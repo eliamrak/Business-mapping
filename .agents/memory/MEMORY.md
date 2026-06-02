@@ -1,0 +1,2 @@
+- [Replit port registration](replit-port-registration.md) — artifact ports must be in .replit [[ports]] section or workflow monitor reports DIDNT_OPEN_A_PORT even when server starts
+- [API server dev build](api-server-dev-build.md) — dev script builds with esbuild first; if dist is stale/missing routes won't load; always rebuild before restart
