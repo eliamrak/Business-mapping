@@ -201,6 +201,12 @@ export default function TeamBuilderTab() {
                       <span className="text-muted-foreground block text-xs">Session Rate</span>
                       <span className="font-semibold">{formatCurrency(c.sessionRate)}</span>
                     </div>
+                    {c.capEnabled && (
+                      <div>
+                        <span className="text-muted-foreground block text-xs">Sessions to Cap</span>
+                        <span className="font-semibold">{Math.round(m.sessionsToCAP)}</span>
+                      </div>
+                    )}
                     <div className="col-span-2">
                       <span className="text-muted-foreground block text-xs">Split (Pre → Post Cap)</span>
                       <span className="font-mono text-xs">
@@ -248,6 +254,7 @@ export default function TeamBuilderTab() {
                   <SelectContent>
                     <SelectItem value="w2">W2 Employee</SelectItem>
                     <SelectItem value="1099">1099 Contractor</SelectItem>
+                    <SelectItem value="owner">Owner</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
@@ -301,6 +308,8 @@ export default function TeamBuilderTab() {
                   <div><span className="text-muted-foreground block text-xs">Employer Obligations (W2)</span><span className="font-semibold text-amber-600">{formatCurrency(metrics.employerObligations)}</span></div>
                   <div><span className="text-muted-foreground block text-xs">Practice Net</span><span className="font-semibold text-primary">{formatCurrency(metrics.practiceNetBeforeOverhead)}</span></div>
                   <div><span className="text-muted-foreground block text-xs">Est. Take-Home (after payroll tax)</span><span className="font-semibold">{formatCurrency(metrics.estimatedCompAfterPayrollTaxes)}</span></div>
+                  <div><span className="text-muted-foreground block text-xs">Est. Payroll Tax</span><span className="font-semibold text-amber-600">{formatCurrency(metrics.clinicianPayrollTaxEstimate)}</span></div>
+                  {form.capEnabled && <div><span className="text-muted-foreground block text-xs">Sessions to Cap</span><span className="font-semibold">{Math.round(metrics.sessionsToCAP)}</span></div>}
                 </div>
               </div>
             )}

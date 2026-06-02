@@ -3,6 +3,7 @@ import {
   useListScenarios, useCreateScenario, useDeleteScenario,
   useUpdateScenario, useDuplicateScenario,
   useGetScenario, useAddScenarioClinician, useUpdateScenarioClinician, useRemoveScenarioClinician,
+  useDuplicateScenarioClinician,
   useListBusinessGoals, useListClinicians,
   getListScenariosQueryKey, getGetScenarioQueryKey
 } from "@workspace/api-client-react";
@@ -115,6 +116,7 @@ function ClinicianEditDialog({
                 <SelectContent>
                   <SelectItem value="w2">W2 Employee</SelectItem>
                   <SelectItem value="1099">1099 Contractor</SelectItem>
+                  <SelectItem value="owner">Owner</SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -181,6 +183,7 @@ function ScenarioDetail({ scenarioId, onBack }: { scenarioId: number; onBack: ()
   const addClinician = useAddScenarioClinician();
   const updateClinician = useUpdateScenarioClinician();
   const removeClinician = useRemoveScenarioClinician();
+  const duplicateClinician = useDuplicateScenarioClinician();
   const updateScenario = useUpdateScenario();
   const queryClient = useQueryClient();
 
@@ -251,6 +254,10 @@ function ScenarioDetail({ scenarioId, onBack }: { scenarioId: number; onBack: ()
     });
   };
 
+  const handleDuplicateClx = (id: number) => {
+    duplicateClinician.mutate({ scenarioId, id }, { onSuccess: invalidate });
+  };
+
   const handleRemoveClx = (id: number) => {
     removeClinician.mutate({ scenarioId, id }, {
       onSuccess: invalidate
@@ -267,9 +274,13 @@ function ScenarioDetail({ scenarioId, onBack }: { scenarioId: number; onBack: ()
 
   const linkedGoal = goals?.find(g => g.id === scenario.businessGoalId);
   const goalOutputs = linkedGoal ? calculateBusinessGoalOutputs(linkedGoal) : null;
-  const goalStatus = goalOutputs
-    ? totalPracticeNet >= goalOutputs.totalAnnualBusinessNeed ? "on-track" : "gap"
+  const goalPct = goalOutputs && goalOutputs.totalAnnualBusinessNeed > 0
+    ? totalPracticeNet / goalOutputs.totalAnnualBusinessNeed
     : null;
+  const goalStatus = goalPct === null ? null
+    : goalPct >= 1 ? "green"
+    : goalPct >= 0.75 ? "yellow"
+    : "red";
 
   return (
     <div className="space-y-6">
@@ -301,21 +312,36 @@ function ScenarioDetail({ scenarioId, onBack }: { scenarioId: number; onBack: ()
           <span className="text-muted-foreground text-xs block">Clinicians</span>
           <span className="text-xl font-bold">{clinicians.length}</span>
           {goalStatus && (
-            <Badge className="mt-1 text-[10px]" variant={goalStatus === "on-track" ? "default" : "destructive"}>
-              {goalStatus === "on-track" ? "On Track" : "Below Goal"}
+            <Badge className="mt-1 text-[10px]"
+              style={{
+                backgroundColor: goalStatus === "green" ? "#16a34a" : goalStatus === "yellow" ? "#d97706" : "#dc2626",
+                color: "white"
+              }}>
+              {goalStatus === "green" ? "On Track" : goalStatus === "yellow" ? "Near Goal" : "Below Goal"}
             </Badge>
           )}
         </CardContent></Card>
       </div>
 
       {linkedGoal && goalOutputs && (
-        <div className={`rounded-lg border p-3 text-sm flex items-center gap-3 ${goalStatus === "on-track" ? "border-green-500 bg-green-50" : "border-amber-400 bg-amber-50"}`}>
-          <div className={`h-2 w-2 rounded-full ${goalStatus === "on-track" ? "bg-green-500" : "bg-amber-500"}`} />
+        <div className={`rounded-lg border p-3 text-sm flex items-center gap-3 ${
+          goalStatus === "green" ? "border-green-500 bg-green-50"
+          : goalStatus === "yellow" ? "border-amber-400 bg-amber-50"
+          : "border-red-400 bg-red-50"
+        }`}>
+          <div className={`h-2 w-2 rounded-full ${
+            goalStatus === "green" ? "bg-green-500"
+            : goalStatus === "yellow" ? "bg-amber-500"
+            : "bg-red-500"
+          }`} />
           <span className="font-medium">Goal: {linkedGoal.name}</span>
           <span className="text-muted-foreground">—</span>
           <span>Need {formatCurrency(goalOutputs.totalAnnualBusinessNeed)}, have {formatCurrency(totalPracticeNet)}</span>
-          {goalStatus !== "on-track" && (
-            <span className="text-destructive font-semibold ml-auto">{formatCurrency(goalOutputs.totalAnnualBusinessNeed - totalPracticeNet)} gap</span>
+          {goalStatus !== "green" && (
+            <span className={`font-semibold ml-auto ${goalStatus === "yellow" ? "text-amber-600" : "text-destructive"}`}>
+              {formatCurrency(goalOutputs.totalAnnualBusinessNeed - totalPracticeNet)} gap
+              {goalPct !== null && ` (${Math.round(goalPct * 100)}%)`}
+            </span>
           )}
         </div>
       )}
@@ -359,10 +385,13 @@ function ScenarioDetail({ scenarioId, onBack }: { scenarioId: number; onBack: ()
                       </div>
                     </div>
                     <div className="flex gap-1">
-                      <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => setEditClx(c)}>
+                      <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => setEditClx(c)} title="Edit">
                         <Pencil className="h-4 w-4" />
                       </Button>
-                      <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive hover:bg-destructive/10" onClick={() => handleRemoveClx(c.id)}>
+                      <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => handleDuplicateClx(c.id)} title="Duplicate">
+                        <Copy className="h-4 w-4" />
+                      </Button>
+                      <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive hover:bg-destructive/10" onClick={() => handleRemoveClx(c.id)} title="Remove">
                         <Trash className="h-4 w-4" />
                       </Button>
                     </div>

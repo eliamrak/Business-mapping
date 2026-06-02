@@ -63,9 +63,15 @@ export function calculateClinicianMetrics(input: ClinicianMetricsInput) {
 
   const estimatedCompAfterPayrollTaxes = clinicianCompensation - clinicianPayrollTaxEstimate;
 
+  const practiceRevPerSession = (input.sessionRate || 0) * ((input.preCapPracticeSplit || 0) / 100);
+  const sessionsToCAP = input.capEnabled && input.capAmount > 0 && practiceRevPerSession > 0
+    ? Math.min(annualSessions, input.capAmount / practiceRevPerSession)
+    : annualSessions;
+
   return {
     annualSessions,
     annualProduction,
+    sessionsToCAP,
     preCapSessions,
     postCapSessions,
     clinicianCompensation,
