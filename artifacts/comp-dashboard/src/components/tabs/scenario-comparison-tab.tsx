@@ -1,8 +1,10 @@
-import { useState } from "react";
-import { useListScenarios, useGetScenario, useListBusinessGoals, getGetScenarioQueryKey } from "@workspace/api-client-react";
+import { useState, useEffect } from "react";
+import { useListScenarios, useGetScenario, useListBusinessGoals, getGetScenarioQueryKey, useGetCurrentReality } from "@workspace/api-client-react";
 import type { ScenarioDetail, BusinessGoal, Scenario } from "@workspace/api-client-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { calculateClinicianMetrics, calculateBusinessGoalOutputs } from "@/lib/calculations";
@@ -38,24 +40,16 @@ function computeMetrics(scenario: ScenarioDetail | undefined) {
   };
 }
 
-function ScenarioColumn({ id, goals }: { id: number; goals: BusinessGoal[] | undefined }) {
-  const { data } = useScenarioData(id);
-  const m = computeMetrics(data);
-  const linkedGoal = goals?.find(g => g.id === data?.businessGoalId);
-  const goalOutputs = linkedGoal ? calculateBusinessGoalOutputs(linkedGoal) : null;
-  const goalMet = goalOutputs && m ? m.totalPracticeNet >= goalOutputs.totalAnnualBusinessNeed : null;
-  return { data, metrics: m, linkedGoal, goalOutputs, goalMet };
-}
-
 interface MetricRowProps {
   label: string;
   values: (number | null)[];
   higherIsBetter?: boolean;
   format?: "currency" | "number" | "percent";
   bold?: boolean;
+  highlight?: boolean;
 }
 
-function MetricRow({ label, values, higherIsBetter = true, format = "currency", bold }: MetricRowProps) {
+function MetricRow({ label, values, higherIsBetter = true, format = "currency", bold, highlight }: MetricRowProps) {
   const fmt = (v: number | null) => {
     if (v === null) return "—";
     if (format === "currency") return formatCurrency(v);
@@ -67,7 +61,10 @@ function MetricRow({ label, values, higherIsBetter = true, format = "currency", 
     ? (higherIsBetter ? Math.max(...validValues) : Math.min(...validValues))
     : null;
   return (
-    <div className="grid py-2 border-b last:border-0 items-center text-sm" style={{ gridTemplateColumns: `1fr repeat(${values.length}, 1fr)` }}>
+    <div
+      className={`grid py-2 border-b last:border-0 items-center text-sm ${highlight ? "bg-primary/5 rounded -mx-2 px-2" : ""}`}
+      style={{ gridTemplateColumns: `1fr repeat(${values.length}, 1fr)` }}
+    >
       <span className={`text-muted-foreground text-xs ${bold ? "font-semibold text-foreground" : ""}`}>{label}</span>
       {values.map((v, i) => (
         <span key={i} className={`text-center ${bold ? "font-bold" : "font-medium"} ${v !== null && v === best && best !== null && validValues.filter(x => x === best).length < validValues.length ? "text-green-600" : ""}`}>
@@ -75,53 +72,6 @@ function MetricRow({ label, values, higherIsBetter = true, format = "currency", 
           {v !== null && v === best && best !== null && validValues.filter(x => x === best).length < validValues.length && <span className="ml-1 text-[10px]">✓</span>}
         </span>
       ))}
-    </div>
-  );
-}
-
-function ScenarioSelectorRow({ ids, onAdd, onRemove, scenarios }: {
-  ids: number[];
-  onAdd: (id: number) => void;
-  onRemove: (idx: number) => void;
-  scenarios: Scenario[] | undefined;
-}) {
-  const used = new Set(ids);
-  const available = scenarios?.filter(s => !used.has(s.id)) ?? [];
-
-  return (
-    <div className="flex items-end gap-3 flex-wrap">
-      {ids.map((id, idx) => {
-        const s = scenarios?.find(x => x.id === id);
-        return (
-          <div key={id} className="space-y-1">
-            <label className="text-xs font-medium text-muted-foreground">Scenario {idx + 1}</label>
-            <div className="flex items-center gap-1">
-              <div className="px-3 py-2 border rounded-md bg-muted text-sm font-medium min-w-32">{s?.name ?? "…"}</div>
-              {ids.length > 2 && (
-                <Button variant="ghost" size="icon" className="h-9 w-9" onClick={() => onRemove(idx)}>
-                  <X className="h-4 w-4" />
-                </Button>
-              )}
-            </div>
-          </div>
-        );
-      })}
-
-      {ids.length < MAX_SCENARIOS && available.length > 0 && (
-        <div className="space-y-1">
-          <label className="text-xs font-medium text-muted-foreground">Add scenario</label>
-          <Select onValueChange={v => onAdd(Number(v))}>
-            <SelectTrigger className="w-40">
-              <SelectValue placeholder="+ Add…" />
-            </SelectTrigger>
-            <SelectContent>
-              {available.map(s => (
-                <SelectItem key={s.id} value={String(s.id)}>{s.name}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
-      )}
     </div>
   );
 }
@@ -138,17 +88,28 @@ function useAllScenarioData(ids: number[], goals: BusinessGoal[] | undefined) {
     const m = computeMetrics(data);
     const linkedGoal = goals?.find(g => g.id === data?.businessGoalId);
     const goalOutputs = linkedGoal ? calculateBusinessGoalOutputs(linkedGoal) : null;
-    const goalMet = goalOutputs && m ? m.totalPracticeNet >= goalOutputs.totalAnnualBusinessNeed : null;
-    return { data, metrics: m, linkedGoal, goalOutputs, goalMet };
+    return { data, metrics: m, linkedGoal, goalOutputs };
   });
 }
 
 export default function ScenarioComparisonTab() {
   const { data: scenarios } = useListScenarios();
   const { data: goals } = useListBusinessGoals();
+  const { data: currentReality } = useGetCurrentReality();
 
   const firstTwo = scenarios ? [scenarios[0]?.id, scenarios[1]?.id].filter(Boolean) as number[] : [];
   const [selectedIds, setSelectedIds] = useState<number[]>([]);
+  const [overheadInput, setOverheadInput] = useState<string>("");
+  const [overheadSeeded, setOverheadSeeded] = useState(false);
+
+  useEffect(() => {
+    if (!overheadSeeded && currentReality?.currentAnnualOverhead != null && currentReality.currentAnnualOverhead > 0) {
+      setOverheadInput(String(currentReality.currentAnnualOverhead));
+      setOverheadSeeded(true);
+    }
+  }, [currentReality, overheadSeeded]);
+
+  const annualOverhead = parseFloat(overheadInput.replace(/,/g, "")) || 0;
 
   const activeIds = selectedIds.length >= 2 ? selectedIds : firstTwo.slice(0, 2);
 
@@ -187,8 +148,8 @@ export default function ScenarioComparisonTab() {
         </Card>
       ) : (
         <>
-          {/* Scenario selectors */}
-          <div className="flex flex-wrap gap-3 items-end">
+          {/* Controls row: scenario selectors + overhead input */}
+          <div className="flex flex-wrap gap-4 items-end">
             {initIds.map((id, idx) => {
               const used = new Set(initIds.filter((_, i) => i !== idx));
               const available = scenarios?.filter(s => !used.has(s.id)) ?? [];
@@ -233,6 +194,25 @@ export default function ScenarioComparisonTab() {
                 </div>
               ) : null;
             })()}
+
+            {/* Annual overhead input */}
+            <div className="space-y-1 ml-auto">
+              <Label className="text-xs font-medium text-muted-foreground">Annual Overhead</Label>
+              <div className="flex items-center gap-1.5">
+                <span className="text-sm text-muted-foreground">$</span>
+                <Input
+                  className="w-40 h-9"
+                  placeholder="0"
+                  value={overheadInput}
+                  onChange={e => setOverheadInput(e.target.value)}
+                />
+              </div>
+              {currentReality?.currentAnnualOverhead != null && currentReality.currentAnnualOverhead > 0 && (
+                <p className="text-[10px] text-muted-foreground">
+                  Defaulted from Current Reality ({formatCurrency(currentReality.currentAnnualOverhead)})
+                </p>
+              )}
+            </div>
           </div>
 
           {hasData && (
@@ -240,19 +220,25 @@ export default function ScenarioComparisonTab() {
               {/* Header row */}
               <div className="grid gap-2" style={{ gridTemplateColumns: `1fr repeat(${activeIds.length}, 1fr)` }}>
                 <div />
-                {allData.map((d, i) => (
-                  <Card key={i} className={i === 0 ? "border-primary/60" : ""}>
-                    <CardContent className="pt-4 text-center">
-                      <p className={`font-bold ${i === 0 ? "text-primary" : ""}`}>{d.data?.name}</p>
-                      {d.linkedGoal && <p className="text-xs text-muted-foreground mt-1">Goal: {d.linkedGoal.name}</p>}
-                      {d.goalMet !== null && (
-                        <Badge className="mt-2 text-[10px]" variant={d.goalMet ? "default" : "destructive"}>
-                          {d.goalMet ? "Goal Met" : "Below Goal"}
-                        </Badge>
-                      )}
-                    </CardContent>
-                  </Card>
-                ))}
+                {allData.map((d, i) => {
+                  const netAfterOverhead = (d.metrics?.totalPracticeNet ?? 0) - annualOverhead;
+                  const goalMet = d.goalOutputs && d.metrics
+                    ? netAfterOverhead >= d.goalOutputs.totalAnnualBusinessNeed
+                    : null;
+                  return (
+                    <Card key={i} className={i === 0 ? "border-primary/60" : ""}>
+                      <CardContent className="pt-4 text-center">
+                        <p className={`font-bold ${i === 0 ? "text-primary" : ""}`}>{d.data?.name}</p>
+                        {d.linkedGoal && <p className="text-xs text-muted-foreground mt-1">Goal: {d.linkedGoal.name}</p>}
+                        {goalMet !== null && (
+                          <Badge className="mt-2 text-[10px]" variant={goalMet ? "default" : "destructive"}>
+                            {goalMet ? "Goal Met" : "Below Goal"}
+                          </Badge>
+                        )}
+                      </CardContent>
+                    </Card>
+                  );
+                })}
               </div>
 
               {/* Practice Financials */}
@@ -270,12 +256,18 @@ export default function ScenarioComparisonTab() {
                   <MetricRow label="Total Employer Burden (W2)" values={allData.map(d => d.metrics?.totalBurden ?? null)} higherIsBetter={false} />
                   <MetricRow label="Total Comp Cost" values={allData.map(d => d.metrics?.totalCost ?? null)} higherIsBetter={false} />
                   <MetricRow label="Practice Net (before overhead)" values={allData.map(d => d.metrics?.totalPracticeNet ?? null)} bold />
+                  <MetricRow
+                    label={`Practice Net (after overhead${annualOverhead > 0 ? ` – ${formatCurrency(annualOverhead)}` : ""})`}
+                    values={allData.map(d => d.metrics != null ? d.metrics.totalPracticeNet - annualOverhead : null)}
+                    bold
+                    highlight
+                  />
                   {allData.some(d => d.goalOutputs) && (
                     <MetricRow
-                      label="% of Goal Achieved"
+                      label="% of Goal Achieved (after overhead)"
                       values={allData.map(d => d.goalOutputs && d.metrics
                         ? (d.goalOutputs.totalAnnualBusinessNeed > 0
-                          ? (d.metrics.totalPracticeNet / d.goalOutputs.totalAnnualBusinessNeed) * 100
+                          ? ((d.metrics.totalPracticeNet - annualOverhead) / d.goalOutputs.totalAnnualBusinessNeed) * 100
                           : null)
                         : null)}
                       format="percent"
@@ -370,16 +362,21 @@ export default function ScenarioComparisonTab() {
                             <p className="mt-1">No goal linked</p>
                           </div>
                         );
-                        const met = d.metrics.totalPracticeNet >= d.goalOutputs.totalAnnualBusinessNeed;
+                        const netAfterOverhead = d.metrics.totalPracticeNet - annualOverhead;
+                        const met = netAfterOverhead >= d.goalOutputs.totalAnnualBusinessNeed;
                         return (
                           <div key={i} className={`rounded-lg border p-4 text-sm ${met ? "border-green-400 bg-green-50" : "border-amber-400 bg-amber-50"}`}>
                             <p className="font-bold">{d.data?.name}</p>
                             <p className="text-muted-foreground text-xs mt-1">Goal: {d.linkedGoal?.name}</p>
                             <p className="mt-2">Need: <strong>{formatCurrency(d.goalOutputs.totalAnnualBusinessNeed)}</strong></p>
-                            <p>Have: <strong>{formatCurrency(d.metrics.totalPracticeNet)}</strong></p>
+                            <p className="text-muted-foreground text-xs">Before overhead: <span className="font-medium text-foreground">{formatCurrency(d.metrics.totalPracticeNet)}</span></p>
+                            {annualOverhead > 0 && (
+                              <p className="text-muted-foreground text-xs">Overhead: <span className="font-medium text-foreground">−{formatCurrency(annualOverhead)}</span></p>
+                            )}
+                            <p className="mt-1">After overhead: <strong>{formatCurrency(netAfterOverhead)}</strong></p>
                             {!met && (
                               <p className="text-destructive font-semibold mt-1">
-                                Gap: {formatCurrency(d.goalOutputs.totalAnnualBusinessNeed - d.metrics.totalPracticeNet)}
+                                Gap: {formatCurrency(d.goalOutputs.totalAnnualBusinessNeed - netAfterOverhead)}
                               </p>
                             )}
                             {met && <p className="text-green-600 font-semibold mt-1">Goal met ✓</p>}
