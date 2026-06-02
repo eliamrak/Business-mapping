@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { db } from "@workspace/db";
 import { scenariosTable, scenarioCliniciansTable } from "@workspace/db";
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 
 const router = Router();
 
@@ -171,15 +171,18 @@ router.patch("/scenarios/:scenarioId/clinicians/:id", async (req, res) => {
     if (body[f] !== undefined) updates[f] = body[f];
   }
   const [sc] = await db.update(scenarioCliniciansTable).set(updates)
-    .where(eq(scenarioCliniciansTable.id, id))
+    .where(and(eq(scenarioCliniciansTable.id, id), eq(scenarioCliniciansTable.scenarioId, scenarioId)))
     .returning();
-  if (!sc || sc.scenarioId !== scenarioId) return res.status(404).json({ error: "Not found" });
+  if (!sc) return res.status(404).json({ error: "Not found" });
   res.json(toApiScenarioClinician(sc));
 });
 
 router.delete("/scenarios/:scenarioId/clinicians/:id", async (req, res) => {
   const id = Number(req.params.id);
-  const result = await db.delete(scenarioCliniciansTable).where(eq(scenarioCliniciansTable.id, id)).returning();
+  const scenarioId = Number(req.params.scenarioId);
+  const result = await db.delete(scenarioCliniciansTable)
+    .where(and(eq(scenarioCliniciansTable.id, id), eq(scenarioCliniciansTable.scenarioId, scenarioId)))
+    .returning();
   if (!result.length) return res.status(404).json({ error: "Not found" });
   res.status(204).send();
 });
