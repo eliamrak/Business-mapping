@@ -22,6 +22,7 @@ import { Plus, Trash, Copy, ChevronLeft, GitMerge, UserPlus, Pencil } from "luci
 import { calculateClinicianMetrics, calculateBusinessGoalOutputs } from "@/lib/calculations";
 import { formatCurrency } from "@/lib/format";
 import { useQueryClient } from "@tanstack/react-query";
+import { useToast } from "@/hooks/use-toast";
 
 type ScenClxForm = {
   label: string;
@@ -186,6 +187,7 @@ function ScenarioDetail({ scenarioId, onBack }: { scenarioId: number; onBack: ()
   const duplicateClinician = useDuplicateScenarioClinician();
   const updateScenario = useUpdateScenario();
   const queryClient = useQueryClient();
+  const { toast } = useToast();
 
   const [editScen, setEditScen] = useState(false);
   const [scenName, setScenName] = useState("");
@@ -218,7 +220,9 @@ function ScenarioDetail({ scenarioId, onBack }: { scenarioId: number; onBack: ()
         invalidate();
         queryClient.invalidateQueries({ queryKey: getListScenariosQueryKey() });
         setEditScen(false);
-      }
+        toast({ title: "Scenario saved", description: `"${scenName}" has been updated.` });
+      },
+      onError: () => toast({ title: "Save failed", description: "Could not save scenario.", variant: "destructive" }),
     });
   };
 
@@ -227,7 +231,11 @@ function ScenarioDetail({ scenarioId, onBack }: { scenarioId: number; onBack: ()
       scenarioId,
       data: { ...scToForm(c), sourceClinicianId: c.id } as never
     }, {
-      onSuccess: () => { invalidate(); setAddOpen(false); setAddSource(null); }
+      onSuccess: () => {
+        invalidate(); setAddOpen(false); setAddSource(null);
+        toast({ title: "Clinician added", description: `"${c.label}" copied into scenario.` });
+      },
+      onError: () => toast({ title: "Add failed", variant: "destructive" }),
     });
   };
 
@@ -241,7 +249,8 @@ function ScenarioDetail({ scenarioId, onBack }: { scenarioId: number; onBack: ()
       otherEmployerBurdenPct: 0, notes: ""
     };
     addClinician.mutate({ scenarioId, data: blank as never }, {
-      onSuccess: () => invalidate()
+      onSuccess: () => { invalidate(); toast({ title: "Clinician added", description: "Edit the details to configure this clinician." }); },
+      onError: () => toast({ title: "Add failed", variant: "destructive" }),
     });
   };
 
@@ -250,17 +259,25 @@ function ScenarioDetail({ scenarioId, onBack }: { scenarioId: number; onBack: ()
     updateClinician.mutate({
       scenarioId, id: editClx.id, data: form as never
     }, {
-      onSuccess: () => { invalidate(); setEditClx(null); }
+      onSuccess: () => {
+        invalidate(); setEditClx(null);
+        toast({ title: "Clinician saved", description: `"${form.label}" has been updated.` });
+      },
+      onError: () => toast({ title: "Save failed", description: "Could not save clinician.", variant: "destructive" }),
     });
   };
 
   const handleDuplicateClx = (id: number) => {
-    duplicateClinician.mutate({ scenarioId, id }, { onSuccess: invalidate });
+    duplicateClinician.mutate({ scenarioId, id }, {
+      onSuccess: () => { invalidate(); toast({ title: "Clinician duplicated" }); },
+      onError: () => toast({ title: "Duplicate failed", variant: "destructive" }),
+    });
   };
 
   const handleRemoveClx = (id: number) => {
     removeClinician.mutate({ scenarioId, id }, {
-      onSuccess: invalidate
+      onSuccess: () => { invalidate(); toast({ title: "Clinician removed" }); },
+      onError: () => toast({ title: "Remove failed", variant: "destructive" }),
     });
   };
 
@@ -476,6 +493,7 @@ export default function ScenarioBuilderTab() {
   const deleteScenario = useDeleteScenario();
   const duplicateScenario = useDuplicateScenario();
   const queryClient = useQueryClient();
+  const { toast } = useToast();
 
   const [openScenarioId, setOpenScenarioId] = useState<number | null>(null);
 
@@ -483,12 +501,22 @@ export default function ScenarioBuilderTab() {
 
   const handleCreate = () => {
     createScenario.mutate({ data: { name: "New Scenario", notes: "" } as never }, {
-      onSuccess: (s) => { invalidate(); setOpenScenarioId(s.id); }
+      onSuccess: (s) => {
+        invalidate(); setOpenScenarioId(s.id);
+        toast({ title: "Scenario created", description: "Configure it below." });
+      },
+      onError: () => toast({ title: "Create failed", variant: "destructive" }),
     });
   };
 
-  const handleDelete = (id: number) => deleteScenario.mutate({ id }, { onSuccess: invalidate });
-  const handleDuplicate = (id: number) => duplicateScenario.mutate({ id }, { onSuccess: invalidate });
+  const handleDelete = (id: number) => deleteScenario.mutate({ id }, {
+    onSuccess: () => { invalidate(); toast({ title: "Scenario deleted" }); },
+    onError: () => toast({ title: "Delete failed", variant: "destructive" }),
+  });
+  const handleDuplicate = (id: number) => duplicateScenario.mutate({ id }, {
+    onSuccess: () => { invalidate(); toast({ title: "Scenario duplicated" }); },
+    onError: () => toast({ title: "Duplicate failed", variant: "destructive" }),
+  });
 
   if (openScenarioId !== null) {
     return <ScenarioDetail scenarioId={openScenarioId} onBack={() => setOpenScenarioId(null)} />;

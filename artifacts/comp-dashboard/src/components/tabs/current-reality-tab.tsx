@@ -12,6 +12,7 @@ import { Info, Pencil } from "lucide-react";
 import { formatCurrency, formatPercent } from "@/lib/format";
 import { calculateCurrentRealityGap } from "@/lib/calculations";
 import { useQueryClient } from "@tanstack/react-query";
+import { useToast } from "@/hooks/use-toast";
 
 type RealityForm = {
   currentOwnerPay: number;
@@ -72,6 +73,7 @@ export default function CurrentRealityTab() {
   const { data: goals, isLoading: isLoadingGoals } = useListBusinessGoals();
   const upsertReality = useUpsertCurrentReality();
   const queryClient = useQueryClient();
+  const { toast } = useToast();
 
   const [selectedGoalId, setSelectedGoalId] = useState<string>("");
   const [editOpen, setEditOpen] = useState(false);
@@ -89,14 +91,24 @@ export default function CurrentRealityTab() {
   const handleSave = () => {
     setSaving(true);
     upsertReality.mutate({ data: form as never }, {
-      onSuccess: () => { invalidate(); setEditOpen(false); setSaving(false); },
-      onError: () => setSaving(false),
+      onSuccess: () => {
+        invalidate(); setEditOpen(false); setSaving(false);
+        toast({ title: "Metrics saved", description: "Current reality metrics have been updated." });
+      },
+      onError: () => {
+        setSaving(false);
+        toast({ title: "Save failed", description: "Could not save metrics. Please try again.", variant: "destructive" });
+      },
     });
   };
 
   const handleInitialize = () => {
     upsertReality.mutate({ data: emptyForm as never }, {
-      onSuccess: () => { invalidate(); setEditOpen(true); },
+      onSuccess: () => {
+        invalidate(); setEditOpen(true);
+        toast({ title: "Profile initialized", description: "Fill in your current practice metrics." });
+      },
+      onError: () => toast({ title: "Initialize failed", variant: "destructive" }),
     });
   };
 

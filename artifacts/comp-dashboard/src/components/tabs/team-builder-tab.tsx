@@ -18,6 +18,7 @@ import { Plus, Trash, User, Copy } from "lucide-react";
 import { calculateClinicianMetrics } from "@/lib/calculations";
 import { formatCurrency } from "@/lib/format";
 import { useQueryClient } from "@tanstack/react-query";
+import { useToast } from "@/hooks/use-toast";
 
 type ClinicianForm = {
   label: string;
@@ -101,6 +102,7 @@ export default function TeamBuilderTab() {
   const deleteClinician = useDeleteClinician();
   const duplicateClinician = useDuplicateClinician();
   const queryClient = useQueryClient();
+  const { toast } = useToast();
 
   const [editClinician, setEditClinician] = useState<Clinician | null>(null);
   const [form, setForm] = useState<ClinicianForm>(defaultForm);
@@ -120,19 +122,35 @@ export default function TeamBuilderTab() {
     if (!editClinician) return;
     setSaving(true);
     updateClinician.mutate({ id: editClinician.id, data: form as never }, {
-      onSuccess: () => { invalidate(); setEditClinician(null); setSaving(false); },
-      onError: () => setSaving(false),
+      onSuccess: () => {
+        invalidate(); setEditClinician(null); setSaving(false);
+        toast({ title: "Clinician saved", description: `"${form.label}" has been updated.` });
+      },
+      onError: () => {
+        setSaving(false);
+        toast({ title: "Save failed", description: "Could not save clinician. Please try again.", variant: "destructive" });
+      },
     });
   };
 
   const handleCreate = () => {
     createClinician.mutate({ data: defaultForm as never }, {
-      onSuccess: (c) => { invalidate(); openEdit(c); },
+      onSuccess: (c) => {
+        invalidate(); openEdit(c);
+        toast({ title: "Clinician added", description: "Edit the details below and save." });
+      },
+      onError: () => toast({ title: "Create failed", description: "Could not add clinician.", variant: "destructive" }),
     });
   };
 
-  const handleDelete = (id: number) => deleteClinician.mutate({ id }, { onSuccess: invalidate });
-  const handleDuplicate = (id: number) => duplicateClinician.mutate({ id }, { onSuccess: invalidate });
+  const handleDelete = (id: number) => deleteClinician.mutate({ id }, {
+    onSuccess: () => { invalidate(); toast({ title: "Clinician deleted" }); },
+    onError: () => toast({ title: "Delete failed", variant: "destructive" }),
+  });
+  const handleDuplicate = (id: number) => duplicateClinician.mutate({ id }, {
+    onSuccess: () => { invalidate(); toast({ title: "Clinician duplicated" }); },
+    onError: () => toast({ title: "Duplicate failed", variant: "destructive" }),
+  });
 
   if (isLoading) return <div className="p-8 text-muted-foreground">Loading clinicians...</div>;
 

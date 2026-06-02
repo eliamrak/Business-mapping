@@ -17,6 +17,7 @@ import type { BusinessGoal as BG } from "@workspace/api-client-react";
 import { calculateBusinessGoalOutputs } from "@/lib/calculations";
 import { formatCurrency } from "@/lib/format";
 import { useQueryClient } from "@tanstack/react-query";
+import { useToast } from "@/hooks/use-toast";
 
 type GoalForm = {
   name: string;
@@ -90,6 +91,7 @@ export default function BusinessGoalsTab() {
   const deleteGoal = useDeleteBusinessGoal();
   const duplicateGoal = useDuplicateBusinessGoal();
   const queryClient = useQueryClient();
+  const { toast } = useToast();
 
   const [editGoal, setEditGoal] = useState<BusinessGoal | null>(null);
   const [form, setForm] = useState<GoalForm>(defaultForm);
@@ -109,23 +111,39 @@ export default function BusinessGoalsTab() {
     if (!editGoal) return;
     setSaving(true);
     updateGoal.mutate({ id: editGoal.id, data: form as never }, {
-      onSuccess: () => { invalidate(); setEditGoal(null); setSaving(false); },
-      onError: () => setSaving(false),
+      onSuccess: () => {
+        invalidate(); setEditGoal(null); setSaving(false);
+        toast({ title: "Goal saved", description: `"${form.name}" has been updated.` });
+      },
+      onError: () => {
+        setSaving(false);
+        toast({ title: "Save failed", description: "Could not save goal. Please try again.", variant: "destructive" });
+      },
     });
   };
 
   const handleCreate = () => {
     createGoal.mutate({ data: defaultForm as never }, {
-      onSuccess: (newGoal) => { invalidate(); openEdit(newGoal); },
+      onSuccess: (newGoal) => {
+        invalidate(); openEdit(newGoal);
+        toast({ title: "Goal created", description: "Edit the details below and save." });
+      },
+      onError: () => toast({ title: "Create failed", description: "Could not create goal.", variant: "destructive" }),
     });
   };
 
   const handleDelete = (id: number) => {
-    deleteGoal.mutate({ id }, { onSuccess: invalidate });
+    deleteGoal.mutate({ id }, {
+      onSuccess: () => { invalidate(); toast({ title: "Goal deleted" }); },
+      onError: () => toast({ title: "Delete failed", variant: "destructive" }),
+    });
   };
 
   const handleDuplicate = (id: number) => {
-    duplicateGoal.mutate({ id }, { onSuccess: invalidate });
+    duplicateGoal.mutate({ id }, {
+      onSuccess: () => { invalidate(); toast({ title: "Goal duplicated" }); },
+      onError: () => toast({ title: "Duplicate failed", variant: "destructive" }),
+    });
   };
 
   if (isLoading) return <div className="p-8 text-muted-foreground">Loading goals...</div>;
