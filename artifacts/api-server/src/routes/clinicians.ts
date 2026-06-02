@@ -72,7 +72,7 @@ router.get("/clinicians/:id", async (req, res) => {
   const id = Number(req.params.id);
   const [clinician] = await db.select().from(cliniciansTable).where(eq(cliniciansTable.id, id));
   if (!clinician) return res.status(404).json({ error: "Not found" });
-  res.json(toApiClinician(clinician));
+  return res.json(toApiClinician(clinician));
 });
 
 router.patch("/clinicians/:id", async (req, res) => {
@@ -100,14 +100,14 @@ router.patch("/clinicians/:id", async (req, res) => {
   }
   const [clinician] = await db.update(cliniciansTable).set(updates).where(eq(cliniciansTable.id, id)).returning();
   if (!clinician) return res.status(404).json({ error: "Not found" });
-  res.json(toApiClinician(clinician));
+  return res.json(toApiClinician(clinician));
 });
 
 router.delete("/clinicians/:id", async (req, res) => {
   const id = Number(req.params.id);
   const result = await db.delete(cliniciansTable).where(eq(cliniciansTable.id, id)).returning();
   if (!result.length) return res.status(404).json({ error: "Not found" });
-  res.status(204).send();
+  return res.status(204).send();
 });
 
 router.post("/clinicians/:id/duplicate", async (req, res) => {
@@ -116,7 +116,7 @@ router.post("/clinicians/:id/duplicate", async (req, res) => {
   if (!original) return res.status(404).json({ error: "Not found" });
   const { id: _id, createdAt: _c, updatedAt: _u, label, ...rest } = original;
   const [copy] = await db.insert(cliniciansTable).values({ ...rest, label: `${label} (Copy)` }).returning();
-  res.status(201).json(toApiClinician(copy));
+  return res.status(201).json(toApiClinician(copy));
 });
 
 export default router;

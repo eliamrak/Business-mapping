@@ -53,7 +53,7 @@ router.get("/business-goals/:id", async (req, res) => {
   const id = Number(req.params.id);
   const [goal] = await db.select().from(businessGoalsTable).where(eq(businessGoalsTable.id, id));
   if (!goal) return res.status(404).json({ error: "Not found" });
-  res.json(toApiGoal(goal));
+  return res.json(toApiGoal(goal));
 });
 
 router.patch("/business-goals/:id", async (req, res) => {
@@ -74,14 +74,14 @@ router.patch("/business-goals/:id", async (req, res) => {
   if (body.notes !== undefined) updates.notes = body.notes;
   const [goal] = await db.update(businessGoalsTable).set(updates).where(eq(businessGoalsTable.id, id)).returning();
   if (!goal) return res.status(404).json({ error: "Not found" });
-  res.json(toApiGoal(goal));
+  return res.json(toApiGoal(goal));
 });
 
 router.delete("/business-goals/:id", async (req, res) => {
   const id = Number(req.params.id);
   const result = await db.delete(businessGoalsTable).where(eq(businessGoalsTable.id, id)).returning();
   if (!result.length) return res.status(404).json({ error: "Not found" });
-  res.status(204).send();
+  return res.status(204).send();
 });
 
 router.post("/business-goals/:id/duplicate", async (req, res) => {
@@ -90,7 +90,7 @@ router.post("/business-goals/:id/duplicate", async (req, res) => {
   if (!original) return res.status(404).json({ error: "Not found" });
   const { id: _id, createdAt: _c, updatedAt: _u, name, ...rest } = original;
   const [copy] = await db.insert(businessGoalsTable).values({ ...rest, name: `${name} (Copy)` }).returning();
-  res.status(201).json(toApiGoal(copy));
+  return res.status(201).json(toApiGoal(copy));
 });
 
 export default router;

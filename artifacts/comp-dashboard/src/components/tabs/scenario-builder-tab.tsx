@@ -222,7 +222,7 @@ function ScenarioDetail({ scenarioId, onBack }: { scenarioId: number; onBack: ()
   const handleAddFromTemplate = (c: Clinician) => {
     addClinician.mutate({
       scenarioId,
-      data: scToForm(c) as never
+      data: { ...scToForm(c), sourceClinicianId: c.id } as never
     }, {
       onSuccess: () => { invalidate(); setAddOpen(false); setAddSource(null); }
     });

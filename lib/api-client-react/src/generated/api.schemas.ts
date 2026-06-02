@@ -279,7 +279,7 @@ export interface ScenarioClinician {
   id: number;
   scenarioId: number;
   /** @nullable */
-  sourceCliniciánId?: number | null;
+  sourceClinicianId?: number | null;
   label: string;
   roleType: ScenarioClinicianRoleType;
   classification: ScenarioClinicianClassification;
@@ -349,7 +349,7 @@ export const ScenarioClinicianInputClassification = {
 } as const;
 
 export interface ScenarioClinicianInput {
-  sourceCliniciánId?: number;
+  sourceClinicianId?: number;
   label: string;
   roleType?: ScenarioClinicianInputRoleType;
   classification?: ScenarioClinicianInputClassification;

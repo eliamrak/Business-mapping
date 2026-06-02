@@ -1,2 +1,4 @@
 - [Replit port registration](replit-port-registration.md) — artifact ports must be in .replit [[ports]] section or workflow monitor reports DIDNT_OPEN_A_PORT even when server starts
 - [API server dev build](api-server-dev-build.md) — dev script builds with esbuild first; if dist is stale/missing routes won't load; always rebuild before restart
+- [sourceClinicianId schema fix](source-clinician-id.md) — generated type had accented typo; fix src AND rebuild dist with tsc to propagate to composite lib consumers
+- [composite lib rebuild required](lib-project-refs.md) — when src in a composite lib changes, run tsc to rebuild dist; tsbuildinfo cache does NOT help; project references read dist

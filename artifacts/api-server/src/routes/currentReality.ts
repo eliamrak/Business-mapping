@@ -24,7 +24,7 @@ function toApiReality(row: typeof currentRealityTable.$inferSelect) {
 router.get("/current-reality", async (_req, res) => {
   const rows = await db.select().from(currentRealityTable).limit(1);
   if (!rows.length) return res.status(404).json({ error: "Not found" });
-  res.json(toApiReality(rows[0]));
+  return res.json(toApiReality(rows[0]));
 });
 
 router.put("/current-reality", async (req, res) => {

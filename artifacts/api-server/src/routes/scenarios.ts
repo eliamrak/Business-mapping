@@ -74,7 +74,7 @@ router.get("/scenarios/:id", async (req, res) => {
   const id = Number(req.params.id);
   const [scenario] = await db.select().from(scenariosTable).where(eq(scenariosTable.id, id));
   if (!scenario) return res.status(404).json({ error: "Not found" });
-  res.json(await toApiScenarioDetail(scenario));
+  return res.json(await toApiScenarioDetail(scenario));
 });
 
 router.patch("/scenarios/:id", async (req, res) => {
@@ -86,14 +86,14 @@ router.patch("/scenarios/:id", async (req, res) => {
   if ("businessGoalId" in body) updates.businessGoalId = body.businessGoalId;
   const [scenario] = await db.update(scenariosTable).set(updates).where(eq(scenariosTable.id, id)).returning();
   if (!scenario) return res.status(404).json({ error: "Not found" });
-  res.json(toApiScenario(scenario));
+  return res.json(toApiScenario(scenario));
 });
 
 router.delete("/scenarios/:id", async (req, res) => {
   const id = Number(req.params.id);
   const result = await db.delete(scenariosTable).where(eq(scenariosTable.id, id)).returning();
   if (!result.length) return res.status(404).json({ error: "Not found" });
-  res.status(204).send();
+  return res.status(204).send();
 });
 
 router.post("/scenarios/:id/duplicate", async (req, res) => {
@@ -112,7 +112,7 @@ router.post("/scenarios/:id/duplicate", async (req, res) => {
     await db.insert(scenarioCliniciansTable).values({ ...cRest, scenarioId: copy.id });
   }
 
-  res.status(201).json(await toApiScenarioDetail(copy));
+  return res.status(201).json(await toApiScenarioDetail(copy));
 });
 
 // ── Scenario Clinicians ────────────────────────────────────────────────────
@@ -150,7 +150,7 @@ router.post("/scenarios/:scenarioId/clinicians", async (req, res) => {
     otherEmployerBurdenPct: String(body.otherEmployerBurdenPct ?? 0),
     notes: body.notes ?? null,
   }).returning();
-  res.status(201).json(toApiScenarioClinician(sc));
+  return res.status(201).json(toApiScenarioClinician(sc));
 });
 
 router.patch("/scenarios/:scenarioId/clinicians/:id", async (req, res) => {
@@ -174,7 +174,7 @@ router.patch("/scenarios/:scenarioId/clinicians/:id", async (req, res) => {
     .where(and(eq(scenarioCliniciansTable.id, id), eq(scenarioCliniciansTable.scenarioId, scenarioId)))
     .returning();
   if (!sc) return res.status(404).json({ error: "Not found" });
-  res.json(toApiScenarioClinician(sc));
+  return res.json(toApiScenarioClinician(sc));
 });
 
 router.delete("/scenarios/:scenarioId/clinicians/:id", async (req, res) => {
@@ -184,7 +184,7 @@ router.delete("/scenarios/:scenarioId/clinicians/:id", async (req, res) => {
     .where(and(eq(scenarioCliniciansTable.id, id), eq(scenarioCliniciansTable.scenarioId, scenarioId)))
     .returning();
   if (!result.length) return res.status(404).json({ error: "Not found" });
-  res.status(204).send();
+  return res.status(204).send();
 });
 
 router.post("/scenarios/:scenarioId/clinicians/:id/duplicate", async (req, res) => {
@@ -194,7 +194,7 @@ router.post("/scenarios/:scenarioId/clinicians/:id/duplicate", async (req, res) 
   if (!original || original.scenarioId !== scenarioId) return res.status(404).json({ error: "Not found" });
   const { id: _id, createdAt: _c, updatedAt: _u, label, ...rest } = original;
   const [copy] = await db.insert(scenarioCliniciansTable).values({ ...rest, label: `${label} (Copy)` }).returning();
-  res.status(201).json(toApiScenarioClinician(copy));
+  return res.status(201).json(toApiScenarioClinician(copy));
 });
 
 export default router;

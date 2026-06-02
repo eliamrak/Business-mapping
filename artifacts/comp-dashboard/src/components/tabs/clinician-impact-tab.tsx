@@ -20,7 +20,7 @@ function findInScenario(
 ): ScenarioClinician | undefined {
   if (!source || !scenarioClinicians) return undefined;
   return (
-    scenarioClinicians.find(c => c.sourceCliniciánId === source.id) ??
+    scenarioClinicians.find(c => c.sourceClinicianId === source.id) ??
     scenarioClinicians.find(c => c.label === source.label)
   );
 }
