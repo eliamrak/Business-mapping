@@ -103,16 +103,30 @@ export function calculateBusinessGoalOutputs(goal: Partial<BusinessGoal>) {
 
 export function calculateCurrentRealityGap(current: CurrentReality | undefined, goal: BusinessGoal | undefined) {
   if (!current) return null;
-  
-  const currentAnnualProductionEstimate = 
-    (current.currentCliniciansCount || 0) * 
-    (current.currentAvgSessionRate || 0) * 
-    (current.currentAvgSessionsPerWeek || 0) * 
+
+  // Estimated gross production across the whole team
+  const currentAnnualProductionEstimate =
+    (current.currentCliniciansCount || 0) *
+    (current.currentAvgSessionRate || 0) *
+    (current.currentAvgSessionsPerWeek || 0) *
     (current.currentAvgWeeksWorkedPerYear || 0);
 
-  const currentNetPerClinicianEstimate = current.currentCliniciansCount > 0 
-    ? (current.currentBusinessProfit || 0) / current.currentCliniciansCount 
-    : 0;
+  // Current net revenue per clinician (using reported business profit as a proxy)
+  const currentNetPerClinicianEstimate =
+    current.currentCliniciansCount > 0
+      ? (current.currentBusinessProfit || 0) / current.currentCliniciansCount
+      : 0;
+
+  // "Currently achieved" = sum of all components that map to a business goal line item:
+  // owner pay, second owner pay, overhead, profit, building fund, and cash reserve
+  // (cash reserve is treated as the emergency reserve equivalent)
+  const currentTotalAchieved =
+    (current.currentOwnerPay || 0) +
+    (current.currentSecondOwnerPay || 0) +
+    (current.currentAnnualOverhead || 0) +
+    (current.currentBusinessProfit || 0) +
+    (current.currentBuildingFund || 0) +
+    (current.currentCashReserve || 0);
 
   let gapToGoal = 0;
   let gapPerClinician = 0;
@@ -120,19 +134,15 @@ export function calculateCurrentRealityGap(current: CurrentReality | undefined, 
 
   if (goal) {
     const goalOutputs = calculateBusinessGoalOutputs(goal);
-    // Let's assume current practice net is what we compare against Total Annual Business Need
-    // But since current reality only has profit/overhead fields, maybe we sum them up to get current "net"
-    const currentTotalNeedAchieved = 
-      (current.currentOwnerPay || 0) + 
-      (current.currentSecondOwnerPay || 0) + 
-      (current.currentAnnualOverhead || 0) + 
-      (current.currentBusinessProfit || 0) + 
-      (current.currentBuildingFund || 0) + 
-      (current.currentCashReserve || 0); // Using cash reserve for emergency?
-
-    gapToGoal = goalOutputs.totalAnnualBusinessNeed - currentTotalNeedAchieved;
-    gapPerClinician = (goal.desiredCliniciansCount || 1) > 0 ? gapToGoal / (goal.desiredCliniciansCount || 1) : 0;
-    percentAchieved = goalOutputs.totalAnnualBusinessNeed > 0 ? (currentTotalNeedAchieved / goalOutputs.totalAnnualBusinessNeed) * 100 : 100;
+    gapToGoal = goalOutputs.totalAnnualBusinessNeed - currentTotalAchieved;
+    gapPerClinician =
+      (goal.desiredCliniciansCount || 1) > 0
+        ? gapToGoal / (goal.desiredCliniciansCount || 1)
+        : 0;
+    percentAchieved =
+      goalOutputs.totalAnnualBusinessNeed > 0
+        ? (currentTotalAchieved / goalOutputs.totalAnnualBusinessNeed) * 100
+        : 100;
   }
 
   return {
@@ -140,6 +150,6 @@ export function calculateCurrentRealityGap(current: CurrentReality | undefined, 
     currentNetPerClinicianEstimate,
     gapToGoal,
     gapPerClinician,
-    percentAchieved
+    percentAchieved,
   };
 }
