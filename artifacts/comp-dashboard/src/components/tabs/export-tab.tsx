@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useListClinicians, useListScenarios, useGetScenario, useListBusinessGoals, useGetCurrentReality, getGetScenarioQueryKey } from "@workspace/api-client-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
 import { Download, FileText, Loader2 } from "lucide-react";
@@ -13,16 +14,21 @@ import autoTable from "jspdf-autotable";
 const BRAND_COLOR: [number, number, number] = [30, 64, 175];
 const HEADER_GRAY: [number, number, number] = [243, 244, 246];
 
-function addPageHeader(doc: jsPDF, title: string, subtitle: string) {
+function addPageHeader(doc: jsPDF, practiceName: string, title: string, subtitle: string) {
   doc.setFillColor(...BRAND_COLOR);
-  doc.rect(0, 0, 210, 18, "F");
+  doc.rect(0, 0, 210, 20, "F");
   doc.setTextColor(255, 255, 255);
-  doc.setFontSize(13);
-  doc.setFont("helvetica", "bold");
-  doc.text(title, 14, 11);
   doc.setFontSize(8);
   doc.setFont("helvetica", "normal");
-  doc.text(subtitle, 14, 16);
+  if (practiceName) {
+    doc.text(practiceName.toUpperCase(), 14, 7);
+  }
+  doc.setFontSize(13);
+  doc.setFont("helvetica", "bold");
+  doc.text(title, 14, practiceName ? 14 : 11);
+  doc.setFontSize(8);
+  doc.setFont("helvetica", "normal");
+  doc.text(subtitle, 14, practiceName ? 19 : 16);
   doc.setTextColor(0, 0, 0);
 }
 
@@ -49,14 +55,11 @@ export default function PDFExportTab() {
   const { data: goals } = useListBusinessGoals();
   const { data: currentReality } = useGetCurrentReality();
 
+  const [practiceName, setPracticeName] = useState("");
   const [selectedScenarioId, setSelectedScenarioId] = useState<number | null>(null);
-  const [compScenA, setCompScenA] = useState<number | null>(null);
-  const [compScenB, setCompScenB] = useState<number | null>(null);
   const [loading, setLoading] = useState<string | null>(null);
 
   const { data: selectedScenario } = useScenarioForExport(selectedScenarioId);
-  const { data: scenA } = useScenarioForExport(compScenA);
-  const { data: scenB } = useScenarioForExport(compScenB);
 
   const generateInternalReport = () => {
     setLoading("internal");
@@ -64,12 +67,14 @@ export default function PDFExportTab() {
       try {
         const doc = new jsPDF();
         const date = new Date().toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" });
-        addPageHeader(doc, "Compensation Strategy — Internal Report", `Generated ${date}`);
+        addPageHeader(doc, practiceName, "Compensation Strategy — Internal Report", `Generated ${date}`);
+
+        const startY = 28;
 
         if (goals && goals.length > 0) {
-          addSectionTitle(doc, "Business Goals", 28);
+          addSectionTitle(doc, "Business Goals", startY);
           autoTable(doc, {
-            startY: 32,
+            startY: startY + 4,
             head: [["Goal Name", "Horizon", "Total Business Need", "Req. Net / Clinician", "Desired Clinicians"]],
             body: goals.map(g => {
               const o = calculateBusinessGoalOutputs(g);
@@ -81,10 +86,11 @@ export default function PDFExportTab() {
         }
 
         if (currentReality) {
-          const y = sectionY(doc) + 8;
-          addSectionTitle(doc, "Current Reality", y);
           const linkedGoal = goals?.[0];
           const gap = calculateCurrentRealityGap(currentReality, linkedGoal);
+
+          const y = sectionY(doc) + 8;
+          addSectionTitle(doc, "Current Reality — Practice Overview", y);
           autoTable(doc, {
             startY: y + 4,
             head: [["Metric", "Value"]],
@@ -92,25 +98,94 @@ export default function PDFExportTab() {
               ["Current Clinicians", currentReality.currentCliniciansCount],
               ["Avg Session Rate", formatCurrency(currentReality.currentAvgSessionRate)],
               ["Avg Sessions/Week", currentReality.currentAvgSessionsPerWeek],
-              ["Owner Pay", formatCurrency(currentReality.currentOwnerPay)],
-              ["Annual Overhead", formatCurrency(currentReality.currentAnnualOverhead)],
-              ["Business Profit", formatCurrency(currentReality.currentBusinessProfit)],
+              ["Avg Weeks Worked/Year", currentReality.currentAvgWeeksWorkedPerYear],
+              ...(gap ? [["Est. Annual Production", formatCurrency(gap.currentAnnualProductionEstimate)]] : []),
               ...(gap && linkedGoal ? [
-                ["Est. Annual Production", formatCurrency(gap.currentAnnualProductionEstimate)],
                 ["Gap to Goal (" + linkedGoal.name + ")", formatCurrency(gap.gapToGoal)],
                 ["Goal Achieved %", gap.percentAchieved.toFixed(1) + "%"],
               ] : []),
             ],
             styles: { fontSize: 8 },
-            headStyles: { fillColor: HEADER_GRAY as [number,number,number], textColor: [0,0,0] as [number,number,number] },
+            headStyles: { fillColor: HEADER_GRAY as [number, number, number], textColor: [0, 0, 0] as [number, number, number] },
             columnStyles: { 0: { fontStyle: "bold" } },
+          });
+
+          const obY = sectionY(doc) + 8;
+          if (obY > 220) doc.addPage();
+          const obTitleY = obY > 220 ? 28 : obY;
+          addSectionTitle(doc, "Overhead & Financial Breakdown — Goal vs. Current", obTitleY);
+          const goalRow = linkedGoal ?? null;
+          autoTable(doc, {
+            startY: obTitleY + 4,
+            head: [["Financial Component", "Goal", "Current", "Gap"]],
+            body: [
+              [
+                "Owner Pay",
+                goalRow ? formatCurrency(goalRow.ownerPayGoal) : "—",
+                formatCurrency(currentReality.currentOwnerPay),
+                goalRow ? formatCurrency((goalRow.ownerPayGoal || 0) - currentReality.currentOwnerPay) : "—",
+              ],
+              [
+                "2nd Owner Pay",
+                goalRow ? formatCurrency(goalRow.secondOwnerPayGoal) : "—",
+                formatCurrency(currentReality.currentSecondOwnerPay),
+                goalRow ? formatCurrency((goalRow.secondOwnerPayGoal || 0) - currentReality.currentSecondOwnerPay) : "—",
+              ],
+              [
+                "Annual Overhead",
+                goalRow ? formatCurrency(goalRow.annualOverheadGoal) : "—",
+                formatCurrency(currentReality.currentAnnualOverhead),
+                goalRow ? formatCurrency((goalRow.annualOverheadGoal || 0) - currentReality.currentAnnualOverhead) : "—",
+              ],
+              [
+                "Business Profit",
+                goalRow ? formatCurrency(goalRow.businessProfitGoal) : "—",
+                formatCurrency(currentReality.currentBusinessProfit),
+                goalRow ? formatCurrency((goalRow.businessProfitGoal || 0) - currentReality.currentBusinessProfit) : "—",
+              ],
+              [
+                "Building Fund",
+                goalRow ? formatCurrency(goalRow.buildingFundGoal) : "—",
+                formatCurrency(currentReality.currentBuildingFund),
+                goalRow ? formatCurrency((goalRow.buildingFundGoal || 0) - currentReality.currentBuildingFund) : "—",
+              ],
+              [
+                "Emergency Reserve",
+                goalRow ? formatCurrency(goalRow.emergencyReserveGoal) : "—",
+                formatCurrency(currentReality.currentCashReserve),
+                goalRow ? formatCurrency((goalRow.emergencyReserveGoal || 0) - currentReality.currentCashReserve) : "—",
+              ],
+              [
+                "Growth Fund",
+                goalRow ? formatCurrency(goalRow.growthFundGoal) : "—",
+                "—",
+                goalRow ? formatCurrency(goalRow.growthFundGoal || 0) : "—",
+              ],
+            ],
+            styles: { fontSize: 8 },
+            headStyles: { fillColor: BRAND_COLOR },
+            columnStyles: { 0: { fontStyle: "bold" } },
+            foot: goalRow ? [[
+              "TOTAL",
+              formatCurrency(calculateBusinessGoalOutputs(goalRow).totalAnnualBusinessNeed),
+              formatCurrency(
+                (currentReality.currentOwnerPay || 0) +
+                (currentReality.currentSecondOwnerPay || 0) +
+                (currentReality.currentAnnualOverhead || 0) +
+                (currentReality.currentBusinessProfit || 0) +
+                (currentReality.currentBuildingFund || 0) +
+                (currentReality.currentCashReserve || 0)
+              ),
+              gap ? formatCurrency(gap.gapToGoal) : "—",
+            ]] : undefined,
+            footStyles: { fillColor: HEADER_GRAY as [number, number, number], textColor: [0, 0, 0] as [number, number, number], fontStyle: "bold" },
           });
         }
 
         if (clinicians && clinicians.length > 0) {
           const y = sectionY(doc) + 8;
           if (y > 240) doc.addPage();
-          const titleY = y > 240 ? 22 : y;
+          const titleY = y > 240 ? 28 : y;
           addSectionTitle(doc, "Clinician Compensation Summary", titleY);
           autoTable(doc, {
             startY: titleY + 4,
@@ -122,12 +197,12 @@ export default function PDFExportTab() {
             styles: { fontSize: 7 },
             headStyles: { fillColor: BRAND_COLOR },
             foot: [["", "", "TOTALS",
-              formatCurrency(clinicians.reduce((s,c) => s + calculateClinicianMetrics({...c,classification:String(c.classification)}).annualProduction, 0)),
-              formatCurrency(clinicians.reduce((s,c) => s + calculateClinicianMetrics({...c,classification:String(c.classification)}).clinicianCompensation, 0)),
-              formatCurrency(clinicians.reduce((s,c) => s + calculateClinicianMetrics({...c,classification:String(c.classification)}).employerObligations, 0)),
-              formatCurrency(clinicians.reduce((s,c) => s + calculateClinicianMetrics({...c,classification:String(c.classification)}).practiceNetBeforeOverhead, 0)),
+              formatCurrency(clinicians.reduce((s, c) => s + calculateClinicianMetrics({ ...c, classification: String(c.classification) }).annualProduction, 0)),
+              formatCurrency(clinicians.reduce((s, c) => s + calculateClinicianMetrics({ ...c, classification: String(c.classification) }).clinicianCompensation, 0)),
+              formatCurrency(clinicians.reduce((s, c) => s + calculateClinicianMetrics({ ...c, classification: String(c.classification) }).employerObligations, 0)),
+              formatCurrency(clinicians.reduce((s, c) => s + calculateClinicianMetrics({ ...c, classification: String(c.classification) }).practiceNetBeforeOverhead, 0)),
             ]],
-            footStyles: { fillColor: HEADER_GRAY as [number,number,number], textColor: [0,0,0] as [number,number,number], fontStyle: "bold" },
+            footStyles: { fillColor: HEADER_GRAY as [number, number, number], textColor: [0, 0, 0] as [number, number, number], fontStyle: "bold" },
           });
         }
 
@@ -143,7 +218,7 @@ export default function PDFExportTab() {
       try {
         const doc = new jsPDF();
         const date = new Date().toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" });
-        addPageHeader(doc, "Clinician Offer Summary", `Prepared ${date}`);
+        addPageHeader(doc, practiceName, "Clinician Compensation Sheet", `Prepared ${date}`);
 
         const clxList = selectedScenario?.clinicians ?? clinicians ?? [];
 
@@ -175,80 +250,145 @@ export default function PDFExportTab() {
         doc.text("Estimates are based on projected session volume. Actual compensation may vary. Practice overhead and goals are not shown in this summary.", 14, y);
         doc.text("W2 employees pay ~7.65% payroll tax. 1099 contractors pay ~15.3% self-employment tax. Consult a tax professional for guidance.", 14, y + 5);
 
-        doc.save(`clinician-offer-summary-${Date.now()}.pdf`);
+        doc.save(`clinician-compensation-sheet-${Date.now()}.pdf`);
       } finally { setLoading(null); }
     }, 50);
   };
 
-  const generateComparisonReport = () => {
-    if (!scenA || !scenB) return;
-    setLoading("comparison");
+  const generatePracticeFinancialSummary = () => {
+    setLoading("financial");
     setTimeout(() => {
       try {
         const doc = new jsPDF();
         const date = new Date().toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" });
-        addPageHeader(doc, "Scenario Comparison Report", `Generated ${date}`);
+        addPageHeader(doc, practiceName, "Practice Financial Summary", `Generated ${date}`);
 
-        const metricsFor = (scen: typeof scenA) => {
-          const cl = scen?.clinicians ?? [];
-          return {
-            production: cl.reduce((s, c) => s + calculateClinicianMetrics(c).annualProduction, 0),
-            comp: cl.reduce((s, c) => s + calculateClinicianMetrics(c).clinicianCompensation, 0),
-            burden: cl.reduce((s, c) => s + calculateClinicianMetrics(c).employerObligations, 0),
-            net: cl.reduce((s, c) => s + calculateClinicianMetrics(c).practiceNetBeforeOverhead, 0),
-            count: cl.length,
-          };
-        };
+        const startY = 28;
 
-        const mA = metricsFor(scenA);
-        const mB = metricsFor(scenB);
+        if (goals && goals.length > 0 && currentReality) {
+          addSectionTitle(doc, "Goal vs. Current Reality", startY);
+          const rows = goals.map(g => {
+            const o = calculateBusinessGoalOutputs(g);
+            const gap = calculateCurrentRealityGap(currentReality, g);
+            return [
+              g.name,
+              g.timeHorizon,
+              formatCurrency(o.totalAnnualBusinessNeed),
+              formatCurrency(o.requiredNetPerClinician),
+              gap ? gap.percentAchieved.toFixed(1) + "%" : "—",
+              gap ? formatCurrency(gap.gapToGoal) : "—",
+            ];
+          });
+          autoTable(doc, {
+            startY: startY + 4,
+            head: [["Goal", "Horizon", "Total Need", "Net/Clinician Needed", "% Achieved", "Gap"]],
+            body: rows,
+            styles: { fontSize: 8 },
+            headStyles: { fillColor: BRAND_COLOR },
+          });
+        } else if (goals && goals.length > 0) {
+          addSectionTitle(doc, "Business Goals", startY);
+          autoTable(doc, {
+            startY: startY + 4,
+            head: [["Goal Name", "Horizon", "Total Business Need", "Req. Net / Clinician", "Desired Clinicians"]],
+            body: goals.map(g => {
+              const o = calculateBusinessGoalOutputs(g);
+              return [g.name, g.timeHorizon, formatCurrency(o.totalAnnualBusinessNeed), formatCurrency(o.requiredNetPerClinician), g.desiredCliniciansCount];
+            }),
+            styles: { fontSize: 8 },
+            headStyles: { fillColor: BRAND_COLOR },
+          });
+        }
 
-        addSectionTitle(doc, "Summary Comparison", 28);
-        autoTable(doc, {
-          startY: 32,
-          head: [["Metric", scenA.name, scenB.name, "Difference"]],
-          body: [
-            ["Total Annual Production", formatCurrency(mA.production), formatCurrency(mB.production), formatCurrency(mB.production - mA.production)],
-            ["Total Clinician Comp", formatCurrency(mA.comp), formatCurrency(mB.comp), formatCurrency(mB.comp - mA.comp)],
-            ["Total Employer Burden", formatCurrency(mA.burden), formatCurrency(mB.burden), formatCurrency(mB.burden - mA.burden)],
-            ["Total Comp Cost", formatCurrency(mA.comp + mA.burden), formatCurrency(mB.comp + mB.burden), formatCurrency((mB.comp + mB.burden) - (mA.comp + mA.burden))],
-            ["Practice Net (before overhead)", formatCurrency(mA.net), formatCurrency(mB.net), formatCurrency(mB.net - mA.net)],
-            ["Clinician Count", mA.count, mB.count, mB.count - mA.count],
-          ],
-          styles: { fontSize: 8 },
-          headStyles: { fillColor: BRAND_COLOR },
-          columnStyles: { 3: { fontStyle: "italic" } },
-        });
+        if (currentReality) {
+          const y = sectionY(doc) + 8;
+          addSectionTitle(doc, "Current Practice Financials", y);
+          autoTable(doc, {
+            startY: y + 4,
+            head: [["Financial Component", "Current Annual"]],
+            body: [
+              ["Owner Pay", formatCurrency(currentReality.currentOwnerPay)],
+              ["2nd Owner Pay", formatCurrency(currentReality.currentSecondOwnerPay)],
+              ["Annual Overhead", formatCurrency(currentReality.currentAnnualOverhead)],
+              ["Business Profit", formatCurrency(currentReality.currentBusinessProfit)],
+              ["Building Fund", formatCurrency(currentReality.currentBuildingFund)],
+              ["Cash Reserve", formatCurrency(currentReality.currentCashReserve)],
+            ],
+            styles: { fontSize: 8 },
+            headStyles: { fillColor: HEADER_GRAY as [number, number, number], textColor: [0, 0, 0] as [number, number, number] },
+            columnStyles: { 0: { fontStyle: "bold" } },
+            foot: [[
+              "TOTAL",
+              formatCurrency(
+                (currentReality.currentOwnerPay || 0) +
+                (currentReality.currentSecondOwnerPay || 0) +
+                (currentReality.currentAnnualOverhead || 0) +
+                (currentReality.currentBusinessProfit || 0) +
+                (currentReality.currentBuildingFund || 0) +
+                (currentReality.currentCashReserve || 0)
+              ),
+            ]],
+            footStyles: { fillColor: HEADER_GRAY as [number, number, number], textColor: [0, 0, 0] as [number, number, number], fontStyle: "bold" },
+          });
+        }
 
-        const yA = sectionY(doc) + 8;
-        addSectionTitle(doc, `${scenA.name} — Clinician Detail`, yA);
-        autoTable(doc, {
-          startY: yA + 4,
-          head: [["Name", "Type", "Session Rate", "Annual Comp", "Practice Net"]],
-          body: (scenA.clinicians ?? []).map(c => {
-            const m = calculateClinicianMetrics(c);
-            return [c.label, String(c.classification).toUpperCase(), formatCurrency(c.sessionRate), formatCurrency(m.clinicianCompensation), formatCurrency(m.practiceNetBeforeOverhead)];
-          }),
-          styles: { fontSize: 7 },
-          headStyles: { fillColor: [59, 130, 246] as [number,number,number] },
-        });
+        if (clinicians && clinicians.length > 0) {
+          const y = sectionY(doc) + 8;
+          if (y > 220) doc.addPage();
+          const titleY = y > 220 ? 28 : y;
 
-        const yB = sectionY(doc) + 8;
-        if (yB > 220) doc.addPage();
-        const titleYB = yB > 220 ? 22 : yB;
-        addSectionTitle(doc, `${scenB.name} — Clinician Detail`, titleYB);
-        autoTable(doc, {
-          startY: titleYB + 4,
-          head: [["Name", "Type", "Session Rate", "Annual Comp", "Practice Net"]],
-          body: (scenB.clinicians ?? []).map(c => {
-            const m = calculateClinicianMetrics(c);
-            return [c.label, String(c.classification).toUpperCase(), formatCurrency(c.sessionRate), formatCurrency(m.clinicianCompensation), formatCurrency(m.practiceNetBeforeOverhead)];
-          }),
-          styles: { fontSize: 7 },
-          headStyles: { fillColor: [107, 114, 128] as [number,number,number] },
-        });
+          const totalProduction = clinicians.reduce((s, c) => s + calculateClinicianMetrics({ ...c, classification: String(c.classification) }).annualProduction, 0);
+          const totalComp = clinicians.reduce((s, c) => s + calculateClinicianMetrics({ ...c, classification: String(c.classification) }).clinicianCompensation, 0);
+          const totalBurden = clinicians.reduce((s, c) => s + calculateClinicianMetrics({ ...c, classification: String(c.classification) }).employerObligations, 0);
+          const totalPracticeNet = clinicians.reduce((s, c) => s + calculateClinicianMetrics({ ...c, classification: String(c.classification) }).practiceNetBeforeOverhead, 0);
+          const netAfterOverhead = currentReality
+            ? totalPracticeNet - (currentReality.currentAnnualOverhead || 0)
+            : null;
 
-        doc.save(`scenario-comparison-${Date.now()}.pdf`);
+          addSectionTitle(doc, "Net Revenue Projections (Team Builder)", titleY);
+          autoTable(doc, {
+            startY: titleY + 4,
+            head: [["Metric", "Projected Annual"]],
+            body: [
+              ["Total Gross Production", formatCurrency(totalProduction)],
+              ["Total Clinician Compensation", formatCurrency(totalComp)],
+              ["Total Employer Burden (W2)", formatCurrency(totalBurden)],
+              ["Practice Net (before overhead)", formatCurrency(totalPracticeNet)],
+              ["Annual Overhead (current)", currentReality ? formatCurrency(currentReality.currentAnnualOverhead) : "—"],
+              ["Projected Net After Overhead", netAfterOverhead !== null ? formatCurrency(netAfterOverhead) : "—"],
+            ],
+            styles: { fontSize: 8 },
+            headStyles: { fillColor: BRAND_COLOR },
+            columnStyles: { 0: { fontStyle: "bold" } },
+          });
+
+          if (goals && goals.length > 0) {
+            const projY = sectionY(doc) + 8;
+            if (projY > 220) doc.addPage();
+            const projTitleY = projY > 220 ? 28 : projY;
+            addSectionTitle(doc, "Goal Achievement Outlook", projTitleY);
+            autoTable(doc, {
+              startY: projTitleY + 4,
+              head: [["Goal", "Business Need", "Projected Net After Overhead", "Surplus / Shortfall"]],
+              body: goals.map(g => {
+                const o = calculateBusinessGoalOutputs(g);
+                const surplus = netAfterOverhead !== null
+                  ? netAfterOverhead - o.totalAnnualBusinessNeed
+                  : null;
+                return [
+                  g.name,
+                  formatCurrency(o.totalAnnualBusinessNeed),
+                  netAfterOverhead !== null ? formatCurrency(netAfterOverhead) : "—",
+                  surplus !== null ? formatCurrency(surplus) : "—",
+                ];
+              }),
+              styles: { fontSize: 8 },
+              headStyles: { fillColor: BRAND_COLOR },
+            });
+          }
+        }
+
+        doc.save(`practice-financial-summary-${Date.now()}.pdf`);
       } finally { setLoading(null); }
     }, 50);
   };
@@ -258,6 +398,17 @@ export default function PDFExportTab() {
       <div>
         <h2 className="text-2xl font-bold tracking-tight">Export Reports</h2>
         <p className="text-muted-foreground">Generate professional PDF summaries for internal use or clinician communication.</p>
+      </div>
+
+      <div className="max-w-sm space-y-1">
+        <Label htmlFor="practice-name" className="text-sm font-medium">Practice Name (for PDF headers)</Label>
+        <Input
+          id="practice-name"
+          placeholder="e.g. Sunrise Counseling"
+          value={practiceName}
+          onChange={e => setPracticeName(e.target.value)}
+        />
+        <p className="text-xs text-muted-foreground">Appears in the header of every exported PDF.</p>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
@@ -270,7 +421,7 @@ export default function PDFExportTab() {
           </CardHeader>
           <CardContent className="space-y-4">
             <p className="text-sm text-muted-foreground">
-              Comprehensive report with all business goals, current reality, and per-clinician compensation breakdown.
+              Comprehensive internal report with all business goals, overhead breakdown, and per-clinician compensation.
               Uses all data from Team Builder.
             </p>
             <Button className="w-full" onClick={generateInternalReport} disabled={loading === "internal"}>
@@ -284,7 +435,7 @@ export default function PDFExportTab() {
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <FileText className="h-5 w-5 text-primary" />
-              Clinician Offer Summary
+              Clinician Communication Sheet
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
@@ -315,41 +466,15 @@ export default function PDFExportTab() {
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <FileText className="h-5 w-5 text-primary" />
-              Scenario Comparison Report
+              Practice Financial Summary
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
             <p className="text-sm text-muted-foreground">
-              Side-by-side comparison of two scenarios with clinician detail tables and net revenue deltas.
+              Goal vs. reality comparison with net revenue projections — ideal for your accountant or financial review.
             </p>
-            <div className="space-y-2">
-              <Label className="text-xs">Scenario A</Label>
-              <Select
-                value={compScenA?.toString() ?? ""}
-                onValueChange={v => setCompScenA(Number(v))}
-              >
-                <SelectTrigger><SelectValue placeholder="Select scenario A…" /></SelectTrigger>
-                <SelectContent>
-                  {scenarios?.map(s => <SelectItem key={s.id} value={String(s.id)}>{s.name}</SelectItem>)}
-                </SelectContent>
-              </Select>
-              <Label className="text-xs">Scenario B</Label>
-              <Select
-                value={compScenB?.toString() ?? ""}
-                onValueChange={v => setCompScenB(Number(v))}
-              >
-                <SelectTrigger><SelectValue placeholder="Select scenario B…" /></SelectTrigger>
-                <SelectContent>
-                  {scenarios?.map(s => <SelectItem key={s.id} value={String(s.id)}>{s.name}</SelectItem>)}
-                </SelectContent>
-              </Select>
-            </div>
-            <Button
-              className="w-full"
-              onClick={generateComparisonReport}
-              disabled={loading === "comparison" || !compScenA || !compScenB || !scenA || !scenB}
-            >
-              {loading === "comparison" ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Download className="h-4 w-4 mr-2" />}
+            <Button className="w-full" onClick={generatePracticeFinancialSummary} disabled={loading === "financial"}>
+              {loading === "financial" ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Download className="h-4 w-4 mr-2" />}
               Generate PDF
             </Button>
           </CardContent>
