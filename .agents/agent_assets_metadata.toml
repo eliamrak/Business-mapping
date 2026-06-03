@@ -1,0 +1,8 @@
+uploads = []
+outputs = []
+
+[[generated]]
+id = "poD-zbqJQnjZ6Pq-TKnJO"
+uri = "file://artifacts/comp-mobile/assets/images/icon.png"
+type = "image"
+title = "generated_image"
