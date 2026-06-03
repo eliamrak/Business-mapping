@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useRef, useCallback, useEffect } from "react";
 import { LayoutDashboard, Download, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -20,12 +20,64 @@ const ADVANCED_TABS = [
   { id: "impact", label: "Clinician Impact", component: ClinicianImpactViewTab },
 ];
 
+const TAB_IDS = ADVANCED_TABS.map(t => t.id);
+
+function isInsideHorizontalScroll(target: EventTarget | null, boundary: HTMLElement | null): boolean {
+  let node = target as HTMLElement | null;
+  while (node && node !== boundary) {
+    if (node.scrollWidth > node.clientWidth + 2) return true;
+    node = node.parentElement;
+  }
+  return false;
+}
+
 export default function Dashboard() {
   const [advancedOpen, setAdvancedOpen] = useState(false);
   const [advancedTab, setAdvancedTab] = useState("goals");
   const [exportOpen, setExportOpen] = useState(false);
 
   const ActiveAdvancedTab = ADVANCED_TABS.find(t => t.id === advancedTab)?.component ?? BusinessGoalsTab;
+
+  const touchStartX = useRef<number | null>(null);
+  const touchStartY = useRef<number | null>(null);
+  const touchStartTarget = useRef<EventTarget | null>(null);
+  const contentRef = useRef<HTMLDivElement>(null);
+  const tabBarRef = useRef<HTMLDivElement>(null);
+
+  const handleTouchStart = useCallback((e: React.TouchEvent) => {
+    touchStartX.current = e.touches[0].clientX;
+    touchStartY.current = e.touches[0].clientY;
+    touchStartTarget.current = e.target;
+  }, []);
+
+  const handleTouchEnd = useCallback((e: React.TouchEvent) => {
+    if (touchStartX.current === null || touchStartY.current === null) return;
+    const deltaX = e.changedTouches[0].clientX - touchStartX.current;
+    const deltaY = e.changedTouches[0].clientY - touchStartY.current;
+    const startTarget = touchStartTarget.current;
+    touchStartX.current = null;
+    touchStartY.current = null;
+    touchStartTarget.current = null;
+
+    if (Math.abs(deltaX) < 60 || Math.abs(deltaY) > Math.abs(deltaX) * 0.7) return;
+
+    if (isInsideHorizontalScroll(startTarget, contentRef.current)) return;
+
+    setAdvancedTab(current => {
+      const idx = TAB_IDS.indexOf(current);
+      if (deltaX < 0 && idx < TAB_IDS.length - 1) return TAB_IDS[idx + 1];
+      if (deltaX > 0 && idx > 0) return TAB_IDS[idx - 1];
+      return current;
+    });
+  }, []);
+
+  useEffect(() => {
+    if (!tabBarRef.current) return;
+    const activeBtn = tabBarRef.current.querySelector(`[data-tab="${advancedTab}"]`);
+    if (activeBtn) {
+      activeBtn.scrollIntoView({ behavior: "smooth", block: "nearest", inline: "center" });
+    }
+  }, [advancedTab]);
 
   return (
     <div className="min-h-screen bg-background flex flex-col font-sans">
@@ -75,10 +127,14 @@ export default function Dashboard() {
             </Button>
           </div>
           <div className="flex flex-col flex-1 min-h-0">
-            <div className="flex gap-1 px-4 sm:px-6 pt-3 border-b overflow-x-auto flex-nowrap hide-scrollbar shrink-0">
+            <div
+              ref={tabBarRef}
+              className="flex gap-1 px-4 sm:px-6 pt-3 border-b overflow-x-auto flex-nowrap hide-scrollbar shrink-0"
+            >
               {ADVANCED_TABS.map(tab => (
                 <button
                   key={tab.id}
+                  data-tab={tab.id}
                   onClick={() => setAdvancedTab(tab.id)}
                   className={`text-xs px-3 py-3 rounded-t whitespace-nowrap transition-colors min-h-[44px] ${
                     advancedTab === tab.id
@@ -90,7 +146,12 @@ export default function Dashboard() {
                 </button>
               ))}
             </div>
-            <div className="flex-1 overflow-y-auto px-4 sm:px-6 py-4">
+            <div
+              ref={contentRef}
+              className="flex-1 overflow-y-auto px-4 sm:px-6 py-4"
+              onTouchStart={handleTouchStart}
+              onTouchEnd={handleTouchEnd}
+            >
               <ActiveAdvancedTab />
             </div>
           </div>
