@@ -217,11 +217,90 @@ function W2vs1099SummarySection({ clinicians }: { clinicians: Clinician[] }) {
         <CardTitle className="text-base">W2 vs 1099 Classification Impact</CardTitle>
       </CardHeader>
       <CardContent className="p-0">
-        <p className="text-xs text-muted-foreground px-6 pb-3">
+        <p className="text-xs text-muted-foreground px-4 sm:px-6 pb-3">
           How each clinician's take-home and the practice's net would change under the opposite classification.
           Same session volume and split — only payroll tax treatment differs.
         </p>
-        <div className="overflow-x-auto">
+
+        {/* ── Mobile card view (< 640px) ── */}
+        <div className="sm:hidden divide-y">
+          {clinicians.map(c => {
+            const isW2 = String(c.classification) === "w2";
+            const actual = calculateClinicianMetrics(c);
+            const alt = calculateClinicianMetrics({ ...c, classification: isW2 ? "1099" : "w2" });
+            const takehomeDelta = alt.estimatedCompAfterPayrollTaxes - actual.estimatedCompAfterPayrollTaxes;
+            const netDelta = alt.practiceNetBeforeOverhead - actual.practiceNetBeforeOverhead;
+            const altLabel = isW2 ? "1099" : "W2";
+
+            return (
+              <div key={c.id} className="px-4 py-4 space-y-3">
+                <div className="flex items-center justify-between">
+                  <span className="font-semibold text-sm">{c.label}</span>
+                  <Badge variant={isW2 ? "default" : "outline"} className="text-[10px] uppercase shrink-0">
+                    {c.classification}
+                  </Badge>
+                </div>
+
+                <div className="grid grid-cols-2 gap-2 text-xs">
+                  <div className="rounded-lg bg-muted/50 p-2.5 space-y-2">
+                    <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">
+                      Current ({c.classification.toUpperCase()})
+                    </p>
+                    <div>
+                      <span className="text-[10px] text-muted-foreground block">Take-Home</span>
+                      <span className="font-semibold">{formatCurrency(actual.estimatedCompAfterPayrollTaxes)}</span>
+                    </div>
+                    <div>
+                      <span className="text-[10px] text-muted-foreground block">Employer Burden</span>
+                      {isW2
+                        ? <span className="font-medium text-amber-600">{formatCurrency(actual.employerObligations)}</span>
+                        : <span className="text-muted-foreground">—</span>
+                      }
+                    </div>
+                    <div>
+                      <span className="text-[10px] text-muted-foreground block">Practice Net</span>
+                      <span className="font-semibold text-primary">{formatCurrency(actual.practiceNetBeforeOverhead)}</span>
+                    </div>
+                  </div>
+
+                  <div className="rounded-lg border border-dashed bg-muted/20 p-2.5 space-y-2">
+                    <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">
+                      If {altLabel}
+                    </p>
+                    <div>
+                      <span className="text-[10px] text-muted-foreground block">Take-Home</span>
+                      <span className={`font-semibold ${takehomeDelta > 0 ? "text-green-600" : takehomeDelta < 0 ? "text-destructive" : ""}`}>
+                        {formatCurrency(alt.estimatedCompAfterPayrollTaxes)}
+                      </span>
+                      <span className={`text-[10px] font-medium block ${takehomeDelta >= 0 ? "text-green-600" : "text-destructive"}`}>
+                        {takehomeDelta >= 0 ? "+" : ""}{formatCurrency(takehomeDelta)}
+                      </span>
+                    </div>
+                    <div>
+                      <span className="text-[10px] text-muted-foreground block">Employer Burden</span>
+                      {!isW2
+                        ? <span className="font-medium text-amber-600">{formatCurrency(alt.employerObligations)}</span>
+                        : <span className="text-muted-foreground">—</span>
+                      }
+                    </div>
+                    <div>
+                      <span className="text-[10px] text-muted-foreground block">Practice Net</span>
+                      <span className={`font-semibold ${netDelta > 0 ? "text-green-600" : netDelta < 0 ? "text-destructive" : "text-primary"}`}>
+                        {formatCurrency(alt.practiceNetBeforeOverhead)}
+                      </span>
+                      <span className={`text-[10px] font-medium block ${netDelta >= 0 ? "text-green-600" : "text-destructive"}`}>
+                        {netDelta >= 0 ? "+" : ""}{formatCurrency(netDelta)}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+
+        {/* ── Desktop table (≥ 640px) ── */}
+        <div className="hidden sm:block overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b bg-muted/40">
@@ -283,7 +362,8 @@ function W2vs1099SummarySection({ clinicians }: { clinicians: Clinician[] }) {
             </tbody>
           </table>
         </div>
-        <div className="px-6 py-3 border-t bg-muted/20 text-xs text-muted-foreground">
+
+        <div className="px-4 sm:px-6 py-3 border-t bg-muted/20 text-xs text-muted-foreground">
           W2: employer absorbs ~7.65% FICA match + FUTA/SUTA + workers' comp; employee pays 7.65% payroll tax. ·
           1099: no employer burden; contractor pays 15.3% self-employment tax.
         </div>
