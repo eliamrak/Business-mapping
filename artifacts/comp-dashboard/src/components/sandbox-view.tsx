@@ -558,9 +558,28 @@ function ClinicianCard({
             )}
 
             {clinician.classification === "w2" && (
-              <div className="grid grid-cols-2 gap-2">
-                <InlineNumber label="Employer FICA (%)" value={clinician.w2EmployerFicaPct} onChange={v => setField("w2EmployerFicaPct", v)} step={0.01} suffix="%" />
-                <InlineNumber label="FUTA/SUTA (%)" value={clinician.futaSutaPct} onChange={v => setField("futaSutaPct", v)} step={0.01} suffix="%" />
+              <div className="space-y-2">
+                <div className="grid grid-cols-2 gap-2">
+                  <InlineNumber label="Employer FICA (%)" value={clinician.w2EmployerFicaPct} onChange={v => setField("w2EmployerFicaPct", v)} step={0.01} suffix="%" />
+                  <InlineNumber label="FUTA/SUTA (%)" value={clinician.futaSutaPct} onChange={v => setField("futaSutaPct", v)} step={0.01} suffix="%" />
+                </div>
+                {metrics.employerObligations > 0 && (
+                  <div className="rounded bg-amber-50 border border-amber-100 px-2.5 py-1.5 text-[11px] text-amber-700 flex flex-wrap gap-x-3 gap-y-0.5">
+                    <span className="font-medium text-amber-800">Burden breakdown:</span>
+                    {metrics.burdenFica > 0 && (
+                      <span>FICA {formatCurrency(metrics.burdenFica)}</span>
+                    )}
+                    {metrics.burdenFutaSuta > 0 && (
+                      <span>FUTA/SUTA {formatCurrency(metrics.burdenFutaSuta)}</span>
+                    )}
+                    {metrics.burdenWorkersComp > 0 && (
+                      <span>WC {formatCurrency(metrics.burdenWorkersComp)}</span>
+                    )}
+                    {metrics.burdenOther > 0 && (
+                      <span>Other {formatCurrency(metrics.burdenOther)}</span>
+                    )}
+                  </div>
+                )}
               </div>
             )}
           </div>

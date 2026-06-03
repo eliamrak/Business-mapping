@@ -52,6 +52,11 @@ export function calculateClinicianMetrics(input: ClinicianMetricsInput) {
 
   const employerObligations = isW2 ? clinicianCompensation * totalEmployerBurdenPct : 0;
 
+  const burdenFica = isW2 ? clinicianCompensation * ((input.w2EmployerFicaPct || 0) / 100) : 0;
+  const burdenFutaSuta = isW2 ? clinicianCompensation * ((input.futaSutaPct || 0) / 100) : 0;
+  const burdenWorkersComp = isW2 ? clinicianCompensation * ((input.workersCompPct || 0) / 100) : 0;
+  const burdenOther = isW2 ? clinicianCompensation * ((input.otherEmployerBurdenPct || 0) / 100) : 0;
+
   const practiceNetBeforeOverhead = practiceGrossRevenue - employerObligations;
 
   let clinicianPayrollTaxEstimate = 0;
@@ -80,6 +85,10 @@ export function calculateClinicianMetrics(input: ClinicianMetricsInput) {
     practiceNetBeforeOverhead,
     clinicianPayrollTaxEstimate,
     estimatedCompAfterPayrollTaxes,
+    burdenFica,
+    burdenFutaSuta,
+    burdenWorkersComp,
+    burdenOther,
   };
 }
 
