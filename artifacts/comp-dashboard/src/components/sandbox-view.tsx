@@ -210,7 +210,7 @@ function InlineNumber({
           value={raw}
           onChange={handleChange}
           onBlur={handleBlur}
-          className="h-7 text-sm px-2 w-full"
+          className="h-9 sm:h-7 text-sm px-2 w-full"
         />
         {suffix && <span className="text-xs text-muted-foreground">{suffix}</span>}
       </div>
@@ -256,7 +256,7 @@ function SplitInput({ clinicianSplit, onClinicianChange }: {
           value={raw}
           onChange={handleChange}
           onBlur={handleBlur}
-          className="h-7 text-sm px-2 w-14"
+          className="h-9 sm:h-7 text-sm px-2 w-16 sm:w-14"
         />
         <span className="text-xs text-muted-foreground">/</span>
         <span className="text-sm font-medium w-10 text-right">{practiceShare}%</span>
@@ -455,11 +455,11 @@ function ClinicianCard({
           <Input
             value={clinician.label}
             onChange={e => setField("label", e.target.value)}
-            className="h-7 text-sm font-semibold border-transparent bg-transparent hover:border-input focus:border-input px-1.5 flex-1 min-w-0"
+            className="h-9 sm:h-7 text-sm font-semibold border-transparent bg-transparent hover:border-input focus:border-input px-1.5 flex-1 min-w-0"
             placeholder="Clinician name"
           />
           <Select value={clinician.classification} onValueChange={v => setField("classification", v)}>
-            <SelectTrigger className="h-7 w-20 text-[11px] shrink-0">
+            <SelectTrigger className="h-9 sm:h-7 w-20 text-[11px] shrink-0">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
@@ -470,7 +470,7 @@ function ClinicianCard({
           </Select>
           <Button
             variant="ghost" size="icon"
-            className="h-7 w-7 text-muted-foreground hover:text-destructive shrink-0"
+            className="h-9 w-9 sm:h-7 sm:w-7 text-muted-foreground hover:text-destructive shrink-0"
             onClick={() => onRemove(clinician._localId)}
           >
             <X className="h-3.5 w-3.5" />
@@ -515,7 +515,7 @@ function ClinicianCard({
               <div className="space-y-1">
                 <Label className="text-[11px]">Role Type</Label>
                 <Select value={clinician.roleType} onValueChange={v => setField("roleType", v)}>
-                  <SelectTrigger className="h-7 text-xs"><SelectValue /></SelectTrigger>
+                  <SelectTrigger className="h-9 sm:h-7 text-xs"><SelectValue /></SelectTrigger>
                   <SelectContent>
                     <SelectItem value="associate">Associate</SelectItem>
                     <SelectItem value="contractor">Contractor</SelectItem>
@@ -1056,8 +1056,8 @@ export default function SandboxView({ onShowAdvanced }: { onShowAdvanced: () => 
         />
       )}
 
-      <div className="flex-1 grid grid-cols-[220px_1fr_220px] gap-4 min-h-0 items-start">
-        <aside className="sticky top-20 space-y-4 overflow-y-auto max-h-[calc(100vh-8rem)]">
+      <div className="flex-1 grid grid-cols-1 lg:grid-cols-[220px_1fr_220px] gap-4 min-h-0 items-start">
+        <aside className="lg:sticky lg:top-20 space-y-4 lg:overflow-y-auto lg:max-h-[calc(100vh-8rem)]">
           <PracticeInputsPanel
             goal={goal}
             goalSaving={goalSaving}
@@ -1110,7 +1110,7 @@ export default function SandboxView({ onShowAdvanced }: { onShowAdvanced: () => 
           )}
         </main>
 
-        <aside className="sticky top-20 space-y-4 overflow-y-auto max-h-[calc(100vh-8rem)]">
+        <aside className="lg:sticky lg:top-20 space-y-4 lg:overflow-y-auto lg:max-h-[calc(100vh-8rem)]">
           <LiveSummaryPanel clinicians={clinicians} goal={goal} />
         </aside>
       </div>

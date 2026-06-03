@@ -30,12 +30,15 @@ export default function Dashboard() {
   return (
     <div className="min-h-screen bg-background flex flex-col font-sans">
       <header className="border-b bg-card shadow-sm sticky top-0 z-10">
-        <div className="container mx-auto px-6 h-14 flex items-center justify-between">
+        <div className="container mx-auto px-3 sm:px-6 h-14 flex items-center justify-between">
           <div className="flex items-center gap-3 text-primary">
-            <div className="bg-primary/10 p-1.5 rounded-md">
+            <div className="bg-primary/10 p-1.5 rounded-md shrink-0">
               <LayoutDashboard className="h-4 w-4 text-primary" />
             </div>
-            <h1 className="text-lg font-semibold tracking-tight text-foreground">Comp Strategy Dashboard</h1>
+            <h1 className="text-base sm:text-lg font-semibold tracking-tight text-foreground truncate">
+              <span className="hidden sm:inline">Comp Strategy Dashboard</span>
+              <span className="sm:hidden">Comp Dashboard</span>
+            </h1>
           </div>
 
           <Button
@@ -50,12 +53,12 @@ export default function Dashboard() {
         </div>
       </header>
 
-      <main className="flex-1 container mx-auto px-6 py-6">
+      <main className="flex-1 container mx-auto px-3 sm:px-6 py-4 sm:py-6">
         <SandboxView onShowAdvanced={() => setAdvancedOpen(true)} />
       </main>
 
       <Dialog open={exportOpen} onOpenChange={setExportOpen}>
-        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+        <DialogContent className="w-[95vw] sm:max-w-4xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Export PDF Reports</DialogTitle>
           </DialogHeader>
@@ -64,7 +67,7 @@ export default function Dashboard() {
       </Dialog>
 
       <Dialog open={advancedOpen} onOpenChange={setAdvancedOpen}>
-        <DialogContent className="max-w-5xl max-h-[90vh] flex flex-col p-0">
+        <DialogContent className="w-[95vw] sm:max-w-5xl max-h-[90vh] flex flex-col p-0">
           <div className="flex items-center justify-between px-6 py-4 border-b shrink-0">
             <h2 className="text-lg font-semibold">Advanced View</h2>
             <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => setAdvancedOpen(false)}>
