@@ -101,11 +101,11 @@ function ClinicianEditDialog({
 
   return (
     <Dialog open={open} onOpenChange={o => { if (!o) onClose(); }}>
-      <DialogContent className="max-w-xl max-h-[90vh] overflow-y-auto">
+      <DialogContent className="w-[95vw] sm:max-w-xl max-h-[90vh] overflow-y-auto">
         <DialogHeader><DialogTitle>{title}</DialogTitle></DialogHeader>
         <div className="space-y-5 py-2">
-          <div className="grid grid-cols-2 gap-4">
-            <div className="col-span-2 space-y-1">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div className="sm:col-span-2 space-y-1">
               <Label>Name / Label</Label>
               <Input value={form.label} onChange={e => setField("label", e.target.value)} />
             </div>
@@ -134,7 +134,7 @@ function ClinicianEditDialog({
           </div>
           <div>
             <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">Productivity</p>
-            <div className="grid grid-cols-3 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
               <NumField label="Session Rate ($)" name="sessionRate" value={form.sessionRate} onChange={setField} />
               <NumField label="Sessions/Wk" name="sessionsPerWeek" value={form.sessionsPerWeek} onChange={setField} />
               <NumField label="Weeks/Yr" name="weeksWorkedPerYear" value={form.weeksWorkedPerYear} onChange={setField} />
@@ -142,10 +142,10 @@ function ClinicianEditDialog({
           </div>
           <div>
             <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">Revenue Split</p>
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <NumField label="Pre-Cap Clinician %" name="preCapClinicianSplit" value={form.preCapClinicianSplit} onChange={setField} step={0.1} />
               <NumField label="Pre-Cap Practice %" name="preCapPracticeSplit" value={form.preCapPracticeSplit} onChange={setField} step={0.1} />
-              <div className="col-span-2 flex items-center gap-3">
+              <div className="sm:col-span-2 flex items-center gap-3">
                 <Switch checked={form.capEnabled} onCheckedChange={v => setField("capEnabled", v)} />
                 <Label>Enable cap</Label>
               </div>
@@ -160,7 +160,7 @@ function ClinicianEditDialog({
           {form.classification === "w2" && (
             <div>
               <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">W2 Employer Burden</p>
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <NumField label="Employer FICA (%)" name="w2EmployerFicaPct" value={form.w2EmployerFicaPct} onChange={setField} step={0.01} />
                 <NumField label="FUTA/SUTA (%)" name="futaSutaPct" value={form.futaSutaPct} onChange={setField} step={0.01} />
                 <NumField label="Workers' Comp (%)" name="workersCompPct" value={form.workersCompPct} onChange={setField} step={0.01} />
@@ -170,7 +170,7 @@ function ClinicianEditDialog({
           )}
           <div className="rounded-lg bg-muted/50 p-3 border text-sm">
             <p className="text-xs font-medium mb-2">Live Preview</p>
-            <div className="grid grid-cols-2 gap-2">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
               <div><span className="text-muted-foreground text-xs">Annual Production</span><p className="font-semibold">{formatCurrency(metrics.annualProduction)}</p></div>
               <div><span className="text-muted-foreground text-xs">Clinician Comp</span><p className="font-semibold text-green-600">{formatCurrency(metrics.clinicianCompensation)}</p></div>
               <div><span className="text-muted-foreground text-xs">Employer Burden</span><p className="font-semibold text-amber-600">{formatCurrency(metrics.employerObligations)}</p></div>
@@ -441,7 +441,7 @@ function ScenarioDetail({ scenarioId, onBack }: { scenarioId: number; onBack: ()
       )}
 
       <Dialog open={addOpen} onOpenChange={setAddOpen}>
-        <DialogContent className="max-w-lg">
+        <DialogContent className="w-[95vw] sm:max-w-lg">
           <DialogHeader><DialogTitle>Import Clinician from Team Builder</DialogTitle></DialogHeader>
           {!allClinicians?.length ? (
             <p className="text-muted-foreground text-sm py-4">No clinicians in Team Builder. Add them there first.</p>
@@ -465,7 +465,7 @@ function ScenarioDetail({ scenarioId, onBack }: { scenarioId: number; onBack: ()
       </Dialog>
 
       <Dialog open={editScen} onOpenChange={setEditScen}>
-        <DialogContent className="max-w-md">
+        <DialogContent className="w-[95vw] sm:max-w-md">
           <DialogHeader><DialogTitle>Edit Scenario</DialogTitle></DialogHeader>
           <div className="space-y-4 py-2">
             <div className="space-y-1">

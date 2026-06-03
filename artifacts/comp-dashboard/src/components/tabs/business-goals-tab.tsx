@@ -222,13 +222,13 @@ export default function BusinessGoalsTab() {
       )}
 
       <Dialog open={!!editGoal} onOpenChange={open => { if (!open) setEditGoal(null); }}>
-        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+        <DialogContent className="w-[95vw] sm:max-w-2xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Edit Business Goal</DialogTitle>
           </DialogHeader>
           <div className="space-y-6 py-2">
-            <div className="grid grid-cols-2 gap-4">
-              <div className="col-span-2 space-y-1">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div className="sm:col-span-2 space-y-1">
                 <Label htmlFor="goal-name">Goal Name</Label>
                 <Input id="goal-name" value={form.name} onChange={e => setField("name", e.target.value)} />
               </div>
@@ -248,7 +248,7 @@ export default function BusinessGoalsTab() {
 
             <div>
               <h4 className="text-sm font-semibold mb-3 text-muted-foreground uppercase tracking-wider">Owner Compensation</h4>
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <NumInput label="Owner Pay Goal ($)" name="ownerPayGoal" value={form.ownerPayGoal} onChange={setField} tooltip="Annual compensation goal for primary owner" />
                 <NumInput label="Second Owner Pay Goal ($)" name="secondOwnerPayGoal" value={form.secondOwnerPayGoal} onChange={setField} tooltip="Annual compensation goal for second owner (0 if single owner)" />
                 <NumInput label="Desired Owner Clinical Caseload" name="desiredOwnerClinicalCaseload" value={form.desiredOwnerClinicalCaseload} onChange={setField} tooltip="How many clinical sessions per week the owner plans to see" />
@@ -257,7 +257,7 @@ export default function BusinessGoalsTab() {
 
             <div>
               <h4 className="text-sm font-semibold mb-3 text-muted-foreground uppercase tracking-wider">Practice Financials</h4>
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <NumInput label="Annual Overhead Goal ($)" name="annualOverheadGoal" value={form.annualOverheadGoal} onChange={setField} tooltip="Rent, utilities, software, admin — all non-compensation overhead" />
                 <NumInput label="Business Profit Goal ($)" name="businessProfitGoal" value={form.businessProfitGoal} onChange={setField} tooltip="Net profit retained in the business after all expenses" />
                 <NumInput label="Building Fund Goal ($)" name="buildingFundGoal" value={form.buildingFundGoal} onChange={setField} tooltip="Savings earmarked for purchasing or renovating a building" />
@@ -273,7 +273,7 @@ export default function BusinessGoalsTab() {
 
             <div className="rounded-lg bg-muted/50 p-4 border">
               <p className="text-sm font-medium mb-2">Calculated Totals</p>
-              <div className="grid grid-cols-2 gap-3 text-sm">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
                 {(() => {
                   const o = calculateBusinessGoalOutputs(form as Partial<BG>);
                   return <>

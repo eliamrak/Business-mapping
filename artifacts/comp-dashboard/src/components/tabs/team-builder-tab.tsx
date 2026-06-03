@@ -253,13 +253,13 @@ export default function TeamBuilderTab() {
       )}
 
       <Dialog open={!!editClinician} onOpenChange={open => { if (!open) setEditClinician(null); }}>
-        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+        <DialogContent className="w-[95vw] sm:max-w-2xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Edit Clinician Profile</DialogTitle>
           </DialogHeader>
           <div className="space-y-6 py-2">
-            <div className="grid grid-cols-2 gap-4">
-              <div className="col-span-2 space-y-1">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div className="sm:col-span-2 space-y-1">
                 <Label htmlFor="c-label">Clinician Name / Label</Label>
                 <Input id="c-label" value={form.label} onChange={e => setField("label", e.target.value)} />
               </div>
@@ -289,7 +289,7 @@ export default function TeamBuilderTab() {
 
             <div>
               <h4 className="text-sm font-semibold mb-3 text-muted-foreground uppercase tracking-wider">Productivity</h4>
-              <div className="grid grid-cols-3 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                 <NumField label="Session Rate ($)" name="sessionRate" value={form.sessionRate} onChange={setField} tooltip="Billed rate per session" />
                 <NumField label="Sessions / Week" name="sessionsPerWeek" value={form.sessionsPerWeek} onChange={setField} />
                 <NumField label="Weeks / Year" name="weeksWorkedPerYear" value={form.weeksWorkedPerYear} onChange={setField} />
@@ -298,10 +298,10 @@ export default function TeamBuilderTab() {
 
             <div>
               <h4 className="text-sm font-semibold mb-3 text-muted-foreground uppercase tracking-wider">Revenue Split</h4>
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <NumField label="Pre-Cap Clinician Split (%)" name="preCapClinicianSplit" value={form.preCapClinicianSplit} onChange={setField} step={0.1} tooltip="Clinician's share of each session before reaching the cap" />
                 <NumField label="Pre-Cap Practice Split (%)" name="preCapPracticeSplit" value={form.preCapPracticeSplit} onChange={setField} step={0.1} />
-                <div className="col-span-2 flex items-center gap-3">
+                <div className="sm:col-span-2 flex items-center gap-3">
                   <Switch id="cap-enabled" checked={form.capEnabled} onCheckedChange={v => setField("capEnabled", v)} />
                   <Label htmlFor="cap-enabled">Enable revenue cap</Label>
                 </div>
@@ -317,7 +317,7 @@ export default function TeamBuilderTab() {
             {form.classification === "w2" && (
               <div>
                 <h4 className="text-sm font-semibold mb-3 text-muted-foreground uppercase tracking-wider">W2 Employer Burden</h4>
-                <div className="grid grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <NumField label="Employer FICA (%)" name="w2EmployerFicaPct" value={form.w2EmployerFicaPct} onChange={setField} step={0.01} tooltip="Federal payroll tax — employer's share of Social Security & Medicare (7.65%)" />
                   <NumField label="FUTA/SUTA (%)" name="futaSutaPct" value={form.futaSutaPct} onChange={setField} step={0.01} tooltip="Federal and state unemployment insurance taxes" />
                   <NumField label="Workers' Comp (%)" name="workersCompPct" value={form.workersCompPct} onChange={setField} step={0.01} tooltip="Workers' compensation insurance premium rate" />
@@ -329,7 +329,7 @@ export default function TeamBuilderTab() {
             {metrics && (
               <div className="rounded-lg bg-muted/50 p-4 border">
                 <p className="text-sm font-medium mb-2">Live Preview</p>
-                <div className="grid grid-cols-2 gap-3 text-sm">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
                   <div><span className="text-muted-foreground block text-xs">Annual Production</span><span className="font-semibold">{formatCurrency(metrics.annualProduction)}</span></div>
                   <div><span className="text-muted-foreground block text-xs">Clinician Comp</span><span className="font-semibold text-green-600">{formatCurrency(metrics.clinicianCompensation)}</span></div>
                   <div><span className="text-muted-foreground block text-xs">Employer Obligations (W2)</span><span className="font-semibold text-amber-600">{formatCurrency(metrics.employerObligations)}</span></div>

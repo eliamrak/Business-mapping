@@ -237,7 +237,7 @@ export default function CurrentRealityTab() {
       )}
 
       <Dialog open={editOpen} onOpenChange={setEditOpen}>
-        <DialogContent className="max-w-xl max-h-[90vh] overflow-y-auto">
+        <DialogContent className="w-[95vw] sm:max-w-xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Edit Current Reality Metrics</DialogTitle>
           </DialogHeader>
@@ -257,7 +257,7 @@ export default function CurrentRealityTab() {
                   Averages filled from {autoFilledCount} clinician{autoFilledCount !== 1 ? "s" : ""} in Team Builder. Review and save when ready.
                 </p>
               )}
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <NumField label="Number of Clinicians" name="currentCliniciansCount" value={form.currentCliniciansCount} onChange={setField} />
                 <NumField label="Avg Session Rate ($)" name="currentAvgSessionRate" value={form.currentAvgSessionRate} onChange={setField} />
                 <NumField label="Avg Sessions / Week" name="currentAvgSessionsPerWeek" value={form.currentAvgSessionsPerWeek} onChange={setField} />
@@ -266,7 +266,7 @@ export default function CurrentRealityTab() {
             </div>
             <div>
               <h4 className="text-sm font-semibold mb-3 text-muted-foreground uppercase tracking-wider">Financial Actuals</h4>
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <NumField label="Owner Pay ($)" name="currentOwnerPay" value={form.currentOwnerPay} onChange={setField} />
                 <NumField label="2nd Owner Pay ($)" name="currentSecondOwnerPay" value={form.currentSecondOwnerPay} onChange={setField} />
                 <NumField label="Annual Overhead ($)" name="currentAnnualOverhead" value={form.currentAnnualOverhead} onChange={setField} />

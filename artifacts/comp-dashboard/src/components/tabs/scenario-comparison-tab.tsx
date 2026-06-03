@@ -354,7 +354,8 @@ export default function ScenarioComparisonTab() {
                 <Card>
                   <CardHeader><CardTitle className="text-base">Goal Progress</CardTitle></CardHeader>
                   <CardContent>
-                    <div className="grid gap-4" style={{ gridTemplateColumns: `repeat(${activeIds.length}, 1fr)` }}>
+                    <div className="overflow-x-auto">
+                    <div className="grid gap-4 min-w-[400px]" style={{ gridTemplateColumns: `repeat(${activeIds.length}, 1fr)` }}>
                       {allData.map((d, i) => {
                         if (!d.goalOutputs || !d.metrics) return (
                           <div key={i} className="rounded-lg border p-4 text-sm text-muted-foreground">
@@ -383,6 +384,7 @@ export default function ScenarioComparisonTab() {
                           </div>
                         );
                       })}
+                    </div>
                     </div>
                   </CardContent>
                 </Card>
