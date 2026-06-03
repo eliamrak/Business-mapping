@@ -124,7 +124,98 @@ function TeamRosterSection({ clinicians }: { clinicians: Clinician[] }) {
         <CardTitle className="text-base">All Clinicians — Production & Compensation</CardTitle>
       </CardHeader>
       <CardContent className="p-0">
-        <div className="overflow-x-auto">
+
+        {/* ── Mobile card view (< 640px) ── */}
+        <div className="sm:hidden divide-y">
+          {rows.map(({ clinician: c, metrics: m }) => {
+            const isW2 = String(c.classification) === "w2";
+            const compPct = m.annualProduction > 0 ? (m.clinicianCompensation / m.annualProduction) * 100 : 0;
+            return (
+              <div key={c.id} className="px-4 py-4 space-y-3">
+                {/* Name / badge row */}
+                <div className="flex items-center justify-between gap-2">
+                  <span className="font-semibold text-sm">{c.label}</span>
+                  <div className="flex items-center gap-1 shrink-0">
+                    <Badge variant={isW2 ? "default" : "outline"} className="text-[10px] uppercase px-1.5 py-0">
+                      {c.classification}
+                    </Badge>
+                    <Badge variant="secondary" className="text-[10px] px-1.5 py-0">{c.roleType}</Badge>
+                  </div>
+                </div>
+                <p className="text-[10px] text-muted-foreground -mt-1">
+                  {c.sessionsPerWeek}/wk · {formatCurrency(c.sessionRate)}/session
+                </p>
+
+                {/* Metrics grid */}
+                <div className="grid grid-cols-2 gap-2 text-xs">
+                  <div className="rounded-lg bg-muted/50 p-2.5 space-y-0.5">
+                    <p className="text-[10px] text-muted-foreground">Annual Production</p>
+                    <p className="font-semibold">{formatCurrency(m.annualProduction)}</p>
+                    <p className="text-[10px] text-muted-foreground">{m.annualSessions} sessions</p>
+                  </div>
+
+                  <div className="rounded-lg bg-muted/50 p-2.5 space-y-0.5">
+                    <p className="text-[10px] text-muted-foreground">Gross Comp</p>
+                    <p className="font-semibold text-green-600">{formatCurrency(m.clinicianCompensation)}</p>
+                    <p className="text-[10px] text-muted-foreground">{formatPercent(compPct, 0)} of prod.</p>
+                  </div>
+
+                  {isW2 && (
+                    <div className="rounded-lg bg-muted/50 p-2.5 space-y-0.5">
+                      <p className="text-[10px] text-muted-foreground">Employer Burden</p>
+                      <p className="font-semibold text-amber-600">{formatCurrency(m.employerObligations)}</p>
+                      <p className="text-[10px] text-muted-foreground">FICA + FUTA/SUTA</p>
+                    </div>
+                  )}
+
+                  <div className="rounded-lg bg-muted/50 p-2.5 space-y-0.5">
+                    <p className="text-[10px] text-muted-foreground">Est. Take-Home</p>
+                    <p className="font-semibold">{formatCurrency(m.estimatedCompAfterPayrollTaxes)}</p>
+                    <p className="text-[10px] text-muted-foreground">after payroll tax</p>
+                  </div>
+
+                  <div className="rounded-lg bg-muted/50 p-2.5 space-y-0.5">
+                    <p className="text-[10px] text-muted-foreground">Practice Net</p>
+                    <p className="font-semibold text-primary">{formatCurrency(m.practiceNetBeforeOverhead)}</p>
+                    <p className="text-[10px] text-muted-foreground">before overhead</p>
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+
+          {/* Mobile totals row */}
+          <div className="px-4 py-4 bg-muted/30 space-y-3">
+            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+              Team Total ({clinicians.length} clinicians)
+            </p>
+            <div className="grid grid-cols-2 gap-2 text-xs">
+              <div className="rounded-lg bg-background p-2.5 space-y-0.5">
+                <p className="text-[10px] text-muted-foreground">Annual Production</p>
+                <p className="font-bold">{formatCurrency(totalProduction)}</p>
+              </div>
+              <div className="rounded-lg bg-background p-2.5 space-y-0.5">
+                <p className="text-[10px] text-muted-foreground">Gross Comp</p>
+                <p className="font-bold text-green-600">{formatCurrency(totalComp)}</p>
+              </div>
+              <div className="rounded-lg bg-background p-2.5 space-y-0.5">
+                <p className="text-[10px] text-muted-foreground">Employer Burden</p>
+                <p className="font-bold text-amber-600">{formatCurrency(totalBurden)}</p>
+              </div>
+              <div className="rounded-lg bg-background p-2.5 space-y-0.5">
+                <p className="text-[10px] text-muted-foreground">Est. Take-Home</p>
+                <p className="font-bold">{formatCurrency(totalTakeHome)}</p>
+              </div>
+              <div className="rounded-lg bg-background p-2.5 space-y-0.5">
+                <p className="text-[10px] text-muted-foreground">Practice Net</p>
+                <p className="font-bold text-primary">{formatCurrency(totalPracticeNet)}</p>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* ── Desktop table view (≥ 640px) ── */}
+        <div className="hidden sm:block overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b bg-muted/40">
@@ -205,6 +296,7 @@ function TeamRosterSection({ clinicians }: { clinicians: Clinician[] }) {
             </tfoot>
           </table>
         </div>
+
       </CardContent>
     </Card>
   );
