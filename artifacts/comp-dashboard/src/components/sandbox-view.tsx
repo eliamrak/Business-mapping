@@ -406,11 +406,13 @@ function ClinicianCard({
   onChange,
   onSave,
   onRemove,
+  overhead,
 }: {
   clinician: SandboxClinician;
   onChange: (localId: string, patch: Partial<SandboxClinician>) => void;
   onSave: (localId: string) => void;
   onRemove: (localId: string) => void;
+  overhead: number;
 }) {
   const metrics = useMemo(() => calculateClinicianMetrics(clinician), [clinician]);
   const savedLabel = useRelativeTime(clinician._savedAt);
@@ -513,8 +515,19 @@ function ClinicianCard({
         >
           {clinician._expanded ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
           {clinician._expanded ? "Fewer settings" : "More settings"}
-          <span className="ml-auto text-[10px] text-muted-foreground">
+          <span className="ml-auto text-[10px] text-muted-foreground flex items-center gap-1.5">
             {metrics.employerObligations > 0 ? "Net after burden" : "Net to practice"}: {formatCurrency(metrics.practiceNetBeforeOverhead)}
+            {overhead > 0 && (
+              <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium ${
+                metrics.practiceNetBeforeOverhead >= overhead
+                  ? "bg-green-100 text-green-700"
+                  : metrics.practiceNetBeforeOverhead >= overhead * 0.5
+                  ? "bg-amber-100 text-amber-700"
+                  : "bg-red-50 text-red-600"
+              }`}>
+                {Math.round((metrics.practiceNetBeforeOverhead / overhead) * 100)}% of overhead
+              </span>
+            )}
           </span>
         </button>
 
@@ -1268,6 +1281,7 @@ export default function SandboxView({ onShowAdvanced }: { onShowAdvanced: () => 
                   onChange={handleClinicianChange}
                   onSave={handleSaveClinician}
                   onRemove={handleRemoveClinician}
+                  overhead={goal.annualOverheadGoal || 0}
                 />
               ))}
             </div>
