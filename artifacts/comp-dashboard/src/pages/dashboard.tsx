@@ -75,12 +75,12 @@ export default function Dashboard() {
             </Button>
           </div>
           <div className="flex flex-col flex-1 min-h-0">
-            <div className="flex gap-1 px-6 pt-3 border-b overflow-x-auto flex-nowrap hide-scrollbar shrink-0">
+            <div className="flex gap-1 px-4 sm:px-6 pt-3 border-b overflow-x-auto flex-nowrap hide-scrollbar shrink-0">
               {ADVANCED_TABS.map(tab => (
                 <button
                   key={tab.id}
                   onClick={() => setAdvancedTab(tab.id)}
-                  className={`text-xs px-3 py-2 rounded-t whitespace-nowrap transition-colors ${
+                  className={`text-xs px-3 py-3 rounded-t whitespace-nowrap transition-colors min-h-[44px] ${
                     advancedTab === tab.id
                       ? "bg-primary text-primary-foreground"
                       : "text-muted-foreground hover:text-foreground"
@@ -90,7 +90,7 @@ export default function Dashboard() {
                 </button>
               ))}
             </div>
-            <div className="flex-1 overflow-y-auto px-6 py-4">
+            <div className="flex-1 overflow-y-auto px-4 sm:px-6 py-4">
               <ActiveAdvancedTab />
             </div>
           </div>

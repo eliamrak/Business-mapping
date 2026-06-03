@@ -311,13 +311,13 @@ function ScenarioDetail({ scenarioId, onBack }: { scenarioId: number; onBack: ()
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center gap-3">
-        <Button variant="ghost" size="sm" onClick={onBack}><ChevronLeft className="h-4 w-4 mr-1" />Back</Button>
-        <div className="flex-1">
+      <div className="flex flex-wrap items-start gap-3">
+        <Button variant="ghost" size="sm" onClick={onBack} className="min-h-[44px]"><ChevronLeft className="h-4 w-4 mr-1" />Back</Button>
+        <div className="flex-1 min-w-0">
           <h2 className="text-2xl font-bold tracking-tight">{scenario.name}</h2>
           {scenario.notes && <p className="text-muted-foreground text-sm">{scenario.notes}</p>}
         </div>
-        <Button variant="outline" size="sm" onClick={openEditScenario}>
+        <Button variant="outline" size="sm" onClick={openEditScenario} className="min-h-[44px]">
           <Pencil className="h-4 w-4 mr-1" />Edit
         </Button>
       </div>
@@ -351,21 +351,21 @@ function ScenarioDetail({ scenarioId, onBack }: { scenarioId: number; onBack: ()
       </div>
 
       {linkedGoal && goalOutputs && (
-        <div className={`rounded-lg border p-3 text-sm flex items-center gap-3 ${
+        <div className={`rounded-lg border p-3 text-sm flex flex-wrap items-center gap-2 ${
           goalStatus === "green" ? "border-green-500 bg-green-50"
           : goalStatus === "yellow" ? "border-amber-400 bg-amber-50"
           : "border-red-400 bg-red-50"
         }`}>
-          <div className={`h-2 w-2 rounded-full ${
+          <div className={`h-2 w-2 rounded-full shrink-0 ${
             goalStatus === "green" ? "bg-green-500"
             : goalStatus === "yellow" ? "bg-amber-500"
             : "bg-red-500"
           }`} />
           <span className="font-medium">Goal: {linkedGoal.name}</span>
-          <span className="text-muted-foreground">—</span>
-          <span>Need {formatCurrency(goalOutputs.totalAnnualBusinessNeed)}, have {formatCurrency(totalPracticeNet)}</span>
+          <span className="text-muted-foreground hidden sm:inline">—</span>
+          <span className="text-xs sm:text-sm">Need {formatCurrency(goalOutputs.totalAnnualBusinessNeed)}, have {formatCurrency(totalPracticeNet)}</span>
           {goalStatus !== "green" && (
-            <span className={`font-semibold ml-auto ${goalStatus === "yellow" ? "text-amber-600" : "text-destructive"}`}>
+            <span className={`font-semibold sm:ml-auto ${goalStatus === "yellow" ? "text-amber-600" : "text-destructive"}`}>
               {formatCurrency(goalOutputs.totalAnnualBusinessNeed - totalPracticeNet)} gap
               {goalPct !== null && ` (${Math.round(goalPct * 100)}%)`}
             </span>
@@ -373,13 +373,13 @@ function ScenarioDetail({ scenarioId, onBack }: { scenarioId: number; onBack: ()
         </div>
       )}
 
-      <div className="flex items-center justify-between">
+      <div className="flex flex-wrap items-center justify-between gap-3">
         <h3 className="text-lg font-semibold">Clinicians in this Scenario</h3>
         <div className="flex gap-2">
-          <Button variant="outline" size="sm" onClick={() => setAddOpen(true)}>
+          <Button variant="outline" size="sm" onClick={() => setAddOpen(true)} className="min-h-[44px]">
             <UserPlus className="h-4 w-4 mr-1" />Import from Team
           </Button>
-          <Button size="sm" onClick={handleAddBlank}>
+          <Button size="sm" onClick={handleAddBlank} className="min-h-[44px]">
             <Plus className="h-4 w-4 mr-1" />Add Blank
           </Button>
         </div>
@@ -397,9 +397,9 @@ function ScenarioDetail({ scenarioId, onBack }: { scenarioId: number; onBack: ()
             return (
               <Card key={c.id}>
                 <CardContent className="pt-4">
-                  <div className="flex items-start gap-4">
-                    <div className="flex-1">
-                      <div className="flex items-center gap-2 mb-2">
+                  <div className="flex flex-col sm:flex-row sm:items-start gap-3">
+                    <div className="flex-1 min-w-0">
+                      <div className="flex flex-wrap items-center gap-2 mb-2">
                         <span className="font-semibold">{c.label}</span>
                         <Badge variant="secondary" className="text-[10px] uppercase">{c.roleType}</Badge>
                         <Badge variant={String(c.classification) === "w2" ? "default" : "outline"} className="text-[10px] uppercase">{c.classification}</Badge>
@@ -411,14 +411,14 @@ function ScenarioDetail({ scenarioId, onBack }: { scenarioId: number; onBack: ()
                         <div><span className="text-muted-foreground text-xs block">Practice Net</span><span className="font-medium text-primary">{formatCurrency(m.practiceNetBeforeOverhead)}</span></div>
                       </div>
                     </div>
-                    <div className="flex gap-1">
-                      <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => setEditClx(c)} title="Edit">
+                    <div className="flex gap-1 sm:shrink-0">
+                      <Button variant="ghost" size="icon" className="h-11 w-11 sm:h-8 sm:w-8" onClick={() => setEditClx(c)} title="Edit">
                         <Pencil className="h-4 w-4" />
                       </Button>
-                      <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => handleDuplicateClx(c.id)} title="Duplicate">
+                      <Button variant="ghost" size="icon" className="h-11 w-11 sm:h-8 sm:w-8" onClick={() => handleDuplicateClx(c.id)} title="Duplicate">
                         <Copy className="h-4 w-4" />
                       </Button>
-                      <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive hover:bg-destructive/10" onClick={() => handleRemoveClx(c.id)} title="Remove">
+                      <Button variant="ghost" size="icon" className="h-11 w-11 sm:h-8 sm:w-8 text-destructive hover:bg-destructive/10" onClick={() => handleRemoveClx(c.id)} title="Remove">
                         <Trash className="h-4 w-4" />
                       </Button>
                     </div>
@@ -536,12 +536,12 @@ export default function ScenarioBuilderTab() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h2 className="text-2xl font-bold tracking-tight">Scenario Builder</h2>
           <p className="text-muted-foreground">Create different practice configurations to compare.</p>
         </div>
-        <Button onClick={handleCreate}>
+        <Button onClick={handleCreate} className="min-h-[44px]">
           <Plus className="h-4 w-4 mr-2" />
           Create Scenario
         </Button>
@@ -568,10 +568,10 @@ export default function ScenarioBuilderTab() {
                   <p className="text-xs text-muted-foreground mt-1">{new Date(s.updatedAt).toLocaleDateString()}</p>
                 </div>
                 <div className="flex gap-1 ml-2 shrink-0">
-                  <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => handleDuplicate(s.id)} title="Duplicate">
+                  <Button variant="ghost" size="icon" className="h-10 w-10 sm:h-8 sm:w-8" onClick={() => handleDuplicate(s.id)} title="Duplicate">
                     <Copy className="h-4 w-4" />
                   </Button>
-                  <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive hover:bg-destructive/10" onClick={() => handleDelete(s.id)}>
+                  <Button variant="ghost" size="icon" className="h-10 w-10 sm:h-8 sm:w-8 text-destructive hover:bg-destructive/10" onClick={() => handleDelete(s.id)}>
                     <Trash className="h-4 w-4" />
                   </Button>
                 </div>

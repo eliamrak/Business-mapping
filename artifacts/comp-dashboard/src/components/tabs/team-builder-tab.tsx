@@ -167,12 +167,12 @@ export default function TeamBuilderTab() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h2 className="text-2xl font-bold tracking-tight">Team Builder</h2>
           <p className="text-muted-foreground">Manage clinician profiles and compensation models.</p>
         </div>
-        <Button onClick={handleCreate}>
+        <Button onClick={handleCreate} className="min-h-[44px]">
           <Plus className="h-4 w-4 mr-2" />
           Add Clinician
         </Button>
@@ -202,10 +202,10 @@ export default function TeamBuilderTab() {
                     </div>
                   </div>
                   <div className="flex gap-1 ml-2 shrink-0">
-                    <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => handleDuplicate(c.id)} title="Duplicate">
+                    <Button variant="ghost" size="icon" className="h-10 w-10 sm:h-8 sm:w-8" onClick={() => handleDuplicate(c.id)} title="Duplicate">
                       <Copy className="h-4 w-4" />
                     </Button>
-                    <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive hover:bg-destructive/10" onClick={() => handleDelete(c.id)}>
+                    <Button variant="ghost" size="icon" className="h-10 w-10 sm:h-8 sm:w-8 text-destructive hover:bg-destructive/10" onClick={() => handleDelete(c.id)}>
                       <Trash className="h-4 w-4" />
                     </Button>
                   </div>

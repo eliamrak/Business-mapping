@@ -141,13 +141,13 @@ export default function CurrentRealityTab() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h2 className="text-2xl font-bold tracking-tight">Current Reality</h2>
           <p className="text-muted-foreground">Log your current practice metrics and compare them against goals.</p>
         </div>
         {currentReality && (
-          <Button onClick={handleOpenEdit}>
+          <Button onClick={handleOpenEdit} className="min-h-[44px]">
             <Pencil className="h-4 w-4 mr-2" />
             Edit Metrics
           </Button>

@@ -150,12 +150,12 @@ export default function BusinessGoalsTab() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h2 className="text-2xl font-bold tracking-tight">Business Goals</h2>
           <p className="text-muted-foreground">Define and compare financial targets for the practice.</p>
         </div>
-        <Button onClick={handleCreate}>
+        <Button onClick={handleCreate} className="min-h-[44px]">
           <Plus className="h-4 w-4 mr-2" />
           Create Goal
         </Button>
@@ -184,10 +184,10 @@ export default function BusinessGoalsTab() {
                     <p className="text-xs text-muted-foreground font-mono">{goal.timeHorizon} horizon</p>
                   </div>
                   <div className="flex gap-1 ml-2 shrink-0">
-                    <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => handleDuplicate(goal.id)} title="Duplicate">
+                    <Button variant="ghost" size="icon" className="h-10 w-10 sm:h-8 sm:w-8" onClick={() => handleDuplicate(goal.id)} title="Duplicate">
                       <Copy className="h-4 w-4" />
                     </Button>
-                    <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive hover:bg-destructive/10" onClick={() => handleDelete(goal.id)} title="Delete">
+                    <Button variant="ghost" size="icon" className="h-10 w-10 sm:h-8 sm:w-8 text-destructive hover:bg-destructive/10" onClick={() => handleDelete(goal.id)} title="Delete">
                       <Trash className="h-4 w-4" />
                     </Button>
                   </div>

@@ -154,11 +154,11 @@ export default function ScenarioComparisonTab() {
               const used = new Set(initIds.filter((_, i) => i !== idx));
               const available = scenarios?.filter(s => !used.has(s.id)) ?? [];
               return (
-                <div key={idx} className="space-y-1">
+                <div key={idx} className="space-y-1 min-w-0">
                   <label className="text-xs font-medium text-muted-foreground">Scenario {idx + 1}</label>
                   <div className="flex items-center gap-1">
                     <Select value={String(id)} onValueChange={v => handleSelect(idx, Number(v))}>
-                      <SelectTrigger className="w-44">
+                      <SelectTrigger className="w-40 min-h-[44px]">
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
@@ -167,7 +167,7 @@ export default function ScenarioComparisonTab() {
                       </SelectContent>
                     </Select>
                     {initIds.length > 2 && (
-                      <Button variant="ghost" size="icon" className="h-9 w-9" onClick={() => handleRemove(idx)}>
+                      <Button variant="ghost" size="icon" className="h-11 w-11" onClick={() => handleRemove(idx)}>
                         <X className="h-4 w-4" />
                       </Button>
                     )}
@@ -184,7 +184,7 @@ export default function ScenarioComparisonTab() {
                   <Select onValueChange={v => {
                     setSelectedIds([...initIds, Number(v)]);
                   }}>
-                    <SelectTrigger className="w-36">
+                    <SelectTrigger className="w-36 min-h-[44px]">
                       <Plus className="h-3 w-3 mr-1" /><SelectValue placeholder="Add scenario" />
                     </SelectTrigger>
                     <SelectContent>
@@ -196,12 +196,12 @@ export default function ScenarioComparisonTab() {
             })()}
 
             {/* Annual overhead input */}
-            <div className="space-y-1 ml-auto">
+            <div className="space-y-1 sm:ml-auto w-full sm:w-auto">
               <Label className="text-xs font-medium text-muted-foreground">Annual Overhead</Label>
               <div className="flex items-center gap-1.5">
                 <span className="text-sm text-muted-foreground">$</span>
                 <Input
-                  className="w-40 h-9"
+                  className="w-40 min-h-[44px]"
                   placeholder="0"
                   value={overheadInput}
                   onChange={e => setOverheadInput(e.target.value)}
@@ -218,78 +218,88 @@ export default function ScenarioComparisonTab() {
           {hasData && (
             <div className="space-y-6">
               {/* Header row */}
-              <div className="grid gap-2" style={{ gridTemplateColumns: `1fr repeat(${activeIds.length}, 1fr)` }}>
-                <div />
-                {allData.map((d, i) => {
-                  const netAfterOverhead = (d.metrics?.totalPracticeNet ?? 0) - annualOverhead;
-                  const goalMet = d.goalOutputs && d.metrics
-                    ? netAfterOverhead >= d.goalOutputs.totalAnnualBusinessNeed
-                    : null;
-                  return (
-                    <Card key={i} className={i === 0 ? "border-primary/60" : ""}>
-                      <CardContent className="pt-4 text-center">
-                        <p className={`font-bold ${i === 0 ? "text-primary" : ""}`}>{d.data?.name}</p>
-                        {d.linkedGoal && <p className="text-xs text-muted-foreground mt-1">Goal: {d.linkedGoal.name}</p>}
-                        {goalMet !== null && (
-                          <Badge className="mt-2 text-[10px]" variant={goalMet ? "default" : "destructive"}>
-                            {goalMet ? "Goal Met" : "Below Goal"}
-                          </Badge>
-                        )}
-                      </CardContent>
-                    </Card>
-                  );
-                })}
+              <div className="overflow-x-auto">
+                <div className="grid gap-2 min-w-[320px]" style={{ gridTemplateColumns: `1fr repeat(${activeIds.length}, 1fr)` }}>
+                  <div />
+                  {allData.map((d, i) => {
+                    const netAfterOverhead = (d.metrics?.totalPracticeNet ?? 0) - annualOverhead;
+                    const goalMet = d.goalOutputs && d.metrics
+                      ? netAfterOverhead >= d.goalOutputs.totalAnnualBusinessNeed
+                      : null;
+                    return (
+                      <Card key={i} className={i === 0 ? "border-primary/60" : ""}>
+                        <CardContent className="pt-4 text-center">
+                          <p className={`font-bold ${i === 0 ? "text-primary" : ""}`}>{d.data?.name}</p>
+                          {d.linkedGoal && <p className="text-xs text-muted-foreground mt-1">Goal: {d.linkedGoal.name}</p>}
+                          {goalMet !== null && (
+                            <Badge className="mt-2 text-[10px]" variant={goalMet ? "default" : "destructive"}>
+                              {goalMet ? "Goal Met" : "Below Goal"}
+                            </Badge>
+                          )}
+                        </CardContent>
+                      </Card>
+                    );
+                  })}
+                </div>
               </div>
 
               {/* Practice Financials */}
               <Card>
                 <CardHeader><CardTitle className="text-base">Practice Financials</CardTitle></CardHeader>
-                <CardContent>
-                  <div className="grid py-2 mb-1" style={{ gridTemplateColumns: `1fr repeat(${activeIds.length}, 1fr)` }}>
-                    <div />
-                    {allData.map((d, i) => (
-                      <p key={i} className="text-xs font-semibold text-center text-muted-foreground uppercase tracking-wider truncate">{d.data?.name}</p>
-                    ))}
+                <CardContent className="px-4 sm:px-6">
+                  <div className="overflow-x-auto">
+                    <div className="min-w-[300px]">
+                      <div className="grid py-2 mb-1" style={{ gridTemplateColumns: `1fr repeat(${activeIds.length}, 1fr)` }}>
+                        <div />
+                        {allData.map((d, i) => (
+                          <p key={i} className="text-xs font-semibold text-center text-muted-foreground uppercase tracking-wider truncate">{d.data?.name}</p>
+                        ))}
+                      </div>
+                      <MetricRow label="Total Annual Production" values={allData.map(d => d.metrics?.totalProduction ?? null)} />
+                      <MetricRow label="Total Clinician Comp" values={allData.map(d => d.metrics?.totalComp ?? null)} higherIsBetter={false} />
+                      <MetricRow label="Total Employer Burden (W2)" values={allData.map(d => d.metrics?.totalBurden ?? null)} higherIsBetter={false} />
+                      <MetricRow label="Total Comp Cost" values={allData.map(d => d.metrics?.totalCost ?? null)} higherIsBetter={false} />
+                      <MetricRow label="Practice Net (before overhead)" values={allData.map(d => d.metrics?.totalPracticeNet ?? null)} bold />
+                      <MetricRow
+                        label={`Practice Net (after overhead${annualOverhead > 0 ? ` – ${formatCurrency(annualOverhead)}` : ""})`}
+                        values={allData.map(d => d.metrics != null ? d.metrics.totalPracticeNet - annualOverhead : null)}
+                        bold
+                        highlight
+                      />
+                      {allData.some(d => d.goalOutputs) && (
+                        <MetricRow
+                          label="% of Goal Achieved (after overhead)"
+                          values={allData.map(d => d.goalOutputs && d.metrics
+                            ? (d.goalOutputs.totalAnnualBusinessNeed > 0
+                              ? ((d.metrics.totalPracticeNet - annualOverhead) / d.goalOutputs.totalAnnualBusinessNeed) * 100
+                              : null)
+                            : null)}
+                          format="percent"
+                        />
+                      )}
+                    </div>
                   </div>
-                  <MetricRow label="Total Annual Production" values={allData.map(d => d.metrics?.totalProduction ?? null)} />
-                  <MetricRow label="Total Clinician Comp" values={allData.map(d => d.metrics?.totalComp ?? null)} higherIsBetter={false} />
-                  <MetricRow label="Total Employer Burden (W2)" values={allData.map(d => d.metrics?.totalBurden ?? null)} higherIsBetter={false} />
-                  <MetricRow label="Total Comp Cost" values={allData.map(d => d.metrics?.totalCost ?? null)} higherIsBetter={false} />
-                  <MetricRow label="Practice Net (before overhead)" values={allData.map(d => d.metrics?.totalPracticeNet ?? null)} bold />
-                  <MetricRow
-                    label={`Practice Net (after overhead${annualOverhead > 0 ? ` – ${formatCurrency(annualOverhead)}` : ""})`}
-                    values={allData.map(d => d.metrics != null ? d.metrics.totalPracticeNet - annualOverhead : null)}
-                    bold
-                    highlight
-                  />
-                  {allData.some(d => d.goalOutputs) && (
-                    <MetricRow
-                      label="% of Goal Achieved (after overhead)"
-                      values={allData.map(d => d.goalOutputs && d.metrics
-                        ? (d.goalOutputs.totalAnnualBusinessNeed > 0
-                          ? ((d.metrics.totalPracticeNet - annualOverhead) / d.goalOutputs.totalAnnualBusinessNeed) * 100
-                          : null)
-                        : null)}
-                      format="percent"
-                    />
-                  )}
                 </CardContent>
               </Card>
 
               {/* Team Composition */}
               <Card>
                 <CardHeader><CardTitle className="text-base">Team Composition</CardTitle></CardHeader>
-                <CardContent>
-                  <div className="grid py-2 mb-1" style={{ gridTemplateColumns: `1fr repeat(${activeIds.length}, 1fr)` }}>
-                    <div />
-                    {allData.map((d, i) => (
-                      <p key={i} className="text-xs font-semibold text-center text-muted-foreground uppercase tracking-wider truncate">{d.data?.name}</p>
-                    ))}
+                <CardContent className="px-4 sm:px-6">
+                  <div className="overflow-x-auto">
+                    <div className="min-w-[280px]">
+                      <div className="grid py-2 mb-1" style={{ gridTemplateColumns: `1fr repeat(${activeIds.length}, 1fr)` }}>
+                        <div />
+                        {allData.map((d, i) => (
+                          <p key={i} className="text-xs font-semibold text-center text-muted-foreground uppercase tracking-wider truncate">{d.data?.name}</p>
+                        ))}
+                      </div>
+                      <MetricRow label="Clinician Count" values={allData.map(d => d.metrics?.clinicianCount ?? null)} format="number" />
+                      <MetricRow label="W2 Employees" values={allData.map(d => d.metrics?.w2Count ?? null)} format="number" higherIsBetter={false} />
+                      <MetricRow label="1099 Contractors" values={allData.map(d => d.metrics?.c1099Count ?? null)} format="number" />
+                      <MetricRow label="Avg Clinician Comp" values={allData.map(d => d.metrics?.avgComp ?? null)} />
+                    </div>
                   </div>
-                  <MetricRow label="Clinician Count" values={allData.map(d => d.metrics?.clinicianCount ?? null)} format="number" />
-                  <MetricRow label="W2 Employees" values={allData.map(d => d.metrics?.w2Count ?? null)} format="number" higherIsBetter={false} />
-                  <MetricRow label="1099 Contractors" values={allData.map(d => d.metrics?.c1099Count ?? null)} format="number" />
-                  <MetricRow label="Avg Clinician Comp" values={allData.map(d => d.metrics?.avgComp ?? null)} />
                 </CardContent>
               </Card>
 
