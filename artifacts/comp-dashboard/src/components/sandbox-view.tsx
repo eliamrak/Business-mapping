@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo } from "react";
+import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import {
   useListClinicians, useCreateClinician, useDeleteClinician, useUpdateClinician,
   useListBusinessGoals, useUpdateBusinessGoal, useCreateBusinessGoal,
@@ -385,6 +385,18 @@ function ClinicianCard({
 }) {
   const metrics = useMemo(() => calculateClinicianMetrics(clinician), [clinician]);
 
+  const onSaveRef = useRef(onSave);
+  useEffect(() => { onSaveRef.current = onSave; }, [onSave]);
+
+  useEffect(() => {
+    if (!clinician._dirty || clinician._saving) return;
+    const timer = setTimeout(() => {
+      onSaveRef.current(clinician._localId);
+    }, 800);
+    return () => clearTimeout(timer);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [clinician]);
+
   const setField = useCallback((name: string, value: unknown) => {
     const patch: Partial<SandboxClinician> = { [name]: value, _dirty: true };
     const v = Number(value);
@@ -502,19 +514,27 @@ function ClinicianCard({
         )}
       </div>
 
-      {clinician._dirty && (
+      {(clinician._dirty || clinician._saving) && (
         <div className="border-t px-3 py-2 flex items-center justify-between bg-amber-50/60">
-          <span className="text-[11px] text-amber-700">Unsaved changes</span>
-          <Button
-            size="sm"
-            variant="outline"
-            className="h-6 text-[11px] px-2 border-amber-400 text-amber-700 hover:bg-amber-100"
-            disabled={clinician._saving}
-            onClick={() => onSave(clinician._localId)}
-          >
-            {clinician._saving ? <Loader2 className="h-3 w-3 animate-spin" /> : <Save className="h-3 w-3" />}
-            <span className="ml-1">Save</span>
-          </Button>
+          {clinician._saving ? (
+            <>
+              <span className="text-[11px] text-amber-700 flex items-center gap-1">
+                <Loader2 className="h-3 w-3 animate-spin" />Saving…
+              </span>
+            </>
+          ) : (
+            <>
+              <span className="text-[11px] text-amber-700">Unsaved changes</span>
+              <Button
+                size="sm"
+                variant="ghost"
+                className="h-6 text-[11px] px-2 text-amber-700 hover:bg-amber-100"
+                onClick={() => onSave(clinician._localId)}
+              >
+                <Save className="h-3 w-3 mr-1" />Save now
+              </Button>
+            </>
+          )}
         </div>
       )}
     </div>
