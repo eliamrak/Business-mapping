@@ -902,10 +902,93 @@ function ScenariosPanel({
   );
 }
 
+// ─── ImportCliniciansDialog ───────────────────────────────────────────────────
+
+function ImportCliniciansDialog({
+  open, onClose, goals, currentGoalId, onImported,
+}: {
+  open: boolean;
+  onClose: () => void;
+  goals: BusinessGoal[];
+  currentGoalId: number | undefined;
+  onImported: (clinicians: SandboxClinician[]) => void;
+}) {
+  const [sourceGoalId, setSourceGoalId] = useState<number | null>(null);
+  const srcParams = { goalId: sourceGoalId ?? undefined };
+  const { data: sourceClinicians, isLoading: loadingSource } = useListClinicians(
+    srcParams,
+    { query: { queryKey: getListCliniciansQueryKey(srcParams), enabled: !!sourceGoalId } }
+  );
+  const copyMutation = useCopyClinicianToGoal();
+  const { toast } = useToast();
+  const otherGoals = goals.filter(g => g.id !== currentGoalId);
+
+  const handleImport = () => {
+    if (!sourceClinicians?.length || !sourceGoalId || !currentGoalId) return;
+    copyMutation.mutate(
+      { data: { ids: sourceClinicians.map(c => c.id), toGoalId: currentGoalId } },
+      {
+        onSuccess: (imported) => {
+          onImported(imported.map(teamClinicianToSandbox));
+          onClose();
+        },
+        onError: () => toast({ title: "Import failed", variant: "destructive" }),
+      }
+    );
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={(o) => { if (!o) onClose(); }}>
+      <DialogContent className="sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle>Import clinicians from another goal</DialogTitle>
+        </DialogHeader>
+        <div className="space-y-4 pt-2">
+          <div className="space-y-1.5">
+            <Label className="text-xs">Copy from goal</Label>
+            <Select onValueChange={v => setSourceGoalId(Number(v))}>
+              <SelectTrigger className="h-8 text-sm">
+                <SelectValue placeholder="Select a goal…" />
+              </SelectTrigger>
+              <SelectContent>
+                {otherGoals.map(g => (
+                  <SelectItem key={g.id} value={String(g.id)}>{g.name}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          {sourceGoalId && !loadingSource && (
+            <p className="text-xs text-muted-foreground">
+              {sourceClinicians?.length
+                ? `${sourceClinicians.length} clinician${sourceClinicians.length !== 1 ? "s" : ""} will be copied into this goal.`
+                : "That goal has no clinicians to import."}
+            </p>
+          )}
+          {sourceGoalId && loadingSource && (
+            <div className="flex items-center gap-2 text-xs text-muted-foreground">
+              <Loader2 className="h-3 w-3 animate-spin" /> Loading…
+            </div>
+          )}
+          <div className="flex justify-end gap-2">
+            <Button variant="outline" size="sm" onClick={onClose}>Cancel</Button>
+            <Button
+              size="sm"
+              onClick={handleImport}
+              disabled={!sourceClinicians?.length || copyMutation.isPending}
+            >
+              {copyMutation.isPending && <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />}
+              Import{sourceClinicians?.length ? ` ${sourceClinicians.length} clinician${sourceClinicians.length !== 1 ? "s" : ""}` : ""}
+            </Button>
+          </div>
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 // ─── SandboxView (main export) ───────────────────────────────────────────────
 
 export default function SandboxView({ onShowAdvanced }: { onShowAdvanced: () => void }) {
-  const { data: apiClinicians, isLoading: loadingClinicians } = useListClinicians();
   const { data: apiGoals, isLoading: loadingGoals } = useListBusinessGoals();
 
   const createClinician = useCreateClinician();
@@ -921,15 +1004,32 @@ export default function SandboxView({ onShowAdvanced }: { onShowAdvanced: () => 
   const [goal, setGoal] = useState<SandboxGoal>(DEFAULT_GOAL);
   const [goalSaving, setGoalSaving] = useState(false);
   const [scenariosOpen, setScenariosOpen] = useState(false);
+  const [importDialogOpen, setImportDialogOpen] = useState(false);
   const [initialized, setInitialized] = useState(false);
+  const cliniciansLoadedForGoalIdRef = useRef<number | undefined>(undefined);
+
+  const activeGoalId = goal.id;
+  const goalClinicianParams = { goalId: activeGoalId };
+  const { data: apiGoalClinicians, isLoading: loadingGoalClinicians } = useListClinicians(
+    goalClinicianParams,
+    { query: { queryKey: getListCliniciansQueryKey(goalClinicianParams), enabled: !!activeGoalId } }
+  );
 
   useEffect(() => {
-    if (!initialized && !loadingClinicians && !loadingGoals) {
-      if (apiClinicians) setClinicians(apiClinicians.map(teamClinicianToSandbox));
+    if (!initialized && !loadingGoals) {
       if (apiGoals && apiGoals.length > 0) setGoal(goalToSandbox(apiGoals[0]));
       setInitialized(true);
     }
-  }, [initialized, loadingClinicians, loadingGoals, apiClinicians, apiGoals]);
+  }, [initialized, loadingGoals, apiGoals]);
+
+  useEffect(() => {
+    if (apiGoalClinicians !== undefined && activeGoalId !== undefined) {
+      if (cliniciansLoadedForGoalIdRef.current !== activeGoalId) {
+        setClinicians(apiGoalClinicians.map(teamClinicianToSandbox));
+        cliniciansLoadedForGoalIdRef.current = activeGoalId;
+      }
+    }
+  }, [apiGoalClinicians, activeGoalId]);
 
   const handleGoalChange = useCallback((patch: Partial<SandboxGoal>) => {
     setGoal(prev => ({ ...prev, ...patch }));
@@ -937,6 +1037,8 @@ export default function SandboxView({ onShowAdvanced }: { onShowAdvanced: () => 
 
   const handleSelectGoal = useCallback((g: BusinessGoal) => {
     setGoal(goalToSandbox(g));
+    setClinicians([]);
+    cliniciansLoadedForGoalIdRef.current = undefined;
   }, []);
 
   const handleSaveGoal = useCallback(async () => {
@@ -984,6 +1086,7 @@ export default function SandboxView({ onShowAdvanced }: { onShowAdvanced: () => 
     setClinicians(prev => prev.map(x => x._localId === localId ? { ...x, _saving: true } : x));
 
     const data = {
+      goalId: goal.id,
       label: c.label, roleType: c.roleType, classification: c.classification,
       sessionRate: c.sessionRate, sessionsPerWeek: c.sessionsPerWeek,
       weeksWorkedPerYear: c.weeksWorkedPerYear,
@@ -1000,7 +1103,7 @@ export default function SandboxView({ onShowAdvanced }: { onShowAdvanced: () => 
         await new Promise<void>((resolve, reject) => {
           updateClinician.mutate({ id: c.id!, data: data as never }, {
             onSuccess: () => {
-              queryClient.invalidateQueries({ queryKey: getListCliniciansQueryKey() });
+              queryClient.invalidateQueries({ queryKey: getListCliniciansQueryKey({ goalId: goal.id }) });
               resolve();
             },
             onError: reject,
@@ -1011,7 +1114,7 @@ export default function SandboxView({ onShowAdvanced }: { onShowAdvanced: () => 
           createClinician.mutate({ data: data as never }, {
             onSuccess: (created) => {
               setClinicians(prev => prev.map(x => x._localId === localId ? { ...x, id: created.id } : x));
-              queryClient.invalidateQueries({ queryKey: getListCliniciansQueryKey() });
+              queryClient.invalidateQueries({ queryKey: getListCliniciansQueryKey({ goalId: goal.id }) });
               resolve();
             },
             onError: reject,
@@ -1029,7 +1132,7 @@ export default function SandboxView({ onShowAdvanced }: { onShowAdvanced: () => 
       setClinicians(prev => prev.map(x => x._localId === localId ? { ...x, _saving: false } : x));
       toast({ title: "Auto-save failed", description: "Could not save clinician. Will retry.", variant: "destructive" });
     }
-  }, [clinicians, updateClinician, createClinician, queryClient, toast]);
+  }, [clinicians, goal, updateClinician, createClinician, queryClient, toast]);
 
   const handleAddClinician = useCallback(() => {
     const newC: SandboxClinician = {
@@ -1050,12 +1153,12 @@ export default function SandboxView({ onShowAdvanced }: { onShowAdvanced: () => 
     if (!c) return;
     if (c.id) {
       deleteClinician.mutate({ id: c.id }, {
-        onSuccess: () => queryClient.invalidateQueries({ queryKey: getListCliniciansQueryKey() }),
+        onSuccess: () => queryClient.invalidateQueries({ queryKey: getListCliniciansQueryKey({ goalId: goal.id }) }),
         onError: () => toast({ title: "Remove failed", variant: "destructive" }),
       });
     }
     setClinicians(prev => prev.filter(x => x._localId !== localId));
-  }, [clinicians, deleteClinician, queryClient, toast]);
+  }, [clinicians, goal, deleteClinician, queryClient, toast]);
 
   const handleLoadScenario = useCallback((newClinicians: SandboxClinician[], linkedGoalId?: number) => {
     setClinicians(newClinicians);
@@ -1065,7 +1168,7 @@ export default function SandboxView({ onShowAdvanced }: { onShowAdvanced: () => 
     }
   }, [apiGoals]);
 
-  if (loadingClinicians || loadingGoals) {
+  if (loadingGoals) {
     return (
       <div className="flex items-center justify-center h-64">
         <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
@@ -1075,6 +1178,19 @@ export default function SandboxView({ onShowAdvanced }: { onShowAdvanced: () => 
 
   return (
     <div className="flex flex-col min-h-0">
+      {importDialogOpen && apiGoals && (
+        <ImportCliniciansDialog
+          open={importDialogOpen}
+          onClose={() => setImportDialogOpen(false)}
+          goals={apiGoals}
+          currentGoalId={goal.id}
+          onImported={(imported) => {
+            setClinicians(prev => [...prev, ...imported]);
+            queryClient.invalidateQueries({ queryKey: getListCliniciansQueryKey({ goalId: goal.id }) });
+          }}
+        />
+      )}
+
       {scenariosOpen && (
         <ScenariosPanel
           onClose={() => setScenariosOpen(false)}
@@ -1105,23 +1221,43 @@ export default function SandboxView({ onShowAdvanced }: { onShowAdvanced: () => 
                 <Badge variant="secondary" className="text-[10px]">{clinicians.length}</Badge>
               )}
             </h3>
-            <Button size="sm" className="h-7 text-xs px-3" onClick={handleAddClinician}>
-              <Plus className="h-3.5 w-3.5 mr-1" />
-              Add Clinician
-            </Button>
-          </div>
-
-          {clinicians.length === 0 ? (
-            <div className="rounded-lg border border-dashed p-12 text-center">
-              <User className="h-8 w-8 text-muted-foreground mx-auto mb-3" />
-              <h3 className="font-medium text-sm mb-1">No clinicians in sandbox</h3>
-              <p className="text-xs text-muted-foreground mb-4 max-w-xs mx-auto">
-                Add clinicians to model compensation and see live profit projections.
-              </p>
-              <Button size="sm" onClick={handleAddClinician}>
+            <div className="flex items-center gap-1.5">
+              {apiGoals && apiGoals.length > 1 && (
+                <Button variant="ghost" size="sm" className="h-7 text-xs px-2.5 text-muted-foreground" onClick={() => setImportDialogOpen(true)}>
+                  <Download className="h-3.5 w-3.5 mr-1" />
+                  Import
+                </Button>
+              )}
+              <Button size="sm" className="h-7 text-xs px-3" onClick={handleAddClinician}>
                 <Plus className="h-3.5 w-3.5 mr-1" />
                 Add Clinician
               </Button>
+            </div>
+          </div>
+
+          {clinicians.length === 0 && loadingGoalClinicians ? (
+            <div className="flex items-center justify-center h-32">
+              <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+            </div>
+          ) : clinicians.length === 0 ? (
+            <div className="rounded-lg border border-dashed p-12 text-center">
+              <User className="h-8 w-8 text-muted-foreground mx-auto mb-3" />
+              <h3 className="font-medium text-sm mb-1">No clinicians in this goal</h3>
+              <p className="text-xs text-muted-foreground mb-4 max-w-xs mx-auto">
+                Add clinicians to model compensation and see live profit projections.
+              </p>
+              <div className="flex items-center justify-center gap-2 flex-wrap">
+                <Button size="sm" onClick={handleAddClinician}>
+                  <Plus className="h-3.5 w-3.5 mr-1" />
+                  Add Clinician
+                </Button>
+                {apiGoals && apiGoals.length > 1 && (
+                  <Button variant="outline" size="sm" onClick={() => setImportDialogOpen(true)}>
+                    <Download className="h-3.5 w-3.5 mr-1" />
+                    Import from another goal
+                  </Button>
+                )}
+              </div>
             </div>
           ) : (
             <div className="space-y-2">
