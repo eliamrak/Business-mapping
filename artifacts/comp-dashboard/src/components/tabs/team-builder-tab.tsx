@@ -116,7 +116,16 @@ export default function TeamBuilderTab() {
   };
 
   const setField = (name: string, value: unknown) =>
-    setForm(f => ({ ...f, [name]: value }));
+    setForm(f => {
+      const update: Partial<typeof f> = { [name]: value };
+      const v = Number(value);
+      const clamped = Math.min(100, Math.max(0, v));
+      if (name === "preCapClinicianSplit")  update.preCapPracticeSplit  = Math.round((100 - clamped) * 10) / 10;
+      if (name === "preCapPracticeSplit")   update.preCapClinicianSplit = Math.round((100 - clamped) * 10) / 10;
+      if (name === "postCapClinicianSplit") update.postCapPracticeSplit = Math.round((100 - clamped) * 10) / 10;
+      if (name === "postCapPracticeSplit")  update.postCapClinicianSplit = Math.round((100 - clamped) * 10) / 10;
+      return { ...f, ...update };
+    });
 
   const handleSave = () => {
     if (!editClinician) return;

@@ -86,7 +86,17 @@ function ClinicianEditDialog({
   initial: ScenClxForm; onSave: (f: ScenClxForm) => void; title: string;
 }) {
   const [form, setForm] = useState<ScenClxForm>(initial);
-  const setField = (n: string, v: unknown) => setForm(f => ({ ...f, [n]: v }));
+  const setField = (n: string, v: unknown) =>
+    setForm(f => {
+      const update: Partial<typeof f> = { [n]: v };
+      const num = Number(v);
+      const clamped = Math.min(100, Math.max(0, num));
+      if (n === "preCapClinicianSplit")  update.preCapPracticeSplit  = Math.round((100 - clamped) * 10) / 10;
+      if (n === "preCapPracticeSplit")   update.preCapClinicianSplit = Math.round((100 - clamped) * 10) / 10;
+      if (n === "postCapClinicianSplit") update.postCapPracticeSplit = Math.round((100 - clamped) * 10) / 10;
+      if (n === "postCapPracticeSplit")  update.postCapClinicianSplit = Math.round((100 - clamped) * 10) / 10;
+      return { ...f, ...update };
+    });
   const metrics = calculateClinicianMetrics(form);
 
   return (
