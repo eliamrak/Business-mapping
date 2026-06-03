@@ -50,6 +50,7 @@ type SandboxClinician = {
   _dirty: boolean;
   _saving: boolean;
   _expanded: boolean;
+  _version: number;
 };
 
 type SandboxGoal = {
@@ -125,6 +126,7 @@ function clinicianToSandbox(c: Clinician | ScenarioDetail["clinicians"][number])
     _dirty: false,
     _saving: false,
     _expanded: false,
+    _version: 0,
   };
 }
 
@@ -398,7 +400,7 @@ function ClinicianCard({
   }, [clinician]);
 
   const setField = useCallback((name: string, value: unknown) => {
-    const patch: Partial<SandboxClinician> = { [name]: value, _dirty: true };
+    const patch: Partial<SandboxClinician> = { [name]: value, _dirty: true, _version: clinician._version + 1 };
     const v = Number(value);
     const clamped = Math.min(100, Math.max(0, v));
     if (name === "preCapClinicianSplit")  patch.preCapPracticeSplit  = Math.round((100 - clamped) * 10) / 10;
@@ -406,7 +408,7 @@ function ClinicianCard({
     if (name === "postCapClinicianSplit") patch.postCapPracticeSplit = Math.round((100 - clamped) * 10) / 10;
     if (name === "postCapPracticeSplit")  patch.postCapClinicianSplit = Math.round((100 - clamped) * 10) / 10;
     onChange(clinician._localId, patch);
-  }, [clinician._localId, onChange]);
+  }, [clinician._localId, clinician._version, onChange]);
 
   return (
     <div className={`rounded-lg border bg-card transition-all ${clinician._dirty ? "border-amber-300 shadow-sm" : ""}`}>
@@ -899,6 +901,7 @@ export default function SandboxView({ onShowAdvanced }: { onShowAdvanced: () => 
     const c = clinicians.find(x => x._localId === localId);
     if (!c) return;
 
+    const versionAtSaveStart = c._version;
     setClinicians(prev => prev.map(x => x._localId === localId ? { ...x, _saving: true } : x));
 
     const data = {
@@ -936,11 +939,16 @@ export default function SandboxView({ onShowAdvanced }: { onShowAdvanced: () => 
           });
         });
       }
-      setClinicians(prev => prev.map(x => x._localId === localId ? { ...x, _dirty: false, _saving: false } : x));
-      toast({ title: "Clinician saved" });
+      // Only clear dirty if no new edits arrived while the request was in-flight.
+      // If _version changed, the debounce effect will schedule another save automatically.
+      setClinicians(prev => prev.map(x => {
+        if (x._localId !== localId) return x;
+        const newEditsArrived = x._version !== versionAtSaveStart;
+        return { ...x, _dirty: newEditsArrived, _saving: false };
+      }));
     } catch {
       setClinicians(prev => prev.map(x => x._localId === localId ? { ...x, _saving: false } : x));
-      toast({ title: "Save failed", variant: "destructive" });
+      toast({ title: "Auto-save failed", description: "Could not save clinician. Will retry.", variant: "destructive" });
     }
   }, [clinicians, updateClinician, createClinician, queryClient, toast]);
 
@@ -952,6 +960,7 @@ export default function SandboxView({ onShowAdvanced }: { onShowAdvanced: () => 
       _dirty: true,
       _saving: false,
       _expanded: false,
+      _version: 0,
     };
     setClinicians(prev => [...prev, newC]);
   }, [clinicians.length]);
