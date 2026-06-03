@@ -18,7 +18,7 @@ import { Separator } from "@/components/ui/separator";
 import {
   Plus, Trash, Save, ChevronDown, ChevronRight,
   BookMarked, X, Check, AlertCircle, TrendingUp,
-  Loader2, Settings2, User, FolderOpen,
+  Loader2, Settings2, User, FolderOpen, CheckCircle2,
 } from "lucide-react";
 import { calculateClinicianMetrics, calculateBusinessGoalOutputs } from "@/lib/calculations";
 import { formatCurrency } from "@/lib/format";
@@ -51,6 +51,7 @@ type SandboxClinician = {
   _saving: boolean;
   _expanded: boolean;
   _version: number;
+  _savedAt: number | null;
 };
 
 type SandboxGoal = {
@@ -127,6 +128,7 @@ function clinicianToSandbox(c: Clinician | ScenarioDetail["clinicians"][number])
     _saving: false,
     _expanded: false,
     _version: 0,
+    _savedAt: null,
   };
 }
 
@@ -390,6 +392,18 @@ function ClinicianCard({
   const onSaveRef = useRef(onSave);
   useEffect(() => { onSaveRef.current = onSave; }, [onSave]);
 
+  const [savedVisible, setSavedVisible] = useState(false);
+  const [savedOpaque, setSavedOpaque] = useState(false);
+
+  useEffect(() => {
+    if (!clinician._savedAt) return;
+    setSavedVisible(true);
+    const tIn  = setTimeout(() => setSavedOpaque(true),  50);
+    const tOut = setTimeout(() => setSavedOpaque(false), 1500);
+    const tEnd = setTimeout(() => setSavedVisible(false), 2200);
+    return () => { clearTimeout(tIn); clearTimeout(tOut); clearTimeout(tEnd); };
+  }, [clinician._savedAt]);
+
   useEffect(() => {
     if (!clinician._dirty || clinician._saving) return;
     const timer = setTimeout(() => {
@@ -537,6 +551,15 @@ function ClinicianCard({
               </Button>
             </>
           )}
+        </div>
+      )}
+      {savedVisible && !clinician._dirty && !clinician._saving && (
+        <div
+          className={`border-t px-3 py-2 bg-green-50/70 transition-opacity duration-700 ${savedOpaque ? "opacity-100" : "opacity-0"}`}
+        >
+          <span className="text-[11px] text-green-700 flex items-center gap-1">
+            <CheckCircle2 className="h-3 w-3" />All changes saved
+          </span>
         </div>
       )}
     </div>
@@ -944,7 +967,7 @@ export default function SandboxView({ onShowAdvanced }: { onShowAdvanced: () => 
       setClinicians(prev => prev.map(x => {
         if (x._localId !== localId) return x;
         const newEditsArrived = x._version !== versionAtSaveStart;
-        return { ...x, _dirty: newEditsArrived, _saving: false };
+        return { ...x, _dirty: newEditsArrived, _saving: false, _savedAt: newEditsArrived ? x._savedAt : Date.now() };
       }));
     } catch {
       setClinicians(prev => prev.map(x => x._localId === localId ? { ...x, _saving: false } : x));
@@ -961,6 +984,7 @@ export default function SandboxView({ onShowAdvanced }: { onShowAdvanced: () => 
       _saving: false,
       _expanded: false,
       _version: 0,
+      _savedAt: null,
     };
     setClinicians(prev => [...prev, newC]);
   }, [clinicians.length]);
