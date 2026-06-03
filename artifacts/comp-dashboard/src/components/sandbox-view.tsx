@@ -25,6 +25,29 @@ import { formatCurrency } from "@/lib/format";
 import { useQueryClient } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
 
+// ─── Helpers ────────────────────────────────────────────────────────────────
+
+function useRelativeTime(ts: number | null): string | null {
+  const compute = useCallback(() => {
+    if (!ts) return null;
+    const mins = Math.floor((Date.now() - ts) / 60_000);
+    if (mins < 1) return "just now";
+    if (mins === 1) return "1 min ago";
+    if (mins < 60) return `${mins} mins ago`;
+    const hrs = Math.floor(mins / 60);
+    return hrs === 1 ? "1 hr ago" : `${hrs} hrs ago`;
+  }, [ts]);
+
+  const [label, setLabel] = useState<string | null>(compute);
+  useEffect(() => {
+    setLabel(compute());
+    if (!ts) return;
+    const id = setInterval(() => setLabel(compute()), 30_000);
+    return () => clearInterval(id);
+  }, [ts, compute]);
+  return label;
+}
+
 // ─── Types ──────────────────────────────────────────────────────────────────
 
 type SandboxClinician = {
@@ -388,6 +411,7 @@ function ClinicianCard({
   onRemove: (localId: string) => void;
 }) {
   const metrics = useMemo(() => calculateClinicianMetrics(clinician), [clinician]);
+  const savedLabel = useRelativeTime(clinician._savedAt);
 
   const onSaveRef = useRef(onSave);
   useEffect(() => { onSaveRef.current = onSave; }, [onSave]);
@@ -452,6 +476,10 @@ function ClinicianCard({
             <X className="h-3.5 w-3.5" />
           </Button>
         </div>
+
+        {savedLabel && !clinician._dirty && (
+          <p className="text-[10px] text-muted-foreground/70 -mt-1 px-1.5">Saved {savedLabel}</p>
+        )}
 
         <div className="grid grid-cols-3 gap-2">
           <InlineNumber label="Rate ($)" value={clinician.sessionRate} onChange={v => setField("sessionRate", v)} prefix="$" />
