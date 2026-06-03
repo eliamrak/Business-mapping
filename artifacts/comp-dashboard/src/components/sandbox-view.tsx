@@ -498,6 +498,13 @@ function ClinicianCard({
           </div>
         </div>
 
+        {metrics.employerObligations > 0 && (
+          <div className="flex items-center justify-between text-[11px]">
+            <span className="text-muted-foreground">W2 employer burden</span>
+            <span className="font-medium text-amber-600">−{formatCurrency(metrics.employerObligations)}/yr</span>
+          </div>
+        )}
+
         <button
           onClick={() => onChange(clinician._localId, { _expanded: !clinician._expanded, _dirty: clinician._dirty })}
           className="flex items-center gap-1 text-[11px] text-muted-foreground hover:text-foreground transition-colors w-full"
@@ -505,7 +512,7 @@ function ClinicianCard({
           {clinician._expanded ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
           {clinician._expanded ? "Fewer settings" : "More settings"}
           <span className="ml-auto text-[10px] text-muted-foreground">
-            Net to practice: {formatCurrency(metrics.practiceNetBeforeOverhead)}
+            {metrics.employerObligations > 0 ? "Net after burden" : "Net to practice"}: {formatCurrency(metrics.practiceNetBeforeOverhead)}
           </span>
         </button>
 
