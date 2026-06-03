@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { useGetCurrentReality, useUpsertCurrentReality, useListBusinessGoals, getGetCurrentRealityQueryKey } from "@workspace/api-client-react";
+import { useGetCurrentReality, useUpsertCurrentReality, useListBusinessGoals, useListClinicians, getGetCurrentRealityQueryKey } from "@workspace/api-client-react";
 import type { CurrentReality } from "@workspace/api-client-react";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -8,7 +8,7 @@ import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { Info, Pencil } from "lucide-react";
+import { Info, Pencil, Wand2 } from "lucide-react";
 import { formatCurrency, formatPercent } from "@/lib/format";
 import { calculateCurrentRealityGap } from "@/lib/calculations";
 import { useQueryClient } from "@tanstack/react-query";
@@ -71,6 +71,7 @@ function NumField({ label, name, value, onChange, tooltip }: {
 export default function CurrentRealityTab() {
   const { data: currentReality, isLoading: isLoadingReality } = useGetCurrentReality();
   const { data: goals, isLoading: isLoadingGoals } = useListBusinessGoals();
+  const { data: clinicians } = useListClinicians();
   const upsertReality = useUpsertCurrentReality();
   const queryClient = useQueryClient();
   const { toast } = useToast();
@@ -79,6 +80,21 @@ export default function CurrentRealityTab() {
   const [editOpen, setEditOpen] = useState(false);
   const [form, setForm] = useState<RealityForm>(emptyForm);
   const [saving, setSaving] = useState(false);
+  const [autoFilledCount, setAutoFilledCount] = useState<number | null>(null);
+
+  const avg = (arr: number[]) => arr.length ? arr.reduce((s, v) => s + v, 0) / arr.length : 0;
+
+  const handleFillFromTeamBuilder = () => {
+    if (!clinicians?.length) return;
+    setForm(f => ({
+      ...f,
+      currentCliniciansCount: clinicians.length,
+      currentAvgSessionRate: Math.round(avg(clinicians.map(c => c.sessionRate))),
+      currentAvgSessionsPerWeek: Math.round(avg(clinicians.map(c => c.sessionsPerWeek)) * 10) / 10,
+      currentAvgWeeksWorkedPerYear: Math.round(avg(clinicians.map(c => c.weeksWorkedPerYear))),
+    }));
+    setAutoFilledCount(clinicians.length);
+  };
 
   useEffect(() => {
     if (currentReality) setForm(realityToForm(currentReality));
@@ -112,6 +128,12 @@ export default function CurrentRealityTab() {
     });
   };
 
+  const handleOpenEdit = () => {
+    if (currentReality) setForm(realityToForm(currentReality));
+    setAutoFilledCount(null);
+    setEditOpen(true);
+  };
+
   if (isLoadingReality || isLoadingGoals) return <div className="p-8 text-muted-foreground">Loading...</div>;
 
   const selectedGoal = goals?.find(g => g.id.toString() === selectedGoalId);
@@ -125,7 +147,7 @@ export default function CurrentRealityTab() {
           <p className="text-muted-foreground">Log your current practice metrics and compare them against goals.</p>
         </div>
         {currentReality && (
-          <Button onClick={() => { setForm(realityToForm(currentReality)); setEditOpen(true); }}>
+          <Button onClick={handleOpenEdit}>
             <Pencil className="h-4 w-4 mr-2" />
             Edit Metrics
           </Button>
@@ -221,7 +243,20 @@ export default function CurrentRealityTab() {
           </DialogHeader>
           <div className="space-y-6 py-2">
             <div>
-              <h4 className="text-sm font-semibold mb-3 text-muted-foreground uppercase tracking-wider">Team Productivity</h4>
+              <div className="flex items-center justify-between mb-3">
+                <h4 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">Team Productivity</h4>
+                {clinicians && clinicians.length > 0 && (
+                  <Button type="button" variant="outline" size="sm" onClick={handleFillFromTeamBuilder}>
+                    <Wand2 className="h-3.5 w-3.5 mr-1.5" />
+                    Fill from Team Builder
+                  </Button>
+                )}
+              </div>
+              {autoFilledCount !== null && (
+                <p className="text-xs text-emerald-600 bg-emerald-50 border border-emerald-200 rounded px-3 py-2 mb-3">
+                  Averages filled from {autoFilledCount} clinician{autoFilledCount !== 1 ? "s" : ""} in Team Builder. Review and save when ready.
+                </p>
+              )}
               <div className="grid grid-cols-2 gap-4">
                 <NumField label="Number of Clinicians" name="currentCliniciansCount" value={form.currentCliniciansCount} onChange={setField} />
                 <NumField label="Avg Session Rate ($)" name="currentAvgSessionRate" value={form.currentAvgSessionRate} onChange={setField} />
