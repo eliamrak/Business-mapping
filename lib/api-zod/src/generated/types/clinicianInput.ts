@@ -9,6 +9,7 @@ import type { ClinicianInputClassification } from './clinicianInputClassificatio
 import type { ClinicianInputRoleType } from './clinicianInputRoleType';
 
 export interface ClinicianInput {
+  goalId?: number;
   label: string;
   roleType?: ClinicianInputRoleType;
   classification?: ClinicianInputClassification;

@@ -195,6 +195,10 @@ export const UpsertCurrentRealityResponse = zod.object({
 /**
  * @summary List all clinician profiles
  */
+export const ListCliniciansQueryParams = zod.object({
+  "goalId": zod.coerce.number().optional()
+})
+
 export const ListCliniciansResponseItem = zod.object({
   "id": zod.number(),
   "label": zod.string(),
@@ -213,6 +217,7 @@ export const ListCliniciansResponseItem = zod.object({
   "futaSutaPct": zod.number(),
   "workersCompPct": zod.number(),
   "otherEmployerBurdenPct": zod.number(),
+  "goalId": zod.number().nullish(),
   "notes": zod.string().nullish(),
   "createdAt": zod.string(),
   "updatedAt": zod.string()
@@ -224,6 +229,7 @@ export const ListCliniciansResponse = zod.array(ListCliniciansResponseItem)
  * @summary Create a clinician profile
  */
 export const CreateClinicianBody = zod.object({
+  "goalId": zod.number().optional(),
   "label": zod.string(),
   "roleType": zod.enum(['senior_clinician', 'associate', 'owner', 'contractor', 'other']).optional(),
   "classification": zod.union([zod.literal('w2'),zod.literal(1099),zod.literal('owner'),zod.literal('other')]).optional(),
@@ -241,6 +247,15 @@ export const CreateClinicianBody = zod.object({
   "workersCompPct": zod.number().optional(),
   "otherEmployerBurdenPct": zod.number().optional(),
   "notes": zod.string().optional()
+})
+
+
+/**
+ * @summary Copy clinicians to a different goal
+ */
+export const CopyClinicianToGoalBody = zod.object({
+  "ids": zod.array(zod.number()),
+  "toGoalId": zod.number()
 })
 
 
@@ -269,6 +284,7 @@ export const GetClinicianResponse = zod.object({
   "futaSutaPct": zod.number(),
   "workersCompPct": zod.number(),
   "otherEmployerBurdenPct": zod.number(),
+  "goalId": zod.number().nullish(),
   "notes": zod.string().nullish(),
   "createdAt": zod.string(),
   "updatedAt": zod.string()
@@ -320,6 +336,7 @@ export const UpdateClinicianResponse = zod.object({
   "futaSutaPct": zod.number(),
   "workersCompPct": zod.number(),
   "otherEmployerBurdenPct": zod.number(),
+  "goalId": zod.number().nullish(),
   "notes": zod.string().nullish(),
   "createdAt": zod.string(),
   "updatedAt": zod.string()

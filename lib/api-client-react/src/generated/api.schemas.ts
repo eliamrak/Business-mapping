@@ -156,6 +156,8 @@ export interface Clinician {
   workersCompPct: number;
   otherEmployerBurdenPct: number;
   /** @nullable */
+  goalId?: number | null;
+  /** @nullable */
   notes?: string | null;
   createdAt: string;
   updatedAt: string;
@@ -183,6 +185,7 @@ export const ClinicianInputClassification = {
 } as const;
 
 export interface ClinicianInput {
+  goalId?: number;
   label: string;
   roleType?: ClinicianInputRoleType;
   classification?: ClinicianInputClassification;
@@ -279,7 +282,7 @@ export interface ScenarioClinician {
   id: number;
   scenarioId: number;
   /** @nullable */
-  sourceClinicianId?: number | null;
+  sourceCliniciánId?: number | null;
   label: string;
   roleType: ScenarioClinicianRoleType;
   classification: ScenarioClinicianClassification;
@@ -349,7 +352,7 @@ export const ScenarioClinicianInputClassification = {
 } as const;
 
 export interface ScenarioClinicianInput {
-  sourceClinicianId?: number;
+  sourceCliniciánId?: number;
   label: string;
   roleType?: ScenarioClinicianInputRoleType;
   classification?: ScenarioClinicianInputClassification;
@@ -409,4 +412,13 @@ export interface ScenarioClinicianUpdate {
   otherEmployerBurdenPct?: number;
   notes?: string;
 }
+
+export type ListCliniciansParams = {
+goalId?: number;
+};
+
+export type CopyClinicianToGoalBody = {
+  ids: number[];
+  toGoalId: number;
+};
 

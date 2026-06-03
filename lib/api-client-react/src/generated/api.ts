@@ -26,9 +26,11 @@ import type {
   Clinician,
   ClinicianInput,
   ClinicianUpdate,
+  CopyClinicianToGoalBody,
   CurrentReality,
   CurrentRealityInput,
   HealthStatus,
+  ListCliniciansParams,
   Scenario,
   ScenarioClinician,
   ScenarioClinicianInput,
@@ -712,20 +714,27 @@ export const useUpsertCurrentReality = <TError = ErrorType<unknown>,
       return useMutation(getUpsertCurrentRealityMutationOptions(options));
     }
 
-export const getListCliniciansUrl = () => {
+export const getListCliniciansUrl = (params?: ListCliniciansParams,) => {
+  const normalizedParams = new URLSearchParams();
 
+  Object.entries(params || {}).forEach(([key, value]) => {
 
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : value.toString())
+    }
+  });
 
+  const stringifiedParams = normalizedParams.toString();
 
-  return `/api/clinicians`
+  return stringifiedParams.length > 0 ? `/api/clinicians?${stringifiedParams}` : `/api/clinicians`
 }
 
 /**
  * @summary List all clinician profiles
  */
-export const listClinicians = async ( options?: RequestInit): Promise<Clinician[]> => {
+export const listClinicians = async (params?: ListCliniciansParams, options?: RequestInit): Promise<Clinician[]> => {
 
-  return customFetch<Clinician[]>(getListCliniciansUrl(),
+  return customFetch<Clinician[]>(getListCliniciansUrl(params),
   {
     ...options,
     method: 'GET'
@@ -738,23 +747,23 @@ export const listClinicians = async ( options?: RequestInit): Promise<Clinician[
 
 
 
-export const getListCliniciansQueryKey = () => {
+export const getListCliniciansQueryKey = (params?: ListCliniciansParams,) => {
     return [
-    `/api/clinicians`
+    `/api/clinicians`, ...(params ? [params] : [])
     ] as const;
     }
 
 
-export const getListCliniciansQueryOptions = <TData = Awaited<ReturnType<typeof listClinicians>>, TError = ErrorType<unknown>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listClinicians>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+export const getListCliniciansQueryOptions = <TData = Awaited<ReturnType<typeof listClinicians>>, TError = ErrorType<unknown>>(params?: ListCliniciansParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listClinicians>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
 ) => {
 
 const {query: queryOptions, request: requestOptions} = options ?? {};
 
-  const queryKey =  queryOptions?.queryKey ?? getListCliniciansQueryKey();
+  const queryKey =  queryOptions?.queryKey ?? getListCliniciansQueryKey(params);
 
 
 
-    const queryFn: QueryFunction<Awaited<ReturnType<typeof listClinicians>>> = ({ signal }) => listClinicians({ signal, ...requestOptions });
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listClinicians>>> = ({ signal }) => listClinicians(params, { signal, ...requestOptions });
 
 
 
@@ -772,11 +781,11 @@ export type ListCliniciansQueryError = ErrorType<unknown>
  */
 
 export function useListClinicians<TData = Awaited<ReturnType<typeof listClinicians>>, TError = ErrorType<unknown>>(
-  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listClinicians>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+ params?: ListCliniciansParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listClinicians>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
 
  ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
 
-  const queryOptions = getListCliniciansQueryOptions(options)
+  const queryOptions = getListCliniciansQueryOptions(params,options)
 
   const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
 
@@ -858,6 +867,77 @@ export const useCreateClinician = <TError = ErrorType<unknown>,
         TContext
       > => {
       return useMutation(getCreateClinicianMutationOptions(options));
+    }
+
+export const getCopyClinicianToGoalUrl = () => {
+
+
+
+
+  return `/api/clinicians/copy-to-goal`
+}
+
+/**
+ * @summary Copy clinicians to a different goal
+ */
+export const copyClinicianToGoal = async (copyClinicianToGoalBody: CopyClinicianToGoalBody, options?: RequestInit): Promise<Clinician[]> => {
+
+  return customFetch<Clinician[]>(getCopyClinicianToGoalUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      copyClinicianToGoalBody,)
+  }
+);}
+
+
+
+
+export const getCopyClinicianToGoalMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof copyClinicianToGoal>>, TError,{data: BodyType<CopyClinicianToGoalBody>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof copyClinicianToGoal>>, TError,{data: BodyType<CopyClinicianToGoalBody>}, TContext> => {
+
+const mutationKey = ['copyClinicianToGoal'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof copyClinicianToGoal>>, {data: BodyType<CopyClinicianToGoalBody>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  copyClinicianToGoal(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type CopyClinicianToGoalMutationResult = NonNullable<Awaited<ReturnType<typeof copyClinicianToGoal>>>
+    export type CopyClinicianToGoalMutationBody = BodyType<CopyClinicianToGoalBody>
+    export type CopyClinicianToGoalMutationError = ErrorType<unknown>
+
+    /**
+ * @summary Copy clinicians to a different goal
+ */
+export const useCopyClinicianToGoal = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof copyClinicianToGoal>>, TError,{data: BodyType<CopyClinicianToGoalBody>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof copyClinicianToGoal>>,
+        TError,
+        {data: BodyType<CopyClinicianToGoalBody>},
+        TContext
+      > => {
+      return useMutation(getCopyClinicianToGoalMutationOptions(options));
     }
 
 export const getGetClinicianUrl = (id: number,) => {

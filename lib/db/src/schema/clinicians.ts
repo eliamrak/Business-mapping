@@ -1,9 +1,11 @@
 import { pgTable, serial, text, numeric, boolean, integer, timestamp } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
+import { businessGoalsTable } from "./businessGoals";
 
 export const cliniciansTable = pgTable("clinicians", {
   id: serial("id").primaryKey(),
+  goalId: integer("goal_id").references(() => businessGoalsTable.id, { onDelete: "set null" }),
   label: text("label").notNull(),
   roleType: text("role_type").notNull().default("associate"),
   classification: text("classification").notNull().default("w2"),

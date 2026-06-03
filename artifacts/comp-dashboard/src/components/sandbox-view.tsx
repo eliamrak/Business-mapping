@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import {
   useListClinicians, useCreateClinician, useDeleteClinician, useUpdateClinician,
+  useCopyClinicianToGoal,
   useListBusinessGoals, useUpdateBusinessGoal, useCreateBusinessGoal,
   useListScenarios, useCreateScenario, useDeleteScenario,
   useAddScenarioClinician, getScenario,
@@ -18,8 +19,9 @@ import { Separator } from "@/components/ui/separator";
 import {
   Plus, Trash, Save, ChevronDown, ChevronRight,
   BookMarked, X, Check, AlertCircle, TrendingUp,
-  Loader2, Settings2, User, FolderOpen, CheckCircle2,
+  Loader2, Settings2, User, FolderOpen, CheckCircle2, Download,
 } from "lucide-react";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { calculateClinicianMetrics, calculateBusinessGoalOutputs } from "@/lib/calculations";
 import { formatCurrency } from "@/lib/format";
 import { useQueryClient } from "@tanstack/react-query";

@@ -27,6 +27,8 @@ export interface Clinician {
   workersCompPct: number;
   otherEmployerBurdenPct: number;
   /** @nullable */
+  goalId?: number | null;
+  /** @nullable */
   notes?: string | null;
   createdAt: string;
   updatedAt: string;

@@ -193,6 +193,12 @@ paths:
       operationId: listClinicians
       tags: [clinicians]
       summary: List all clinician profiles
+      parameters:
+        - name: goalId
+          in: query
+          required: false
+          schema:
+            type: integer
       responses:
         "200":
           description: List of clinicians
@@ -219,6 +225,35 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Clinician"
+
+  /clinicians/copy-to-goal:
+    post:
+      operationId: copyClinicianToGoal
+      tags: [clinicians]
+      summary: Copy clinicians to a different goal
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [ids, toGoalId]
+              properties:
+                ids:
+                  type: array
+                  items:
+                    type: integer
+                toGoalId:
+                  type: integer
+      responses:
+        "201":
+          description: Copied clinicians
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Clinician"
 
   /clinicians/{id}:
     get:
@@ -786,6 +821,8 @@ components:
           type: number
         otherEmployerBurdenPct:
           type: number
+        goalId:
+          type: ["integer", "null"]
         notes:
           type: ["string", "null"]
         createdAt:
@@ -798,6 +835,8 @@ components:
       required:
         - label
       properties:
+        goalId:
+          type: integer
         label:
           type: string
         roleType:

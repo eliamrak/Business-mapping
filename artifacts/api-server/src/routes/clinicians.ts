@@ -1,13 +1,14 @@
 import { Router } from "express";
 import { db } from "@workspace/db";
-import { cliniciansTable } from "@workspace/db";
-import { eq } from "drizzle-orm";
+import { cliniciansTable, businessGoalsTable } from "@workspace/db";
+import { eq, isNull, inArray } from "drizzle-orm";
 
 const router = Router();
 
 function toApiClinician(row: typeof cliniciansTable.$inferSelect) {
   return {
     id: row.id,
+    goalId: row.goalId ?? null,
     label: row.label,
     roleType: row.roleType,
     classification: row.classification,
@@ -37,9 +38,29 @@ function defaultsForClassification(classification: string) {
   return { preCapClinicianSplit: "60", preCapPracticeSplit: "40", postCapClinicianSplit: "75", postCapPracticeSplit: "25" };
 }
 
-router.get("/clinicians", async (_req, res) => {
-  const clinicians = await db.select().from(cliniciansTable).orderBy(cliniciansTable.createdAt);
+router.get("/clinicians", async (req, res) => {
+  const rawGoalId = req.query.goalId;
+  const goalId = rawGoalId !== undefined ? Number(rawGoalId) : undefined;
+  const clinicians = goalId !== undefined && !isNaN(goalId)
+    ? await db.select().from(cliniciansTable).where(eq(cliniciansTable.goalId, goalId)).orderBy(cliniciansTable.createdAt)
+    : await db.select().from(cliniciansTable).orderBy(cliniciansTable.createdAt);
   res.json(clinicians.map(toApiClinician));
+});
+
+router.post("/clinicians/copy-to-goal", async (req, res) => {
+  const { ids, toGoalId } = req.body;
+  if (!Array.isArray(ids) || ids.length === 0 || !toGoalId) {
+    return res.status(400).json({ error: "ids (array) and toGoalId required" });
+  }
+  const sources = await db.select().from(cliniciansTable).where(inArray(cliniciansTable.id, ids.map(Number)));
+  if (!sources.length) return res.status(404).json({ error: "No clinicians found" });
+  const copies = await db.insert(cliniciansTable).values(
+    sources.map(({ id: _id, createdAt: _c, updatedAt: _u, goalId: _g, ...rest }) => ({
+      ...rest,
+      goalId: Number(toGoalId),
+    }))
+  ).returning();
+  return res.status(201).json(copies.map(toApiClinician));
 });
 
 router.post("/clinicians", async (req, res) => {
@@ -47,6 +68,7 @@ router.post("/clinicians", async (req, res) => {
   const classification = body.classification ?? "w2";
   const splits = defaultsForClassification(classification);
   const [clinician] = await db.insert(cliniciansTable).values({
+    goalId: body.goalId !== undefined ? Number(body.goalId) : null,
     label: body.label ?? "New Clinician",
     roleType: body.roleType ?? "associate",
     classification,
