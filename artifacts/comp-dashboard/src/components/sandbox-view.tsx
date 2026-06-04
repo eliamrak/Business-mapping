@@ -481,28 +481,45 @@ function ClinicianCard({
     const coversTotalPct = totalAnnualBusinessNeed > 0
       ? Math.round((metrics.practiceNetBeforeOverhead / totalAnnualBusinessNeed) * 100)
       : null;
+    const netVal = metrics.practiceNetBeforeOverhead;
+    const pctColor = (pct: number | null) =>
+      pct === null ? "text-muted-foreground"
+      : pct >= 100  ? "text-green-600"
+      : pct >= 50   ? "text-amber-600"
+      :               "text-red-600";
+    const dollarColor = (v: number) => v >= 0 ? "text-green-600" : "text-red-600";
+    const overheadCostColor = (pct: number | null) =>
+      pct === null ? "text-muted-foreground"
+      : pct <= 5   ? "text-green-600"
+      : pct <= 15  ? "text-amber-600"
+      :              "text-red-600";
     return [
       {
         id: "overheadCostAdded" as CardMetric,
         value: overheadCostPct !== null ? `${overheadCostPct}% of overhead` : "—",
+        valueColor: overheadCostColor(overheadCostPct),
       },
       {
         id: "coversOverhead" as CardMetric,
         value: coversOverheadPct !== null ? `${coversOverheadPct}% of overhead` : "—",
+        valueColor: pctColor(coversOverheadPct),
       },
       {
         id: "coversTotalGoal" as CardMetric,
         value: coversTotalPct !== null ? `${coversTotalPct}% of goal` : "—",
+        valueColor: pctColor(coversTotalPct),
       },
       {
         id: "practiceContribution" as CardMetric,
-        value: formatCurrency(metrics.practiceNetBeforeOverhead),
+        value: formatCurrency(netVal),
+        valueColor: dollarColor(netVal),
       },
       {
         id: "netAfterEmployerTaxes" as CardMetric,
         value: isW2
-          ? `${formatCurrency(metrics.practiceGrossRevenue)} → ${formatCurrency(metrics.practiceNetBeforeOverhead)}`
-          : formatCurrency(metrics.practiceNetBeforeOverhead),
+          ? `${formatCurrency(metrics.practiceGrossRevenue)} → ${formatCurrency(netVal)}`
+          : formatCurrency(netVal),
+        valueColor: dollarColor(netVal),
       },
     ];
   }, [metrics, overhead, totalAnnualBusinessNeed, isW2]);
@@ -735,24 +752,31 @@ function ClinicianCard({
 
         {breakdownOpen && (
           <div className="rounded border bg-muted/40 p-1.5 space-y-0.5">
-            {metricRows.map(row => (
-              <button
-                key={row.id}
-                type="button"
-                onClick={() => onSelectMetric(row.id)}
-                className="flex items-center w-full gap-2 py-1 px-1.5 rounded hover:bg-muted/80 text-left transition-colors"
-              >
-                <span className="flex-1 text-[11px] text-muted-foreground">{CARD_METRIC_LABELS[row.id]}</span>
-                <span className="text-[11px] font-medium tabular-nums shrink-0 text-foreground">{row.value}</span>
-                <span className={`h-3.5 w-3.5 rounded-full border-2 shrink-0 flex items-center justify-center transition-colors ${
-                  selectedMetric === row.id ? "border-primary" : "border-muted-foreground/30"
-                }`}>
-                  {selectedMetric === row.id && (
-                    <span className="h-1.5 w-1.5 rounded-full bg-primary" />
-                  )}
-                </span>
-              </button>
-            ))}
+            {metricRows.map(row => {
+              const isSelected = selectedMetric === row.id;
+              return (
+                <button
+                  key={row.id}
+                  type="button"
+                  onClick={() => onSelectMetric(row.id)}
+                  className={`flex items-center w-full gap-2 py-1 px-1.5 rounded text-left transition-colors ${
+                    isSelected ? "bg-primary/5 hover:bg-primary/10" : "hover:bg-muted/80"
+                  }`}
+                >
+                  <span className={`flex-1 text-[11px] transition-colors ${
+                    isSelected ? "text-foreground font-semibold" : "text-muted-foreground"
+                  }`}>{CARD_METRIC_LABELS[row.id]}</span>
+                  <span className={`text-[11px] font-medium tabular-nums shrink-0 ${row.valueColor}`}>{row.value}</span>
+                  <span className={`h-3.5 w-3.5 rounded-full border-2 shrink-0 flex items-center justify-center transition-colors ${
+                    isSelected ? "border-primary" : "border-muted-foreground/30"
+                  }`}>
+                    {isSelected && (
+                      <span className="h-1.5 w-1.5 rounded-full bg-primary" />
+                    )}
+                  </span>
+                </button>
+              );
+            })}
           </div>
         )}
       </div>
