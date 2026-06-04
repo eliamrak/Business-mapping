@@ -298,7 +298,8 @@ type CardMetric =
   | "overheadCostAdded"
   | "coversTotalGoal"
   | "practiceContribution"
-  | "netAfterEmployerTaxes";
+  | "netAfterEmployerTaxes"
+  | "fullyLoadedProfit";
 
 const CARD_METRIC_LABELS: Record<CardMetric, string> = {
   coversOverhead:        "Covers overhead",
@@ -306,7 +307,10 @@ const CARD_METRIC_LABELS: Record<CardMetric, string> = {
   coversTotalGoal:       "Covers total goal",
   practiceContribution:  "Practice contribution",
   netAfterEmployerTaxes: "Net after employer taxes",
+  fullyLoadedProfit:     "Fully loaded profit",
 };
+
+type OverheadAllocationModel = "equal" | "revenue" | "session";
 
 // ─── LiveSummaryPanel ────────────────────────────────────────────────────────
 
@@ -455,6 +459,10 @@ function ClinicianCard({
   totalAnnualBusinessNeed,
   selectedMetric,
   onSelectMetric,
+  overheadAllocationModel,
+  totalAnnualSessions,
+  totalAnnualRevenue,
+  clinicianCount,
 }: {
   clinician: SandboxClinician;
   onChange: (localId: string, patch: Partial<SandboxClinician>) => void;
@@ -464,12 +472,54 @@ function ClinicianCard({
   totalAnnualBusinessNeed: number;
   selectedMetric: CardMetric;
   onSelectMetric: (m: CardMetric) => void;
+  overheadAllocationModel: OverheadAllocationModel;
+  totalAnnualSessions: number;
+  totalAnnualRevenue: number;
+  clinicianCount: number;
 }) {
   const metrics = useMemo(() => calculateClinicianMetrics(clinician), [clinician]);
   const savedLabel = useRelativeTime(clinician._savedAt);
   const [breakdownOpen, setBreakdownOpen] = useState(false);
 
   const isW2 = String(clinician.classification).toLowerCase() === "w2";
+
+  const allocatedOverhead = useMemo(() => {
+    if (overhead <= 0) return 0;
+    switch (overheadAllocationModel) {
+      case "equal":
+        return clinicianCount > 0 ? overhead / clinicianCount : overhead;
+      case "revenue":
+        return totalAnnualRevenue > 0 ? (metrics.annualProduction / totalAnnualRevenue) * overhead : 0;
+      case "session":
+        return totalAnnualSessions > 0 ? (metrics.annualSessions / totalAnnualSessions) * overhead : 0;
+    }
+  }, [overheadAllocationModel, overhead, clinicianCount, totalAnnualRevenue, totalAnnualSessions, metrics]);
+
+  const profitabilityData = useMemo(() => {
+    const contributionMargin = metrics.practiceNetBeforeOverhead;
+    const fullyLoadedProfit = contributionMargin - allocatedOverhead;
+    const weeksWorked = clinician.weeksWorkedPerYear || 1;
+    const retainedPerSession = metrics.annualSessions > 0
+      ? contributionMargin / metrics.annualSessions
+      : 0;
+    const breakEvenSessionsPerYear = retainedPerSession > 0
+      ? allocatedOverhead / retainedPerSession
+      : allocatedOverhead > 0 ? Infinity : 0;
+    const breakEvenSessionsPerWeek = isFinite(breakEvenSessionsPerYear)
+      ? breakEvenSessionsPerYear / weeksWorked
+      : Infinity;
+    const sessionsVsBreakEven = isFinite(breakEvenSessionsPerWeek)
+      ? clinician.sessionsPerWeek - breakEvenSessionsPerWeek
+      : -Infinity;
+    const isProfit = fullyLoadedProfit > 0;
+    const isLosing = contributionMargin <= 0;
+    const status: string = isProfit
+      ? "Profitable"
+      : isLosing
+      ? "Losing Money"
+      : "Below Break-Even";
+    return { fullyLoadedProfit, breakEvenSessionsPerWeek, sessionsVsBreakEven, status, isProfit, isLosing };
+  }, [metrics, allocatedOverhead, clinician.sessionsPerWeek, clinician.weeksWorkedPerYear]);
 
   const metricRows = useMemo(() => {
     const overheadCostPct = isW2 && overhead > 0
@@ -521,8 +571,13 @@ function ClinicianCard({
           : formatCurrency(netVal),
         valueColor: dollarColor(netVal),
       },
+      {
+        id: "fullyLoadedProfit" as CardMetric,
+        value: formatCurrency(profitabilityData.fullyLoadedProfit),
+        valueColor: dollarColor(profitabilityData.fullyLoadedProfit),
+      },
     ];
-  }, [metrics, overhead, totalAnnualBusinessNeed, isW2]);
+  }, [metrics, overhead, totalAnnualBusinessNeed, isW2, profitabilityData]);
 
   const badgeData = useMemo((): { label: string; cls: string } | null => {
     switch (selectedMetric) {
@@ -553,8 +608,17 @@ function ClinicianCard({
         const v = metrics.practiceNetBeforeOverhead;
         return { label: formatCurrency(v), cls: v >= 0 ? "bg-green-100 text-green-700" : "bg-red-50 text-red-600" };
       }
+      case "fullyLoadedProfit": {
+        const v = profitabilityData.fullyLoadedProfit;
+        const cls = v > 0
+          ? "bg-green-100 text-green-700"
+          : v > -(allocatedOverhead * 0.1 + 1)
+          ? "bg-amber-100 text-amber-700"
+          : "bg-red-50 text-red-600";
+        return { label: formatCurrency(v), cls };
+      }
     }
-  }, [selectedMetric, metrics, overhead, totalAnnualBusinessNeed, isW2]);
+  }, [selectedMetric, metrics, overhead, totalAnnualBusinessNeed, isW2, profitabilityData, allocatedOverhead]);
 
   const onSaveRef = useRef(onSave);
   useEffect(() => { onSaveRef.current = onSave; }, [onSave]);
@@ -777,6 +841,75 @@ function ClinicianCard({
                 </button>
               );
             })}
+
+            {overhead > 0 && (
+              <>
+                <div className="pt-1 pb-0.5">
+                  <div className="border-t border-border/60" />
+                  <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mt-1.5 px-1.5 flex items-center gap-1">
+                    Overhead allocation
+                    <InfoTip text="Your share of annual overhead based on the selected allocation model (Equal / Revenue / Session)." />
+                  </p>
+                </div>
+
+                <div className="flex items-center w-full gap-2 py-1 px-1.5">
+                  <span className="flex-1 text-[11px] text-muted-foreground flex items-center gap-1">
+                    Overhead allocated
+                    <InfoTip text="Dollar share of practice overhead assigned to this clinician under the chosen model." />
+                  </span>
+                  <span className="text-[11px] font-medium tabular-nums text-muted-foreground">
+                    {formatCurrency(allocatedOverhead)}
+                  </span>
+                </div>
+
+                <div className="flex items-center w-full gap-2 py-1 px-1.5">
+                  <span className="flex-1 text-[11px] text-muted-foreground flex items-center gap-1">
+                    Break-even sessions/wk
+                    <InfoTip text="Minimum weekly sessions needed for this clinician to cover their allocated overhead at current rates." />
+                  </span>
+                  <span className={`text-[11px] font-medium tabular-nums ${
+                    !isFinite(profitabilityData.breakEvenSessionsPerWeek)
+                      ? "text-red-600"
+                      : clinician.sessionsPerWeek >= profitabilityData.breakEvenSessionsPerWeek
+                      ? "text-green-600"
+                      : "text-amber-600"
+                  }`}>
+                    {isFinite(profitabilityData.breakEvenSessionsPerWeek)
+                      ? profitabilityData.breakEvenSessionsPerWeek.toFixed(1)
+                      : "—"}
+                  </span>
+                </div>
+
+                <div className="flex items-center w-full gap-2 py-1 px-1.5">
+                  <span className="flex-1 text-[11px] text-muted-foreground flex items-center gap-1">
+                    Sessions vs break-even
+                    <InfoTip text="Actual sessions per week minus break-even sessions per week. Positive = above break-even; negative = below." />
+                  </span>
+                  <span className={`text-[11px] font-medium tabular-nums ${
+                    !isFinite(profitabilityData.sessionsVsBreakEven) || profitabilityData.sessionsVsBreakEven < 0
+                      ? "text-red-600"
+                      : "text-green-600"
+                  }`}>
+                    {isFinite(profitabilityData.sessionsVsBreakEven)
+                      ? `${profitabilityData.sessionsVsBreakEven >= 0 ? "+" : ""}${profitabilityData.sessionsVsBreakEven.toFixed(1)} sessions`
+                      : "—"}
+                  </span>
+                </div>
+
+                <div className="flex items-center w-full gap-2 py-1 px-1.5">
+                  <span className="flex-1 text-[11px] text-muted-foreground">Status</span>
+                  <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded-full ${
+                    profitabilityData.isProfit
+                      ? "bg-green-100 text-green-700"
+                      : profitabilityData.isLosing
+                      ? "bg-red-100 text-red-700"
+                      : "bg-amber-100 text-amber-700"
+                  }`}>
+                    {profitabilityData.status}
+                  </span>
+                </div>
+              </>
+            )}
           </div>
         )}
       </div>
@@ -1207,12 +1340,23 @@ export default function SandboxView({ onShowAdvanced }: { onShowAdvanced: () => 
     "coversTotalGoal",
     "practiceContribution",
     "netAfterEmployerTaxes",
+    "fullyLoadedProfit",
   ];
   const SELECTED_METRIC_STORAGE_KEY = "compDashboard_pinnedMetric";
   const storedMetric = localStorage.getItem(SELECTED_METRIC_STORAGE_KEY) as CardMetric | null;
   const [selectedMetric, setSelectedMetric] = useState<CardMetric>(
     storedMetric && VALID_CARD_METRICS.includes(storedMetric) ? storedMetric : "coversOverhead"
   );
+  const ALLOCATION_MODEL_STORAGE_KEY = "compDashboard_allocationModel";
+  const storedModel = localStorage.getItem(ALLOCATION_MODEL_STORAGE_KEY) as OverheadAllocationModel | null;
+  const validModels: OverheadAllocationModel[] = ["equal", "revenue", "session"];
+  const [overheadAllocationModel, setOverheadAllocationModel] = useState<OverheadAllocationModel>(
+    storedModel && validModels.includes(storedModel) ? storedModel : "session"
+  );
+  const handleSetAllocationModel = (m: OverheadAllocationModel) => {
+    localStorage.setItem(ALLOCATION_MODEL_STORAGE_KEY, m);
+    setOverheadAllocationModel(m);
+  };
 
   const handleSetSelectedMetric = (metric: CardMetric) => {
     localStorage.setItem(SELECTED_METRIC_STORAGE_KEY, metric);
@@ -1447,6 +1591,30 @@ export default function SandboxView({ onShowAdvanced }: { onShowAdvanced: () => 
               </Button>
             </div>
           </div>
+          {clinicians.length > 0 && (goal.annualOverheadGoal ?? 0) > 0 && (
+            <div className="flex items-center gap-1.5">
+              <span className="text-[10px] text-muted-foreground flex items-center gap-1">
+                Overhead allocation
+                <InfoTip text="How shared overhead is divided across clinicians. Equal splits it evenly; Revenue weights by each clinician's production; Session weights by session count." />
+              </span>
+              <div className="flex items-center gap-px rounded bg-muted/70 border p-0.5 ml-auto">
+                {(["equal", "revenue", "session"] as const).map(m => (
+                  <button
+                    key={m}
+                    type="button"
+                    onClick={() => handleSetAllocationModel(m)}
+                    className={`px-2.5 py-0.5 rounded text-[10px] capitalize transition-colors ${
+                      overheadAllocationModel === m
+                        ? "bg-background shadow-sm font-semibold text-foreground"
+                        : "text-muted-foreground hover:text-foreground"
+                    }`}
+                  >
+                    {m.charAt(0).toUpperCase() + m.slice(1)}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
 
           {clinicians.length === 0 && loadingGoalClinicians ? (
             <div className="flex items-center justify-center h-32">
@@ -1474,19 +1642,29 @@ export default function SandboxView({ onShowAdvanced }: { onShowAdvanced: () => 
             </div>
           ) : (
             <div className="space-y-2">
-              {clinicians.map(c => (
-                <ClinicianCard
-                  key={c._localId}
-                  clinician={c}
-                  onChange={handleClinicianChange}
-                  onSave={handleSaveClinician}
-                  onRemove={handleRemoveClinician}
-                  overhead={goal.annualOverheadGoal || 0}
-                  totalAnnualBusinessNeed={calculateBusinessGoalOutputs(goal as Partial<BusinessGoal>).totalAnnualBusinessNeed}
-                  selectedMetric={selectedMetric}
-                  onSelectMetric={handleSetSelectedMetric}
-                />
-              ))}
+              {(() => {
+                const allMetrics = clinicians.map(c => calculateClinicianMetrics(c));
+                const totalAnnualSessions = allMetrics.reduce((s, m) => s + m.annualSessions, 0);
+                const totalAnnualRevenue = allMetrics.reduce((s, m) => s + m.annualProduction, 0);
+                const clinicianCount = clinicians.length;
+                return clinicians.map(c => (
+                  <ClinicianCard
+                    key={c._localId}
+                    clinician={c}
+                    onChange={handleClinicianChange}
+                    onSave={handleSaveClinician}
+                    onRemove={handleRemoveClinician}
+                    overhead={goal.annualOverheadGoal || 0}
+                    totalAnnualBusinessNeed={calculateBusinessGoalOutputs(goal as Partial<BusinessGoal>).totalAnnualBusinessNeed}
+                    selectedMetric={selectedMetric}
+                    onSelectMetric={handleSetSelectedMetric}
+                    overheadAllocationModel={overheadAllocationModel}
+                    totalAnnualSessions={totalAnnualSessions}
+                    totalAnnualRevenue={totalAnnualRevenue}
+                    clinicianCount={clinicianCount}
+                  />
+                ));
+              })()}
             </div>
           )}
         </main>
