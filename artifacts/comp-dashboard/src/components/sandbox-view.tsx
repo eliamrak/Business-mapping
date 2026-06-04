@@ -513,12 +513,15 @@ function ClinicianCard({
       : -Infinity;
     const isProfit = fullyLoadedProfit > 0;
     const isLosing = contributionMargin <= 0;
+    const isBelowBreakEven = !isProfit && !isLosing && isFinite(breakEvenSessionsPerWeek) && clinician.sessionsPerWeek < breakEvenSessionsPerWeek;
     const status: string = isProfit
       ? "Profitable"
       : isLosing
       ? "Losing Money"
-      : "Below Break-Even";
-    return { fullyLoadedProfit, breakEvenSessionsPerWeek, sessionsVsBreakEven, status, isProfit, isLosing };
+      : isBelowBreakEven
+      ? "Below Break-Even"
+      : "Covers Direct Costs Only";
+    return { contributionMargin, fullyLoadedProfit, breakEvenSessionsPerWeek, sessionsVsBreakEven, status, isProfit, isLosing, isBelowBreakEven };
   }, [metrics, allocatedOverhead, clinician.sessionsPerWeek, clinician.weeksWorkedPerYear]);
 
   const metricRows = useMemo(() => {
@@ -857,8 +860,40 @@ function ClinicianCard({
                     Overhead allocated
                     <InfoTip text="Dollar share of practice overhead assigned to this clinician under the chosen model." />
                   </span>
-                  <span className="text-[11px] font-medium tabular-nums text-muted-foreground">
+                  <span className={`text-[11px] font-medium tabular-nums ${
+                    allocatedOverhead <= 0
+                      ? "text-muted-foreground"
+                      : allocatedOverhead <= (overhead / Math.max(1, clinicianCount)) * 0.8
+                      ? "text-green-600"
+                      : allocatedOverhead <= (overhead / Math.max(1, clinicianCount)) * 1.2
+                      ? "text-amber-600"
+                      : "text-red-600"
+                  }`}>
                     {formatCurrency(allocatedOverhead)}
+                  </span>
+                </div>
+
+                <div className="flex items-center w-full gap-2 py-1 px-1.5">
+                  <span className="flex-1 text-[11px] text-muted-foreground flex items-center gap-1">
+                    Contribution margin
+                    <InfoTip text="Revenue kept by the practice after paying clinician comp and W2 employer taxes. This is the practice's share before overhead." />
+                  </span>
+                  <span className={`text-[11px] font-medium tabular-nums ${
+                    profitabilityData.contributionMargin >= 0 ? "text-green-600" : "text-red-600"
+                  }`}>
+                    {formatCurrency(profitabilityData.contributionMargin)}
+                  </span>
+                </div>
+
+                <div className="flex items-center w-full gap-2 py-1 px-1.5">
+                  <span className="flex-1 text-[11px] text-muted-foreground flex items-center gap-1">
+                    Fully loaded profit
+                    <InfoTip text="Contribution margin minus allocated overhead. Positive means this clinician is profitable after absorbing their fair share of shared costs." />
+                  </span>
+                  <span className={`text-[11px] font-medium tabular-nums ${
+                    profitabilityData.fullyLoadedProfit > 0 ? "text-green-600" : "text-red-600"
+                  }`}>
+                    {formatCurrency(profitabilityData.fullyLoadedProfit)}
                   </span>
                 </div>
 
@@ -883,7 +918,7 @@ function ClinicianCard({
                 <div className="flex items-center w-full gap-2 py-1 px-1.5">
                   <span className="flex-1 text-[11px] text-muted-foreground flex items-center gap-1">
                     Sessions vs break-even
-                    <InfoTip text="Actual sessions per week minus break-even sessions per week. Positive = above break-even; negative = below." />
+                    <InfoTip text="Actual sessions per week minus break-even sessions per week." />
                   </span>
                   <span className={`text-[11px] font-medium tabular-nums ${
                     !isFinite(profitabilityData.sessionsVsBreakEven) || profitabilityData.sessionsVsBreakEven < 0
@@ -891,7 +926,9 @@ function ClinicianCard({
                       : "text-green-600"
                   }`}>
                     {isFinite(profitabilityData.sessionsVsBreakEven)
-                      ? `${profitabilityData.sessionsVsBreakEven >= 0 ? "+" : ""}${profitabilityData.sessionsVsBreakEven.toFixed(1)} sessions`
+                      ? profitabilityData.sessionsVsBreakEven >= 0
+                        ? `+${profitabilityData.sessionsVsBreakEven.toFixed(1)} sessions above`
+                        : `${profitabilityData.sessionsVsBreakEven.toFixed(1)} sessions below`
                       : "—"}
                   </span>
                 </div>
