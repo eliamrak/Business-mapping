@@ -20,6 +20,10 @@ tags:
     description: Practice scenarios
   - name: scenarioClinicians
     description: Clinicians within a scenario
+  - name: staff
+    description: Non-clinician staff members
+  - name: scenarioStaff
+    description: Non-clinician staff within a scenario
 
 paths:
   /healthz:
@@ -573,6 +577,207 @@ paths:
               schema:
                 $ref: "#/components/schemas/ScenarioClinician"
 
+  # ─────────────────────────────────────────
+  # Staff Members
+  # ─────────────────────────────────────────
+  /staff:
+    get:
+      operationId: listStaffMembers
+      tags: [staff]
+      summary: List all non-clinician staff members
+      parameters:
+        - name: goalId
+          in: query
+          required: false
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: List of staff members
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/StaffMember"
+    post:
+      operationId: createStaffMember
+      tags: [staff]
+      summary: Create a staff member
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/StaffMemberInput"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/StaffMember"
+
+  /staff/{id}:
+    get:
+      operationId: getStaffMember
+      tags: [staff]
+      summary: Get a staff member by ID
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Staff member
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/StaffMember"
+        "404":
+          description: Not found
+    patch:
+      operationId: updateStaffMember
+      tags: [staff]
+      summary: Update a staff member
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/StaffMemberUpdate"
+      responses:
+        "200":
+          description: Updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/StaffMember"
+        "404":
+          description: Not found
+    delete:
+      operationId: deleteStaffMember
+      tags: [staff]
+      summary: Delete a staff member
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "204":
+          description: Deleted
+        "404":
+          description: Not found
+
+  # ─────────────────────────────────────────
+  # Scenario Staff Members
+  # ─────────────────────────────────────────
+  /scenarios/{scenarioId}/staff:
+    get:
+      operationId: listScenarioStaff
+      tags: [scenarioStaff]
+      summary: List all staff members in a scenario
+      parameters:
+        - name: scenarioId
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: List of scenario staff members
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ScenarioStaffMember"
+    post:
+      operationId: addScenarioStaffMember
+      tags: [scenarioStaff]
+      summary: Add a staff member to a scenario
+      parameters:
+        - name: scenarioId
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ScenarioStaffMemberInput"
+      responses:
+        "201":
+          description: Added
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ScenarioStaffMember"
+
+  /scenarios/{scenarioId}/staff/{id}:
+    patch:
+      operationId: updateScenarioStaffMember
+      tags: [scenarioStaff]
+      summary: Update a staff member's settings within a scenario
+      parameters:
+        - name: scenarioId
+          in: path
+          required: true
+          schema:
+            type: integer
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ScenarioStaffMemberUpdate"
+      responses:
+        "200":
+          description: Updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ScenarioStaffMember"
+        "404":
+          description: Not found
+    delete:
+      operationId: removeScenarioStaffMember
+      tags: [scenarioStaff]
+      summary: Remove a staff member from a scenario
+      parameters:
+        - name: scenarioId
+          in: path
+          required: true
+          schema:
+            type: integer
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "204":
+          description: Removed
+        "404":
+          description: Not found
+
 components:
   schemas:
     HealthStatus:
@@ -946,6 +1151,7 @@ components:
         - notes
         - businessGoalId
         - clinicians
+        - staffMembers
         - createdAt
         - updatedAt
       properties:
@@ -961,6 +1167,10 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/ScenarioClinician"
+        staffMembers:
+          type: array
+          items:
+            $ref: "#/components/schemas/ScenarioStaffMember"
         createdAt:
           type: string
         updatedAt:
@@ -1132,6 +1342,249 @@ components:
         postCapClinicianSplit:
           type: number
         postCapPracticeSplit:
+          type: number
+        w2EmployerFicaPct:
+          type: number
+        futaSutaPct:
+          type: number
+        workersCompPct:
+          type: number
+        otherEmployerBurdenPct:
+          type: number
+        notes:
+          type: string
+
+    # ─── Staff Member ─────────────────────────
+    StaffMember:
+      type: object
+      required:
+        - id
+        - label
+        - roleType
+        - classification
+        - weeksPerYear
+        - w2EmployerFicaPct
+        - futaSutaPct
+        - workersCompPct
+        - otherEmployerBurdenPct
+        - annualSalary
+        - hourlyRate
+        - hoursPerWeek
+        - goalId
+        - notes
+        - createdAt
+        - updatedAt
+      properties:
+        id:
+          type: integer
+        goalId:
+          type: ["integer", "null"]
+        label:
+          type: string
+        roleType:
+          type: string
+          enum: [admin, billing, front_desk, other]
+        classification:
+          type: string
+          enum: [w2, contractor]
+        annualSalary:
+          type: ["number", "null"]
+        hourlyRate:
+          type: ["number", "null"]
+        hoursPerWeek:
+          type: ["number", "null"]
+        weeksPerYear:
+          type: number
+        w2EmployerFicaPct:
+          type: number
+        futaSutaPct:
+          type: number
+        workersCompPct:
+          type: number
+        otherEmployerBurdenPct:
+          type: number
+        notes:
+          type: ["string", "null"]
+        createdAt:
+          type: string
+        updatedAt:
+          type: string
+
+    StaffMemberInput:
+      type: object
+      required:
+        - label
+      properties:
+        goalId:
+          type: integer
+        label:
+          type: string
+        roleType:
+          type: string
+          enum: [admin, billing, front_desk, other]
+        classification:
+          type: string
+          enum: [w2, contractor]
+        annualSalary:
+          type: number
+        hourlyRate:
+          type: number
+        hoursPerWeek:
+          type: number
+        weeksPerYear:
+          type: number
+        w2EmployerFicaPct:
+          type: number
+        futaSutaPct:
+          type: number
+        workersCompPct:
+          type: number
+        otherEmployerBurdenPct:
+          type: number
+        notes:
+          type: string
+
+    StaffMemberUpdate:
+      type: object
+      properties:
+        label:
+          type: string
+        roleType:
+          type: string
+          enum: [admin, billing, front_desk, other]
+        classification:
+          type: string
+          enum: [w2, contractor]
+        annualSalary:
+          type: number
+        hourlyRate:
+          type: number
+        hoursPerWeek:
+          type: number
+        weeksPerYear:
+          type: number
+        w2EmployerFicaPct:
+          type: number
+        futaSutaPct:
+          type: number
+        workersCompPct:
+          type: number
+        otherEmployerBurdenPct:
+          type: number
+        notes:
+          type: string
+
+    # ─── Scenario Staff Member ─────────────────
+    ScenarioStaffMember:
+      type: object
+      required:
+        - id
+        - scenarioId
+        - label
+        - roleType
+        - classification
+        - weeksPerYear
+        - w2EmployerFicaPct
+        - futaSutaPct
+        - workersCompPct
+        - otherEmployerBurdenPct
+        - annualSalary
+        - hourlyRate
+        - hoursPerWeek
+        - sourceStaffMemberId
+        - notes
+        - createdAt
+        - updatedAt
+      properties:
+        id:
+          type: integer
+        scenarioId:
+          type: integer
+        sourceStaffMemberId:
+          type: ["integer", "null"]
+        label:
+          type: string
+        roleType:
+          type: string
+          enum: [admin, billing, front_desk, other]
+        classification:
+          type: string
+          enum: [w2, contractor]
+        annualSalary:
+          type: ["number", "null"]
+        hourlyRate:
+          type: ["number", "null"]
+        hoursPerWeek:
+          type: ["number", "null"]
+        weeksPerYear:
+          type: number
+        w2EmployerFicaPct:
+          type: number
+        futaSutaPct:
+          type: number
+        workersCompPct:
+          type: number
+        otherEmployerBurdenPct:
+          type: number
+        notes:
+          type: ["string", "null"]
+        createdAt:
+          type: string
+        updatedAt:
+          type: string
+
+    ScenarioStaffMemberInput:
+      type: object
+      required:
+        - label
+      properties:
+        sourceStaffMemberId:
+          type: integer
+        label:
+          type: string
+        roleType:
+          type: string
+          enum: [admin, billing, front_desk, other]
+        classification:
+          type: string
+          enum: [w2, contractor]
+        annualSalary:
+          type: number
+        hourlyRate:
+          type: number
+        hoursPerWeek:
+          type: number
+        weeksPerYear:
+          type: number
+        w2EmployerFicaPct:
+          type: number
+        futaSutaPct:
+          type: number
+        workersCompPct:
+          type: number
+        otherEmployerBurdenPct:
+          type: number
+        notes:
+          type: string
+
+    ScenarioStaffMemberUpdate:
+      type: object
+      properties:
+        label:
+          type: string
+        roleType:
+          type: string
+          enum: [admin, billing, front_desk, other]
+        classification:
+          type: string
+          enum: [w2, contractor]
+        annualSalary:
+          type: number
+        hourlyRate:
+          type: number
+        hoursPerWeek:
+          type: number
+        weeksPerYear:
           type: number
         w2EmployerFicaPct:
           type: number

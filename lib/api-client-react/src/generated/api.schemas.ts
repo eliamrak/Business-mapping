@@ -305,6 +305,49 @@ export interface ScenarioClinician {
   updatedAt: string;
 }
 
+export type ScenarioStaffMemberRoleType = typeof ScenarioStaffMemberRoleType[keyof typeof ScenarioStaffMemberRoleType];
+
+
+export const ScenarioStaffMemberRoleType = {
+  admin: 'admin',
+  billing: 'billing',
+  front_desk: 'front_desk',
+  other: 'other',
+} as const;
+
+export type ScenarioStaffMemberClassification = typeof ScenarioStaffMemberClassification[keyof typeof ScenarioStaffMemberClassification];
+
+
+export const ScenarioStaffMemberClassification = {
+  w2: 'w2',
+  contractor: 'contractor',
+} as const;
+
+export interface ScenarioStaffMember {
+  id: number;
+  scenarioId: number;
+  /** @nullable */
+  sourceStaffMemberId: number | null;
+  label: string;
+  roleType: ScenarioStaffMemberRoleType;
+  classification: ScenarioStaffMemberClassification;
+  /** @nullable */
+  annualSalary: number | null;
+  /** @nullable */
+  hourlyRate: number | null;
+  /** @nullable */
+  hoursPerWeek: number | null;
+  weeksPerYear: number;
+  w2EmployerFicaPct: number;
+  futaSutaPct: number;
+  workersCompPct: number;
+  otherEmployerBurdenPct: number;
+  /** @nullable */
+  notes: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface ScenarioDetail {
   id: number;
   name: string;
@@ -313,6 +356,7 @@ export interface ScenarioDetail {
   /** @nullable */
   businessGoalId: number | null;
   clinicians: ScenarioClinician[];
+  staffMembers: ScenarioStaffMember[];
   createdAt: string;
   updatedAt: string;
 }
@@ -413,6 +457,182 @@ export interface ScenarioClinicianUpdate {
   notes?: string;
 }
 
+export type StaffMemberRoleType = typeof StaffMemberRoleType[keyof typeof StaffMemberRoleType];
+
+
+export const StaffMemberRoleType = {
+  admin: 'admin',
+  billing: 'billing',
+  front_desk: 'front_desk',
+  other: 'other',
+} as const;
+
+export type StaffMemberClassification = typeof StaffMemberClassification[keyof typeof StaffMemberClassification];
+
+
+export const StaffMemberClassification = {
+  w2: 'w2',
+  contractor: 'contractor',
+} as const;
+
+export interface StaffMember {
+  id: number;
+  /** @nullable */
+  goalId: number | null;
+  label: string;
+  roleType: StaffMemberRoleType;
+  classification: StaffMemberClassification;
+  /** @nullable */
+  annualSalary: number | null;
+  /** @nullable */
+  hourlyRate: number | null;
+  /** @nullable */
+  hoursPerWeek: number | null;
+  weeksPerYear: number;
+  w2EmployerFicaPct: number;
+  futaSutaPct: number;
+  workersCompPct: number;
+  otherEmployerBurdenPct: number;
+  /** @nullable */
+  notes: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export type StaffMemberInputRoleType = typeof StaffMemberInputRoleType[keyof typeof StaffMemberInputRoleType];
+
+
+export const StaffMemberInputRoleType = {
+  admin: 'admin',
+  billing: 'billing',
+  front_desk: 'front_desk',
+  other: 'other',
+} as const;
+
+export type StaffMemberInputClassification = typeof StaffMemberInputClassification[keyof typeof StaffMemberInputClassification];
+
+
+export const StaffMemberInputClassification = {
+  w2: 'w2',
+  contractor: 'contractor',
+} as const;
+
+export interface StaffMemberInput {
+  goalId?: number;
+  label: string;
+  roleType?: StaffMemberInputRoleType;
+  classification?: StaffMemberInputClassification;
+  annualSalary?: number;
+  hourlyRate?: number;
+  hoursPerWeek?: number;
+  weeksPerYear?: number;
+  w2EmployerFicaPct?: number;
+  futaSutaPct?: number;
+  workersCompPct?: number;
+  otherEmployerBurdenPct?: number;
+  notes?: string;
+}
+
+export type StaffMemberUpdateRoleType = typeof StaffMemberUpdateRoleType[keyof typeof StaffMemberUpdateRoleType];
+
+
+export const StaffMemberUpdateRoleType = {
+  admin: 'admin',
+  billing: 'billing',
+  front_desk: 'front_desk',
+  other: 'other',
+} as const;
+
+export type StaffMemberUpdateClassification = typeof StaffMemberUpdateClassification[keyof typeof StaffMemberUpdateClassification];
+
+
+export const StaffMemberUpdateClassification = {
+  w2: 'w2',
+  contractor: 'contractor',
+} as const;
+
+export interface StaffMemberUpdate {
+  label?: string;
+  roleType?: StaffMemberUpdateRoleType;
+  classification?: StaffMemberUpdateClassification;
+  annualSalary?: number;
+  hourlyRate?: number;
+  hoursPerWeek?: number;
+  weeksPerYear?: number;
+  w2EmployerFicaPct?: number;
+  futaSutaPct?: number;
+  workersCompPct?: number;
+  otherEmployerBurdenPct?: number;
+  notes?: string;
+}
+
+export type ScenarioStaffMemberInputRoleType = typeof ScenarioStaffMemberInputRoleType[keyof typeof ScenarioStaffMemberInputRoleType];
+
+
+export const ScenarioStaffMemberInputRoleType = {
+  admin: 'admin',
+  billing: 'billing',
+  front_desk: 'front_desk',
+  other: 'other',
+} as const;
+
+export type ScenarioStaffMemberInputClassification = typeof ScenarioStaffMemberInputClassification[keyof typeof ScenarioStaffMemberInputClassification];
+
+
+export const ScenarioStaffMemberInputClassification = {
+  w2: 'w2',
+  contractor: 'contractor',
+} as const;
+
+export interface ScenarioStaffMemberInput {
+  sourceStaffMemberId?: number;
+  label: string;
+  roleType?: ScenarioStaffMemberInputRoleType;
+  classification?: ScenarioStaffMemberInputClassification;
+  annualSalary?: number;
+  hourlyRate?: number;
+  hoursPerWeek?: number;
+  weeksPerYear?: number;
+  w2EmployerFicaPct?: number;
+  futaSutaPct?: number;
+  workersCompPct?: number;
+  otherEmployerBurdenPct?: number;
+  notes?: string;
+}
+
+export type ScenarioStaffMemberUpdateRoleType = typeof ScenarioStaffMemberUpdateRoleType[keyof typeof ScenarioStaffMemberUpdateRoleType];
+
+
+export const ScenarioStaffMemberUpdateRoleType = {
+  admin: 'admin',
+  billing: 'billing',
+  front_desk: 'front_desk',
+  other: 'other',
+} as const;
+
+export type ScenarioStaffMemberUpdateClassification = typeof ScenarioStaffMemberUpdateClassification[keyof typeof ScenarioStaffMemberUpdateClassification];
+
+
+export const ScenarioStaffMemberUpdateClassification = {
+  w2: 'w2',
+  contractor: 'contractor',
+} as const;
+
+export interface ScenarioStaffMemberUpdate {
+  label?: string;
+  roleType?: ScenarioStaffMemberUpdateRoleType;
+  classification?: ScenarioStaffMemberUpdateClassification;
+  annualSalary?: number;
+  hourlyRate?: number;
+  hoursPerWeek?: number;
+  weeksPerYear?: number;
+  w2EmployerFicaPct?: number;
+  futaSutaPct?: number;
+  workersCompPct?: number;
+  otherEmployerBurdenPct?: number;
+  notes?: string;
+}
+
 export type ListCliniciansParams = {
 goalId?: number;
 };
@@ -420,5 +640,9 @@ goalId?: number;
 export type CopyClinicianToGoalBody = {
   ids: number[];
   toGoalId: number;
+};
+
+export type ListStaffMembersParams = {
+goalId?: number;
 };
 

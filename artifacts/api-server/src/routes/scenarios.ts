@@ -1,7 +1,8 @@
 import { Router } from "express";
 import { db } from "@workspace/db";
-import { scenariosTable, scenarioCliniciansTable } from "@workspace/db";
+import { scenariosTable, scenarioCliniciansTable, scenarioStaffMembersTable, staffMembersTable } from "@workspace/db";
 import { and, eq } from "drizzle-orm";
+import { toApiScenarioStaffMember } from "./staff";
 
 const router = Router();
 
@@ -44,12 +45,18 @@ function toApiScenario(row: typeof scenariosTable.$inferSelect) {
 }
 
 async function toApiScenarioDetail(row: typeof scenariosTable.$inferSelect) {
-  const clinicians = await db.select().from(scenarioCliniciansTable)
-    .where(eq(scenarioCliniciansTable.scenarioId, row.id))
-    .orderBy(scenarioCliniciansTable.createdAt);
+  const [clinicians, staffMembers] = await Promise.all([
+    db.select().from(scenarioCliniciansTable)
+      .where(eq(scenarioCliniciansTable.scenarioId, row.id))
+      .orderBy(scenarioCliniciansTable.createdAt),
+    db.select().from(scenarioStaffMembersTable)
+      .where(eq(scenarioStaffMembersTable.scenarioId, row.id))
+      .orderBy(scenarioStaffMembersTable.createdAt),
+  ]);
   return {
     ...toApiScenario(row),
     clinicians: clinicians.map(toApiScenarioClinician),
+    staffMembers: staffMembers.map(toApiScenarioStaffMember),
   };
 }
 
@@ -103,13 +110,20 @@ router.post("/scenarios/:id/duplicate", async (req, res) => {
   const { id: _id, createdAt: _c, updatedAt: _u, name, ...rest } = original;
   const [copy] = await db.insert(scenariosTable).values({ ...rest, name: `${name} (Copy)` }).returning();
 
-  // Duplicate all clinicians
-  const clinicians = await db.select().from(scenarioCliniciansTable)
-    .where(eq(scenarioCliniciansTable.scenarioId, id));
+  // Duplicate all clinicians and staff members
+  const [clinicians, staffMembers] = await Promise.all([
+    db.select().from(scenarioCliniciansTable).where(eq(scenarioCliniciansTable.scenarioId, id)),
+    db.select().from(scenarioStaffMembersTable).where(eq(scenarioStaffMembersTable.scenarioId, id)),
+  ]);
 
   for (const c of clinicians) {
     const { id: _cid, scenarioId: _scid, createdAt: _cc, updatedAt: _cu, ...cRest } = c;
     await db.insert(scenarioCliniciansTable).values({ ...cRest, scenarioId: copy.id });
+  }
+
+  for (const s of staffMembers) {
+    const { id: _sid, scenarioId: _scid, createdAt: _sc, updatedAt: _su, ...sRest } = s;
+    await db.insert(scenarioStaffMembersTable).values({ ...sRest, scenarioId: copy.id });
   }
 
   return res.status(201).json(await toApiScenarioDetail(copy));

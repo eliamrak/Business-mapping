@@ -4,10 +4,11 @@ import {
   useUpdateScenario, useDuplicateScenario,
   useGetScenario, useAddScenarioClinician, useUpdateScenarioClinician, useRemoveScenarioClinician,
   useDuplicateScenarioClinician,
-  useListBusinessGoals, useListClinicians,
+  useListBusinessGoals, useListClinicians, useListStaffMembers,
+  useAddScenarioStaffMember, useUpdateScenarioStaffMember, useRemoveScenarioStaffMember,
   getListScenariosQueryKey, getGetScenarioQueryKey
 } from "@workspace/api-client-react";
-import type { Scenario, ScenarioClinician, Clinician } from "@workspace/api-client-react";
+import type { Scenario, ScenarioClinician, Clinician, ScenarioStaffMember, StaffMember } from "@workspace/api-client-react";
 import { Card, CardHeader, CardTitle, CardContent, CardFooter } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -18,11 +19,190 @@ import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
-import { Plus, Trash, Copy, ChevronLeft, GitMerge, UserPlus, Pencil } from "lucide-react";
-import { calculateClinicianMetrics, calculateBusinessGoalOutputs } from "@/lib/calculations";
+import { Plus, Trash, Copy, ChevronLeft, GitMerge, UserPlus, Pencil, Users } from "lucide-react";
+import { calculateClinicianMetrics, calculateBusinessGoalOutputs, calculateStaffMemberCost } from "@/lib/calculations";
 import { formatCurrency } from "@/lib/format";
 import { useQueryClient } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
+
+const STAFF_ROLE_LABELS: Record<string, string> = {
+  admin: "Admin",
+  billing: "Billing",
+  front_desk: "Front Desk",
+  other: "Other",
+};
+
+type ScenStaffForm = {
+  label: string;
+  roleType: string;
+  classification: string;
+  annualSalary: number | null;
+  hourlyRate: number | null;
+  hoursPerWeek: number | null;
+  weeksPerYear: number | null;
+  w2EmployerFicaPct: number;
+  futaSutaPct: number;
+  workersCompPct: number;
+  otherEmployerBurdenPct: number;
+};
+
+function ssToForm(s: ScenarioStaffMember): ScenStaffForm {
+  return {
+    label: s.label,
+    roleType: String(s.roleType),
+    classification: String(s.classification),
+    annualSalary: s.annualSalary != null ? Number(s.annualSalary) : null,
+    hourlyRate: s.hourlyRate != null ? Number(s.hourlyRate) : null,
+    hoursPerWeek: s.hoursPerWeek != null ? Number(s.hoursPerWeek) : null,
+    weeksPerYear: s.weeksPerYear != null ? Number(s.weeksPerYear) : null,
+    w2EmployerFicaPct: Number(s.w2EmployerFicaPct ?? 7.65),
+    futaSutaPct: Number(s.futaSutaPct ?? 1),
+    workersCompPct: Number(s.workersCompPct ?? 0.5),
+    otherEmployerBurdenPct: Number(s.otherEmployerBurdenPct ?? 0),
+  };
+}
+
+function StaffEditDialog({
+  open, onClose, initial, onSave, title,
+}: {
+  open: boolean; onClose: () => void;
+  initial: ScenStaffForm; onSave: (f: ScenStaffForm) => void; title: string;
+}) {
+  const [form, setForm] = useState<ScenStaffForm>(initial);
+  const isSalary = form.annualSalary != null && form.annualSalary > 0;
+  const isW2 = form.classification === "w2";
+
+  const previewCost = calculateStaffMemberCost({
+    annualSalary: form.annualSalary,
+    hourlyRate: form.hourlyRate,
+    hoursPerWeek: form.hoursPerWeek,
+    weeksPerYear: form.weeksPerYear ?? 0,
+    classification: form.classification,
+    w2EmployerFicaPct: form.w2EmployerFicaPct,
+    futaSutaPct: form.futaSutaPct,
+    workersCompPct: form.workersCompPct,
+    otherEmployerBurdenPct: form.otherEmployerBurdenPct,
+  });
+
+  const set = (k: keyof ScenStaffForm, v: unknown) =>
+    setForm(f => ({ ...f, [k]: v }));
+
+  return (
+    <Dialog open={open} onOpenChange={o => { if (!o) onClose(); }}>
+      <DialogContent className="w-[95vw] sm:max-w-xl max-h-[90vh] overflow-y-auto">
+        <DialogHeader><DialogTitle>{title}</DialogTitle></DialogHeader>
+        <div className="space-y-5 py-2">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div className="sm:col-span-2 space-y-1">
+              <Label>Name / Label</Label>
+              <Input value={form.label} onChange={e => set("label", e.target.value)} />
+            </div>
+            <div className="space-y-1">
+              <Label>Role Type</Label>
+              <Select value={form.roleType} onValueChange={v => set("roleType", v)}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  {Object.entries(STAFF_ROLE_LABELS).map(([k, v]) => (
+                    <SelectItem key={k} value={k}>{v}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-1">
+              <Label>Classification</Label>
+              <Select value={form.classification} onValueChange={v => set("classification", v)}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="w2">W2 Employee</SelectItem>
+                  <SelectItem value="contractor">1099 Contractor</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="sm:col-span-2 space-y-2">
+              <div className="flex items-center gap-3">
+                <span className="text-sm font-medium">Compensation Mode</span>
+                <div className="flex items-center gap-2 text-sm">
+                  <span className={isSalary ? "text-muted-foreground" : "font-medium"}>Hourly</span>
+                  <Switch
+                    checked={isSalary}
+                    onCheckedChange={on => {
+                      if (on) { set("annualSalary", 50000); set("hourlyRate", null); set("hoursPerWeek", null); set("weeksPerYear", null); }
+                      else { set("annualSalary", null); set("hourlyRate", 25); set("hoursPerWeek", 40); set("weeksPerYear", 50); }
+                    }}
+                  />
+                  <span className={isSalary ? "font-medium" : "text-muted-foreground"}>Annual Salary</span>
+                </div>
+              </div>
+              {isSalary ? (
+                <div className="space-y-1">
+                  <Label>Annual Salary ($)</Label>
+                  <Input type="number" min={0} value={form.annualSalary ?? ""} onChange={e => set("annualSalary", Number(e.target.value))} />
+                </div>
+              ) : (
+                <div className="grid grid-cols-3 gap-3">
+                  <div className="space-y-1">
+                    <Label>Hourly Rate ($)</Label>
+                    <Input type="number" min={0} value={form.hourlyRate ?? ""} onChange={e => set("hourlyRate", Number(e.target.value))} />
+                  </div>
+                  <div className="space-y-1">
+                    <Label>Hours / Week</Label>
+                    <Input type="number" min={0} value={form.hoursPerWeek ?? ""} onChange={e => set("hoursPerWeek", Number(e.target.value))} />
+                  </div>
+                  <div className="space-y-1">
+                    <Label>Weeks / Year</Label>
+                    <Input type="number" min={0} value={form.weeksPerYear ?? ""} onChange={e => set("weeksPerYear", Number(e.target.value))} />
+                  </div>
+                </div>
+              )}
+            </div>
+            {isW2 && (
+              <>
+                <div className="space-y-1">
+                  <Label>Employer FICA (%)</Label>
+                  <Input type="number" min={0} step={0.01} value={form.w2EmployerFicaPct} onChange={e => set("w2EmployerFicaPct", Number(e.target.value))} />
+                </div>
+                <div className="space-y-1">
+                  <Label>FUTA/SUTA (%)</Label>
+                  <Input type="number" min={0} step={0.01} value={form.futaSutaPct} onChange={e => set("futaSutaPct", Number(e.target.value))} />
+                </div>
+                <div className="space-y-1">
+                  <Label>Workers&apos; Comp (%)</Label>
+                  <Input type="number" min={0} step={0.01} value={form.workersCompPct} onChange={e => set("workersCompPct", Number(e.target.value))} />
+                </div>
+                <div className="space-y-1">
+                  <Label>Other Burden (%)</Label>
+                  <Input type="number" min={0} step={0.01} value={form.otherEmployerBurdenPct} onChange={e => set("otherEmployerBurdenPct", Number(e.target.value))} />
+                </div>
+              </>
+            )}
+          </div>
+
+          <div className="rounded-lg bg-muted/60 p-3 space-y-1 text-sm">
+            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">Cost Preview</p>
+            <div className="grid grid-cols-3 gap-2 text-center">
+              <div>
+                <span className="text-xs text-muted-foreground block">Base Cost</span>
+                <span className="font-semibold">{formatCurrency(previewCost.baseAnnualCost)}</span>
+              </div>
+              <div>
+                <span className="text-xs text-muted-foreground block">Employer Burden</span>
+                <span className="font-semibold text-amber-600">{formatCurrency(previewCost.employerBurden)}</span>
+              </div>
+              <div>
+                <span className="text-xs text-muted-foreground block">Total Annual</span>
+                <span className="font-bold text-rose-600">{formatCurrency(previewCost.totalAnnualCost)}</span>
+              </div>
+            </div>
+          </div>
+        </div>
+        <DialogFooter>
+          <Button variant="outline" onClick={onClose}>Cancel</Button>
+          <Button onClick={() => onSave(form)}>Save Changes</Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
 
 type ScenClxForm = {
   label: string;
@@ -190,11 +370,15 @@ function ClinicianEditDialog({
 function ScenarioDetail({ scenarioId, onBack }: { scenarioId: number; onBack: () => void }) {
   const { data: scenario, isLoading } = useGetScenario(scenarioId);
   const { data: allClinicians } = useListClinicians();
+  const { data: allStaff } = useListStaffMembers();
   const { data: goals } = useListBusinessGoals();
   const addClinician = useAddScenarioClinician();
   const updateClinician = useUpdateScenarioClinician();
   const removeClinician = useRemoveScenarioClinician();
   const duplicateClinician = useDuplicateScenarioClinician();
+  const addStaff = useAddScenarioStaffMember();
+  const updateStaff = useUpdateScenarioStaffMember();
+  const removeStaff = useRemoveScenarioStaffMember();
   const updateScenario = useUpdateScenario();
   const queryClient = useQueryClient();
   const { toast } = useToast();
@@ -206,6 +390,8 @@ function ScenarioDetail({ scenarioId, onBack }: { scenarioId: number; onBack: ()
   const [editClx, setEditClx] = useState<ScenarioClinician | null>(null);
   const [addOpen, setAddOpen] = useState(false);
   const [addSource, setAddSource] = useState<Clinician | null>(null);
+  const [addStaffOpen, setAddStaffOpen] = useState(false);
+  const [editStaff, setEditStaff] = useState<ScenarioStaffMember | null>(null);
 
   const invalidate = () => queryClient.invalidateQueries({ queryKey: getGetScenarioQueryKey(scenarioId) });
 
@@ -293,11 +479,84 @@ function ScenarioDetail({ scenarioId, onBack }: { scenarioId: number; onBack: ()
 
   if (isLoading || !scenario) return <div className="p-8 text-muted-foreground">Loading scenario...</div>;
 
+  const handleAddStaffFromTemplate = (s: StaffMember) => {
+    addStaff.mutate({
+      scenarioId,
+      data: {
+        label: s.label,
+        roleType: s.roleType,
+        classification: s.classification,
+        annualSalary: s.annualSalary ?? undefined,
+        hourlyRate: s.hourlyRate ?? undefined,
+        hoursPerWeek: s.hoursPerWeek ?? undefined,
+        weeksPerYear: s.weeksPerYear,
+        w2EmployerFicaPct: s.w2EmployerFicaPct,
+        futaSutaPct: s.futaSutaPct,
+        workersCompPct: s.workersCompPct,
+        otherEmployerBurdenPct: s.otherEmployerBurdenPct,
+        sourceStaffMemberId: s.id,
+      } as never
+    }, {
+      onSuccess: () => { invalidate(); setAddStaffOpen(false); toast({ title: "Staff added", description: `"${s.label}" added to scenario.` }); },
+      onError: () => toast({ title: "Add failed", variant: "destructive" }),
+    });
+  };
+
+  const handleRemoveStaff = (id: number) => {
+    removeStaff.mutate({ scenarioId, id }, {
+      onSuccess: () => { invalidate(); toast({ title: "Staff removed" }); },
+      onError: () => toast({ title: "Remove failed", variant: "destructive" }),
+    });
+  };
+
+  const handleSaveStaff = (form: ScenStaffForm) => {
+    if (!editStaff) return;
+    updateStaff.mutate({
+      scenarioId,
+      id: editStaff.id,
+      data: {
+        label: form.label,
+        roleType: form.roleType as never,
+        classification: form.classification as never,
+        annualSalary: form.annualSalary,
+        hourlyRate: form.hourlyRate,
+        hoursPerWeek: form.hoursPerWeek,
+        weeksPerYear: form.weeksPerYear,
+        w2EmployerFicaPct: form.w2EmployerFicaPct,
+        futaSutaPct: form.futaSutaPct,
+        workersCompPct: form.workersCompPct,
+        otherEmployerBurdenPct: form.otherEmployerBurdenPct,
+      } as never,
+    }, {
+      onSuccess: () => {
+        invalidate();
+        setEditStaff(null);
+        toast({ title: "Staff member updated", description: `"${form.label}" has been updated.` });
+      },
+      onError: () => toast({ title: "Update failed", variant: "destructive" }),
+    });
+  };
+
   const clinicians = scenario.clinicians ?? [];
+  const scenarioStaff = scenario.staffMembers ?? [];
   const totalProduction = clinicians.reduce((sum, c) => sum + calculateClinicianMetrics(c).annualProduction, 0);
   const totalComp = clinicians.reduce((sum, c) => sum + calculateClinicianMetrics(c).clinicianCompensation, 0);
   const totalBurden = clinicians.reduce((sum, c) => sum + calculateClinicianMetrics(c).employerObligations, 0);
   const totalPracticeNet = clinicians.reduce((sum, c) => sum + calculateClinicianMetrics(c).practiceNetBeforeOverhead, 0);
+  const totalStaffCost = scenarioStaff.reduce((sum, s) => {
+    const { totalAnnualCost } = calculateStaffMemberCost({
+      annualSalary: s.annualSalary,
+      hourlyRate: s.hourlyRate,
+      hoursPerWeek: s.hoursPerWeek,
+      weeksPerYear: s.weeksPerYear,
+      classification: String(s.classification),
+      w2EmployerFicaPct: s.w2EmployerFicaPct,
+      futaSutaPct: s.futaSutaPct,
+      workersCompPct: s.workersCompPct,
+      otherEmployerBurdenPct: s.otherEmployerBurdenPct,
+    });
+    return sum + totalAnnualCost;
+  }, 0);
 
   const linkedGoal = goals?.find(g => g.id === scenario.businessGoalId);
   const goalOutputs = linkedGoal ? calculateBusinessGoalOutputs(linkedGoal) : null;
@@ -336,17 +595,9 @@ function ScenarioDetail({ scenarioId, onBack }: { scenarioId: number; onBack: ()
           <span className="text-xl font-bold text-primary">{formatCurrency(totalPracticeNet)}</span>
         </CardContent></Card>
         <Card><CardContent className="pt-4">
-          <span className="text-muted-foreground text-xs block">Clinicians</span>
-          <span className="text-xl font-bold">{clinicians.length}</span>
-          {goalStatus && (
-            <Badge className="mt-1 text-[10px]"
-              style={{
-                backgroundColor: goalStatus === "green" ? "#16a34a" : goalStatus === "yellow" ? "#d97706" : "#dc2626",
-                color: "white"
-              }}>
-              {goalStatus === "green" ? "On Track" : goalStatus === "yellow" ? "Near Goal" : "Below Goal"}
-            </Badge>
-          )}
+          <span className="text-muted-foreground text-xs block">Staff Overhead</span>
+          <span className="text-xl font-bold text-rose-600">{formatCurrency(totalStaffCost)}</span>
+          <span className="text-[10px] text-muted-foreground block mt-0.5">{scenarioStaff.length} member{scenarioStaff.length !== 1 ? "s" : ""}</span>
         </CardContent></Card>
       </div>
 
@@ -439,6 +690,117 @@ function ScenarioDetail({ scenarioId, onBack }: { scenarioId: number; onBack: ()
           title={`Edit ${editClx.label}`}
         />
       )}
+
+      {/* ── Non-Clinical Staff ── */}
+      <Separator />
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="flex items-center gap-2">
+          <Users className="h-5 w-5 text-muted-foreground" />
+          <h3 className="text-lg font-semibold">Non-Clinical Staff</h3>
+          {scenarioStaff.length > 0 && (
+            <span className="text-sm text-muted-foreground">— {formatCurrency(totalStaffCost)} / yr</span>
+          )}
+        </div>
+        <Button variant="outline" size="sm" onClick={() => setAddStaffOpen(true)} className="min-h-[44px]">
+          <UserPlus className="h-4 w-4 mr-1" />Import from Team
+        </Button>
+      </div>
+
+      {scenarioStaff.length === 0 ? (
+        <Card className="flex flex-col items-center justify-center p-8 text-center">
+          <p className="text-muted-foreground text-sm">No staff in this scenario.</p>
+          <Button className="mt-3" variant="outline" size="sm" onClick={() => setAddStaffOpen(true)}>Import from Team Builder</Button>
+        </Card>
+      ) : (
+        <div className="space-y-2">
+          {scenarioStaff.map(s => {
+            const cost = calculateStaffMemberCost({
+              annualSalary: s.annualSalary,
+              hourlyRate: s.hourlyRate,
+              hoursPerWeek: s.hoursPerWeek,
+              weeksPerYear: s.weeksPerYear,
+              classification: String(s.classification),
+              w2EmployerFicaPct: s.w2EmployerFicaPct,
+              futaSutaPct: s.futaSutaPct,
+              workersCompPct: s.workersCompPct,
+              otherEmployerBurdenPct: s.otherEmployerBurdenPct,
+            });
+            return (
+              <Card key={s.id}>
+                <CardContent className="pt-4">
+                  <div className="flex flex-col sm:flex-row sm:items-center gap-3">
+                    <div className="flex-1 min-w-0">
+                      <div className="flex flex-wrap items-center gap-2 mb-2">
+                        <span className="font-semibold">{s.label}</span>
+                        <Badge variant="secondary" className="text-[10px]">{STAFF_ROLE_LABELS[String(s.roleType)] ?? s.roleType}</Badge>
+                        <Badge variant={String(s.classification) === "w2" ? "default" : "outline"} className="text-[10px] uppercase">{s.classification}</Badge>
+                      </div>
+                      <div className="grid grid-cols-3 gap-3 text-sm">
+                        <div><span className="text-muted-foreground text-xs block">Base Salary</span><span className="font-medium">{formatCurrency(cost.baseAnnualCost)}</span></div>
+                        <div><span className="text-muted-foreground text-xs block">Employer Burden</span><span className="font-medium text-amber-600">{formatCurrency(cost.employerBurden)}</span></div>
+                        <div><span className="text-muted-foreground text-xs block">Total Annual Cost</span><span className="font-medium text-rose-600">{formatCurrency(cost.totalAnnualCost)}</span></div>
+                      </div>
+                    </div>
+                    <div className="flex gap-1 shrink-0">
+                      <Button variant="ghost" size="icon" className="h-11 w-11 sm:h-8 sm:w-8" onClick={() => setEditStaff(s)} title="Edit">
+                        <Pencil className="h-4 w-4" />
+                      </Button>
+                      <Button variant="ghost" size="icon" className="h-11 w-11 sm:h-8 sm:w-8 text-destructive hover:bg-destructive/10" onClick={() => handleRemoveStaff(s.id)} title="Remove">
+                        <Trash className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            );
+          })}
+        </div>
+      )}
+
+      {editStaff && (
+        <StaffEditDialog
+          open={!!editStaff}
+          onClose={() => setEditStaff(null)}
+          initial={ssToForm(editStaff)}
+          onSave={handleSaveStaff}
+          title={`Edit ${editStaff.label}`}
+        />
+      )}
+
+      <Dialog open={addStaffOpen} onOpenChange={setAddStaffOpen}>
+        <DialogContent className="w-[95vw] sm:max-w-lg">
+          <DialogHeader><DialogTitle>Import Staff from Team Builder</DialogTitle></DialogHeader>
+          {!allStaff?.length ? (
+            <p className="text-muted-foreground text-sm py-4">No staff in Team Builder. Add them there first.</p>
+          ) : (
+            <div className="space-y-2 py-2 max-h-80 overflow-y-auto">
+              {allStaff.map(s => {
+                const cost = calculateStaffMemberCost({
+                  annualSalary: s.annualSalary, hourlyRate: s.hourlyRate, hoursPerWeek: s.hoursPerWeek,
+                  weeksPerYear: s.weeksPerYear, classification: String(s.classification),
+                  w2EmployerFicaPct: s.w2EmployerFicaPct, futaSutaPct: s.futaSutaPct,
+                  workersCompPct: s.workersCompPct, otherEmployerBurdenPct: s.otherEmployerBurdenPct,
+                });
+                const alreadyAdded = scenarioStaff.some(ss => ss.sourceStaffMemberId === s.id);
+                return (
+                  <div key={s.id} className="flex items-center justify-between p-3 border rounded-lg hover:bg-muted/50">
+                    <div>
+                      <span className="font-medium">{s.label}</span>
+                      <span className="text-muted-foreground text-xs ml-2">{STAFF_ROLE_LABELS[String(s.roleType)]} · {formatCurrency(cost.totalAnnualCost)}/yr</span>
+                    </div>
+                    <Button size="sm" onClick={() => handleAddStaffFromTemplate(s)} disabled={alreadyAdded}>
+                      {alreadyAdded ? "Added" : "Import"}
+                    </Button>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setAddStaffOpen(false)}>Close</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <Dialog open={addOpen} onOpenChange={setAddOpen}>
         <DialogContent className="w-[95vw] sm:max-w-lg">

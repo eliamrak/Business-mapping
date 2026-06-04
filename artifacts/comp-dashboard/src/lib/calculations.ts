@@ -1,4 +1,4 @@
-import { BusinessGoal, Clinician, CurrentReality, ScenarioClinician } from "@workspace/api-client-react";
+import { BusinessGoal, Clinician, CurrentReality, ScenarioClinician, StaffMember, ScenarioStaffMember } from "@workspace/api-client-react";
 
 export interface ClinicianMetricsInput {
   sessionRate: number;
@@ -90,6 +90,54 @@ export function calculateClinicianMetrics(input: ClinicianMetricsInput) {
     burdenWorkersComp,
     burdenOther,
   };
+}
+
+export interface StaffCostInput {
+  annualSalary?: number | null;
+  hourlyRate?: number | null;
+  hoursPerWeek?: number | null;
+  weeksPerYear: number;
+  classification: string;
+  w2EmployerFicaPct: number;
+  futaSutaPct: number;
+  workersCompPct: number;
+  otherEmployerBurdenPct: number;
+}
+
+export function calculateStaffMemberCost(input: StaffCostInput) {
+  let baseAnnualCost = 0;
+  if (input.annualSalary != null && input.annualSalary > 0) {
+    baseAnnualCost = input.annualSalary;
+  } else if (input.hourlyRate != null && input.hoursPerWeek != null) {
+    baseAnnualCost = (input.hourlyRate || 0) * (input.hoursPerWeek || 0) * (input.weeksPerYear || 52);
+  }
+
+  const isW2 = String(input.classification).toLowerCase() === "w2";
+  const totalBurdenPct = isW2
+    ? ((input.w2EmployerFicaPct || 0) + (input.futaSutaPct || 0) + (input.workersCompPct || 0) + (input.otherEmployerBurdenPct || 0)) / 100
+    : 0;
+
+  const employerBurden = baseAnnualCost * totalBurdenPct;
+  const totalAnnualCost = baseAnnualCost + employerBurden;
+
+  return { baseAnnualCost, employerBurden, totalAnnualCost };
+}
+
+export function calculateTotalStaffCost(staffMembers: (StaffMember | ScenarioStaffMember)[]) {
+  return staffMembers.reduce((sum, s) => {
+    const { totalAnnualCost } = calculateStaffMemberCost({
+      annualSalary: s.annualSalary,
+      hourlyRate: s.hourlyRate,
+      hoursPerWeek: s.hoursPerWeek,
+      weeksPerYear: s.weeksPerYear,
+      classification: String(s.classification),
+      w2EmployerFicaPct: s.w2EmployerFicaPct,
+      futaSutaPct: s.futaSutaPct,
+      workersCompPct: s.workersCompPct,
+      otherEmployerBurdenPct: s.otherEmployerBurdenPct,
+    });
+    return sum + totalAnnualCost;
+  }, 0);
 }
 
 export function calculateBusinessGoalOutputs(goal: Partial<BusinessGoal>) {

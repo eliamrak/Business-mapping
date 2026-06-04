@@ -6,6 +6,7 @@
  * OpenAPI spec version: 0.1.0
  */
 import type { ScenarioClinician } from './scenarioClinician';
+import type { ScenarioStaffMember } from './scenarioStaffMember';
 
 export interface ScenarioDetail {
   id: number;
@@ -15,6 +16,7 @@ export interface ScenarioDetail {
   /** @nullable */
   businessGoalId: number | null;
   clinicians: ScenarioClinician[];
+  staffMembers: ScenarioStaffMember[];
   createdAt: string;
   updatedAt: string;
 }

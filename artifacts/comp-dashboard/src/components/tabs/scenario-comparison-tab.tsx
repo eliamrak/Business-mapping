@@ -7,7 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
-import { calculateClinicianMetrics, calculateBusinessGoalOutputs } from "@/lib/calculations";
+import { calculateClinicianMetrics, calculateBusinessGoalOutputs, calculateStaffMemberCost } from "@/lib/calculations";
 import { formatCurrency, formatPercent } from "@/lib/format";
 import { GitCompare, Plus, X } from "lucide-react";
 
@@ -22,10 +22,20 @@ function useScenarioData(id: number | null) {
 function computeMetrics(scenario: ScenarioDetail | undefined) {
   if (!scenario) return null;
   const cl = scenario.clinicians ?? [];
+  const staff = scenario.staffMembers ?? [];
   const totalProduction = cl.reduce((s, c) => s + calculateClinicianMetrics(c).annualProduction, 0);
   const totalComp = cl.reduce((s, c) => s + calculateClinicianMetrics(c).clinicianCompensation, 0);
   const totalBurden = cl.reduce((s, c) => s + calculateClinicianMetrics(c).employerObligations, 0);
   const totalPracticeNet = cl.reduce((s, c) => s + calculateClinicianMetrics(c).practiceNetBeforeOverhead, 0);
+  const totalStaffCost = staff.reduce((sum, s) => {
+    const { totalAnnualCost } = calculateStaffMemberCost({
+      annualSalary: s.annualSalary, hourlyRate: s.hourlyRate, hoursPerWeek: s.hoursPerWeek,
+      weeksPerYear: s.weeksPerYear, classification: String(s.classification),
+      w2EmployerFicaPct: s.w2EmployerFicaPct, futaSutaPct: s.futaSutaPct,
+      workersCompPct: s.workersCompPct, otherEmployerBurdenPct: s.otherEmployerBurdenPct,
+    });
+    return sum + totalAnnualCost;
+  }, 0);
   const w2Count = cl.filter(c => String(c.classification) === "w2").length;
   return {
     totalProduction,
@@ -33,6 +43,8 @@ function computeMetrics(scenario: ScenarioDetail | undefined) {
     totalBurden,
     totalCost: totalComp + totalBurden,
     totalPracticeNet,
+    totalStaffCost,
+    staffCount: staff.length,
     clinicianCount: cl.length,
     w2Count,
     c1099Count: cl.length - w2Count,
@@ -260,18 +272,19 @@ export default function ScenarioComparisonTab() {
                       <MetricRow label="Total Employer Burden (W2)" values={allData.map(d => d.metrics?.totalBurden ?? null)} higherIsBetter={false} />
                       <MetricRow label="Total Comp Cost" values={allData.map(d => d.metrics?.totalCost ?? null)} higherIsBetter={false} />
                       <MetricRow label="Practice Net (before overhead)" values={allData.map(d => d.metrics?.totalPracticeNet ?? null)} bold />
+                      <MetricRow label="Non-Clinical Staff Cost" values={allData.map(d => d.metrics?.totalStaffCost ?? null)} higherIsBetter={false} />
                       <MetricRow
-                        label={`Practice Net (after overhead${annualOverhead > 0 ? ` – ${formatCurrency(annualOverhead)}` : ""})`}
-                        values={allData.map(d => d.metrics != null ? d.metrics.totalPracticeNet - annualOverhead : null)}
+                        label={`Net After Overhead${annualOverhead > 0 ? ` & Staff` : ""}`}
+                        values={allData.map(d => d.metrics != null ? d.metrics.totalPracticeNet - annualOverhead - (d.metrics.totalStaffCost ?? 0) : null)}
                         bold
                         highlight
                       />
                       {allData.some(d => d.goalOutputs) && (
                         <MetricRow
-                          label="% of Goal Achieved (after overhead)"
+                          label="% of Goal Achieved (after overhead & staff)"
                           values={allData.map(d => d.goalOutputs && d.metrics
                             ? (d.goalOutputs.totalAnnualBusinessNeed > 0
-                              ? ((d.metrics.totalPracticeNet - annualOverhead) / d.goalOutputs.totalAnnualBusinessNeed) * 100
+                              ? ((d.metrics.totalPracticeNet - annualOverhead - (d.metrics.totalStaffCost ?? 0)) / d.goalOutputs.totalAnnualBusinessNeed) * 100
                               : null)
                             : null)}
                           format="percent"
@@ -298,6 +311,7 @@ export default function ScenarioComparisonTab() {
                       <MetricRow label="W2 Employees" values={allData.map(d => d.metrics?.w2Count ?? null)} format="number" higherIsBetter={false} />
                       <MetricRow label="1099 Contractors" values={allData.map(d => d.metrics?.c1099Count ?? null)} format="number" />
                       <MetricRow label="Avg Clinician Comp" values={allData.map(d => d.metrics?.avgComp ?? null)} />
+                      <MetricRow label="Non-Clinical Staff" values={allData.map(d => d.metrics?.staffCount ?? null)} format="number" />
                     </div>
                   </div>
                 </CardContent>
@@ -373,21 +387,25 @@ export default function ScenarioComparisonTab() {
                             <p className="mt-1">No goal linked</p>
                           </div>
                         );
-                        const netAfterOverhead = d.metrics.totalPracticeNet - annualOverhead;
-                        const met = netAfterOverhead >= d.goalOutputs.totalAnnualBusinessNeed;
+                        const staffCost = d.metrics.totalStaffCost ?? 0;
+                        const netAfterAll = d.metrics.totalPracticeNet - annualOverhead - staffCost;
+                        const met = netAfterAll >= d.goalOutputs.totalAnnualBusinessNeed;
                         return (
                           <div key={i} className={`rounded-lg border p-4 text-sm ${met ? "border-green-400 bg-green-50" : "border-amber-400 bg-amber-50"}`}>
                             <p className="font-bold">{d.data?.name}</p>
                             <p className="text-muted-foreground text-xs mt-1">Goal: {d.linkedGoal?.name}</p>
                             <p className="mt-2">Need: <strong>{formatCurrency(d.goalOutputs.totalAnnualBusinessNeed)}</strong></p>
-                            <p className="text-muted-foreground text-xs">Before overhead: <span className="font-medium text-foreground">{formatCurrency(d.metrics.totalPracticeNet)}</span></p>
+                            <p className="text-muted-foreground text-xs">Practice net: <span className="font-medium text-foreground">{formatCurrency(d.metrics.totalPracticeNet)}</span></p>
                             {annualOverhead > 0 && (
                               <p className="text-muted-foreground text-xs">Overhead: <span className="font-medium text-foreground">−{formatCurrency(annualOverhead)}</span></p>
                             )}
-                            <p className="mt-1">After overhead: <strong>{formatCurrency(netAfterOverhead)}</strong></p>
+                            {staffCost > 0 && (
+                              <p className="text-muted-foreground text-xs">Staff costs: <span className="font-medium text-foreground">−{formatCurrency(staffCost)}</span></p>
+                            )}
+                            <p className="mt-1">Net after all costs: <strong>{formatCurrency(netAfterAll)}</strong></p>
                             {!met && (
                               <p className="text-destructive font-semibold mt-1">
-                                Gap: {formatCurrency(d.goalOutputs.totalAnnualBusinessNeed - netAfterOverhead)}
+                                Gap: {formatCurrency(d.goalOutputs.totalAnnualBusinessNeed - netAfterAll)}
                               </p>
                             )}
                             {met && <p className="text-green-600 font-semibold mt-1">Goal met ✓</p>}

@@ -87,17 +87,32 @@ export interface SandboxClinicianResult {
   practiceNet: number;
 }
 
+export interface SandboxStaffInput {
+  annualSalary: number;
+  classification: string;
+  employerBurdenPct: number;
+}
+
+export interface SandboxStaffResult {
+  baseSalary: number;
+  employerBurden: number;
+  totalCost: number;
+}
+
 export interface SandboxTotals {
   clinicianResults: SandboxClinicianResult[];
+  staffResults: SandboxStaffResult[];
   totalPracticeNet: number;
   totalClinicianComp: number;
+  totalStaffCost: number;
   totalNeed: number;
   gap: number;
 }
 
 export function calculateSandboxResults(
   clinicians: SandboxClinicianInput[],
-  settings: { annualOverheadGoal: number; ownerPayGoal: number }
+  settings: { annualOverheadGoal: number; ownerPayGoal: number },
+  staff: SandboxStaffInput[] = []
 ): SandboxTotals {
   let totalPracticeNet = 0;
   let totalClinicianComp = 0;
@@ -116,10 +131,19 @@ export function calculateSandboxResults(
     return { annualProduction, clinicianComp, practiceGross, practiceNet };
   });
 
-  const totalNeed = (settings.annualOverheadGoal || 0) + (settings.ownerPayGoal || 0);
+  let totalStaffCost = 0;
+  const staffResults = staff.map((s) => {
+    const isW2 = String(s.classification).toLowerCase() === "w2";
+    const employerBurden = isW2 ? (s.annualSalary || 0) * ((s.employerBurdenPct || 0) / 100) : 0;
+    const totalCost = (s.annualSalary || 0) + employerBurden;
+    totalStaffCost += totalCost;
+    return { baseSalary: s.annualSalary || 0, employerBurden, totalCost };
+  });
+
+  const totalNeed = (settings.annualOverheadGoal || 0) + (settings.ownerPayGoal || 0) + totalStaffCost;
   const gap = totalPracticeNet - totalNeed;
 
-  return { clinicianResults, totalPracticeNet, totalClinicianComp, totalNeed, gap };
+  return { clinicianResults, staffResults, totalPracticeNet, totalClinicianComp, totalStaffCost, totalNeed, gap };
 }
 
 export function formatCurrency(n: number, compact = false): string {

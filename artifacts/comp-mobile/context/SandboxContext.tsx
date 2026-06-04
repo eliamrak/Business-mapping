@@ -18,6 +18,15 @@ export interface SandboxClinician {
   classification: "w2" | "1099";
 }
 
+export interface SandboxStaff {
+  id: string;
+  label: string;
+  roleType: "admin" | "billing" | "front_desk" | "other";
+  classification: "w2" | "contractor";
+  annualSalary: number;
+  employerBurdenPct: number;
+}
+
 export interface SandboxSettings {
   annualOverheadGoal: number;
   ownerPayGoal: number;
@@ -26,10 +35,14 @@ export interface SandboxSettings {
 interface SandboxContextType {
   settings: SandboxSettings;
   clinicians: SandboxClinician[];
+  staff: SandboxStaff[];
   updateSettings: (updates: Partial<SandboxSettings>) => void;
   addClinician: () => void;
   updateClinician: (id: string, updates: Partial<SandboxClinician>) => void;
   removeClinician: (id: string) => void;
+  addStaff: () => void;
+  updateStaff: (id: string, updates: Partial<SandboxStaff>) => void;
+  removeStaff: (id: string) => void;
 }
 
 const DEFAULT_SETTINGS: SandboxSettings = {
@@ -49,13 +62,16 @@ const DEFAULT_CLINICIANS: SandboxClinician[] = [
   },
 ];
 
-const STORAGE_KEY = "@sandbox_state_v1";
+const DEFAULT_STAFF: SandboxStaff[] = [];
+
+const STORAGE_KEY = "@sandbox_state_v2";
 
 const SandboxContext = createContext<SandboxContextType | null>(null);
 
 export function SandboxProvider({ children }: { children: React.ReactNode }) {
   const [settings, setSettingsState] = useState<SandboxSettings>(DEFAULT_SETTINGS);
   const [clinicians, setCliniciansState] = useState<SandboxClinician[]>(DEFAULT_CLINICIANS);
+  const [staff, setStaffState] = useState<SandboxStaff[]>(DEFAULT_STAFF);
   const loadedRef = useRef(false);
 
   useEffect(() => {
@@ -67,6 +83,9 @@ export function SandboxProvider({ children }: { children: React.ReactNode }) {
           if (Array.isArray(parsed.clinicians) && parsed.clinicians.length > 0) {
             setCliniciansState(parsed.clinicians);
           }
+          if (Array.isArray(parsed.staff)) {
+            setStaffState(parsed.staff);
+          }
         } catch {}
       }
       loadedRef.current = true;
@@ -75,8 +94,8 @@ export function SandboxProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     if (!loadedRef.current) return;
-    AsyncStorage.setItem(STORAGE_KEY, JSON.stringify({ settings, clinicians }));
-  }, [settings, clinicians]);
+    AsyncStorage.setItem(STORAGE_KEY, JSON.stringify({ settings, clinicians, staff }));
+  }, [settings, clinicians, staff]);
 
   const updateSettings = useCallback((updates: Partial<SandboxSettings>) => {
     setSettingsState((prev) => ({ ...prev, ...updates }));
@@ -110,15 +129,46 @@ export function SandboxProvider({ children }: { children: React.ReactNode }) {
     setCliniciansState((prev) => prev.filter((c) => c.id !== id));
   }, []);
 
+  const addStaff = useCallback(() => {
+    setStaffState((prev) => [
+      ...prev,
+      {
+        id: Date.now().toString() + Math.random().toString(36).substr(2, 9),
+        label: `Staff Member ${prev.length + 1}`,
+        roleType: "admin" as const,
+        classification: "w2" as const,
+        annualSalary: 45000,
+        employerBurdenPct: 9.15,
+      },
+    ]);
+  }, []);
+
+  const updateStaff = useCallback(
+    (id: string, updates: Partial<SandboxStaff>) => {
+      setStaffState((prev) =>
+        prev.map((s) => (s.id === id ? { ...s, ...updates } : s))
+      );
+    },
+    []
+  );
+
+  const removeStaff = useCallback((id: string) => {
+    setStaffState((prev) => prev.filter((s) => s.id !== id));
+  }, []);
+
   return (
     <SandboxContext.Provider
       value={{
         settings,
         clinicians,
+        staff,
         updateSettings,
         addClinician,
         updateClinician,
         removeClinician,
+        addStaff,
+        updateStaff,
+        removeStaff,
       }}
     >
       {children}

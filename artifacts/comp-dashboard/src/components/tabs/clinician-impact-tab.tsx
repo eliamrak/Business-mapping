@@ -1,10 +1,10 @@
 import { useState } from "react";
-import { useListClinicians, useGetScenario, useListScenarios, getGetScenarioQueryKey } from "@workspace/api-client-react";
+import { useListClinicians, useGetScenario, useListScenarios, useListStaffMembers, getGetScenarioQueryKey } from "@workspace/api-client-react";
 import type { Clinician, ScenarioClinician } from "@workspace/api-client-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
-import { calculateClinicianMetrics } from "@/lib/calculations";
+import { calculateClinicianMetrics, calculateStaffMemberCost } from "@/lib/calculations";
 import { formatCurrency, formatPercent } from "@/lib/format";
 import { Users, TrendingUp, TrendingDown } from "lucide-react";
 
@@ -106,7 +106,7 @@ function ClassificationDeltaBadge({ clinician }: { clinician: Clinician }) {
   );
 }
 
-function TeamRosterSection({ clinicians }: { clinicians: Clinician[] }) {
+function TeamRosterSection({ clinicians, totalStaffCost }: { clinicians: Clinician[]; totalStaffCost?: number }) {
   const rows = clinicians.map(c => ({
     clinician: c,
     metrics: calculateClinicianMetrics(c),
@@ -117,6 +117,8 @@ function TeamRosterSection({ clinicians }: { clinicians: Clinician[] }) {
   const totalBurden = rows.reduce((s, r) => s + r.metrics.employerObligations, 0);
   const totalTakeHome = rows.reduce((s, r) => s + r.metrics.estimatedCompAfterPayrollTaxes, 0);
   const totalPracticeNet = rows.reduce((s, r) => s + r.metrics.practiceNetBeforeOverhead, 0);
+  const staffCost = totalStaffCost ?? 0;
+  const netAfterStaff = totalPracticeNet - staffCost;
 
   return (
     <Card>
@@ -293,6 +295,26 @@ function TeamRosterSection({ clinicians }: { clinicians: Clinician[] }) {
                 <td className="py-3 px-3 text-right font-bold">{formatCurrency(totalTakeHome)}</td>
                 <td className="py-3 pl-3 pr-6 text-right font-bold text-primary">{formatCurrency(totalPracticeNet)}</td>
               </tr>
+              {staffCost > 0 && (
+                <>
+                  <tr className="bg-muted/20 border-t">
+                    <td className="py-2 pl-6 pr-3 text-xs text-muted-foreground" colSpan={5}>
+                      Non-clinical staff overhead
+                    </td>
+                    <td className="py-2 pl-3 pr-6 text-right text-xs font-medium text-rose-600">
+                      −{formatCurrency(staffCost)}
+                    </td>
+                  </tr>
+                  <tr className="bg-primary/5 border-t">
+                    <td className="py-2 pl-6 pr-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider" colSpan={5}>
+                      Net After Staff Overhead
+                    </td>
+                    <td className="py-2 pl-3 pr-6 text-right font-bold text-primary">
+                      {formatCurrency(netAfterStaff)}
+                    </td>
+                  </tr>
+                </>
+              )}
             </tfoot>
           </table>
         </div>
@@ -467,6 +489,17 @@ function W2vs1099SummarySection({ clinicians }: { clinicians: Clinician[] }) {
 export default function ClinicianImpactViewTab() {
   const { data: clinicians, isLoading: isLoadingClinicians } = useListClinicians();
   const { data: scenarios, isLoading: isLoadingScenarios } = useListScenarios();
+  const { data: staffMembers } = useListStaffMembers();
+
+  const totalStaffCost = staffMembers?.reduce((sum, s) => {
+    const { totalAnnualCost } = calculateStaffMemberCost({
+      annualSalary: s.annualSalary, hourlyRate: s.hourlyRate, hoursPerWeek: s.hoursPerWeek,
+      weeksPerYear: s.weeksPerYear, classification: String(s.classification),
+      w2EmployerFicaPct: s.w2EmployerFicaPct, futaSutaPct: s.futaSutaPct,
+      workersCompPct: s.workersCompPct, otherEmployerBurdenPct: s.otherEmployerBurdenPct,
+    });
+    return sum + totalAnnualCost;
+  }, 0) ?? 0;
 
   const [selectedClinicianId, setSelectedClinicianId] = useState<number | null>(null);
   const [scenarioAId, setScenarioAId] = useState<number | null>(null);
@@ -515,7 +548,7 @@ export default function ClinicianImpactViewTab() {
       </div>
 
       {/* ── Section 1: All Clinicians Roster ── */}
-      <TeamRosterSection clinicians={clinicians} />
+      <TeamRosterSection clinicians={clinicians} totalStaffCost={totalStaffCost} />
 
       {/* ── Section 2: W2 vs 1099 Summary ── */}
       <W2vs1099SummarySection clinicians={clinicians} />

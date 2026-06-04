@@ -419,6 +419,25 @@ export const GetScenarioResponse = zod.object({
   "createdAt": zod.string(),
   "updatedAt": zod.string()
 })),
+  "staffMembers": zod.array(zod.object({
+  "id": zod.number(),
+  "scenarioId": zod.number(),
+  "sourceStaffMemberId": zod.number().nullable(),
+  "label": zod.string(),
+  "roleType": zod.enum(['admin', 'billing', 'front_desk', 'other']),
+  "classification": zod.enum(['w2', 'contractor']),
+  "annualSalary": zod.number().nullable(),
+  "hourlyRate": zod.number().nullable(),
+  "hoursPerWeek": zod.number().nullable(),
+  "weeksPerYear": zod.number(),
+  "w2EmployerFicaPct": zod.number(),
+  "futaSutaPct": zod.number(),
+  "workersCompPct": zod.number(),
+  "otherEmployerBurdenPct": zod.number(),
+  "notes": zod.string().nullable(),
+  "createdAt": zod.string(),
+  "updatedAt": zod.string()
+})),
   "createdAt": zod.string(),
   "updatedAt": zod.string()
 })
@@ -593,6 +612,237 @@ export const RemoveScenarioClinicianParams = zod.object({
  * @summary Duplicate a clinician within a scenario
  */
 export const DuplicateScenarioClinicianParams = zod.object({
+  "scenarioId": zod.coerce.number(),
+  "id": zod.coerce.number()
+})
+
+
+/**
+ * @summary List all non-clinician staff members
+ */
+export const ListStaffMembersQueryParams = zod.object({
+  "goalId": zod.coerce.number().optional()
+})
+
+export const ListStaffMembersResponseItem = zod.object({
+  "id": zod.number(),
+  "goalId": zod.number().nullable(),
+  "label": zod.string(),
+  "roleType": zod.enum(['admin', 'billing', 'front_desk', 'other']),
+  "classification": zod.enum(['w2', 'contractor']),
+  "annualSalary": zod.number().nullable(),
+  "hourlyRate": zod.number().nullable(),
+  "hoursPerWeek": zod.number().nullable(),
+  "weeksPerYear": zod.number(),
+  "w2EmployerFicaPct": zod.number(),
+  "futaSutaPct": zod.number(),
+  "workersCompPct": zod.number(),
+  "otherEmployerBurdenPct": zod.number(),
+  "notes": zod.string().nullable(),
+  "createdAt": zod.string(),
+  "updatedAt": zod.string()
+})
+export const ListStaffMembersResponse = zod.array(ListStaffMembersResponseItem)
+
+
+/**
+ * @summary Create a staff member
+ */
+export const CreateStaffMemberBody = zod.object({
+  "goalId": zod.number().optional(),
+  "label": zod.string(),
+  "roleType": zod.enum(['admin', 'billing', 'front_desk', 'other']).optional(),
+  "classification": zod.enum(['w2', 'contractor']).optional(),
+  "annualSalary": zod.number().optional(),
+  "hourlyRate": zod.number().optional(),
+  "hoursPerWeek": zod.number().optional(),
+  "weeksPerYear": zod.number().optional(),
+  "w2EmployerFicaPct": zod.number().optional(),
+  "futaSutaPct": zod.number().optional(),
+  "workersCompPct": zod.number().optional(),
+  "otherEmployerBurdenPct": zod.number().optional(),
+  "notes": zod.string().optional()
+})
+
+
+/**
+ * @summary Get a staff member by ID
+ */
+export const GetStaffMemberParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const GetStaffMemberResponse = zod.object({
+  "id": zod.number(),
+  "goalId": zod.number().nullable(),
+  "label": zod.string(),
+  "roleType": zod.enum(['admin', 'billing', 'front_desk', 'other']),
+  "classification": zod.enum(['w2', 'contractor']),
+  "annualSalary": zod.number().nullable(),
+  "hourlyRate": zod.number().nullable(),
+  "hoursPerWeek": zod.number().nullable(),
+  "weeksPerYear": zod.number(),
+  "w2EmployerFicaPct": zod.number(),
+  "futaSutaPct": zod.number(),
+  "workersCompPct": zod.number(),
+  "otherEmployerBurdenPct": zod.number(),
+  "notes": zod.string().nullable(),
+  "createdAt": zod.string(),
+  "updatedAt": zod.string()
+})
+
+
+/**
+ * @summary Update a staff member
+ */
+export const UpdateStaffMemberParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const UpdateStaffMemberBody = zod.object({
+  "label": zod.string().optional(),
+  "roleType": zod.enum(['admin', 'billing', 'front_desk', 'other']).optional(),
+  "classification": zod.enum(['w2', 'contractor']).optional(),
+  "annualSalary": zod.number().optional(),
+  "hourlyRate": zod.number().optional(),
+  "hoursPerWeek": zod.number().optional(),
+  "weeksPerYear": zod.number().optional(),
+  "w2EmployerFicaPct": zod.number().optional(),
+  "futaSutaPct": zod.number().optional(),
+  "workersCompPct": zod.number().optional(),
+  "otherEmployerBurdenPct": zod.number().optional(),
+  "notes": zod.string().optional()
+})
+
+export const UpdateStaffMemberResponse = zod.object({
+  "id": zod.number(),
+  "goalId": zod.number().nullable(),
+  "label": zod.string(),
+  "roleType": zod.enum(['admin', 'billing', 'front_desk', 'other']),
+  "classification": zod.enum(['w2', 'contractor']),
+  "annualSalary": zod.number().nullable(),
+  "hourlyRate": zod.number().nullable(),
+  "hoursPerWeek": zod.number().nullable(),
+  "weeksPerYear": zod.number(),
+  "w2EmployerFicaPct": zod.number(),
+  "futaSutaPct": zod.number(),
+  "workersCompPct": zod.number(),
+  "otherEmployerBurdenPct": zod.number(),
+  "notes": zod.string().nullable(),
+  "createdAt": zod.string(),
+  "updatedAt": zod.string()
+})
+
+
+/**
+ * @summary Delete a staff member
+ */
+export const DeleteStaffMemberParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+
+/**
+ * @summary List all staff members in a scenario
+ */
+export const ListScenarioStaffParams = zod.object({
+  "scenarioId": zod.coerce.number()
+})
+
+export const ListScenarioStaffResponseItem = zod.object({
+  "id": zod.number(),
+  "scenarioId": zod.number(),
+  "sourceStaffMemberId": zod.number().nullable(),
+  "label": zod.string(),
+  "roleType": zod.enum(['admin', 'billing', 'front_desk', 'other']),
+  "classification": zod.enum(['w2', 'contractor']),
+  "annualSalary": zod.number().nullable(),
+  "hourlyRate": zod.number().nullable(),
+  "hoursPerWeek": zod.number().nullable(),
+  "weeksPerYear": zod.number(),
+  "w2EmployerFicaPct": zod.number(),
+  "futaSutaPct": zod.number(),
+  "workersCompPct": zod.number(),
+  "otherEmployerBurdenPct": zod.number(),
+  "notes": zod.string().nullable(),
+  "createdAt": zod.string(),
+  "updatedAt": zod.string()
+})
+export const ListScenarioStaffResponse = zod.array(ListScenarioStaffResponseItem)
+
+
+/**
+ * @summary Add a staff member to a scenario
+ */
+export const AddScenarioStaffMemberParams = zod.object({
+  "scenarioId": zod.coerce.number()
+})
+
+export const AddScenarioStaffMemberBody = zod.object({
+  "sourceStaffMemberId": zod.number().optional(),
+  "label": zod.string(),
+  "roleType": zod.enum(['admin', 'billing', 'front_desk', 'other']).optional(),
+  "classification": zod.enum(['w2', 'contractor']).optional(),
+  "annualSalary": zod.number().optional(),
+  "hourlyRate": zod.number().optional(),
+  "hoursPerWeek": zod.number().optional(),
+  "weeksPerYear": zod.number().optional(),
+  "w2EmployerFicaPct": zod.number().optional(),
+  "futaSutaPct": zod.number().optional(),
+  "workersCompPct": zod.number().optional(),
+  "otherEmployerBurdenPct": zod.number().optional(),
+  "notes": zod.string().optional()
+})
+
+
+/**
+ * @summary Update a staff member's settings within a scenario
+ */
+export const UpdateScenarioStaffMemberParams = zod.object({
+  "scenarioId": zod.coerce.number(),
+  "id": zod.coerce.number()
+})
+
+export const UpdateScenarioStaffMemberBody = zod.object({
+  "label": zod.string().optional(),
+  "roleType": zod.enum(['admin', 'billing', 'front_desk', 'other']).optional(),
+  "classification": zod.enum(['w2', 'contractor']).optional(),
+  "annualSalary": zod.number().optional(),
+  "hourlyRate": zod.number().optional(),
+  "hoursPerWeek": zod.number().optional(),
+  "weeksPerYear": zod.number().optional(),
+  "w2EmployerFicaPct": zod.number().optional(),
+  "futaSutaPct": zod.number().optional(),
+  "workersCompPct": zod.number().optional(),
+  "otherEmployerBurdenPct": zod.number().optional(),
+  "notes": zod.string().optional()
+})
+
+export const UpdateScenarioStaffMemberResponse = zod.object({
+  "id": zod.number(),
+  "scenarioId": zod.number(),
+  "sourceStaffMemberId": zod.number().nullable(),
+  "label": zod.string(),
+  "roleType": zod.enum(['admin', 'billing', 'front_desk', 'other']),
+  "classification": zod.enum(['w2', 'contractor']),
+  "annualSalary": zod.number().nullable(),
+  "hourlyRate": zod.number().nullable(),
+  "hoursPerWeek": zod.number().nullable(),
+  "weeksPerYear": zod.number(),
+  "w2EmployerFicaPct": zod.number(),
+  "futaSutaPct": zod.number(),
+  "workersCompPct": zod.number(),
+  "otherEmployerBurdenPct": zod.number(),
+  "notes": zod.string().nullable(),
+  "createdAt": zod.string(),
+  "updatedAt": zod.string()
+})
+
+
+/**
+ * @summary Remove a staff member from a scenario
+ */
+export const RemoveScenarioStaffMemberParams = zod.object({
   "scenarioId": zod.coerce.number(),
   "id": zod.coerce.number()
 })

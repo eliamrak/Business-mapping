@@ -13,7 +13,7 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-import { useSandbox, SandboxClinician } from "@/context/SandboxContext";
+import { useSandbox, SandboxClinician, SandboxStaff } from "@/context/SandboxContext";
 import { useColors } from "@/hooks/useColors";
 import { calculateSandboxResults, formatCurrency } from "@/lib/calculations";
 
@@ -190,18 +190,108 @@ function ClinicianCard({
   );
 }
 
+function StaffCard({
+  member,
+  totalCost,
+}: {
+  member: SandboxStaff;
+  totalCost: number;
+}) {
+  const colors = useColors();
+  const { updateStaff, removeStaff } = useSandbox();
+  const [editingLabel, setEditingLabel] = useState(false);
+  const [labelText, setLabelText] = useState(member.label);
+
+  const handleRemove = useCallback(() => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    Alert.alert("Remove Staff", `Remove "${member.label}"?`, [
+      { text: "Cancel", style: "cancel" },
+      {
+        text: "Remove",
+        style: "destructive",
+        onPress: () => removeStaff(member.id),
+      },
+    ]);
+  }, [member.id, member.label, removeStaff]);
+
+  return (
+    <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border }]}>
+      <View style={styles.cardHeader}>
+        {editingLabel ? (
+          <TextInput
+            style={[styles.cardLabelInput, { color: colors.foreground, borderColor: colors.secondary }]}
+            value={labelText}
+            onChangeText={setLabelText}
+            onBlur={() => {
+              setEditingLabel(false);
+              if (labelText.trim()) updateStaff(member.id, { label: labelText.trim() });
+              else setLabelText(member.label);
+            }}
+            autoFocus
+            selectTextOnFocus
+          />
+        ) : (
+          <Pressable onPress={() => setEditingLabel(true)} style={styles.cardLabelBtn}>
+            <Text style={[styles.cardLabel, { color: colors.foreground }]}>{member.label}</Text>
+            <Feather name="edit-2" size={12} color={colors.mutedForeground} style={{ marginLeft: 4 }} />
+          </Pressable>
+        )}
+        <Pressable onPress={handleRemove} hitSlop={8}>
+          <Feather name="trash-2" size={16} color={colors.destructive} />
+        </Pressable>
+      </View>
+
+      <View style={styles.cardRow}>
+        <NumericField
+          label="Annual Salary"
+          value={member.annualSalary}
+          onChange={(n) => updateStaff(member.id, { annualSalary: n })}
+          prefix="$"
+        />
+        <NumericField
+          label="Burden %"
+          value={member.employerBurdenPct}
+          onChange={(n) => updateStaff(member.id, { employerBurdenPct: n })}
+          suffix="%"
+        />
+      </View>
+
+      <View style={[styles.cardFooter, { borderTopColor: colors.border }]}>
+        <View style={styles.cardStat}>
+          <Text style={[styles.cardStatLabel, { color: colors.mutedForeground }]}>Annual salary</Text>
+          <Text style={[styles.cardStatValue, { color: colors.foreground }]}>
+            {formatCurrency(member.annualSalary)}
+          </Text>
+        </View>
+        <View style={[styles.cardStatDivider, { backgroundColor: colors.border }]} />
+        <View style={styles.cardStat}>
+          <Text style={[styles.cardStatLabel, { color: colors.mutedForeground }]}>Total cost</Text>
+          <Text style={[styles.cardStatValue, { color: "#e11d48" }]}>
+            {formatCurrency(totalCost)}
+          </Text>
+        </View>
+      </View>
+    </View>
+  );
+}
+
 export default function SandboxScreen() {
   const colors = useColors();
   const insets = useSafeAreaInsets();
-  const { settings, clinicians, updateSettings, addClinician } = useSandbox();
+  const { settings, clinicians, staff, updateSettings, addClinician, addStaff } = useSandbox();
 
-  const results = calculateSandboxResults(clinicians, settings);
+  const results = calculateSandboxResults(clinicians, settings, staff);
   const isSurplus = results.gap >= 0;
 
   const handleAddClinician = useCallback(() => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     addClinician();
   }, [addClinician]);
+
+  const handleAddStaff = useCallback(() => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    addStaff();
+  }, [addStaff]);
 
   const webTopPad = Platform.OS === "web" ? 67 : 0;
   const bottomPad = Platform.OS === "web" ? 84 + 20 : 100;
@@ -306,6 +396,45 @@ export default function SandboxScreen() {
           <Feather name="plus" size={18} color={colors.primaryForeground} />
           <Text style={[styles.addBtnText, { color: colors.primaryForeground }]}>
             Add Clinician
+          </Text>
+        </Pressable>
+      </View>
+
+      <View style={styles.section}>
+        <View style={styles.sectionHeader}>
+          <Text style={[styles.sectionTitle, { color: colors.primary }]}>
+            Non-Clinical Staff ({staff.length})
+          </Text>
+          {results.totalStaffCost > 0 && (
+            <Text style={[styles.staffCostBadge, { color: "#e11d48" }]}>
+              {formatCurrency(results.totalStaffCost, true)} / yr
+            </Text>
+          )}
+        </View>
+
+        {staff.map((s, i) => (
+          <StaffCard
+            key={s.id}
+            member={s}
+            totalCost={results.staffResults[i]?.totalCost ?? 0}
+          />
+        ))}
+
+        <Pressable
+          style={({ pressed }) => [
+            styles.addBtn,
+            {
+              backgroundColor: pressed ? colors.card : colors.card,
+              borderColor: colors.border,
+              borderWidth: 1,
+            },
+          ]}
+          onPress={handleAddStaff}
+          testID="add-staff"
+        >
+          <Feather name="plus" size={18} color={colors.foreground} />
+          <Text style={[styles.addBtnText, { color: colors.foreground }]}>
+            Add Staff Member
           </Text>
         </Pressable>
       </View>
@@ -422,4 +551,5 @@ const styles = StyleSheet.create({
     marginTop: 4,
   },
   addBtnText: { fontSize: 15, fontFamily: "Inter_600SemiBold" },
+  staffCostBadge: { fontSize: 13, fontFamily: "Inter_600SemiBold" },
 });

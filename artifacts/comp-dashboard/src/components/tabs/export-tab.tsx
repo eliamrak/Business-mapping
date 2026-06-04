@@ -1,15 +1,22 @@
 import { useState } from "react";
-import { useListClinicians, useListScenarios, useGetScenario, useListBusinessGoals, useGetCurrentReality, getGetScenarioQueryKey } from "@workspace/api-client-react";
+import { useListClinicians, useListScenarios, useGetScenario, useListBusinessGoals, useGetCurrentReality, useListStaffMembers, getGetScenarioQueryKey } from "@workspace/api-client-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
 import { Download, FileText, Loader2 } from "lucide-react";
-import { calculateClinicianMetrics, calculateBusinessGoalOutputs, calculateCurrentRealityGap } from "@/lib/calculations";
+import { calculateClinicianMetrics, calculateBusinessGoalOutputs, calculateCurrentRealityGap, calculateStaffMemberCost } from "@/lib/calculations";
 import { formatCurrency } from "@/lib/format";
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
+
+const STAFF_ROLE_LABELS: Record<string, string> = {
+  admin: "Admin",
+  billing: "Billing",
+  front_desk: "Front Desk",
+  other: "Other",
+};
 
 const BRAND_COLOR: [number, number, number] = [30, 64, 175];
 const HEADER_GRAY: [number, number, number] = [243, 244, 246];
@@ -54,6 +61,7 @@ export default function PDFExportTab() {
   const { data: scenarios } = useListScenarios();
   const { data: goals } = useListBusinessGoals();
   const { data: currentReality } = useGetCurrentReality();
+  const { data: staffMembers } = useListStaffMembers();
 
   const [practiceName, setPracticeName] = useState("");
   const [selectedScenarioId, setSelectedScenarioId] = useState<number | null>(null);
@@ -206,6 +214,40 @@ export default function PDFExportTab() {
           });
         }
 
+        if (staffMembers && staffMembers.length > 0) {
+          const y = sectionY(doc) + 8;
+          if (y > 240) doc.addPage();
+          const titleY = y > 240 ? 28 : y;
+          addSectionTitle(doc, "Non-Clinical Staff Cost Summary", titleY);
+          autoTable(doc, {
+            startY: titleY + 4,
+            head: [["Name", "Role", "Classification", "Base Salary", "Employer Burden", "Total Annual Cost"]],
+            body: staffMembers.map(s => {
+              const cost = calculateStaffMemberCost({
+                annualSalary: s.annualSalary, hourlyRate: s.hourlyRate, hoursPerWeek: s.hoursPerWeek,
+                weeksPerYear: s.weeksPerYear, classification: String(s.classification),
+                w2EmployerFicaPct: s.w2EmployerFicaPct, futaSutaPct: s.futaSutaPct,
+                workersCompPct: s.workersCompPct, otherEmployerBurdenPct: s.otherEmployerBurdenPct,
+              });
+              return [s.label, STAFF_ROLE_LABELS[String(s.roleType)] ?? s.roleType, String(s.classification).toUpperCase(), formatCurrency(cost.baseAnnualCost), formatCurrency(cost.employerBurden), formatCurrency(cost.totalAnnualCost)];
+            }),
+            styles: { fontSize: 7 },
+            headStyles: { fillColor: BRAND_COLOR },
+            foot: [["", "", "TOTALS", "", "",
+              formatCurrency(staffMembers.reduce((sum, s) => {
+                const { totalAnnualCost } = calculateStaffMemberCost({
+                  annualSalary: s.annualSalary, hourlyRate: s.hourlyRate, hoursPerWeek: s.hoursPerWeek,
+                  weeksPerYear: s.weeksPerYear, classification: String(s.classification),
+                  w2EmployerFicaPct: s.w2EmployerFicaPct, futaSutaPct: s.futaSutaPct,
+                  workersCompPct: s.workersCompPct, otherEmployerBurdenPct: s.otherEmployerBurdenPct,
+                });
+                return sum + totalAnnualCost;
+              }, 0)),
+            ]],
+            footStyles: { fillColor: HEADER_GRAY as [number, number, number], textColor: [0, 0, 0] as [number, number, number], fontStyle: "bold" },
+          });
+        }
+
         doc.save(`compensation-internal-report-${Date.now()}.pdf`);
       } finally { setLoading(null); }
     }, 50);
@@ -341,8 +383,17 @@ export default function PDFExportTab() {
           const totalComp = clinicians.reduce((s, c) => s + calculateClinicianMetrics({ ...c, classification: String(c.classification) }).clinicianCompensation, 0);
           const totalBurden = clinicians.reduce((s, c) => s + calculateClinicianMetrics({ ...c, classification: String(c.classification) }).employerObligations, 0);
           const totalPracticeNet = clinicians.reduce((s, c) => s + calculateClinicianMetrics({ ...c, classification: String(c.classification) }).practiceNetBeforeOverhead, 0);
+          const totalStaffCost = staffMembers ? staffMembers.reduce((sum, s) => {
+            const { totalAnnualCost } = calculateStaffMemberCost({
+              annualSalary: s.annualSalary, hourlyRate: s.hourlyRate, hoursPerWeek: s.hoursPerWeek,
+              weeksPerYear: s.weeksPerYear, classification: String(s.classification),
+              w2EmployerFicaPct: s.w2EmployerFicaPct, futaSutaPct: s.futaSutaPct,
+              workersCompPct: s.workersCompPct, otherEmployerBurdenPct: s.otherEmployerBurdenPct,
+            });
+            return sum + totalAnnualCost;
+          }, 0) : 0;
           const netAfterOverhead = currentReality
-            ? totalPracticeNet - (currentReality.currentAnnualOverhead || 0)
+            ? totalPracticeNet - (currentReality.currentAnnualOverhead || 0) - totalStaffCost
             : null;
 
           addSectionTitle(doc, "Net Revenue Projections (Team Builder)", titleY);
@@ -352,10 +403,11 @@ export default function PDFExportTab() {
             body: [
               ["Total Gross Production", formatCurrency(totalProduction)],
               ["Total Clinician Compensation", formatCurrency(totalComp)],
-              ["Total Employer Burden (W2)", formatCurrency(totalBurden)],
+              ["Total Employer Burden (Clinicians, W2)", formatCurrency(totalBurden)],
               ["Practice Net (before overhead)", formatCurrency(totalPracticeNet)],
               ["Annual Overhead (current)", currentReality ? formatCurrency(currentReality.currentAnnualOverhead) : "—"],
-              ["Projected Net After Overhead", netAfterOverhead !== null ? formatCurrency(netAfterOverhead) : "—"],
+              ["Non-Clinical Staff Cost", staffMembers?.length ? formatCurrency(totalStaffCost) : "—"],
+              ["Projected Net After Overhead & Staff", netAfterOverhead !== null ? formatCurrency(netAfterOverhead) : "—"],
             ],
             styles: { fontSize: 8 },
             headStyles: { fillColor: BRAND_COLOR },
