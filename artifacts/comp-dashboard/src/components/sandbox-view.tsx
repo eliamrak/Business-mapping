@@ -1201,7 +1201,23 @@ export default function SandboxView({ onShowAdvanced }: { onShowAdvanced: () => 
   const [scenariosOpen, setScenariosOpen] = useState(false);
   const [importDialogOpen, setImportDialogOpen] = useState(false);
   const [initialized, setInitialized] = useState(false);
-  const [selectedMetric, setSelectedMetric] = useState<CardMetric>("coversOverhead");
+  const VALID_CARD_METRICS: CardMetric[] = [
+    "coversOverhead",
+    "overheadCostAdded",
+    "coversTotalGoal",
+    "practiceContribution",
+    "netAfterEmployerTaxes",
+  ];
+  const SELECTED_METRIC_STORAGE_KEY = "compDashboard_pinnedMetric";
+  const storedMetric = localStorage.getItem(SELECTED_METRIC_STORAGE_KEY) as CardMetric | null;
+  const [selectedMetric, setSelectedMetric] = useState<CardMetric>(
+    storedMetric && VALID_CARD_METRICS.includes(storedMetric) ? storedMetric : "coversOverhead"
+  );
+
+  const handleSetSelectedMetric = (metric: CardMetric) => {
+    localStorage.setItem(SELECTED_METRIC_STORAGE_KEY, metric);
+    setSelectedMetric(metric);
+  };
   const cliniciansLoadedForGoalIdRef = useRef<number | undefined>(undefined);
 
   const activeGoalId = goal.id;
@@ -1468,7 +1484,7 @@ export default function SandboxView({ onShowAdvanced }: { onShowAdvanced: () => 
                   overhead={goal.annualOverheadGoal || 0}
                   totalAnnualBusinessNeed={calculateBusinessGoalOutputs(goal as Partial<BusinessGoal>).totalAnnualBusinessNeed}
                   selectedMetric={selectedMetric}
-                  onSelectMetric={setSelectedMetric}
+                  onSelectMetric={handleSetSelectedMetric}
                 />
               ))}
             </div>
