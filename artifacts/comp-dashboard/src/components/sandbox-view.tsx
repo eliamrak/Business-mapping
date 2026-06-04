@@ -19,8 +19,9 @@ import { Separator } from "@/components/ui/separator";
 import {
   Plus, Trash, Save, ChevronDown, ChevronRight,
   BookMarked, X, Check, AlertCircle, TrendingUp,
-  Loader2, Settings2, User, FolderOpen, CheckCircle2, Download,
+  Loader2, Settings2, User, FolderOpen, CheckCircle2, Download, Info,
 } from "lucide-react";
+import { Tooltip, TooltipTrigger, TooltipContent, TooltipProvider } from "@/components/ui/tooltip";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { calculateClinicianMetrics, calculateBusinessGoalOutputs } from "@/lib/calculations";
 import { formatCurrency } from "@/lib/format";
@@ -251,7 +252,10 @@ function SplitInput({ clinicianSplit, onClinicianChange }: {
 
   return (
     <div className="space-y-0.5">
-      <span className="text-[11px] text-muted-foreground">Split (clx / practice)</span>
+      <span className="text-[11px] text-muted-foreground flex items-center gap-1">
+        Split (clx / practice)
+        <InfoTip text="The % of each session fee going to the clinician vs. staying with the practice. 'Clx' = clinician. The two numbers always add up to 100." />
+      </span>
       <div className="flex items-center gap-1">
         <Input
           type="number" step={1} min={0} max={100}
@@ -264,6 +268,26 @@ function SplitInput({ clinicianSplit, onClinicianChange }: {
         <span className="text-sm font-medium w-10 text-right">{practiceShare}%</span>
       </div>
     </div>
+  );
+}
+
+// ─── InfoTip ─────────────────────────────────────────────────────────────────
+
+function InfoTip({ text }: { text: string }) {
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <span
+          className="cursor-help shrink-0 inline-flex items-center"
+          onClick={e => e.stopPropagation()}
+        >
+          <Info className="h-3 w-3 text-muted-foreground/50" />
+        </span>
+      </TooltipTrigger>
+      <TooltipContent side="top" className="max-w-[220px] text-center leading-snug whitespace-normal">
+        {text}
+      </TooltipContent>
+    </Tooltip>
   );
 }
 
@@ -314,31 +338,31 @@ function LiveSummaryPanel({
         <div className="space-y-2">
           <div className="rounded-lg bg-muted/50 border p-3 space-y-2">
             <div className="flex justify-between text-xs">
-              <span className="text-muted-foreground">Gross Production</span>
+              <span className="text-muted-foreground flex items-center gap-1">Gross Production <InfoTip text="Total session revenue all clinicians generate (sessions × rate × weeks worked)." /></span>
               <span className="font-semibold">{formatCurrency(totalProduction)}</span>
             </div>
             <div className="flex justify-between text-xs">
-              <span className="text-muted-foreground">Clinician Comp</span>
+              <span className="text-muted-foreground flex items-center gap-1">Clinician Comp <InfoTip text="Total gross compensation paid to all clinicians on the roster, before their personal taxes." /></span>
               <span className="font-semibold text-amber-600">−{formatCurrency(totalComp)}</span>
             </div>
             {totalBurden > 0 && (
               <div className="flex justify-between text-xs">
-                <span className="text-muted-foreground">Employer Burden</span>
+                <span className="text-muted-foreground flex items-center gap-1">Employer Burden <InfoTip text="Employer-side payroll taxes on W2 clinicians: FICA (7.65%), FUTA/SUTA, and workers' comp. $0 for 1099 contractors." /></span>
                 <span className="font-semibold text-amber-600">−{formatCurrency(totalBurden)}</span>
               </div>
             )}
             <Separator className="my-1" />
             <div className="flex justify-between text-xs">
-              <span className="text-muted-foreground">Practice Net</span>
+              <span className="text-muted-foreground flex items-center gap-1">Practice Net <InfoTip text="Revenue left for the practice after paying all clinicians and any W2 employer taxes. Overhead and profit come out of this." /></span>
               <span className="font-semibold text-primary">{formatCurrency(totalPracticeNet)}</span>
             </div>
             <div className="flex justify-between text-xs">
-              <span className="text-muted-foreground">Est. Overhead</span>
+              <span className="text-muted-foreground flex items-center gap-1">Est. Overhead <InfoTip text="Your annual overhead goal from Practice Inputs — facilities, admin, software, etc." /></span>
               <span className="font-semibold text-muted-foreground">−{formatCurrency(overhead)}</span>
             </div>
             <Separator className="my-1" />
             <div className="flex justify-between text-sm">
-              <span className="font-semibold">Net After Overhead</span>
+              <span className="font-semibold flex items-center gap-1">Net After Overhead <InfoTip text="Practice net minus overhead. This is the pool available for owner pay and business profit." /></span>
               <span className={`font-bold ${netAfterOverhead >= 0 ? "text-primary" : "text-destructive"}`}>
                 {formatCurrency(netAfterOverhead)}
               </span>
@@ -355,16 +379,20 @@ function LiveSummaryPanel({
                 <span className={`text-xs font-semibold ${isOnTrack ? "text-green-700" : "text-destructive"}`}>
                   {isOnTrack ? "Goal Achieved" : "Below Goal"}
                 </span>
-                <span className={`ml-auto text-xs font-bold ${isOnTrack ? "text-green-700" : "text-destructive"}`}>
-                  {pct}%
+                <span className="ml-auto flex items-center gap-1">
+                  <InfoTip text="How much of your total annual business need your current clinician roster is meeting (Practice Net ÷ Goal Target)." />
+                  <span className={`text-xs font-bold ${isOnTrack ? "text-green-700" : "text-destructive"}`}>{pct}%</span>
                 </span>
               </div>
               <div className="flex justify-between text-xs">
-                <span className="text-muted-foreground">Goal Target</span>
+                <span className="text-muted-foreground flex items-center gap-1">Goal Target <InfoTip text="Your complete annual business need: owner pay + overhead + profit goal. Everything the practice must generate." /></span>
                 <span className="font-semibold">{formatCurrency(goalOutputs.totalAnnualBusinessNeed)}</span>
               </div>
               <div className="flex justify-between text-xs">
-                <span className="text-muted-foreground">{isOnTrack ? "Surplus" : "Gap"}</span>
+                <span className="text-muted-foreground flex items-center gap-1">
+                  {isOnTrack ? "Surplus" : "Gap"}
+                  <InfoTip text={isOnTrack ? "How much your practice net exceeds the Goal Target." : "How much more practice net you need to hit your Goal Target."} />
+                </span>
                 <span className={`font-bold ${isOnTrack ? "text-green-600" : "text-destructive"}`}>
                   {isOnTrack
                     ? `+${formatCurrency(Math.abs(gap))}`
@@ -497,14 +525,20 @@ function ClinicianCard({
             onClinicianChange={v => setField("preCapClinicianSplit", v)}
           />
           <div className="space-y-0.5">
-            <span className="text-[11px] text-muted-foreground">Annual Comp</span>
+            <span className="text-[11px] text-muted-foreground flex items-center gap-1">
+              Annual Comp
+              <InfoTip text="The clinician's total gross annual earnings before personal income taxes." />
+            </span>
             <p className="text-sm font-semibold text-green-600">{formatCurrency(metrics.clinicianCompensation)}</p>
           </div>
         </div>
 
         {metrics.employerObligations > 0 && (
           <div className="flex items-center justify-between text-[11px]">
-            <span className="text-muted-foreground">W2 employer burden</span>
+            <span className="text-muted-foreground flex items-center gap-1">
+              W2 employer burden
+              <InfoTip text="Extra payroll costs the practice owes on top of wages: employer FICA (7.65%), FUTA/SUTA, and workers' comp. Only applies to W2 employees." />
+            </span>
             <span className="font-medium text-amber-600">−{formatCurrency(metrics.employerObligations)}/yr</span>
           </div>
         )}
@@ -517,6 +551,10 @@ function ClinicianCard({
           {clinician._expanded ? "Fewer settings" : "More settings"}
           <span className="ml-auto text-[10px] text-muted-foreground flex items-center gap-1.5">
             {metrics.employerObligations > 0 ? "Net after burden" : "Net to practice"}: {formatCurrency(metrics.practiceNetBeforeOverhead)}
+            <InfoTip text={metrics.employerObligations > 0
+              ? "Revenue the practice keeps after paying this clinician and W2 employer taxes. Overhead and profit come out of this."
+              : "Revenue the practice keeps after paying this clinician. Overhead and profit come out of this."
+            } />
             {overhead > 0 && (
               <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium ${
                 metrics.practiceNetBeforeOverhead >= overhead
@@ -1190,6 +1228,7 @@ export default function SandboxView({ onShowAdvanced }: { onShowAdvanced: () => 
   }
 
   return (
+    <TooltipProvider delayDuration={300}>
     <div className="flex flex-col min-h-0">
       {importDialogOpen && apiGoals && (
         <ImportCliniciansDialog
@@ -1314,5 +1353,6 @@ export default function SandboxView({ onShowAdvanced }: { onShowAdvanced: () => 
         </Button>
       </div>
     </div>
+    </TooltipProvider>
   );
 }
