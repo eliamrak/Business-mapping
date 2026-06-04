@@ -291,6 +291,23 @@ function InfoTip({ text }: { text: string }) {
   );
 }
 
+// ─── CardMetric ──────────────────────────────────────────────────────────────
+
+type CardMetric =
+  | "coversOverhead"
+  | "overheadCostAdded"
+  | "coversTotalGoal"
+  | "practiceContribution"
+  | "netAfterEmployerTaxes";
+
+const CARD_METRIC_LABELS: Record<CardMetric, string> = {
+  coversOverhead:        "Covers overhead",
+  overheadCostAdded:    "Overhead cost added",
+  coversTotalGoal:       "Covers total goal",
+  practiceContribution:  "Practice contribution",
+  netAfterEmployerTaxes: "Net after employer taxes",
+};
+
 // ─── LiveSummaryPanel ────────────────────────────────────────────────────────
 
 function LiveSummaryPanel({
@@ -435,15 +452,92 @@ function ClinicianCard({
   onSave,
   onRemove,
   overhead,
+  totalAnnualBusinessNeed,
+  selectedMetric,
+  onSelectMetric,
 }: {
   clinician: SandboxClinician;
   onChange: (localId: string, patch: Partial<SandboxClinician>) => void;
   onSave: (localId: string) => void;
   onRemove: (localId: string) => void;
   overhead: number;
+  totalAnnualBusinessNeed: number;
+  selectedMetric: CardMetric;
+  onSelectMetric: (m: CardMetric) => void;
 }) {
   const metrics = useMemo(() => calculateClinicianMetrics(clinician), [clinician]);
   const savedLabel = useRelativeTime(clinician._savedAt);
+  const [breakdownOpen, setBreakdownOpen] = useState(false);
+
+  const isW2 = String(clinician.classification).toLowerCase() === "w2";
+
+  const metricRows = useMemo(() => {
+    const overheadCostPct = isW2 && overhead > 0
+      ? Math.round((metrics.employerObligations / overhead) * 100)
+      : null;
+    const coversOverheadPct = overhead > 0
+      ? Math.round((metrics.practiceNetBeforeOverhead / overhead) * 100)
+      : null;
+    const coversTotalPct = totalAnnualBusinessNeed > 0
+      ? Math.round((metrics.practiceNetBeforeOverhead / totalAnnualBusinessNeed) * 100)
+      : null;
+    return [
+      {
+        id: "overheadCostAdded" as CardMetric,
+        value: overheadCostPct !== null ? `${overheadCostPct}% of overhead` : "—",
+      },
+      {
+        id: "coversOverhead" as CardMetric,
+        value: coversOverheadPct !== null ? `${coversOverheadPct}% of overhead` : "—",
+      },
+      {
+        id: "coversTotalGoal" as CardMetric,
+        value: coversTotalPct !== null ? `${coversTotalPct}% of goal` : "—",
+      },
+      {
+        id: "practiceContribution" as CardMetric,
+        value: formatCurrency(metrics.practiceNetBeforeOverhead),
+      },
+      {
+        id: "netAfterEmployerTaxes" as CardMetric,
+        value: isW2
+          ? `${formatCurrency(metrics.practiceGrossRevenue)} → ${formatCurrency(metrics.practiceNetBeforeOverhead)}`
+          : formatCurrency(metrics.practiceNetBeforeOverhead),
+      },
+    ];
+  }, [metrics, overhead, totalAnnualBusinessNeed, isW2]);
+
+  const badgeData = useMemo((): { label: string; cls: string } | null => {
+    switch (selectedMetric) {
+      case "coversOverhead": {
+        if (overhead <= 0) return null;
+        const pct = Math.round((metrics.practiceNetBeforeOverhead / overhead) * 100);
+        const cls = pct >= 100 ? "bg-green-100 text-green-700" : pct >= 50 ? "bg-amber-100 text-amber-700" : "bg-red-50 text-red-600";
+        return { label: `${pct}% of overhead`, cls };
+      }
+      case "overheadCostAdded": {
+        if (!isW2) return { label: "—", cls: "bg-muted text-muted-foreground" };
+        if (overhead <= 0) return null;
+        const pct = Math.round((metrics.employerObligations / overhead) * 100);
+        const cls = pct <= 5 ? "bg-green-100 text-green-700" : pct <= 15 ? "bg-amber-100 text-amber-700" : "bg-red-50 text-red-600";
+        return { label: `+${pct}% overhead`, cls };
+      }
+      case "coversTotalGoal": {
+        if (totalAnnualBusinessNeed <= 0) return null;
+        const pct = Math.round((metrics.practiceNetBeforeOverhead / totalAnnualBusinessNeed) * 100);
+        const cls = pct >= 100 ? "bg-green-100 text-green-700" : pct >= 50 ? "bg-amber-100 text-amber-700" : "bg-red-50 text-red-600";
+        return { label: `${pct}% of goal`, cls };
+      }
+      case "practiceContribution": {
+        const v = metrics.practiceNetBeforeOverhead;
+        return { label: formatCurrency(v), cls: v >= 0 ? "bg-green-100 text-green-700" : "bg-red-50 text-red-600" };
+      }
+      case "netAfterEmployerTaxes": {
+        const v = metrics.practiceNetBeforeOverhead;
+        return { label: formatCurrency(v), cls: v >= 0 ? "bg-green-100 text-green-700" : "bg-red-50 text-red-600" };
+      }
+    }
+  }, [selectedMetric, metrics, overhead, totalAnnualBusinessNeed, isW2]);
 
   const onSaveRef = useRef(onSave);
   useEffect(() => { onSaveRef.current = onSave; }, [onSave]);
@@ -555,15 +649,9 @@ function ClinicianCard({
               ? "Revenue the practice keeps after paying this clinician and W2 employer taxes. Overhead and profit come out of this."
               : "Revenue the practice keeps after paying this clinician. Overhead and profit come out of this."
             } />
-            {overhead > 0 && (
-              <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium ${
-                metrics.practiceNetBeforeOverhead >= overhead
-                  ? "bg-green-100 text-green-700"
-                  : metrics.practiceNetBeforeOverhead >= overhead * 0.5
-                  ? "bg-amber-100 text-amber-700"
-                  : "bg-red-50 text-red-600"
-              }`}>
-                {Math.round((metrics.practiceNetBeforeOverhead / overhead) * 100)}% of overhead
+            {badgeData && (
+              <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium ${badgeData.cls}`}>
+                {badgeData.label}
               </span>
             )}
           </span>
@@ -633,6 +721,38 @@ function ClinicianCard({
                 )}
               </div>
             )}
+          </div>
+        )}
+
+        <button
+          type="button"
+          onClick={() => setBreakdownOpen(prev => !prev)}
+          className="flex items-center gap-1 text-[11px] text-muted-foreground hover:text-foreground transition-colors w-full"
+        >
+          {breakdownOpen ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
+          Contribution breakdown
+        </button>
+
+        {breakdownOpen && (
+          <div className="rounded border bg-muted/40 p-1.5 space-y-0.5">
+            {metricRows.map(row => (
+              <button
+                key={row.id}
+                type="button"
+                onClick={() => onSelectMetric(row.id)}
+                className="flex items-center w-full gap-2 py-1 px-1.5 rounded hover:bg-muted/80 text-left transition-colors"
+              >
+                <span className="flex-1 text-[11px] text-muted-foreground">{CARD_METRIC_LABELS[row.id]}</span>
+                <span className="text-[11px] font-medium tabular-nums shrink-0 text-foreground">{row.value}</span>
+                <span className={`h-3.5 w-3.5 rounded-full border-2 shrink-0 flex items-center justify-center transition-colors ${
+                  selectedMetric === row.id ? "border-primary" : "border-muted-foreground/30"
+                }`}>
+                  {selectedMetric === row.id && (
+                    <span className="h-1.5 w-1.5 rounded-full bg-primary" />
+                  )}
+                </span>
+              </button>
+            ))}
           </div>
         )}
       </div>
@@ -1057,6 +1177,7 @@ export default function SandboxView({ onShowAdvanced }: { onShowAdvanced: () => 
   const [scenariosOpen, setScenariosOpen] = useState(false);
   const [importDialogOpen, setImportDialogOpen] = useState(false);
   const [initialized, setInitialized] = useState(false);
+  const [selectedMetric, setSelectedMetric] = useState<CardMetric>("coversOverhead");
   const cliniciansLoadedForGoalIdRef = useRef<number | undefined>(undefined);
 
   const activeGoalId = goal.id;
@@ -1321,6 +1442,9 @@ export default function SandboxView({ onShowAdvanced }: { onShowAdvanced: () => 
                   onSave={handleSaveClinician}
                   onRemove={handleRemoveClinician}
                   overhead={goal.annualOverheadGoal || 0}
+                  totalAnnualBusinessNeed={calculateBusinessGoalOutputs(goal as Partial<BusinessGoal>).totalAnnualBusinessNeed}
+                  selectedMetric={selectedMetric}
+                  onSelectMetric={setSelectedMetric}
                 />
               ))}
             </div>
