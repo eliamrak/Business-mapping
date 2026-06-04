@@ -1,0 +1,109 @@
+Add a new clinician overhead allocation and profitability function to the existing app.
+
+The goal of this feature is to help the user determine whether each clinician is offsetting their own costs and contributing profit to the practice.
+
+Add a new section called:
+
+Clinician Overhead Allocation
+
+This section should let the user choose between three overhead allocation models:
+
+1. Equal Allocation  
+Divide total shared overhead equally across all active clinicians.
+
+Formula:
+Total shared overhead ÷ number of active clinicians
+
+2. Revenue Based Allocation  
+Assign shared overhead based on each clinician’s percentage of total collected revenue.
+
+Formula:
+Clinician collected revenue ÷ total practice collected revenue × total shared overhead
+
+3. Session Based Allocation  
+Assign shared overhead based on each clinician’s percentage of total completed sessions.
+
+Formula:
+Clinician completed sessions ÷ total practice completed sessions × total shared overhead
+
+The user should be able to switch between these three models and instantly see how each clinician’s profitability changes.
+
+Use existing clinician and practice data where available, including:
+Clinician name
+Collected revenue
+Completed sessions
+Compensation paid
+Pay percentage or pay per session
+Direct clinician costs
+Shared overhead
+Active/inactive clinician status
+
+Add these calculations for each clinician:
+
+Contribution Margin =
+Collected revenue minus compensation paid minus direct clinician costs
+
+Allocated Shared Overhead =
+Based on the selected allocation model
+
+Fully Loaded Profit =
+Contribution margin minus allocated shared overhead
+
+Profit Margin =
+Fully loaded profit divided by collected revenue
+
+Average Collected Fee Per Session =
+Collected revenue divided by completed sessions
+
+Practice Retained Revenue Per Session =
+Contribution margin divided by completed sessions
+
+Break Even Sessions =
+Allocated shared overhead divided by practice retained revenue per session
+
+Break Even Sessions Per Week =
+Break even sessions divided by selected reporting period weeks
+
+Sessions Above or Below Break Even =
+Actual completed sessions minus break even sessions
+
+Add a clinician profitability table showing:
+
+Clinician
+Collected revenue
+Completed sessions
+Compensation paid
+Direct costs
+Contribution margin
+Allocated overhead
+Fully loaded profit
+Profit margin
+Break even sessions per week
+Actual average sessions per week
+Sessions above/below break even
+Status
+
+Status rules:
+
+Profitable:
+Fully loaded profit is greater than 0
+
+Covers Direct Costs Only:
+Contribution margin is greater than 0 but fully loaded profit is less than or equal to 0
+
+Below Break Even:
+Contribution margin is greater than 0 but actual sessions are below break even
+
+Losing Money:
+Contribution margin is less than or equal to 0
+
+Add a comparison view where the user can see the same clinician under all three allocation models side by side.
+
+Add export options for this section:
+Export PDF
+Export CSV
+Print friendly report
+
+This feature should be clean, simple, and easy for a non financial user to understand. The main question the feature should answer is:
+
+Is this clinician covering their own costs, covering their share of overhead, and contributing profit to the practice?
