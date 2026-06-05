@@ -7,6 +7,7 @@ import {
   useAddScenarioClinician, getScenario,
   getListCliniciansQueryKey, getListBusinessGoalsQueryKey, getListScenariosQueryKey,
   getGetScenarioQueryKey,
+  useListStaffMembers,
 } from "@workspace/api-client-react";
 import type { Clinician, BusinessGoal, ScenarioDetail } from "@workspace/api-client-react";
 import { Button } from "@/components/ui/button";
@@ -23,7 +24,7 @@ import {
 } from "lucide-react";
 import { Tooltip, TooltipTrigger, TooltipContent, TooltipProvider } from "@/components/ui/tooltip";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { calculateClinicianMetrics, calculateBusinessGoalOutputs } from "@/lib/calculations";
+import { calculateClinicianMetrics, calculateBusinessGoalOutputs, calculateTotalStaffCost } from "@/lib/calculations";
 import { formatCurrency } from "@/lib/format";
 import { useQueryClient } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
@@ -321,21 +322,28 @@ function LiveSummaryPanel({
   clinicians: SandboxClinician[];
   goal: SandboxGoal;
 }) {
+  const { data: staffMembers } = useListStaffMembers();
+  const totalStaffCost = useMemo(
+    () => calculateTotalStaffCost(staffMembers ?? []),
+    [staffMembers],
+  );
+
   const metrics = clinicians.map(c => calculateClinicianMetrics(c));
   const totalProduction = metrics.reduce((s, m) => s + m.annualProduction, 0);
   const totalComp = metrics.reduce((s, m) => s + m.clinicianCompensation, 0);
   const totalBurden = metrics.reduce((s, m) => s + m.employerObligations, 0);
   const totalPracticeNet = metrics.reduce((s, m) => s + m.practiceNetBeforeOverhead, 0);
   const overhead = goal.annualOverheadGoal || 0;
-  const netAfterOverhead = totalPracticeNet - overhead;
+  const netAfterOverhead = totalPracticeNet - overhead - totalStaffCost;
   const goalOutputs = calculateBusinessGoalOutputs(goal as Partial<BusinessGoal>);
   // totalAnnualBusinessNeed already includes overhead, so compare against
-  // totalPracticeNet (pre-overhead) — not netAfterOverhead, which would
-  // double-count overhead in the gap calculation.
-  const gap = goalOutputs.totalAnnualBusinessNeed - totalPracticeNet;
-  const isOnTrack = totalPracticeNet >= goalOutputs.totalAnnualBusinessNeed;
+  // totalPracticeNet minus staff cost — staff overhead reduces the available
+  // net the same way any other real expense does.
+  const effectivePracticeNet = totalPracticeNet - totalStaffCost;
+  const gap = goalOutputs.totalAnnualBusinessNeed - effectivePracticeNet;
+  const isOnTrack = effectivePracticeNet >= goalOutputs.totalAnnualBusinessNeed;
   const pct = goalOutputs.totalAnnualBusinessNeed > 0
-    ? Math.round((totalPracticeNet / goalOutputs.totalAnnualBusinessNeed) * 100)
+    ? Math.round((effectivePracticeNet / goalOutputs.totalAnnualBusinessNeed) * 100)
     : 100;
 
   return (
@@ -381,9 +389,15 @@ function LiveSummaryPanel({
               <span className="text-muted-foreground flex items-center gap-1">Est. Overhead <InfoTip text="Your annual overhead goal from Practice Inputs — facilities, admin, software, etc." /></span>
               <span className="font-semibold text-muted-foreground">−{formatCurrency(overhead)}</span>
             </div>
+            {totalStaffCost > 0 && (
+              <div className="flex justify-between text-xs">
+                <span className="text-muted-foreground flex items-center gap-1">Staff Overhead <InfoTip text="Total annual cost of all non-clinical staff from Team Builder, including salaries and employer burden." /></span>
+                <span className="font-semibold text-amber-600">−{formatCurrency(totalStaffCost)}</span>
+              </div>
+            )}
             <Separator className="my-1" />
             <div className="flex justify-between text-sm">
-              <span className="font-semibold flex items-center gap-1">Net After Overhead <InfoTip text="Practice net minus overhead. This is the pool available for owner pay and business profit." /></span>
+              <span className="font-semibold flex items-center gap-1">Net After Overhead <InfoTip text="Practice net minus overhead and staff costs. This is the pool available for owner pay and business profit." /></span>
               <span className={`font-bold ${netAfterOverhead >= 0 ? "text-primary" : "text-destructive"}`}>
                 {formatCurrency(netAfterOverhead)}
               </span>
@@ -433,7 +447,7 @@ function LiveSummaryPanel({
             <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">Per Month</p>
             <div className="flex justify-between text-xs">
               <span className="text-muted-foreground">Monthly Net</span>
-              <span className="font-semibold">{formatCurrency(totalPracticeNet / 12)}</span>
+              <span className="font-semibold">{formatCurrency(effectivePracticeNet / 12)}</span>
             </div>
             {goalOutputs.totalAnnualBusinessNeed > 0 && (
               <div className="flex justify-between text-xs">
