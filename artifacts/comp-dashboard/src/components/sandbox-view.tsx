@@ -7,9 +7,10 @@ import {
   useAddScenarioClinician, getScenario,
   getListCliniciansQueryKey, getListBusinessGoalsQueryKey, getListScenariosQueryKey,
   getGetScenarioQueryKey,
-  useListStaffMembers,
+  useListStaffMembers, useCreateStaffMember, useUpdateStaffMember, useDeleteStaffMember,
+  getListStaffMembersQueryKey,
 } from "@workspace/api-client-react";
-import type { Clinician, BusinessGoal, ScenarioDetail } from "@workspace/api-client-react";
+import type { Clinician, BusinessGoal, ScenarioDetail, StaffMember } from "@workspace/api-client-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -20,13 +21,13 @@ import { Separator } from "@/components/ui/separator";
 import {
   Plus, Trash, Save, ChevronDown, ChevronRight,
   BookMarked, X, Check, AlertCircle, TrendingUp,
-  Loader2, Settings2, User, FolderOpen, CheckCircle2, Download, Info,
+  Loader2, Settings2, User, Users, FolderOpen, CheckCircle2, Download, Info,
   Monitor, Link2, CheckCheck,
 } from "lucide-react";
 import { Tooltip, TooltipTrigger, TooltipContent, TooltipProvider } from "@/components/ui/tooltip";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { ClinicianPresenterCard } from "@/components/clinician-presenter-card";
-import { calculateClinicianMetrics, calculateBusinessGoalOutputs, calculateTotalStaffCost } from "@/lib/calculations";
+import { calculateClinicianMetrics, calculateBusinessGoalOutputs, calculateTotalStaffCost, calculateStaffMemberCost } from "@/lib/calculations";
 import { formatCurrency } from "@/lib/format";
 import { useQueryClient } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
@@ -97,6 +98,29 @@ type SandboxGoal = {
   desiredCliniciansCount: number;
 };
 
+type SandboxStaffMember = {
+  _localId: string;
+  id?: number;
+  label: string;
+  roleType: string;
+  classification: string;
+  annualSalary: number | null;
+  hourlyRate: number | null;
+  hoursPerWeek: number | null;
+  weeksPerYear: number;
+  w2EmployerFicaPct: number;
+  futaSutaPct: number;
+  workersCompPct: number;
+  otherEmployerBurdenPct: number;
+  notes: string;
+  payMode: "salary" | "hourly";
+  _dirty: boolean;
+  _saving: boolean;
+  _burdenOpen: boolean;
+  _version: number;
+  _savedAt: number | null;
+};
+
 // ─── Constants ──────────────────────────────────────────────────────────────
 
 const DEFAULT_GOAL: SandboxGoal = {
@@ -108,6 +132,21 @@ const DEFAULT_GOAL: SandboxGoal = {
   emergencyReserveGoal: 10000,
   growthFundGoal: 0,
   desiredCliniciansCount: 5,
+};
+
+const DEFAULT_STAFF_FIELDS = {
+  roleType: "admin",
+  classification: "w2",
+  annualSalary: 45000 as number | null,
+  hourlyRate: null as number | null,
+  hoursPerWeek: null as number | null,
+  weeksPerYear: 52,
+  w2EmployerFicaPct: 7.65,
+  futaSutaPct: 1.0,
+  workersCompPct: 0.5,
+  otherEmployerBurdenPct: 0,
+  notes: "",
+  payMode: "salary" as "salary" | "hourly",
 };
 
 const DEFAULT_CLINICIAN_FIELDS = {
@@ -182,6 +221,31 @@ function goalToSandbox(g: BusinessGoal): SandboxGoal {
     emergencyReserveGoal: g.emergencyReserveGoal,
     growthFundGoal: g.growthFundGoal,
     desiredCliniciansCount: g.desiredCliniciansCount,
+  };
+}
+
+function staffMemberToSandbox(s: StaffMember): SandboxStaffMember {
+  return {
+    _localId: makeLocalId(),
+    id: s.id,
+    label: s.label,
+    roleType: String(s.roleType),
+    classification: String(s.classification),
+    annualSalary: s.annualSalary ?? null,
+    hourlyRate: s.hourlyRate ?? null,
+    hoursPerWeek: s.hoursPerWeek ?? null,
+    weeksPerYear: s.weeksPerYear,
+    w2EmployerFicaPct: s.w2EmployerFicaPct,
+    futaSutaPct: s.futaSutaPct,
+    workersCompPct: s.workersCompPct,
+    otherEmployerBurdenPct: s.otherEmployerBurdenPct,
+    notes: s.notes ?? "",
+    payMode: s.annualSalary != null && s.annualSalary > 0 ? "salary" : "hourly",
+    _dirty: false,
+    _saving: false,
+    _burdenOpen: false,
+    _version: 0,
+    _savedAt: null,
   };
 }
 
@@ -321,19 +385,216 @@ const CARD_METRIC_LABELS: Record<CardMetric, string> = {
 
 type OverheadAllocationModel = "equal" | "revenue" | "session";
 
+// ─── SandboxStaffCard ────────────────────────────────────────────────────────
+
+const STAFF_ROLE_OPTIONS = [
+  { value: "admin", label: "Admin / Office Manager" },
+  { value: "billing", label: "Billing Coordinator" },
+  { value: "front_desk", label: "Front Desk" },
+  { value: "other", label: "Other" },
+];
+
+function SandboxStaffCard({
+  staff,
+  onChange,
+  onSave,
+  onRemove,
+}: {
+  staff: SandboxStaffMember;
+  onChange: (localId: string, patch: Partial<SandboxStaffMember>) => void;
+  onSave: (localId: string) => void;
+  onRemove: (localId: string) => void;
+}) {
+  const savedLabel = useRelativeTime(staff._savedAt);
+  const [savedVisible, setSavedVisible] = useState(false);
+  const [savedOpaque, setSavedOpaque] = useState(false);
+
+  const onSaveRef = useRef(onSave);
+  useEffect(() => { onSaveRef.current = onSave; }, [onSave]);
+
+  useEffect(() => {
+    if (!staff._savedAt) return;
+    setSavedVisible(true);
+    const tIn  = setTimeout(() => setSavedOpaque(true), 50);
+    const tOut = setTimeout(() => setSavedOpaque(false), 1500);
+    const tEnd = setTimeout(() => setSavedVisible(false), 2200);
+    return () => { clearTimeout(tIn); clearTimeout(tOut); clearTimeout(tEnd); };
+  }, [staff._savedAt]);
+
+  useEffect(() => {
+    if (!staff._dirty || staff._saving) return;
+    const timer = setTimeout(() => {
+      onSaveRef.current(staff._localId);
+    }, 800);
+    return () => clearTimeout(timer);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [staff]);
+
+  const setField = useCallback((name: string, value: unknown) => {
+    onChange(staff._localId, { [name]: value, _dirty: true, _version: staff._version + 1 } as Partial<SandboxStaffMember>);
+  }, [staff._localId, staff._version, onChange]);
+
+  const isW2 = String(staff.classification).toLowerCase() === "w2";
+
+  const { totalAnnualCost } = useMemo(() => calculateStaffMemberCost({
+    annualSalary: staff.payMode === "salary" ? staff.annualSalary : null,
+    hourlyRate: staff.payMode === "hourly" ? staff.hourlyRate : null,
+    hoursPerWeek: staff.payMode === "hourly" ? staff.hoursPerWeek : null,
+    weeksPerYear: staff.weeksPerYear,
+    classification: staff.classification,
+    w2EmployerFicaPct: staff.w2EmployerFicaPct,
+    futaSutaPct: staff.futaSutaPct,
+    workersCompPct: staff.workersCompPct,
+    otherEmployerBurdenPct: staff.otherEmployerBurdenPct,
+  }), [staff]);
+
+  return (
+    <div className={`rounded-lg border bg-card transition-all ${staff._dirty ? "border-amber-300 shadow-sm" : ""}`}>
+      <div className="p-3 space-y-2">
+        {/* Row 1: name + role + remove */}
+        <div className="flex items-center gap-2">
+          <Input
+            value={staff.label}
+            onChange={e => setField("label", e.target.value)}
+            className="h-11 sm:h-7 text-sm font-semibold border-transparent bg-transparent hover:border-input focus:border-input px-1.5 flex-1 min-w-0"
+            placeholder="Staff name"
+          />
+          <Select value={staff.roleType} onValueChange={v => setField("roleType", v)}>
+            <SelectTrigger className="h-11 sm:h-7 w-28 text-[11px] shrink-0">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {STAFF_ROLE_OPTIONS.map(o => (
+                <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <Select value={staff.classification} onValueChange={v => setField("classification", v)}>
+            <SelectTrigger className="h-11 sm:h-7 w-24 text-[11px] shrink-0">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="w2">W2</SelectItem>
+              <SelectItem value="contractor">1099</SelectItem>
+            </SelectContent>
+          </Select>
+          <button
+            onClick={() => onRemove(staff._localId)}
+            className="h-11 w-11 sm:h-7 sm:w-7 flex items-center justify-center shrink-0 rounded text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors"
+          >
+            <X className="h-3.5 w-3.5" />
+          </button>
+        </div>
+
+        {/* Row 2: pay mode toggle + pay inputs */}
+        <div className="space-y-2">
+          <div className="flex items-center gap-1.5">
+            <button
+              type="button"
+              onClick={() => setField("payMode", "salary")}
+              className={`px-2 py-0.5 rounded text-[11px] transition-colors border ${staff.payMode === "salary" ? "bg-primary text-primary-foreground border-primary" : "border-muted-foreground/30 text-muted-foreground hover:text-foreground"}`}
+            >
+              Salary
+            </button>
+            <button
+              type="button"
+              onClick={() => setField("payMode", "hourly")}
+              className={`px-2 py-0.5 rounded text-[11px] transition-colors border ${staff.payMode === "hourly" ? "bg-primary text-primary-foreground border-primary" : "border-muted-foreground/30 text-muted-foreground hover:text-foreground"}`}
+            >
+              Hourly
+            </button>
+            <span className="ml-auto text-xs font-semibold text-primary">
+              {formatCurrency(totalAnnualCost)}/yr
+            </span>
+          </div>
+
+          {staff.payMode === "salary" ? (
+            <InlineNumber
+              label="Annual Salary"
+              prefix="$"
+              value={staff.annualSalary ?? 0}
+              onChange={v => onChange(staff._localId, { annualSalary: v, hourlyRate: null, hoursPerWeek: null, _dirty: true, _version: staff._version + 1 })}
+            />
+          ) : (
+            <div className="grid grid-cols-3 gap-2">
+              <InlineNumber
+                label="Hourly Rate"
+                prefix="$"
+                step={0.01}
+                value={staff.hourlyRate ?? 0}
+                onChange={v => onChange(staff._localId, { hourlyRate: v, annualSalary: null, _dirty: true, _version: staff._version + 1 })}
+              />
+              <InlineNumber
+                label="Hrs/Wk"
+                step={0.5}
+                value={staff.hoursPerWeek ?? 0}
+                onChange={v => onChange(staff._localId, { hoursPerWeek: v, _dirty: true, _version: staff._version + 1 })}
+              />
+              <InlineNumber
+                label="Wks/Yr"
+                value={staff.weeksPerYear}
+                onChange={v => setField("weeksPerYear", v)}
+              />
+            </div>
+          )}
+        </div>
+
+        {/* W2 burden section (collapsible) */}
+        {isW2 && (
+          <div>
+            <button
+              type="button"
+              onClick={() => onChange(staff._localId, { _burdenOpen: !staff._burdenOpen } as Partial<SandboxStaffMember>)}
+              className="flex items-center gap-1 text-[11px] text-muted-foreground hover:text-foreground transition-colors"
+            >
+              {staff._burdenOpen ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
+              Employer burden
+            </button>
+            {staff._burdenOpen && (
+              <div className="grid grid-cols-2 gap-2 mt-2">
+                <InlineNumber label="FICA %" step={0.01} suffix="%" value={staff.w2EmployerFicaPct} onChange={v => setField("w2EmployerFicaPct", v)} />
+                <InlineNumber label="FUTA/SUTA %" step={0.01} suffix="%" value={staff.futaSutaPct} onChange={v => setField("futaSutaPct", v)} />
+                <InlineNumber label="Workers' Comp %" step={0.01} suffix="%" value={staff.workersCompPct} onChange={v => setField("workersCompPct", v)} />
+                <InlineNumber label="Other Burden %" step={0.01} suffix="%" value={staff.otherEmployerBurdenPct} onChange={v => setField("otherEmployerBurdenPct", v)} />
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Save indicator */}
+        <div className="flex items-center justify-end gap-1.5 min-h-[14px]">
+          {staff._saving && <Loader2 className="h-3 w-3 animate-spin text-muted-foreground" />}
+          {savedVisible && !staff._saving && (
+            <span className={`text-[10px] text-muted-foreground flex items-center gap-0.5 transition-opacity duration-500 ${savedOpaque ? "opacity-100" : "opacity-0"}`}>
+              <CheckCheck className="h-3 w-3" />
+              {savedLabel}
+            </span>
+          )}
+          {staff._dirty && !staff._saving && (
+            <span className="text-[10px] text-amber-500 flex items-center gap-0.5">
+              <Save className="h-3 w-3" /> Saving…
+            </span>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ─── LiveSummaryPanel ────────────────────────────────────────────────────────
 
 function LiveSummaryPanel({
   clinicians,
   goal,
+  staff,
 }: {
   clinicians: SandboxClinician[];
   goal: SandboxGoal;
+  staff: SandboxStaffMember[];
 }) {
-  const { data: staffMembers } = useListStaffMembers();
   const totalStaffCost = useMemo(
-    () => calculateTotalStaffCost(staffMembers ?? []),
-    [staffMembers],
+    () => calculateTotalStaffCost(staff as Parameters<typeof calculateTotalStaffCost>[0]),
+    [staff],
   );
 
   const metrics = clinicians.map(c => calculateClinicianMetrics(c));
@@ -1507,11 +1768,16 @@ export default function SandboxView({ onShowAdvanced }: { onShowAdvanced: () => 
   const deleteClinician = useDeleteClinician();
   const updateGoal = useUpdateBusinessGoal();
   const createGoal = useCreateBusinessGoal();
+  const createStaff = useCreateStaffMember();
+  const updateStaff = useUpdateStaffMember();
+  const deleteStaff = useDeleteStaffMember();
 
   const queryClient = useQueryClient();
   const { toast } = useToast();
 
   const [clinicians, setClinicians] = useState<SandboxClinician[]>([]);
+  const [sandboxStaff, setSandboxStaff] = useState<SandboxStaffMember[]>([]);
+  const [staffSectionOpen, setStaffSectionOpen] = useState(true);
   const [goal, setGoal] = useState<SandboxGoal>(DEFAULT_GOAL);
   const [goalSaving, setGoalSaving] = useState(false);
   const [scenariosOpen, setScenariosOpen] = useState(false);
@@ -1546,12 +1812,18 @@ export default function SandboxView({ onShowAdvanced }: { onShowAdvanced: () => 
     setSelectedMetric(metric);
   };
   const cliniciansLoadedForGoalIdRef = useRef<number | undefined>(undefined);
+  const staffLoadedForGoalIdRef = useRef<number | undefined>(undefined);
 
   const activeGoalId = goal.id;
   const goalClinicianParams = { goalId: activeGoalId };
   const { data: apiGoalClinicians, isLoading: loadingGoalClinicians } = useListClinicians(
     goalClinicianParams,
     { query: { queryKey: getListCliniciansQueryKey(goalClinicianParams), enabled: !!activeGoalId } }
+  );
+  const goalStaffParams = { goalId: activeGoalId };
+  const { data: apiGoalStaff } = useListStaffMembers(
+    goalStaffParams,
+    { query: { queryKey: getListStaffMembersQueryKey(goalStaffParams), enabled: !!activeGoalId } }
   );
 
   useEffect(() => {
@@ -1570,6 +1842,15 @@ export default function SandboxView({ onShowAdvanced }: { onShowAdvanced: () => 
     }
   }, [apiGoalClinicians, activeGoalId]);
 
+  useEffect(() => {
+    if (apiGoalStaff !== undefined && activeGoalId !== undefined) {
+      if (staffLoadedForGoalIdRef.current !== activeGoalId) {
+        setSandboxStaff(apiGoalStaff.map(staffMemberToSandbox));
+        staffLoadedForGoalIdRef.current = activeGoalId;
+      }
+    }
+  }, [apiGoalStaff, activeGoalId]);
+
   const handleGoalChange = useCallback((patch: Partial<SandboxGoal>) => {
     setGoal(prev => ({ ...prev, ...patch }));
   }, []);
@@ -1577,7 +1858,9 @@ export default function SandboxView({ onShowAdvanced }: { onShowAdvanced: () => 
   const handleSelectGoal = useCallback((g: BusinessGoal) => {
     setGoal(goalToSandbox(g));
     setClinicians([]);
+    setSandboxStaff([]);
     cliniciansLoadedForGoalIdRef.current = undefined;
+    staffLoadedForGoalIdRef.current = undefined;
   }, []);
 
   const handleSaveGoal = useCallback(async () => {
@@ -1700,6 +1983,93 @@ export default function SandboxView({ onShowAdvanced }: { onShowAdvanced: () => 
     }
     setClinicians(prev => prev.filter(x => x._localId !== localId));
   }, [clinicians, goal, deleteClinician, queryClient, toast]);
+
+  const handleStaffChange = useCallback((localId: string, patch: Partial<SandboxStaffMember>) => {
+    setSandboxStaff(prev => prev.map(s => s._localId === localId ? { ...s, ...patch } : s));
+  }, []);
+
+  const handleSaveStaff = useCallback(async (localId: string) => {
+    const s = sandboxStaff.find(x => x._localId === localId);
+    if (!s) return;
+
+    const versionAtSaveStart = s._version;
+    setSandboxStaff(prev => prev.map(x => x._localId === localId ? { ...x, _saving: true } : x));
+
+    const data = {
+      goalId: goal.id,
+      label: s.label,
+      roleType: s.roleType,
+      classification: s.classification,
+      annualSalary: s.payMode === "salary" ? s.annualSalary ?? undefined : undefined,
+      hourlyRate: s.payMode === "hourly" ? s.hourlyRate ?? undefined : undefined,
+      hoursPerWeek: s.payMode === "hourly" ? s.hoursPerWeek ?? undefined : undefined,
+      weeksPerYear: s.weeksPerYear,
+      w2EmployerFicaPct: s.w2EmployerFicaPct,
+      futaSutaPct: s.futaSutaPct,
+      workersCompPct: s.workersCompPct,
+      otherEmployerBurdenPct: s.otherEmployerBurdenPct,
+      notes: s.notes || undefined,
+    };
+
+    try {
+      if (s.id) {
+        await new Promise<void>((resolve, reject) => {
+          updateStaff.mutate({ id: s.id!, data: data as never }, {
+            onSuccess: () => {
+              queryClient.invalidateQueries({ queryKey: getListStaffMembersQueryKey({ goalId: goal.id }) });
+              resolve();
+            },
+            onError: reject,
+          });
+        });
+      } else {
+        await new Promise<void>((resolve, reject) => {
+          createStaff.mutate({ data: data as never }, {
+            onSuccess: (created) => {
+              setSandboxStaff(prev => prev.map(x => x._localId === localId ? { ...x, id: created.id } : x));
+              queryClient.invalidateQueries({ queryKey: getListStaffMembersQueryKey({ goalId: goal.id }) });
+              resolve();
+            },
+            onError: reject,
+          });
+        });
+      }
+      setSandboxStaff(prev => prev.map(x => {
+        if (x._localId !== localId) return x;
+        const newEditsArrived = x._version !== versionAtSaveStart;
+        return { ...x, _dirty: newEditsArrived, _saving: false, _savedAt: newEditsArrived ? x._savedAt : Date.now() };
+      }));
+    } catch {
+      setSandboxStaff(prev => prev.map(x => x._localId === localId ? { ...x, _saving: false } : x));
+      toast({ title: "Auto-save failed", description: "Could not save staff member.", variant: "destructive" });
+    }
+  }, [sandboxStaff, goal, updateStaff, createStaff, queryClient, toast]);
+
+  const handleAddStaff = useCallback(() => {
+    const newS: SandboxStaffMember = {
+      _localId: makeLocalId(),
+      label: `Staff ${sandboxStaff.length + 1}`,
+      ...DEFAULT_STAFF_FIELDS,
+      _dirty: true,
+      _saving: false,
+      _burdenOpen: false,
+      _version: 0,
+      _savedAt: null,
+    };
+    setSandboxStaff(prev => [...prev, newS]);
+  }, [sandboxStaff.length]);
+
+  const handleRemoveStaff = useCallback((localId: string) => {
+    const s = sandboxStaff.find(x => x._localId === localId);
+    if (!s) return;
+    if (s.id) {
+      deleteStaff.mutate({ id: s.id }, {
+        onSuccess: () => queryClient.invalidateQueries({ queryKey: getListStaffMembersQueryKey({ goalId: goal.id }) }),
+        onError: () => toast({ title: "Remove failed", variant: "destructive" }),
+      });
+    }
+    setSandboxStaff(prev => prev.filter(x => x._localId !== localId));
+  }, [sandboxStaff, goal, deleteStaff, queryClient, toast]);
 
   const handleLoadScenario = useCallback((newClinicians: SandboxClinician[], linkedGoalId?: number) => {
     setClinicians(newClinicians);
@@ -1852,10 +2222,60 @@ export default function SandboxView({ onShowAdvanced }: { onShowAdvanced: () => 
               })()}
             </div>
           )}
+          {/* ── Non-Clinical Staff Section ── */}
+          <div className="mt-2">
+            <div className="flex items-center gap-2 py-1">
+              <button
+                type="button"
+                onClick={() => setStaffSectionOpen(o => !o)}
+                className="flex items-center gap-2 flex-1 text-sm font-semibold text-foreground hover:text-primary transition-colors"
+              >
+                {staffSectionOpen ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
+                <Users className="h-4 w-4 text-muted-foreground" />
+                Non-Clinical Staff
+                {sandboxStaff.length > 0 && (
+                  <Badge variant="secondary" className="text-[10px] ml-1">{sandboxStaff.length}</Badge>
+                )}
+              </button>
+              <Button
+                size="sm"
+                className="h-7 text-xs px-3 shrink-0"
+                onClick={() => { handleAddStaff(); setStaffSectionOpen(true); }}
+              >
+                <Plus className="h-3.5 w-3.5 mr-1" />
+                Add Staff
+              </Button>
+            </div>
+
+            {staffSectionOpen && (
+              <div className="mt-2 space-y-2">
+                {sandboxStaff.length === 0 ? (
+                  <div className="rounded-lg border border-dashed p-6 text-center">
+                    <Users className="h-6 w-6 text-muted-foreground mx-auto mb-2" />
+                    <p className="text-xs text-muted-foreground mb-3">Add support staff to see their cost in the Live Summary</p>
+                    <Button size="sm" variant="outline" onClick={handleAddStaff}>
+                      <Plus className="h-3.5 w-3.5 mr-1" />
+                      Add Staff Member
+                    </Button>
+                  </div>
+                ) : (
+                  sandboxStaff.map(s => (
+                    <SandboxStaffCard
+                      key={s._localId}
+                      staff={s}
+                      onChange={handleStaffChange}
+                      onSave={handleSaveStaff}
+                      onRemove={handleRemoveStaff}
+                    />
+                  ))
+                )}
+              </div>
+            )}
+          </div>
         </main>
 
         <aside className="lg:sticky lg:top-20 space-y-4 lg:overflow-y-auto lg:max-h-[calc(100vh-8rem)]">
-          <LiveSummaryPanel clinicians={clinicians} goal={goal} />
+          <LiveSummaryPanel clinicians={clinicians} goal={goal} staff={sandboxStaff} />
         </aside>
       </div>
 
