@@ -987,6 +987,8 @@ components:
         - futaSutaPct
         - workersCompPct
         - otherEmployerBurdenPct
+        - nonClinicalHoursPerWeek
+        - nonClinicalHourlyRate
         - createdAt
         - updatedAt
       properties:
@@ -1025,6 +1027,10 @@ components:
         workersCompPct:
           type: number
         otherEmployerBurdenPct:
+          type: number
+        nonClinicalHoursPerWeek:
+          type: number
+        nonClinicalHourlyRate:
           type: number
         goalId:
           type: ["integer", "null"]
@@ -1076,6 +1082,10 @@ components:
           type: number
         otherEmployerBurdenPct:
           type: number
+        nonClinicalHoursPerWeek:
+          type: number
+        nonClinicalHourlyRate:
+          type: number
         notes:
           type: string
 
@@ -1115,6 +1125,10 @@ components:
         workersCompPct:
           type: number
         otherEmployerBurdenPct:
+          type: number
+        nonClinicalHoursPerWeek:
+          type: number
+        nonClinicalHourlyRate:
           type: number
         notes:
           type: string

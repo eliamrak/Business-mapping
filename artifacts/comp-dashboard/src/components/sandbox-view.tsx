@@ -1634,6 +1634,8 @@ export default function SandboxView({ onShowAdvanced }: { onShowAdvanced: () => 
       postCapClinicianSplit: c.postCapClinicianSplit, postCapPracticeSplit: c.postCapPracticeSplit,
       w2EmployerFicaPct: c.w2EmployerFicaPct, futaSutaPct: c.futaSutaPct,
       workersCompPct: c.workersCompPct, otherEmployerBurdenPct: c.otherEmployerBurdenPct,
+      nonClinicalHoursPerWeek: c.nonClinicalHoursPerWeek,
+      nonClinicalHourlyRate: c.nonClinicalHourlyRate,
       notes: c.notes,
     };
 

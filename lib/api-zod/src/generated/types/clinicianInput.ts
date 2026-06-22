@@ -26,5 +26,7 @@ export interface ClinicianInput {
   futaSutaPct?: number;
   workersCompPct?: number;
   otherEmployerBurdenPct?: number;
+  nonClinicalHoursPerWeek?: number;
+  nonClinicalHourlyRate?: number;
   notes?: string;
 }

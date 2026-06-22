@@ -66,7 +66,7 @@ export function calculateClinicianMetrics(input: ClinicianMetricsInput) {
   const burdenWorkersComp = isW2 ? clinicianCompensation * ((input.workersCompPct || 0) / 100) : 0;
   const burdenOther = isW2 ? clinicianCompensation * ((input.otherEmployerBurdenPct || 0) / 100) : 0;
 
-  const practiceNetBeforeOverhead = practiceGrossRevenue - employerObligations;
+  const practiceNetBeforeOverhead = practiceGrossRevenue - nonClinicalComp - employerObligations;
 
   let clinicianPayrollTaxEstimate = 0;
   if (isW2) {

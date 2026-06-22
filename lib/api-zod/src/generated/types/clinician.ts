@@ -26,6 +26,8 @@ export interface Clinician {
   futaSutaPct: number;
   workersCompPct: number;
   otherEmployerBurdenPct: number;
+  nonClinicalHoursPerWeek: number;
+  nonClinicalHourlyRate: number;
   /** @nullable */
   goalId?: number | null;
   /** @nullable */

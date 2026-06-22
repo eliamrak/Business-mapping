@@ -217,6 +217,8 @@ export const ListCliniciansResponseItem = zod.object({
   "futaSutaPct": zod.number(),
   "workersCompPct": zod.number(),
   "otherEmployerBurdenPct": zod.number(),
+  "nonClinicalHoursPerWeek": zod.number(),
+  "nonClinicalHourlyRate": zod.number(),
   "goalId": zod.number().nullish(),
   "notes": zod.string().nullish(),
   "createdAt": zod.string(),
@@ -246,6 +248,8 @@ export const CreateClinicianBody = zod.object({
   "futaSutaPct": zod.number().optional(),
   "workersCompPct": zod.number().optional(),
   "otherEmployerBurdenPct": zod.number().optional(),
+  "nonClinicalHoursPerWeek": zod.number().optional(),
+  "nonClinicalHourlyRate": zod.number().optional(),
   "notes": zod.string().optional()
 })
 
@@ -284,6 +288,8 @@ export const GetClinicianResponse = zod.object({
   "futaSutaPct": zod.number(),
   "workersCompPct": zod.number(),
   "otherEmployerBurdenPct": zod.number(),
+  "nonClinicalHoursPerWeek": zod.number(),
+  "nonClinicalHourlyRate": zod.number(),
   "goalId": zod.number().nullish(),
   "notes": zod.string().nullish(),
   "createdAt": zod.string(),
@@ -315,6 +321,8 @@ export const UpdateClinicianBody = zod.object({
   "futaSutaPct": zod.number().optional(),
   "workersCompPct": zod.number().optional(),
   "otherEmployerBurdenPct": zod.number().optional(),
+  "nonClinicalHoursPerWeek": zod.number().optional(),
+  "nonClinicalHourlyRate": zod.number().optional(),
   "notes": zod.string().optional()
 })
 
@@ -336,6 +344,8 @@ export const UpdateClinicianResponse = zod.object({
   "futaSutaPct": zod.number(),
   "workersCompPct": zod.number(),
   "otherEmployerBurdenPct": zod.number(),
+  "nonClinicalHoursPerWeek": zod.number(),
+  "nonClinicalHourlyRate": zod.number(),
   "goalId": zod.number().nullish(),
   "notes": zod.string().nullish(),
   "createdAt": zod.string(),
