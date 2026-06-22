@@ -2259,15 +2259,25 @@ export default function SandboxView({ onShowAdvanced }: { onShowAdvanced: () => 
                     </Button>
                   </div>
                 ) : (
-                  sandboxStaff.map(s => (
-                    <SandboxStaffCard
-                      key={s._localId}
-                      staff={s}
-                      onChange={handleStaffChange}
-                      onSave={handleSaveStaff}
-                      onRemove={handleRemoveStaff}
-                    />
-                  ))
+                  <>
+                    {sandboxStaff.map(s => (
+                      <SandboxStaffCard
+                        key={s._localId}
+                        staff={s}
+                        onChange={handleStaffChange}
+                        onSave={handleSaveStaff}
+                        onRemove={handleRemoveStaff}
+                      />
+                    ))}
+                    {sandboxStaff.length > 1 && (
+                      <div className="flex items-center justify-between px-3 py-2 rounded-lg bg-muted/50 border border-border/50 text-xs text-muted-foreground">
+                        <span>Total staff overhead</span>
+                        <span className="font-medium text-foreground">
+                          ${calculateTotalStaffCost(sandboxStaff as Parameters<typeof calculateTotalStaffCost>[0]).toLocaleString()}/yr
+                        </span>
+                      </div>
+                    )}
+                  </>
                 )}
               </div>
             )}
