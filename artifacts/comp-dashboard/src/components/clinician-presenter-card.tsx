@@ -94,7 +94,6 @@ export function ClinicianPresenterCard({ data }: { data: ClinicianPresenterData 
 
   const metrics = useMemo(() => calculateClinicianMetrics(effectiveData), [effectiveData]);
 
-  const classStr = String(data.classification).toLowerCase();
   const hasNonClinical =
     (data.nonClinicalHoursPerWeek ?? 0) > 0 && (data.nonClinicalHourlyRate ?? 0) > 0;
   const nonClinicalAnnual =
@@ -175,24 +174,6 @@ export function ClinicianPresenterCard({ data }: { data: ClinicianPresenterData 
           />
         )}
       </div>
-
-      {classStr === "w2" && metrics.clinicianPayrollTaxEstimate > 0 && (
-        <div className="px-6 py-4 border-t space-y-1">
-          <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">
-            Payroll Tax Estimate
-          </p>
-          <Row
-            label="Est. employee payroll taxes"
-            value={`−${formatCurrency(metrics.clinicianPayrollTaxEstimate)}/yr`}
-            valueClass="text-amber-600"
-          />
-          <Row
-            label="Est. take-home after taxes"
-            value={formatCurrency(metrics.estimatedCompAfterPayrollTaxes)}
-            valueClass="text-slate-700"
-          />
-        </div>
-      )}
 
       <div className="px-6 py-5 border-t bg-gradient-to-br from-green-50 to-emerald-50 dark:from-green-950 dark:to-emerald-950">
         <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-1">
