@@ -593,10 +593,28 @@ function LiveSummaryPanel({
   goal: SandboxGoal;
   staff: SandboxStaffMember[];
 }) {
-  const totalStaffCost = useMemo(
-    () => calculateTotalStaffCost(staff as Parameters<typeof calculateTotalStaffCost>[0]),
-    [staff],
-  );
+  const staffCostBreakdown = useMemo(() => {
+    let salaries = 0;
+    let burden = 0;
+    for (const s of staff) {
+      const { baseAnnualCost, employerBurden } = calculateStaffMemberCost({
+        annualSalary: s.annualSalary,
+        hourlyRate: s.hourlyRate,
+        hoursPerWeek: s.hoursPerWeek,
+        weeksPerYear: s.weeksPerYear,
+        classification: String(s.classification),
+        w2EmployerFicaPct: s.w2EmployerFicaPct,
+        futaSutaPct: s.futaSutaPct,
+        workersCompPct: s.workersCompPct,
+        otherEmployerBurdenPct: s.otherEmployerBurdenPct,
+      });
+      salaries += baseAnnualCost;
+      burden += employerBurden;
+    }
+    return { salaries, burden, total: salaries + burden };
+  }, [staff]);
+
+  const totalStaffCost = staffCostBreakdown.total;
 
   const metrics = clinicians.map(c => calculateClinicianMetrics(c));
   const totalProduction = metrics.reduce((s, m) => s + m.annualProduction, 0);
@@ -659,10 +677,16 @@ function LiveSummaryPanel({
               <span className="text-muted-foreground flex items-center gap-1">Est. Overhead <InfoTip text="Your annual overhead goal from Practice Inputs — facilities, admin, software, etc." /></span>
               <span className="font-semibold text-muted-foreground">−{formatCurrency(overhead)}</span>
             </div>
-            {totalStaffCost > 0 && (
+            {staffCostBreakdown.salaries > 0 && (
               <div className="flex justify-between text-xs">
-                <span className="text-muted-foreground flex items-center gap-1">Staff Overhead <InfoTip text="Total annual cost of all non-clinical staff from Team Builder, including salaries and employer burden." /></span>
-                <span className="font-semibold text-amber-600">−{formatCurrency(totalStaffCost)}</span>
+                <span className="text-muted-foreground flex items-center gap-1">Staff Salaries <InfoTip text="Total base compensation for all non-clinical staff (salaries or hourly pay × hours × weeks)." /></span>
+                <span className="font-semibold text-amber-600">−{formatCurrency(staffCostBreakdown.salaries)}</span>
+              </div>
+            )}
+            {staffCostBreakdown.burden > 0 && (
+              <div className="flex justify-between text-xs">
+                <span className="text-muted-foreground flex items-center gap-1">Staff Employer Burden <InfoTip text="Employer-side payroll taxes on W2 staff: FICA, FUTA/SUTA, and workers' comp. $0 for 1099 contractors." /></span>
+                <span className="font-semibold text-amber-600">−{formatCurrency(staffCostBreakdown.burden)}</span>
               </div>
             )}
             <Separator className="my-1" />
