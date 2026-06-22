@@ -97,7 +97,7 @@ router.post("/staff", async (req, res) => {
     otherEmployerBurdenPct: String(body.otherEmployerBurdenPct ?? 0),
     notes: body.notes ?? null,
   }).returning();
-  res.status(201).json(toApiStaffMember(member));
+  return res.status(201).json(toApiStaffMember(member));
 });
 
 router.get("/staff/:id", async (req, res) => {
