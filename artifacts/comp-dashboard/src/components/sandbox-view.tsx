@@ -21,9 +21,11 @@ import {
   Plus, Trash, Save, ChevronDown, ChevronRight,
   BookMarked, X, Check, AlertCircle, TrendingUp,
   Loader2, Settings2, User, FolderOpen, CheckCircle2, Download, Info,
+  Monitor, Link2, CheckCheck,
 } from "lucide-react";
 import { Tooltip, TooltipTrigger, TooltipContent, TooltipProvider } from "@/components/ui/tooltip";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { ClinicianPresenterCard } from "@/components/clinician-presenter-card";
 import { calculateClinicianMetrics, calculateBusinessGoalOutputs, calculateTotalStaffCost } from "@/lib/calculations";
 import { formatCurrency } from "@/lib/format";
 import { useQueryClient } from "@tanstack/react-query";
@@ -494,6 +496,8 @@ function ClinicianCard({
   const metrics = useMemo(() => calculateClinicianMetrics(clinician), [clinician]);
   const savedLabel = useRelativeTime(clinician._savedAt);
   const [breakdownOpen, setBreakdownOpen] = useState(false);
+  const [presentOpen, setPresentOpen] = useState(false);
+  const [linkCopied, setLinkCopied] = useState(false);
 
   const isW2 = String(clinician.classification).toLowerCase() === "w2";
 
@@ -692,6 +696,14 @@ function ClinicianCard({
               <SelectItem value="owner">Owner</SelectItem>
             </SelectContent>
           </Select>
+          <Button
+            variant="ghost" size="icon"
+            className="h-11 w-11 sm:h-7 sm:w-7 text-muted-foreground hover:text-primary shrink-0"
+            onClick={() => setPresentOpen(true)}
+            title="Present to clinician"
+          >
+            <Monitor className="h-3.5 w-3.5" />
+          </Button>
           <Button
             variant="ghost" size="icon"
             className="h-11 w-11 sm:h-7 sm:w-7 text-muted-foreground hover:text-destructive shrink-0"
@@ -997,6 +1009,68 @@ function ClinicianCard({
           </span>
         </div>
       )}
+
+      <Dialog open={presentOpen} onOpenChange={setPresentOpen}>
+        <DialogContent
+          className="fixed inset-0 w-screen h-screen max-w-none max-h-none rounded-none border-0 p-0 gap-0 flex flex-col bg-background"
+          aria-describedby={undefined}
+        >
+          <DialogHeader className="px-5 pt-4 pb-3 border-b shrink-0 flex flex-row items-center justify-between gap-2">
+            <DialogTitle className="text-sm font-semibold">Clinician Compensation View</DialogTitle>
+            <div className="flex items-center gap-2 ml-auto">
+              {clinician.id ? (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="h-7 text-xs gap-1.5"
+                  onClick={() => {
+                    const base = import.meta.env.BASE_URL.replace(/\/$/, "");
+                    const url = `${window.location.origin}${base}/present/${clinician.id}`;
+                    navigator.clipboard.writeText(url).catch(() => {}).then(() => {
+                      setLinkCopied(true);
+                      setTimeout(() => setLinkCopied(false), 2000);
+                    });
+                  }}
+                >
+                  {linkCopied ? (
+                    <><CheckCheck className="h-3 w-3 text-green-600" />Copied!</>
+                  ) : (
+                    <><Link2 className="h-3 w-3" />Copy link</>
+                  )}
+                </Button>
+              ) : (
+                <span className="text-[11px] text-muted-foreground italic">Save first to get a shareable link</span>
+              )}
+            </div>
+          </DialogHeader>
+          <div className="flex-1 overflow-y-auto flex items-center justify-center p-6">
+            <ClinicianPresenterCard
+              data={{
+                label: clinician.label,
+                classification: clinician.classification,
+                sessionRate: clinician.sessionRate,
+                sessionsPerWeek: clinician.sessionsPerWeek,
+                weeksWorkedPerYear: clinician.weeksWorkedPerYear,
+                preCapClinicianSplit: clinician.preCapClinicianSplit,
+                preCapPracticeSplit: clinician.preCapPracticeSplit,
+                capEnabled: clinician.capEnabled,
+                capAmount: clinician.capAmount,
+                postCapClinicianSplit: clinician.postCapClinicianSplit,
+                postCapPracticeSplit: clinician.postCapPracticeSplit,
+                w2EmployerFicaPct: clinician.w2EmployerFicaPct,
+                futaSutaPct: clinician.futaSutaPct,
+                workersCompPct: clinician.workersCompPct,
+                otherEmployerBurdenPct: clinician.otherEmployerBurdenPct,
+              }}
+            />
+          </div>
+          <div className="px-5 py-3 border-t bg-muted/30 shrink-0">
+            <p className="text-[11px] text-muted-foreground text-center">
+              Estimates are based on the schedule shown above. Actual compensation may vary.
+            </p>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
