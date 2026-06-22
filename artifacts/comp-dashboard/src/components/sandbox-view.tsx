@@ -1332,7 +1332,7 @@ function ClinicianCard({
 
       <Dialog open={presentOpen} onOpenChange={setPresentOpen}>
         <DialogContent
-          className="fixed inset-0 w-screen h-screen max-w-none max-h-none rounded-none border-0 p-0 gap-0 flex flex-col bg-background"
+          className="fixed inset-0 w-screen h-screen max-w-none max-h-none translate-x-0 translate-y-0 rounded-none border-0 p-0 gap-0 flex flex-col bg-background"
           aria-describedby={undefined}
         >
           <DialogHeader className="px-5 pt-4 pb-3 border-b shrink-0 flex flex-row items-center justify-between gap-2">
