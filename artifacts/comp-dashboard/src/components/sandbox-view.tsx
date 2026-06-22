@@ -75,6 +75,8 @@ type SandboxClinician = {
   futaSutaPct: number;
   workersCompPct: number;
   otherEmployerBurdenPct: number;
+  nonClinicalHoursPerWeek: number;
+  nonClinicalHourlyRate: number;
   notes: string;
   _dirty: boolean;
   _saving: boolean;
@@ -124,6 +126,8 @@ const DEFAULT_CLINICIAN_FIELDS = {
   futaSutaPct: 1.0,
   workersCompPct: 0.5,
   otherEmployerBurdenPct: 0,
+  nonClinicalHoursPerWeek: 0,
+  nonClinicalHourlyRate: 0,
   notes: "",
 };
 
@@ -152,6 +156,8 @@ function clinicianToSandbox(c: Clinician | ScenarioDetail["clinicians"][number])
     futaSutaPct: c.futaSutaPct,
     workersCompPct: c.workersCompPct,
     otherEmployerBurdenPct: c.otherEmployerBurdenPct,
+    nonClinicalHoursPerWeek: (c as Clinician).nonClinicalHoursPerWeek ?? 0,
+    nonClinicalHourlyRate: (c as Clinician).nonClinicalHourlyRate ?? 0,
     notes: c.notes ?? "",
     _dirty: false,
     _saving: false,
@@ -496,6 +502,7 @@ function ClinicianCard({
   const metrics = useMemo(() => calculateClinicianMetrics(clinician), [clinician]);
   const savedLabel = useRelativeTime(clinician._savedAt);
   const [breakdownOpen, setBreakdownOpen] = useState(false);
+  const [nonClinicalOpen, setNonClinicalOpen] = useState(false);
   const [presentOpen, setPresentOpen] = useState(false);
   const [linkCopied, setLinkCopied] = useState(false);
 
@@ -744,6 +751,57 @@ function ClinicianCard({
               <InfoTip text="Extra payroll costs the practice owes on top of wages: employer FICA (7.65%), FUTA/SUTA, and workers' comp. Only applies to W2 employees." />
             </span>
             <span className="font-medium text-amber-600">−{formatCurrency(metrics.employerObligations)}/yr</span>
+          </div>
+        )}
+
+        {metrics.nonClinicalComp > 0 && (
+          <div className="flex items-center justify-between text-[11px]">
+            <span className="text-muted-foreground flex items-center gap-1">
+              Non-clinical pay
+              <InfoTip text="Additional annual pay for non-clinical hours (supervision, admin, documentation) at an hourly rate, added on top of session-split earnings." />
+            </span>
+            <span className="font-medium text-green-700">+{formatCurrency(metrics.nonClinicalComp)}/yr</span>
+          </div>
+        )}
+
+        <button
+          type="button"
+          onClick={() => setNonClinicalOpen(prev => !prev)}
+          className="flex items-center gap-1 text-[11px] text-muted-foreground hover:text-foreground transition-colors w-full"
+        >
+          {nonClinicalOpen ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
+          Non-Clinical Hours
+          {clinician.nonClinicalHoursPerWeek > 0 && (
+            <span className="ml-1 text-[10px] text-primary font-medium">
+              {clinician.nonClinicalHoursPerWeek} hrs/wk @ ${clinician.nonClinicalHourlyRate}/hr
+            </span>
+          )}
+        </button>
+
+        {nonClinicalOpen && (
+          <div className="grid grid-cols-2 gap-2 pt-1 border-t">
+            <InlineNumber
+              label="Non-Clinical Hrs/Wk"
+              value={clinician.nonClinicalHoursPerWeek}
+              onChange={v => setField("nonClinicalHoursPerWeek", v)}
+              step={0.5}
+              suffix="hrs"
+            />
+            <InlineNumber
+              label="Hourly Rate ($)"
+              value={clinician.nonClinicalHourlyRate}
+              onChange={v => setField("nonClinicalHourlyRate", v)}
+              prefix="$"
+            />
+            {metrics.nonClinicalComp > 0 && (
+              <div className="col-span-2 rounded bg-green-50 border border-green-100 px-2.5 py-1.5 text-[11px] text-green-700">
+                <span className="font-medium">Annual add-on: </span>
+                {formatCurrency(metrics.nonClinicalComp)}/yr
+                <span className="text-green-600/70 ml-1">
+                  ({clinician.nonClinicalHoursPerWeek} hrs × ${clinician.nonClinicalHourlyRate}/hr × {clinician.weeksWorkedPerYear} wks)
+                </span>
+              </div>
+            )}
           </div>
         )}
 

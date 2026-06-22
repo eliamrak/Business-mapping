@@ -22,6 +22,8 @@ export const cliniciansTable = pgTable("clinicians", {
   futaSutaPct: numeric("futa_suta_pct", { precision: 7, scale: 4 }).notNull().default("1.0"),
   workersCompPct: numeric("workers_comp_pct", { precision: 7, scale: 4 }).notNull().default("0.5"),
   otherEmployerBurdenPct: numeric("other_employer_burden_pct", { precision: 7, scale: 4 }).notNull().default("0"),
+  nonClinicalHoursPerWeek: numeric("non_clinical_hours_per_week", { precision: 6, scale: 2 }).notNull().default("0"),
+  nonClinicalHourlyRate: numeric("non_clinical_hourly_rate", { precision: 8, scale: 2 }).notNull().default("0"),
   notes: text("notes"),
   createdAt: timestamp("created_at").notNull().defaultNow(),
   updatedAt: timestamp("updated_at").notNull().defaultNow(),

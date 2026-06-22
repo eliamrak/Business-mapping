@@ -25,6 +25,8 @@ function toApiClinician(row: typeof cliniciansTable.$inferSelect) {
     futaSutaPct: Number(row.futaSutaPct),
     workersCompPct: Number(row.workersCompPct),
     otherEmployerBurdenPct: Number(row.otherEmployerBurdenPct),
+    nonClinicalHoursPerWeek: Number(row.nonClinicalHoursPerWeek),
+    nonClinicalHourlyRate: Number(row.nonClinicalHourlyRate),
     notes: row.notes,
     createdAt: row.createdAt.toISOString(),
     updatedAt: row.updatedAt.toISOString(),
@@ -85,6 +87,8 @@ router.post("/clinicians", async (req, res) => {
     futaSutaPct: String(body.futaSutaPct ?? 1.0),
     workersCompPct: String(body.workersCompPct ?? 0.5),
     otherEmployerBurdenPct: String(body.otherEmployerBurdenPct ?? 0),
+    nonClinicalHoursPerWeek: String(body.nonClinicalHoursPerWeek ?? 0),
+    nonClinicalHourlyRate: String(body.nonClinicalHourlyRate ?? 0),
     notes: body.notes ?? null,
   }).returning();
   res.status(201).json(toApiClinician(clinician));
@@ -101,7 +105,7 @@ router.patch("/clinicians/:id", async (req, res) => {
   const id = Number(req.params.id);
   const body = req.body;
   const updates: Record<string, unknown> = { updatedAt: new Date() };
-  const numFields = ["sessionRate", "sessionsPerWeek", "weeksWorkedPerYear", "preCapClinicianSplit", "preCapPracticeSplit", "capAmount", "postCapClinicianSplit", "postCapPracticeSplit", "w2EmployerFicaPct", "futaSutaPct", "workersCompPct", "otherEmployerBurdenPct"];
+  const numFields = ["sessionRate", "sessionsPerWeek", "weeksWorkedPerYear", "preCapClinicianSplit", "preCapPracticeSplit", "capAmount", "postCapClinicianSplit", "postCapPracticeSplit", "w2EmployerFicaPct", "futaSutaPct", "workersCompPct", "otherEmployerBurdenPct", "nonClinicalHoursPerWeek", "nonClinicalHourlyRate"];
   const strFields = ["label", "roleType", "classification", "notes"];
   const boolFields = ["capEnabled"];
   const dbFieldMap: Record<string, string> = {
@@ -110,6 +114,7 @@ router.patch("/clinicians/:id", async (req, res) => {
     capAmount: "capAmount", postCapClinicianSplit: "postCapClinicianSplit", postCapPracticeSplit: "postCapPracticeSplit",
     w2EmployerFicaPct: "w2EmployerFicaPct", futaSutaPct: "futaSutaPct", workersCompPct: "workersCompPct",
     otherEmployerBurdenPct: "otherEmployerBurdenPct",
+    nonClinicalHoursPerWeek: "nonClinicalHoursPerWeek", nonClinicalHourlyRate: "nonClinicalHourlyRate",
   };
   for (const f of numFields) {
     if (body[f] !== undefined) updates[dbFieldMap[f] ?? f] = String(body[f]);

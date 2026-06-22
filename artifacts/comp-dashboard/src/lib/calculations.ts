@@ -15,6 +15,8 @@ export interface ClinicianMetricsInput {
   futaSutaPct: number;
   workersCompPct: number;
   otherEmployerBurdenPct: number;
+  nonClinicalHoursPerWeek?: number;
+  nonClinicalHourlyRate?: number;
 }
 
 export function calculateClinicianMetrics(input: ClinicianMetricsInput) {
@@ -35,9 +37,16 @@ export function calculateClinicianMetrics(input: ClinicianMetricsInput) {
     postCapSessions = 0;
   }
 
-  const clinicianCompensation =
+  const sessionSplitCompensation =
     (preCapSessions * (input.sessionRate || 0) * ((input.preCapClinicianSplit || 0) / 100)) +
     (postCapSessions * (input.sessionRate || 0) * ((input.postCapClinicianSplit || 0) / 100));
+
+  const nonClinicalComp =
+    (input.nonClinicalHoursPerWeek || 0) *
+    (input.nonClinicalHourlyRate || 0) *
+    (input.weeksWorkedPerYear || 0);
+
+  const clinicianCompensation = sessionSplitCompensation + nonClinicalComp;
 
   const practiceGrossRevenue =
     (preCapSessions * (input.sessionRate || 0) * ((input.preCapPracticeSplit || 0) / 100)) +
@@ -79,6 +88,8 @@ export function calculateClinicianMetrics(input: ClinicianMetricsInput) {
     sessionsToCAP,
     preCapSessions,
     postCapSessions,
+    sessionSplitCompensation,
+    nonClinicalComp,
     clinicianCompensation,
     practiceGrossRevenue,
     employerObligations,
