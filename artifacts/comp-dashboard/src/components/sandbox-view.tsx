@@ -8,6 +8,7 @@ import {
   getListCliniciansQueryKey, getListBusinessGoalsQueryKey, getListScenariosQueryKey,
   getGetScenarioQueryKey,
   useListStaffMembers, useCreateStaffMember, useUpdateStaffMember, useDeleteStaffMember,
+  useCopyStaffToGoal,
   getListStaffMembersQueryKey,
 } from "@workspace/api-client-react";
 import type { Clinician, BusinessGoal, ScenarioDetail, StaffMember } from "@workspace/api-client-react";
@@ -1758,6 +1759,90 @@ function ImportCliniciansDialog({
   );
 }
 
+// ─── ImportStaffDialog ────────────────────────────────────────────────────────
+
+function ImportStaffDialog({
+  open, onClose, goals, currentGoalId, onImported,
+}: {
+  open: boolean;
+  onClose: () => void;
+  goals: BusinessGoal[];
+  currentGoalId: number | undefined;
+  onImported: (staff: SandboxStaffMember[]) => void;
+}) {
+  const [sourceGoalId, setSourceGoalId] = useState<number | null>(null);
+  const srcParams = { goalId: sourceGoalId ?? undefined };
+  const { data: sourceStaff, isLoading: loadingSource } = useListStaffMembers(
+    srcParams,
+    { query: { queryKey: getListStaffMembersQueryKey(srcParams), enabled: !!sourceGoalId } }
+  );
+  const copyMutation = useCopyStaffToGoal();
+  const { toast } = useToast();
+  const otherGoals = goals.filter(g => g.id !== currentGoalId);
+
+  const handleImport = () => {
+    if (!sourceStaff?.length || !sourceGoalId || !currentGoalId) return;
+    copyMutation.mutate(
+      { data: { ids: sourceStaff.map(s => s.id), toGoalId: currentGoalId } },
+      {
+        onSuccess: (imported) => {
+          onImported(imported.map(staffMemberToSandbox));
+          onClose();
+        },
+        onError: () => toast({ title: "Import failed", variant: "destructive" }),
+      }
+    );
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={(o) => { if (!o) onClose(); }}>
+      <DialogContent className="sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle>Import staff from another goal</DialogTitle>
+        </DialogHeader>
+        <div className="space-y-4 pt-2">
+          <div className="space-y-1.5">
+            <Label className="text-xs">Copy from goal</Label>
+            <Select onValueChange={v => setSourceGoalId(Number(v))}>
+              <SelectTrigger className="h-8 text-sm">
+                <SelectValue placeholder="Select a goal…" />
+              </SelectTrigger>
+              <SelectContent>
+                {otherGoals.map(g => (
+                  <SelectItem key={g.id} value={String(g.id)}>{g.name}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          {sourceGoalId && !loadingSource && (
+            <p className="text-xs text-muted-foreground">
+              {sourceStaff?.length
+                ? `${sourceStaff.length} staff member${sourceStaff.length !== 1 ? "s" : ""} will be copied into this goal.`
+                : "That goal has no staff to import."}
+            </p>
+          )}
+          {sourceGoalId && loadingSource && (
+            <div className="flex items-center gap-2 text-xs text-muted-foreground">
+              <Loader2 className="h-3 w-3 animate-spin" /> Loading…
+            </div>
+          )}
+          <div className="flex justify-end gap-2">
+            <Button variant="outline" size="sm" onClick={onClose}>Cancel</Button>
+            <Button
+              size="sm"
+              onClick={handleImport}
+              disabled={!sourceStaff?.length || copyMutation.isPending}
+            >
+              {copyMutation.isPending && <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />}
+              Import{sourceStaff?.length ? ` ${sourceStaff.length} staff member${sourceStaff.length !== 1 ? "s" : ""}` : ""}
+            </Button>
+          </div>
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 // ─── SandboxView (main export) ───────────────────────────────────────────────
 
 export default function SandboxView({ onShowAdvanced }: { onShowAdvanced: () => void }) {
@@ -1782,6 +1867,7 @@ export default function SandboxView({ onShowAdvanced }: { onShowAdvanced: () => 
   const [goalSaving, setGoalSaving] = useState(false);
   const [scenariosOpen, setScenariosOpen] = useState(false);
   const [importDialogOpen, setImportDialogOpen] = useState(false);
+  const [importStaffDialogOpen, setImportStaffDialogOpen] = useState(false);
   const [initialized, setInitialized] = useState(false);
   const VALID_CARD_METRICS: CardMetric[] = [
     "coversOverhead",
@@ -2102,6 +2188,18 @@ export default function SandboxView({ onShowAdvanced }: { onShowAdvanced: () => 
           }}
         />
       )}
+      {importStaffDialogOpen && apiGoals && (
+        <ImportStaffDialog
+          open={importStaffDialogOpen}
+          onClose={() => setImportStaffDialogOpen(false)}
+          goals={apiGoals}
+          currentGoalId={goal.id}
+          onImported={(imported) => {
+            setSandboxStaff(prev => [...prev, ...imported]);
+            queryClient.invalidateQueries({ queryKey: getListStaffMembersQueryKey({ goalId: goal.id }) });
+          }}
+        />
+      )}
 
       {scenariosOpen && (
         <ScenariosPanel
@@ -2237,6 +2335,17 @@ export default function SandboxView({ onShowAdvanced }: { onShowAdvanced: () => 
                   <Badge variant="secondary" className="text-[10px] ml-1">{sandboxStaff.length}</Badge>
                 )}
               </button>
+              {(apiGoals?.length ?? 0) > 1 && (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="h-7 text-xs px-3 shrink-0"
+                  onClick={() => { setImportStaffDialogOpen(true); setStaffSectionOpen(true); }}
+                >
+                  <Download className="h-3.5 w-3.5 mr-1" />
+                  Import
+                </Button>
+              )}
               <Button
                 size="sm"
                 className="h-7 text-xs px-3 shrink-0"

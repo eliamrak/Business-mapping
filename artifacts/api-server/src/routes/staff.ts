@@ -119,6 +119,24 @@ router.delete("/staff/:id", async (req, res) => {
   return res.status(204).send();
 });
 
+// ── Copy Staff to Goal ───────────────────────────────────────────────────────
+
+router.post("/staff/copy-to-goal", async (req, res) => {
+  const { ids, toGoalId } = req.body;
+  if (!Array.isArray(ids) || ids.length === 0 || !toGoalId) {
+    return res.status(400).json({ error: "ids (array) and toGoalId required" });
+  }
+  const sources = await db.select().from(staffMembersTable).where(inArray(staffMembersTable.id, ids.map(Number)));
+  if (!sources.length) return res.status(404).json({ error: "No staff members found" });
+  const copies = await db.insert(staffMembersTable).values(
+    sources.map(({ id: _id, createdAt: _c, updatedAt: _u, goalId: _g, ...rest }) => ({
+      ...rest,
+      goalId: Number(toGoalId),
+    }))
+  ).returning();
+  return res.status(201).json(copies.map(toApiStaffMember));
+});
+
 // ── Scenario Staff Members ──────────────────────────────────────────────────
 
 router.get("/scenarios/:scenarioId/staff", async (req, res) => {

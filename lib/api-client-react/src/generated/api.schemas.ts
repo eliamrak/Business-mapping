@@ -642,6 +642,11 @@ export type CopyClinicianToGoalBody = {
   toGoalId: number;
 };
 
+export type CopyStaffToGoalBody = {
+  ids: number[];
+  toGoalId: number;
+};
+
 export type ListStaffMembersParams = {
 goalId?: number;
 };

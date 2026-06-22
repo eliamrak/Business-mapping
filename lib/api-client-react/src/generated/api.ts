@@ -2414,6 +2414,59 @@ export const useDeleteStaffMember = <TError = ErrorType<void>,
       return useMutation(getDeleteStaffMemberMutationOptions(options));
     }
 
+export const getCopyStaffToGoalUrl = () => {
+  return `/api/staff/copy-to-goal`
+}
+
+/**
+ * @summary Copy staff members to a different goal
+ */
+export const copyStaffToGoal = async (copyStaffToGoalBody: CopyStaffToGoalBody, options?: RequestInit): Promise<StaffMember[]> => {
+  return customFetch<StaffMember[]>(getCopyStaffToGoalUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(copyStaffToGoalBody),
+  }
+);}
+
+export const getCopyStaffToGoalMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof copyStaffToGoal>>, TError,{data: BodyType<CopyStaffToGoalBody>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof copyStaffToGoal>>, TError,{data: BodyType<CopyStaffToGoalBody>}, TContext> => {
+
+const mutationKey = ['copyStaffToGoal'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof copyStaffToGoal>>, {data: BodyType<CopyStaffToGoalBody>}> = (props) => {
+          const {data} = props ?? {};
+          return copyStaffToGoal(data, requestOptions)
+        }
+
+  return { mutationFn, ...mutationOptions }}
+
+    export type CopyStaffToGoalMutationResult = NonNullable<Awaited<ReturnType<typeof copyStaffToGoal>>>
+    export type CopyStaffToGoalMutationBody = BodyType<CopyStaffToGoalBody>
+    export type CopyStaffToGoalMutationError = ErrorType<unknown>
+
+    /**
+ * @summary Copy staff members to a different goal
+ */
+export const useCopyStaffToGoal = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof copyStaffToGoal>>, TError,{data: BodyType<CopyStaffToGoalBody>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof copyStaffToGoal>>,
+        TError,
+        {data: BodyType<CopyStaffToGoalBody>},
+        TContext
+      > => {
+      return useMutation(getCopyStaffToGoalMutationOptions(options));
+    }
+
 export const getListScenarioStaffUrl = (scenarioId: number,) => {
 
 
