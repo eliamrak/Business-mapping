@@ -1381,6 +1381,8 @@ function ClinicianCard({
                 futaSutaPct: clinician.futaSutaPct,
                 workersCompPct: clinician.workersCompPct,
                 otherEmployerBurdenPct: clinician.otherEmployerBurdenPct,
+                nonClinicalHoursPerWeek: clinician.nonClinicalHoursPerWeek,
+                nonClinicalHourlyRate: clinician.nonClinicalHourlyRate,
               }}
             />
           </div>

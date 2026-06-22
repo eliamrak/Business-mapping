@@ -53,6 +53,8 @@ export default function ClinicianPresenterPage() {
               futaSutaPct: clinician.futaSutaPct,
               workersCompPct: clinician.workersCompPct,
               otherEmployerBurdenPct: clinician.otherEmployerBurdenPct,
+              nonClinicalHoursPerWeek: clinician.nonClinicalHoursPerWeek,
+              nonClinicalHourlyRate: clinician.nonClinicalHourlyRate,
             }}
           />
         )}

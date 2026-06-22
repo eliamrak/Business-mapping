@@ -1,6 +1,7 @@
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { calculateClinicianMetrics } from "@/lib/calculations";
 import { formatCurrency } from "@/lib/format";
+import { Minus, Plus } from "lucide-react";
 
 export interface ClinicianPresenterData {
   label: string;
@@ -18,6 +19,8 @@ export interface ClinicianPresenterData {
   futaSutaPct: number;
   workersCompPct: number;
   otherEmployerBurdenPct: number;
+  nonClinicalHoursPerWeek?: number;
+  nonClinicalHourlyRate?: number;
 }
 
 function ClassificationBadge({ value }: { value: string }) {
@@ -35,19 +38,69 @@ function ClassificationBadge({ value }: { value: string }) {
   );
 }
 
-function Row({ label, value, valueClass }: { label: string; value: string; valueClass?: string }) {
+function Row({ label, value, valueClass, sub }: { label: string; value: string; valueClass?: string; sub?: string }) {
   return (
     <div className="flex items-center justify-between py-2 border-b last:border-b-0">
-      <span className="text-sm text-muted-foreground">{label}</span>
+      <span className="text-sm text-muted-foreground">
+        {label}
+        {sub && <span className="block text-[11px] text-muted-foreground/60">{sub}</span>}
+      </span>
       <span className={`text-sm font-medium tabular-nums ${valueClass ?? ""}`}>{value}</span>
     </div>
   );
 }
 
+function SessionsStepper({
+  value,
+  onChange,
+}: {
+  value: number;
+  onChange: (v: number) => void;
+}) {
+  return (
+    <div className="flex items-center justify-between py-2 border-b last:border-b-0">
+      <div>
+        <span className="text-sm text-muted-foreground">Sessions per week</span>
+        <span className="block text-[11px] text-primary font-medium">Adjust to model your schedule</span>
+      </div>
+      <div className="flex items-center gap-2">
+        <button
+          onClick={() => onChange(Math.max(1, value - 1))}
+          className="h-6 w-6 rounded border flex items-center justify-center text-muted-foreground hover:bg-muted transition-colors"
+          aria-label="Decrease sessions"
+        >
+          <Minus className="h-3 w-3" />
+        </button>
+        <span className="text-sm font-semibold tabular-nums w-5 text-center">{value}</span>
+        <button
+          onClick={() => onChange(Math.min(40, value + 1))}
+          className="h-6 w-6 rounded border flex items-center justify-center text-muted-foreground hover:bg-muted transition-colors"
+          aria-label="Increase sessions"
+        >
+          <Plus className="h-3 w-3" />
+        </button>
+      </div>
+    </div>
+  );
+}
+
 export function ClinicianPresenterCard({ data }: { data: ClinicianPresenterData }) {
-  const metrics = useMemo(() => calculateClinicianMetrics(data), [data]);
+  const [sessionsPerWeek, setSessionsPerWeek] = useState(data.sessionsPerWeek);
+
+  const effectiveData = useMemo(
+    () => ({ ...data, sessionsPerWeek }),
+    [data, sessionsPerWeek]
+  );
+
+  const metrics = useMemo(() => calculateClinicianMetrics(effectiveData), [effectiveData]);
 
   const classStr = String(data.classification).toLowerCase();
+  const hasNonClinical =
+    (data.nonClinicalHoursPerWeek ?? 0) > 0 && (data.nonClinicalHourlyRate ?? 0) > 0;
+  const nonClinicalAnnual =
+    (data.nonClinicalHoursPerWeek ?? 0) * (data.nonClinicalHourlyRate ?? 0) * data.weeksWorkedPerYear;
+
+  const scheduleChanged = sessionsPerWeek !== data.sessionsPerWeek;
 
   return (
     <div className="rounded-2xl border bg-card shadow-sm overflow-hidden w-full max-w-md mx-auto">
@@ -62,10 +115,31 @@ export function ClinicianPresenterCard({ data }: { data: ClinicianPresenterData 
       <div className="px-6 py-4 space-y-1">
         <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">Schedule</p>
         <Row label="Session rate" value={formatCurrency(data.sessionRate)} />
-        <Row label="Sessions per week" value={String(data.sessionsPerWeek)} />
+        <SessionsStepper value={sessionsPerWeek} onChange={setSessionsPerWeek} />
         <Row label="Weeks worked per year" value={String(data.weeksWorkedPerYear)} />
-        <Row label="Annual sessions" value={String(metrics.annualSessions)} />
+        <Row
+          label="Annual sessions"
+          value={String(metrics.annualSessions)}
+          valueClass={scheduleChanged ? "text-primary" : undefined}
+        />
       </div>
+
+      {hasNonClinical && (
+        <div className="px-6 py-4 space-y-1 border-t">
+          <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">
+            Non-Clinical Hours
+          </p>
+          <Row
+            label="Hours per week"
+            value={`${data.nonClinicalHoursPerWeek} hrs @ ${formatCurrency(data.nonClinicalHourlyRate ?? 0)}/hr`}
+          />
+          <Row
+            label="Annual non-clinical pay"
+            value={formatCurrency(nonClinicalAnnual)}
+            valueClass="text-slate-700"
+          />
+        </div>
+      )}
 
       <div className="px-6 py-4 space-y-1 border-t">
         <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">
@@ -127,9 +201,16 @@ export function ClinicianPresenterCard({ data }: { data: ClinicianPresenterData 
         <p className="text-3xl font-bold text-green-700 tabular-nums">
           {formatCurrency(metrics.clinicianCompensation)}
         </p>
-        <p className="text-xs text-muted-foreground mt-1">
-          Gross earnings before personal income taxes
-        </p>
+        {scheduleChanged && (
+          <p className="text-[11px] text-primary mt-1">
+            Based on {sessionsPerWeek} sessions/wk · original was {data.sessionsPerWeek}
+          </p>
+        )}
+        {!scheduleChanged && (
+          <p className="text-xs text-muted-foreground mt-1">
+            Gross earnings before personal income taxes
+          </p>
+        )}
       </div>
     </div>
   );
