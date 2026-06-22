@@ -2104,6 +2104,11 @@ export default function SandboxView({ onShowAdvanced }: { onShowAdvanced: () => 
     const s = sandboxStaff.find(x => x._localId === localId);
     if (!s) return;
 
+    if (goal.id === undefined) {
+      setSandboxStaff(prev => prev.map(x => x._localId === localId ? { ...x, _dirty: true, _saving: false } : x));
+      return;
+    }
+
     const versionAtSaveStart = s._version;
     setSandboxStaff(prev => prev.map(x => x._localId === localId ? { ...x, _saving: true } : x));
 
@@ -2156,6 +2161,21 @@ export default function SandboxView({ onShowAdvanced }: { onShowAdvanced: () => 
       toast({ title: "Auto-save failed", description: "Could not save staff member.", variant: "destructive" });
     }
   }, [sandboxStaff, goal, updateStaff, createStaff, queryClient, toast]);
+
+  const goalIdRef = useRef<number | undefined>(undefined);
+  useEffect(() => {
+    const prevGoalId = goalIdRef.current;
+    goalIdRef.current = goal.id;
+    if (prevGoalId === undefined && goal.id !== undefined) {
+      setSandboxStaff(prev => {
+        const dirty = prev.filter(s => s._dirty && !s._saving && !s.id);
+        dirty.forEach(s => {
+          setTimeout(() => handleSaveStaff(s._localId), 0);
+        });
+        return prev;
+      });
+    }
+  }, [goal.id, handleSaveStaff]);
 
   const handleAddStaff = useCallback(() => {
     const newS: SandboxStaffMember = {
@@ -2376,6 +2396,7 @@ export default function SandboxView({ onShowAdvanced }: { onShowAdvanced: () => 
                 size="sm"
                 className="h-7 text-xs px-3 shrink-0"
                 onClick={() => { handleAddStaff(); setStaffSectionOpen(true); }}
+                disabled={goal.id === undefined}
               >
                 <Plus className="h-3.5 w-3.5 mr-1" />
                 Add Staff
@@ -2388,7 +2409,7 @@ export default function SandboxView({ onShowAdvanced }: { onShowAdvanced: () => 
                   <div className="rounded-lg border border-dashed p-6 text-center">
                     <Users className="h-6 w-6 text-muted-foreground mx-auto mb-2" />
                     <p className="text-xs text-muted-foreground mb-3">Add support staff to see their cost in the Live Summary</p>
-                    <Button size="sm" variant="outline" onClick={handleAddStaff}>
+                    <Button size="sm" variant="outline" onClick={handleAddStaff} disabled={goal.id === undefined}>
                       <Plus className="h-3.5 w-3.5 mr-1" />
                       Add Staff Member
                     </Button>

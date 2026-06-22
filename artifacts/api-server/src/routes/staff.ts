@@ -79,8 +79,11 @@ router.get("/staff", async (req, res) => {
 
 router.post("/staff", async (req, res) => {
   const body = req.body;
+  if (body.goalId === undefined || body.goalId === null) {
+    return res.status(400).json({ error: "goalId is required" });
+  }
   const [member] = await db.insert(staffMembersTable).values({
-    goalId: body.goalId !== undefined ? Number(body.goalId) : null,
+    goalId: Number(body.goalId),
     label: body.label ?? "New Staff Member",
     roleType: body.roleType ?? "admin",
     classification: body.classification ?? "w2",
