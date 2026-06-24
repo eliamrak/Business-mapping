@@ -25,6 +25,7 @@ export const cliniciansTable = pgTable("clinicians", {
   nonClinicalHoursPerWeek: numeric("non_clinical_hours_per_week", { precision: 6, scale: 2 }).notNull().default("0"),
   nonClinicalHourlyRate: numeric("non_clinical_hourly_rate", { precision: 8, scale: 2 }).notNull().default("0"),
   notes: text("notes"),
+  shareToken: text("share_token"),
   createdAt: timestamp("created_at").notNull().defaultNow(),
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
 });

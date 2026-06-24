@@ -1,14 +1,23 @@
 import { useParams } from "wouter";
-import { useGetClinician } from "@workspace/api-client-react";
 import { ClinicianPresenterCard } from "@/components/clinician-presenter-card";
 import { Loader2 } from "lucide-react";
+import { useQuery } from "@tanstack/react-query";
+
+async function fetchByToken(token: string) {
+  const base = import.meta.env.BASE_URL.replace(/\/$/, "");
+  const res = await fetch(`${base}/api/clinicians/by-token/${encodeURIComponent(token)}`);
+  if (!res.ok) throw new Error("not_found");
+  return res.json();
+}
 
 export default function ClinicianPresenterPage() {
-  const { clinicianId } = useParams<{ clinicianId: string }>();
-  const id = Number(clinicianId);
+  const { token } = useParams<{ token: string }>();
 
-  const { data: clinician, isLoading, isError } = useGetClinician(id, {
-    query: { enabled: !isNaN(id) && id > 0 },
+  const { data: clinician, isLoading, isError } = useQuery({
+    queryKey: ["clinician-by-token", token],
+    queryFn: () => fetchByToken(token!),
+    enabled: !!token,
+    retry: false,
   });
 
   return (
@@ -28,9 +37,9 @@ export default function ClinicianPresenterPage() {
 
         {isError && (
           <div className="text-center space-y-2">
-            <p className="text-sm font-medium text-destructive">Clinician not found.</p>
+            <p className="text-sm font-medium text-destructive">Link not found or has been revoked.</p>
             <p className="text-xs text-muted-foreground">
-              This link may be outdated. Ask your practice owner for an updated link.
+              Ask your practice owner for an updated link.
             </p>
           </div>
         )}

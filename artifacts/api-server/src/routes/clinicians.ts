@@ -2,6 +2,7 @@ import { Router } from "express";
 import { db } from "@workspace/db";
 import { cliniciansTable, businessGoalsTable } from "@workspace/db";
 import { eq, isNull, inArray } from "drizzle-orm";
+import { randomUUID } from "crypto";
 
 const router = Router();
 
@@ -28,6 +29,7 @@ function toApiClinician(row: typeof cliniciansTable.$inferSelect) {
     nonClinicalHoursPerWeek: Number(row.nonClinicalHoursPerWeek),
     nonClinicalHourlyRate: Number(row.nonClinicalHourlyRate),
     notes: row.notes,
+    shareToken: row.shareToken ?? null,
     createdAt: row.createdAt.toISOString(),
     updatedAt: row.updatedAt.toISOString(),
   };
@@ -57,12 +59,20 @@ router.post("/clinicians/copy-to-goal", async (req, res) => {
   const sources = await db.select().from(cliniciansTable).where(inArray(cliniciansTable.id, ids.map(Number)));
   if (!sources.length) return res.status(404).json({ error: "No clinicians found" });
   const copies = await db.insert(cliniciansTable).values(
-    sources.map(({ id: _id, createdAt: _c, updatedAt: _u, goalId: _g, ...rest }) => ({
+    sources.map(({ id: _id, createdAt: _c, updatedAt: _u, goalId: _g, shareToken: _t, ...rest }) => ({
       ...rest,
       goalId: Number(toGoalId),
     }))
   ).returning();
   return res.status(201).json(copies.map(toApiClinician));
+});
+
+router.get("/clinicians/by-token/:token", async (req, res) => {
+  const { token } = req.params;
+  if (!token) return res.status(400).json({ error: "Token required" });
+  const [clinician] = await db.select().from(cliniciansTable).where(eq(cliniciansTable.shareToken, token));
+  if (!clinician) return res.status(404).json({ error: "Link not found or has been revoked" });
+  return res.json(toApiClinician(clinician));
 });
 
 router.post("/clinicians", async (req, res) => {
@@ -141,9 +151,30 @@ router.post("/clinicians/:id/duplicate", async (req, res) => {
   const id = Number(req.params.id);
   const [original] = await db.select().from(cliniciansTable).where(eq(cliniciansTable.id, id));
   if (!original) return res.status(404).json({ error: "Not found" });
-  const { id: _id, createdAt: _c, updatedAt: _u, label, ...rest } = original;
+  const { id: _id, createdAt: _c, updatedAt: _u, label, shareToken: _t, ...rest } = original;
   const [copy] = await db.insert(cliniciansTable).values({ ...rest, label: `${label} (Copy)` }).returning();
   return res.status(201).json(toApiClinician(copy));
+});
+
+router.post("/clinicians/:id/generate-link", async (req, res) => {
+  const id = Number(req.params.id);
+  const token = randomUUID();
+  const [clinician] = await db.update(cliniciansTable)
+    .set({ shareToken: token, updatedAt: new Date() })
+    .where(eq(cliniciansTable.id, id))
+    .returning();
+  if (!clinician) return res.status(404).json({ error: "Not found" });
+  return res.json(toApiClinician(clinician));
+});
+
+router.post("/clinicians/:id/revoke-link", async (req, res) => {
+  const id = Number(req.params.id);
+  const [clinician] = await db.update(cliniciansTable)
+    .set({ shareToken: null, updatedAt: new Date() })
+    .where(eq(cliniciansTable.id, id))
+    .returning();
+  if (!clinician) return res.status(404).json({ error: "Not found" });
+  return res.json(toApiClinician(clinician));
 });
 
 export default router;

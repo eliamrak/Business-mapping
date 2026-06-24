@@ -19,7 +19,7 @@ function Router() {
   return (
     <Switch>
       <Route path="/" component={Dashboard} />
-      <Route path="/present/:clinicianId" component={ClinicianPresenterPage} />
+      <Route path="/present/:token" component={ClinicianPresenterPage} />
       <Route component={NotFound} />
     </Switch>
   );

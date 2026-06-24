@@ -80,6 +80,7 @@ type SandboxClinician = {
   nonClinicalHoursPerWeek: number;
   nonClinicalHourlyRate: number;
   notes: string;
+  shareToken: string | null;
   _dirty: boolean;
   _saving: boolean;
   _expanded: boolean;
@@ -169,6 +170,7 @@ const DEFAULT_CLINICIAN_FIELDS = {
   nonClinicalHoursPerWeek: 0,
   nonClinicalHourlyRate: 0,
   notes: "",
+  shareToken: null as string | null,
 };
 
 let localIdCounter = 0;
@@ -199,6 +201,7 @@ function clinicianToSandbox(c: Clinician | ScenarioDetail["clinicians"][number])
     nonClinicalHoursPerWeek: (c as Clinician).nonClinicalHoursPerWeek ?? 0,
     nonClinicalHourlyRate: (c as Clinician).nonClinicalHourlyRate ?? 0,
     notes: c.notes ?? "",
+    shareToken: (c as Clinician).shareToken ?? null,
     _dirty: false,
     _saving: false,
     _expanded: false,
@@ -791,6 +794,7 @@ function ClinicianCard({
   const [nonClinicalOpen, setNonClinicalOpen] = useState(false);
   const [presentOpen, setPresentOpen] = useState(false);
   const [linkCopied, setLinkCopied] = useState(false);
+  const [linkWorking, setLinkWorking] = useState(false);
 
   const isW2 = String(clinician.classification).toLowerCase() === "w2";
 
@@ -1363,25 +1367,85 @@ function ClinicianCard({
             <DialogTitle className="text-sm font-semibold">Clinician Compensation View</DialogTitle>
             <div className="flex items-center gap-2 ml-auto">
               {clinician.id ? (
-                <Button
-                  size="sm"
-                  variant="outline"
-                  className="h-7 text-xs gap-1.5"
-                  onClick={() => {
-                    const base = import.meta.env.BASE_URL.replace(/\/$/, "");
-                    const url = `${window.location.origin}${base}/present/${clinician.id}`;
-                    navigator.clipboard.writeText(url).catch(() => {}).then(() => {
-                      setLinkCopied(true);
-                      setTimeout(() => setLinkCopied(false), 2000);
-                    });
-                  }}
-                >
-                  {linkCopied ? (
-                    <><CheckCheck className="h-3 w-3 text-green-600" />Copied!</>
-                  ) : (
-                    <><Link2 className="h-3 w-3" />Copy link</>
-                  )}
-                </Button>
+                clinician.shareToken ? (
+                  <>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="h-7 text-xs gap-1.5"
+                      disabled={linkWorking}
+                      onClick={() => {
+                        const base = import.meta.env.BASE_URL.replace(/\/$/, "");
+                        const url = `${window.location.origin}${base}/present/${clinician.shareToken}`;
+                        navigator.clipboard.writeText(url).catch(() => {}).then(() => {
+                          setLinkCopied(true);
+                          setTimeout(() => setLinkCopied(false), 2000);
+                        });
+                      }}
+                    >
+                      {linkCopied ? (
+                        <><CheckCheck className="h-3 w-3 text-green-600" />Copied!</>
+                      ) : (
+                        <><Link2 className="h-3 w-3" />Copy link</>
+                      )}
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      className="h-7 text-xs gap-1.5 text-destructive hover:text-destructive hover:bg-destructive/10"
+                      disabled={linkWorking}
+                      onClick={async () => {
+                        if (!clinician.id) return;
+                        setLinkWorking(true);
+                        try {
+                          const base = import.meta.env.BASE_URL.replace(/\/$/, "");
+                          const res = await fetch(`${base}/api/clinicians/${clinician.id}/revoke-link`, { method: "POST" });
+                          if (res.ok) {
+                            onChange(clinician._localId, { shareToken: null });
+                          }
+                        } finally {
+                          setLinkWorking(false);
+                        }
+                      }}
+                    >
+                      Revoke link
+                    </Button>
+                  </>
+                ) : (
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="h-7 text-xs gap-1.5"
+                    disabled={linkWorking}
+                    onClick={async () => {
+                      if (!clinician.id) return;
+                      setLinkWorking(true);
+                      try {
+                        const base = import.meta.env.BASE_URL.replace(/\/$/, "");
+                        const res = await fetch(`${base}/api/clinicians/${clinician.id}/generate-link`, { method: "POST" });
+                        if (res.ok) {
+                          const data = await res.json();
+                          onChange(clinician._localId, { shareToken: data.shareToken });
+                          const url = `${window.location.origin}${base}/present/${data.shareToken}`;
+                          navigator.clipboard.writeText(url).catch(() => {}).then(() => {
+                            setLinkCopied(true);
+                            setTimeout(() => setLinkCopied(false), 2000);
+                          });
+                        }
+                      } finally {
+                        setLinkWorking(false);
+                      }
+                    }}
+                  >
+                    {linkWorking ? (
+                      <><Loader2 className="h-3 w-3 animate-spin" />Generating…</>
+                    ) : linkCopied ? (
+                      <><CheckCheck className="h-3 w-3 text-green-600" />Link copied!</>
+                    ) : (
+                      <><Link2 className="h-3 w-3" />Generate link</>
+                    )}
+                  </Button>
+                )
               ) : (
                 <span className="text-[11px] text-muted-foreground italic">Save first to get a shareable link</span>
               )}
