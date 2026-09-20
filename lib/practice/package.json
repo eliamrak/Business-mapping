@@ -1,0 +1,8 @@
+{
+  "name": "@workspace/practice",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": { ".": "./src/index.ts", "./hub": "./src/hub/index.ts", "./compensation": "./src/compensation.ts" },
+  "dependencies": { "zod": "catalog:" }
+}

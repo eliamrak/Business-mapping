@@ -1,7 +1,8 @@
 import { Router } from "express";
 import { db } from "@workspace/db";
-import { cliniciansTable, businessGoalsTable } from "@workspace/db";
-import { eq, isNull, inArray } from "drizzle-orm";
+import { cliniciansTable, businessGoalsTable, hubWorkspacesTable } from "@workspace/db";
+import {workspaceSchema,referencedClinicianIds} from "@workspace/practice/hub";
+import { eq, isNull, inArray, sql } from "drizzle-orm";
 import { randomUUID } from "crypto";
 
 const router = Router();
@@ -142,9 +143,23 @@ router.patch("/clinicians/:id", async (req, res) => {
 
 router.delete("/clinicians/:id", async (req, res) => {
   const id = Number(req.params.id);
-  const result = await db.delete(cliniciansTable).where(eq(cliniciansTable.id, id)).returning();
-  if (!result.length) return res.status(404).json({ error: "Not found" });
-  return res.status(204).send();
+  try {
+    const result=await db.transaction(async tx=>{
+      await tx.execute(sql`SELECT pg_advisory_xact_lock(7422,1)`);
+      const [hub]=await tx.select().from(hubWorkspacesTable).where(eq(hubWorkspacesTable.id,1));
+      if(hub&&referencedClinicianIds(workspaceSchema.parse(hub.data)).has(id))return null;
+      return tx.delete(cliniciansTable).where(eq(cliniciansTable.id,id)).returning();
+    });
+    if(!result)return res.status(409).json({error:"This clinician is linked to business plans or operating history. Archive the operating profile instead of deleting it."});
+    if (!result.length) return res.status(404).json({ error: "Not found" });
+    return res.status(204).send();
+  } catch (error) {
+    const databaseError = error as { code?: string; cause?: { code?: string } };
+    if (databaseError.code === "23503" || databaseError.cause?.code === "23503") {
+      return res.status(409).json({ error: "This clinician has saved history and cannot be deleted. Keep the clinician to preserve those records." });
+    }
+    throw error;
+  }
 });
 
 router.post("/clinicians/:id/duplicate", async (req, res) => {

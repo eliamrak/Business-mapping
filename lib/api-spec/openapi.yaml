@@ -1241,7 +1241,7 @@ components:
           type: integer
         scenarioId:
           type: integer
-        sourceCliniciánId:
+        sourceClinicianId:
           type: ["integer", "null"]
         label:
           type: string
@@ -1289,7 +1289,7 @@ components:
       required:
         - label
       properties:
-        sourceCliniciánId:
+        sourceClinicianId:
           type: integer
         label:
           type: string

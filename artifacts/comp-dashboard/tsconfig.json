@@ -18,6 +18,9 @@
   },
   "references": [
     {
+      "path": "../../lib/practice"
+    },
+    {
       "path": "../../lib/api-client-react"
     }
   ]

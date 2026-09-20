@@ -35,8 +35,8 @@ function isInsideHorizontalScroll(target: EventTarget | null, boundary: HTMLElem
 }
 
 export default function Dashboard() {
-  const [advancedOpen, setAdvancedOpen] = useState(false);
-  const [advancedTab, setAdvancedTab] = useState("goals");
+  const [advancedOpen, setAdvancedOpen] = useState(() => new URLSearchParams(window.location.search).get("view") === "team");
+  const [advancedTab, setAdvancedTab] = useState(() => new URLSearchParams(window.location.search).get("view") === "team" ? "team" : "goals");
   const [exportOpen, setExportOpen] = useState(false);
   const [showScrollHint, setShowScrollHint] = useState(true);
 
@@ -116,7 +116,7 @@ export default function Dashboard() {
             </h1>
           </div>
 
-          <Button
+          <div className="flex items-center gap-2"><Button variant="outline" size="sm" asChild><a href={`${import.meta.env.BASE_URL}hub`}>Business hub</a></Button><Button variant="outline" size="sm" asChild><a href={`${import.meta.env.BASE_URL}practice`}><Users className="h-3.5 w-3.5" />Sessions</a></Button><Button
             variant="ghost"
             size="sm"
             className="h-8 text-xs text-muted-foreground gap-1.5"
@@ -124,7 +124,7 @@ export default function Dashboard() {
           >
             <Download className="h-3.5 w-3.5" />
             Export PDF
-          </Button>
+          </Button></div>
         </div>
       </header>
 

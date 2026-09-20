@@ -27,6 +27,7 @@ import type {
   ClinicianInput,
   ClinicianUpdate,
   CopyClinicianToGoalBody,
+  CopyStaffToGoalBody,
   CurrentReality,
   CurrentRealityInput,
   HealthStatus,
@@ -2761,4 +2762,3 @@ export const useRemoveScenarioStaffMember = <TError = ErrorType<void>,
       > => {
       return useMutation(getRemoveScenarioStaffMemberMutationOptions(options));
     }
-

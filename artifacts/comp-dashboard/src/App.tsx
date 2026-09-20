@@ -5,6 +5,9 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import NotFound from "@/pages/not-found";
 import Dashboard from "@/pages/dashboard";
 import ClinicianPresenterPage from "@/pages/clinician-presenter";
+import Practice from "@/pages/practice";
+import Hub from "@/pages/hub";
+import Access from "@/components/hub/access";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -18,7 +21,10 @@ const queryClient = new QueryClient({
 function Router() {
   return (
     <Switch>
-      <Route path="/" component={Dashboard} />
+      <Route path="/hub/:section">{params=><Access><Hub section={params.section}/></Access>}</Route>
+      <Route path="/hub"><Access><Hub/></Access></Route>
+      <Route path="/practice"><Access><Practice/></Access></Route>
+      <Route path="/"><Access><Dashboard/></Access></Route>
       <Route path="/present/:token" component={ClinicianPresenterPage} />
       <Route component={NotFound} />
     </Switch>

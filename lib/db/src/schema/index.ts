@@ -5,3 +5,5 @@ export * from "./scenarios";
 export * from "./scenarioClinicians";
 export * from "./staffMembers";
 export * from "./scenarioStaffMembers";
+export * from "./sessionRecords";
+export * from "./hub";

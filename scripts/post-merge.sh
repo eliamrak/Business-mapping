@@ -1,4 +1,4 @@
 #!/bin/bash
 set -e
 pnpm install --frozen-lockfile
-pnpm --filter db push
+printf '%s\n' 'Dependencies ready. Database changes require the reviewed numbered migrations; no automatic schema push was run.'

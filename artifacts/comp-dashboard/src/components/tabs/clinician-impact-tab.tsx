@@ -358,7 +358,7 @@ function W2vs1099SummarySection({ clinicians }: { clinicians: Clinician[] }) {
                 <div className="grid grid-cols-2 gap-2 text-xs">
                   <div className="rounded-lg bg-muted/50 p-2.5 space-y-2">
                     <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">
-                      Current ({c.classification.toUpperCase()})
+                      Current ({String(c.classification).toUpperCase()})
                     </p>
                     <div>
                       <span className="text-[10px] text-muted-foreground block">Take-Home</span>
