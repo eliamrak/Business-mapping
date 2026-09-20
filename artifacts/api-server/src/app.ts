@@ -7,7 +7,14 @@ import { seedIfEmpty } from "./seed";
 import { db } from "@workspace/db";
 import { staffMembersTable } from "@workspace/db";
 import { isNull } from "drizzle-orm";
-import { authRouter, requireAccess, localPreview } from "./lib/auth";
+import { clerkMiddleware } from "@clerk/express";
+import { publishableKeyFromHost } from "@clerk/shared/keys";
+import { authRouter, requireAccess } from "./lib/auth";
+import {
+  CLERK_PROXY_PATH,
+  clerkProxyMiddleware,
+  getClerkProxyHost,
+} from "./middlewares/clerkProxyMiddleware";
 
 const app: Express = express();
 
@@ -30,9 +37,21 @@ app.use(
     },
   }),
 );
+
+app.use(CLERK_PROXY_PATH, clerkProxyMiddleware());
+
 app.use(cors({origin: process.env.APP_ORIGIN || false, credentials:true}));
 app.use(express.json({limit:"15mb"}));
 app.use(express.urlencoded({ extended: true }));
+
+app.use(
+  clerkMiddleware((req) => ({
+    publishableKey: publishableKeyFromHost(
+      getClerkProxyHost(req) ?? "",
+      process.env.CLERK_PUBLISHABLE_KEY,
+    ),
+  })),
+);
 
 app.use("/api", authRouter);
 app.use("/api", requireAccess, router);

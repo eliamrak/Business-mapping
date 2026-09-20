@@ -33,3 +33,8 @@ externalPort = 3001
 [[ports]]
 localPort = 23894
 externalPort = 23894
+
+[userenv]
+
+[userenv.shared]
+EMC_OWNER_EMAIL = "eliam@emcounseling.org"
