@@ -1,0 +1,465 @@
+Build a clean, user-friendly internal web app called “Compensation Strategy Dashboard.”
+
+Do not use AI features in this first version. This app should be a calculator, scenario builder, and PDF export tool for modeling clinician compensation, business goals, and long-term practice planning.
+
+The app should be simple, intuitive, and easy to navigate. The user should be able to create business goals, build compensation scenarios, assign different compensation models to different clinicians inside a scenario, compare scenarios side by side, and export clean PDF summaries.
+
+Core Purpose
+
+The app should help a group practice owner answer:
+
+1. What does the business need financially?
+2. What does each clinician need to produce?
+3. How do different compensation models affect clinician compensation?
+4. How do W2 and 1099 classifications affect tax burden and business net?
+5. Which offers meet the business goals while still being attractive to clinicians?
+6. What is the overall business impact if different clinicians are on different pay structures?
+
+Navigation
+
+Create the following main tabs:
+
+1. Business Goals
+2. Current Reality
+3. Team Builder
+4. Scenario Builder
+5. Scenario Comparison
+6. Clinician Impact View
+7. PDF Export
+
+Use a clean dashboard-style interface. Avoid clutter. Each tab should answer one clear question.
+
+Tab 1: Business Goals
+
+Purpose:
+Help the user define financial goals for the business over time.
+
+Fields:
+- Goal Name
+- Time Horizon: 1 year, 3 year, 5 year, 10 year
+- Owner Pay Goal
+- Second Owner Pay Goal
+- Annual Overhead Goal
+- Business Profit Goal
+- Building Fund Goal
+- Emergency Reserve Goal
+- Growth Fund Goal
+- Desired Number of Clinicians
+- Desired Owner Clinical Caseload
+- Notes
+
+Calculated Outputs:
+- Total Annual Business Need
+- Required Net Per Clinician
+- Required Monthly Business Need
+- Required Monthly Net Per Clinician
+
+Formula:
+Total Annual Business Need =
+Owner Pay Goal
++ Second Owner Pay Goal
++ Annual Overhead Goal
++ Business Profit Goal
++ Building Fund Goal
++ Emergency Reserve Goal
++ Growth Fund Goal
+
+Required Net Per Clinician =
+Total Annual Business Need / Desired Number of Clinicians
+
+Allow the user to create, edit, duplicate, and delete business goal profiles.
+
+Tab 2: Current Reality
+
+Purpose:
+Show current business reality and compare it to goals.
+
+Fields:
+- Current Owner Pay
+- Current Second Owner Pay
+- Current Annual Overhead
+- Current Business Profit
+- Current Cash Reserve
+- Current Building Fund
+- Current Number of Clinicians
+- Current Average Session Rate
+- Current Average Sessions Per Week
+- Current Average Weeks Worked Per Year
+
+Calculated Outputs:
+- Current Annual Production Estimate
+- Current Net Per Clinician Estimate
+- Gap Between Current Reality and Selected Goal
+- Gap Per Clinician
+- Percent of Goal Achieved
+
+Tab 3: Team Builder
+
+Purpose:
+Allow the user to build a team inside a scenario.
+
+Each clinician card should include:
+
+Basic Info:
+- Clinician Label or Name
+- Role Type: Senior Clinician, Associate, Owner, Contractor, Other
+- Classification: W2, 1099, Owner, Other
+- Session Rate
+- Sessions Per Week
+- Weeks Worked Per Year
+
+Compensation Model:
+- Pre-Cap Clinician Split %
+- Pre-Cap Practice Split %
+- Cap Amount
+- Post-Cap Clinician Split %
+- Post-Cap Practice Split %
+- Option to turn cap on or off
+- Option for “same split forever”
+
+Tax and Cost Assumptions:
+- W2 Employer FICA %
+- FUTA/SUTA %
+- Workers Comp %
+- Other Employer Burden %
+- 1099 Employer Burden should default to 0
+
+Calculated Clinician Outputs:
+- Annual Sessions
+- Annual Production
+- Sessions to Cap
+- Weeks to Cap
+- Pre-Cap Compensation
+- Post-Cap Compensation
+- Total Clinician Compensation
+- Practice Gross Revenue From Clinician
+- Employer Obligations Paid By Practice
+- Practice Net Before General Practice Overhead
+- Clinician Payroll Tax Estimate
+- Estimated Compensation After Payroll Taxes
+
+Important:
+Clinician compensation should be calculated from production and splits.
+Classification should determine who pays employer-side payroll obligations.
+Do not automatically change compensation just because classification changes.
+
+Tab 4: Scenario Builder
+
+Purpose:
+Allow the user to create entire practice scenarios.
+
+Each scenario should include:
+- Scenario Name
+- Selected Business Goal
+- Notes
+- List of clinicians included in this scenario
+- Ability to add clinicians manually
+- Ability to duplicate clinicians
+- Ability to duplicate entire scenario
+- Ability to assign different compensation structures to different clinicians
+
+Scenario-Level Outputs:
+- Total Annual Production
+- Total Clinician Compensation
+- Total Practice Gross Revenue
+- Total Employer Obligations Paid By Practice
+- Total Practice Net Before General Practice Overhead
+- Selected Business Goal Requirement
+- Amount Above or Below Goal
+- Meets Goal: Yes or No
+- Percent of Goal Achieved
+
+Use status colors:
+- Green: meets or exceeds goal
+- Yellow: within 10% of goal
+- Red: more than 10% below goal
+
+Tab 5: Scenario Comparison
+
+Purpose:
+Compare multiple practice scenarios side by side.
+
+Allow the user to select 2 to 4 scenarios.
+
+Comparison Table:
+- Scenario Name
+- Number of Clinicians
+- Total Production
+- Total Clinician Compensation
+- Employer Obligations Paid By Practice
+- Practice Net Before General Practice Overhead
+- Goal Requirement
+- Amount Above or Below Goal
+- Meets Goal
+- Average Clinician Compensation
+- Average Practice Net Per Clinician
+
+Include a second table showing clinician-level comparison if the same clinician appears in multiple scenarios.
+
+Clinician-Level Comparison:
+- Clinician Name or Label
+- Scenario
+- Classification
+- Session Rate
+- Sessions Per Week
+- Annual Production
+- Compensation
+- Employer Obligations Paid By Practice
+- Estimated Payroll Tax Paid By Clinician
+- Estimated Compensation After Payroll Taxes
+- Practice Net From Clinician
+
+Tab 6: Clinician Impact View
+
+Purpose:
+Create a simple clinician-facing comparison between W2 and 1099.
+
+This tab should be clean, simple, and suitable for discussion with a clinician.
+
+User should select:
+- Clinician
+- Scenario A
+- Scenario B
+
+Display:
+- Annual Production
+- Compensation Earned
+- Classification
+- Payroll Taxes Paid Personally
+- Employer-Side Payroll Taxes Paid By Practice
+- Estimated Compensation After Payroll Taxes
+- Practice Net From Clinician
+
+Important explanation box:
+“Compensation is determined by production and the compensation formula. Classification determines who is responsible for employer-side payroll obligations. Under W2, the practice pays employer-side payroll costs. Under 1099, those costs are generally shifted to the clinician through self-employment tax responsibility.”
+
+Show a simplified table:
+
+W2 vs 1099:
+- Compensation
+- Employee payroll tax estimate
+- Employer-side tax paid by practice
+- Additional employer-side tax assumed by clinician
+- Estimated compensation after payroll taxes
+
+Use language carefully:
+Do not say this is final tax advice.
+Label all tax outputs as estimates.
+
+Tab 7: PDF Export
+
+Purpose:
+Allow the user to export clean PDFs.
+
+Export Types:
+
+1. Internal Scenario Report
+Includes:
+- Business goal
+- Scenario summary
+- All clinicians
+- Practice net
+- Goal gap
+- Employer obligations
+- Notes
+
+2. Clinician Offer Summary
+Includes:
+- Clinician production assumptions
+- Compensation formula
+- Estimated compensation
+- W2 vs 1099 tax responsibility explanation
+- Estimated payroll tax impact
+- Plain-language summary
+- Hide business-sensitive goals unless user chooses to include them
+
+3. Scenario Comparison Report
+Includes:
+- Side-by-side comparison of selected scenarios
+- Key differences
+- Goal achievement status
+
+PDFs should be professional, simple, and easy to read.
+
+Calculation Requirements
+
+Annual Sessions =
+Sessions Per Week * Weeks Worked Per Year
+
+Annual Production =
+Annual Sessions * Session Rate
+
+Practice Revenue Before Cap =
+Session Rate * Practice Pre-Cap Split
+
+Sessions To Cap =
+Cap Amount / Practice Revenue Per Session Before Cap
+
+If cap is off:
+Use same split for all sessions.
+
+If cap is on:
+Pre-Cap Sessions =
+MIN(Annual Sessions, Sessions To Cap)
+
+Post-Cap Sessions =
+MAX(0, Annual Sessions - Sessions To Cap)
+
+Clinician Compensation =
+(Pre-Cap Sessions * Session Rate * Pre-Cap Clinician Split)
++
+(Post-Cap Sessions * Session Rate * Post-Cap Clinician Split)
+
+Practice Gross Revenue =
+(Pre-Cap Sessions * Session Rate * Pre-Cap Practice Split)
++
+(Post-Cap Sessions * Session Rate * Post-Cap Practice Split)
+
+Employer Obligations Paid By Practice =
+If W2:
+Clinician Compensation * Total Employer Burden %
+If 1099:
+0
+
+Total Employer Burden % =
+W2 Employer FICA %
++ FUTA/SUTA %
++ Workers Comp %
++ Other Employer Burden %
+
+Practice Net Before General Practice Overhead =
+Practice Gross Revenue - Employer Obligations Paid By Practice
+
+Clinician Payroll Tax Estimate:
+For W2:
+Clinician Compensation * Employee FICA %
+For 1099:
+Clinician Compensation * Self Employment Tax %
+Default Employee FICA = 7.65%
+Default Self Employment Tax = 15.3%
+
+Estimated Compensation After Payroll Taxes =
+Clinician Compensation - Clinician Payroll Tax Estimate
+
+Important:
+This is not full take-home pay. Do not include federal income tax, state income tax, deductions, retirement, or itemized tax planning unless added later. Label this as “After Payroll Taxes Only.”
+
+UX Requirements
+
+The app should be extremely user-friendly.
+
+Design principles:
+- One screen answers one question
+- Use cards instead of dense spreadsheets
+- Use clear labels
+- Use tooltips for confusing concepts
+- Use green, yellow, and red indicators
+- Avoid clutter
+- Keep clinician-facing views clean
+- Keep owner-only views separate
+
+Required tooltips:
+- Annual Production: total revenue generated before compensation split
+- Clinician Compensation: amount paid to clinician before income taxes
+- Employer Obligations: employment-related costs paid by the practice for W2 clinicians
+- Practice Net: practice revenue after clinician compensation and employer obligations, before general overhead
+- Payroll Tax Estimate: estimate of payroll taxes only, not total tax liability
+- Cap: amount the practice receives before post-cap split begins
+
+Data Requirements
+
+Use local app state or simple database storage so users can save:
+- Business goals
+- Current reality profile
+- Clinician profiles
+- Scenarios
+- Scenario comparisons
+
+Use persistent storage if available.
+
+Include seed/demo data but do not use real business names, real clinician names, or real branding.
+
+Use placeholder labels only:
+- Clinician A
+- Clinician B
+- Scenario 1
+- Scenario 2
+- Practice Owner
+- Second Owner
+
+Do not include any real company branding.
+
+Default Assumptions
+
+Use these defaults:
+- Session Rate: $175
+- Sessions Per Week: 20
+- Weeks Worked Per Year: 48
+- Cap: $50,000
+- W2 Employer FICA: 7.65%
+- FUTA/SUTA: 1.0%
+- Workers Comp: 0.5%
+- Other Employer Burden: 0%
+- Employee FICA: 7.65%
+- Self Employment Tax: 15.3%
+- Default 1099 model: 60/40 pre-cap, 95/5 post-cap
+- Default W2 model: 60/40 pre-cap, 75/25 post-cap
+
+Important Conceptual Requirement
+
+The app must separate:
+1. Compensation formula
+2. Employment classification
+3. Tax responsibility
+4. Practice net
+
+Do not make the mistake of treating W2 and 1099 compensation as automatically different.
+
+The app should allow compensation to be the same or different depending on the scenario inputs.
+
+The user should be able to demonstrate:
+- Same production
+- Same compensation
+- Different payroll tax responsibility
+- Different practice employer obligations
+- Different practice net
+
+Non-Negotiable Features
+
+Must include:
+- Business goal planner
+- Current reality view
+- Team builder
+- Scenario builder
+- Different clinicians with different splits and classifications inside one scenario
+- W2 and 1099 comparison
+- Clinician payroll tax burden estimate
+- Practice employer obligation estimate
+- Scenario comparison
+- Clinician impact view
+- PDF export
+- Editable assumptions
+- Saved scenarios
+- Duplicate scenario function
+- No AI features in version 1
+
+Do not build:
+- AI advisor
+- Payroll integration
+- QuickBooks integration
+- Tax filing tools
+- User accounts unless needed
+- Client data tracking
+- Protected health information fields
+- CRM features
+
+Final Output
+
+Build a working web app with clean navigation, editable data, saved scenarios, accurate calculations, and PDF export.
+
+After building, provide:
+1. A summary of what was built
+2. A list of any assumptions made
+3. A list of features not yet built
+4. Instructions for how to test the calculator
+5. Any known limitations

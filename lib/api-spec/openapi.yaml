@@ -1,0 +1,1612 @@
+openapi: 3.1.0
+info:
+  # Do not change the title, if the title changes, the import paths will be broken
+  title: Api
+  version: 0.1.0
+  description: Compensation Strategy Dashboard API
+servers:
+  - url: /api
+    description: Base API path
+tags:
+  - name: health
+    description: Health operations
+  - name: businessGoals
+    description: Business goal profiles
+  - name: currentReality
+    description: Current reality profile
+  - name: clinicians
+    description: Clinician profiles
+  - name: scenarios
+    description: Practice scenarios
+  - name: scenarioClinicians
+    description: Clinicians within a scenario
+  - name: staff
+    description: Non-clinician staff members
+  - name: scenarioStaff
+    description: Non-clinician staff within a scenario
+
+paths:
+  /healthz:
+    get:
+      operationId: healthCheck
+      tags: [health]
+      summary: Health check
+      responses:
+        "200":
+          description: Healthy
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HealthStatus"
+
+  # ─────────────────────────────────────────
+  # Business Goals
+  # ─────────────────────────────────────────
+  /business-goals:
+    get:
+      operationId: listBusinessGoals
+      tags: [businessGoals]
+      summary: List all business goal profiles
+      responses:
+        "200":
+          description: List of business goals
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/BusinessGoal"
+    post:
+      operationId: createBusinessGoal
+      tags: [businessGoals]
+      summary: Create a new business goal profile
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/BusinessGoalInput"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BusinessGoal"
+
+  /business-goals/{id}:
+    get:
+      operationId: getBusinessGoal
+      tags: [businessGoals]
+      summary: Get a business goal by ID
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Business goal
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BusinessGoal"
+        "404":
+          description: Not found
+    patch:
+      operationId: updateBusinessGoal
+      tags: [businessGoals]
+      summary: Update a business goal
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/BusinessGoalUpdate"
+      responses:
+        "200":
+          description: Updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BusinessGoal"
+        "404":
+          description: Not found
+    delete:
+      operationId: deleteBusinessGoal
+      tags: [businessGoals]
+      summary: Delete a business goal
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "204":
+          description: Deleted
+        "404":
+          description: Not found
+
+  /business-goals/{id}/duplicate:
+    post:
+      operationId: duplicateBusinessGoal
+      tags: [businessGoals]
+      summary: Duplicate a business goal
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "201":
+          description: Duplicated goal
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BusinessGoal"
+
+  # ─────────────────────────────────────────
+  # Current Reality
+  # ─────────────────────────────────────────
+  /current-reality:
+    get:
+      operationId: getCurrentReality
+      tags: [currentReality]
+      summary: Get the current reality profile
+      responses:
+        "200":
+          description: Current reality
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CurrentReality"
+        "404":
+          description: Not set yet
+    put:
+      operationId: upsertCurrentReality
+      tags: [currentReality]
+      summary: Create or update the current reality profile
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CurrentRealityInput"
+      responses:
+        "200":
+          description: Updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CurrentReality"
+
+  # ─────────────────────────────────────────
+  # Clinicians
+  # ─────────────────────────────────────────
+  /clinicians:
+    get:
+      operationId: listClinicians
+      tags: [clinicians]
+      summary: List all clinician profiles
+      parameters:
+        - name: goalId
+          in: query
+          required: false
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: List of clinicians
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Clinician"
+    post:
+      operationId: createClinician
+      tags: [clinicians]
+      summary: Create a clinician profile
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ClinicianInput"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Clinician"
+
+  /clinicians/copy-to-goal:
+    post:
+      operationId: copyClinicianToGoal
+      tags: [clinicians]
+      summary: Copy clinicians to a different goal
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [ids, toGoalId]
+              properties:
+                ids:
+                  type: array
+                  items:
+                    type: integer
+                toGoalId:
+                  type: integer
+      responses:
+        "201":
+          description: Copied clinicians
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Clinician"
+
+  /clinicians/{id}:
+    get:
+      operationId: getClinician
+      tags: [clinicians]
+      summary: Get a clinician by ID
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Clinician
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Clinician"
+        "404":
+          description: Not found
+    patch:
+      operationId: updateClinician
+      tags: [clinicians]
+      summary: Update a clinician
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ClinicianUpdate"
+      responses:
+        "200":
+          description: Updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Clinician"
+        "404":
+          description: Not found
+    delete:
+      operationId: deleteClinician
+      tags: [clinicians]
+      summary: Delete a clinician
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "204":
+          description: Deleted
+        "404":
+          description: Not found
+
+  /clinicians/{id}/duplicate:
+    post:
+      operationId: duplicateClinician
+      tags: [clinicians]
+      summary: Duplicate a clinician
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "201":
+          description: Duplicated clinician
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Clinician"
+
+  # ─────────────────────────────────────────
+  # Scenarios
+  # ─────────────────────────────────────────
+  /scenarios:
+    get:
+      operationId: listScenarios
+      tags: [scenarios]
+      summary: List all scenarios
+      responses:
+        "200":
+          description: List of scenarios
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Scenario"
+    post:
+      operationId: createScenario
+      tags: [scenarios]
+      summary: Create a scenario
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ScenarioInput"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Scenario"
+
+  /scenarios/{id}:
+    get:
+      operationId: getScenario
+      tags: [scenarios]
+      summary: Get a scenario by ID (with clinicians)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Scenario with clinicians
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ScenarioDetail"
+        "404":
+          description: Not found
+    patch:
+      operationId: updateScenario
+      tags: [scenarios]
+      summary: Update a scenario
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ScenarioUpdate"
+      responses:
+        "200":
+          description: Updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Scenario"
+        "404":
+          description: Not found
+    delete:
+      operationId: deleteScenario
+      tags: [scenarios]
+      summary: Delete a scenario
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "204":
+          description: Deleted
+        "404":
+          description: Not found
+
+  /scenarios/{id}/duplicate:
+    post:
+      operationId: duplicateScenario
+      tags: [scenarios]
+      summary: Duplicate a scenario (including all its clinicians)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "201":
+          description: Duplicated scenario
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ScenarioDetail"
+
+  # ─────────────────────────────────────────
+  # Scenario Clinicians
+  # ─────────────────────────────────────────
+  /scenarios/{scenarioId}/clinicians:
+    get:
+      operationId: listScenarioClinicians
+      tags: [scenarioClinicians]
+      summary: List all clinicians in a scenario
+      parameters:
+        - name: scenarioId
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: List of scenario clinicians
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ScenarioClinician"
+    post:
+      operationId: addScenarioClinician
+      tags: [scenarioClinicians]
+      summary: Add a clinician to a scenario
+      parameters:
+        - name: scenarioId
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ScenarioClinicianInput"
+      responses:
+        "201":
+          description: Added
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ScenarioClinician"
+
+  /scenarios/{scenarioId}/clinicians/{id}:
+    patch:
+      operationId: updateScenarioClinician
+      tags: [scenarioClinicians]
+      summary: Update a clinician's settings within a scenario
+      parameters:
+        - name: scenarioId
+          in: path
+          required: true
+          schema:
+            type: integer
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ScenarioClinicianUpdate"
+      responses:
+        "200":
+          description: Updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ScenarioClinician"
+        "404":
+          description: Not found
+    delete:
+      operationId: removeScenarioClinician
+      tags: [scenarioClinicians]
+      summary: Remove a clinician from a scenario
+      parameters:
+        - name: scenarioId
+          in: path
+          required: true
+          schema:
+            type: integer
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "204":
+          description: Removed
+        "404":
+          description: Not found
+
+  /scenarios/{scenarioId}/clinicians/{id}/duplicate:
+    post:
+      operationId: duplicateScenarioClinician
+      tags: [scenarioClinicians]
+      summary: Duplicate a clinician within a scenario
+      parameters:
+        - name: scenarioId
+          in: path
+          required: true
+          schema:
+            type: integer
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "201":
+          description: Duplicated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ScenarioClinician"
+
+  # ─────────────────────────────────────────
+  # Staff Members
+  # ─────────────────────────────────────────
+  /staff:
+    get:
+      operationId: listStaffMembers
+      tags: [staff]
+      summary: List all non-clinician staff members
+      parameters:
+        - name: goalId
+          in: query
+          required: false
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: List of staff members
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/StaffMember"
+    post:
+      operationId: createStaffMember
+      tags: [staff]
+      summary: Create a staff member
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/StaffMemberInput"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/StaffMember"
+
+  /staff/{id}:
+    get:
+      operationId: getStaffMember
+      tags: [staff]
+      summary: Get a staff member by ID
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Staff member
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/StaffMember"
+        "404":
+          description: Not found
+    patch:
+      operationId: updateStaffMember
+      tags: [staff]
+      summary: Update a staff member
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/StaffMemberUpdate"
+      responses:
+        "200":
+          description: Updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/StaffMember"
+        "404":
+          description: Not found
+    delete:
+      operationId: deleteStaffMember
+      tags: [staff]
+      summary: Delete a staff member
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "204":
+          description: Deleted
+        "404":
+          description: Not found
+
+  # ─────────────────────────────────────────
+  # Scenario Staff Members
+  # ─────────────────────────────────────────
+  /scenarios/{scenarioId}/staff:
+    get:
+      operationId: listScenarioStaff
+      tags: [scenarioStaff]
+      summary: List all staff members in a scenario
+      parameters:
+        - name: scenarioId
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: List of scenario staff members
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ScenarioStaffMember"
+    post:
+      operationId: addScenarioStaffMember
+      tags: [scenarioStaff]
+      summary: Add a staff member to a scenario
+      parameters:
+        - name: scenarioId
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ScenarioStaffMemberInput"
+      responses:
+        "201":
+          description: Added
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ScenarioStaffMember"
+
+  /scenarios/{scenarioId}/staff/{id}:
+    patch:
+      operationId: updateScenarioStaffMember
+      tags: [scenarioStaff]
+      summary: Update a staff member's settings within a scenario
+      parameters:
+        - name: scenarioId
+          in: path
+          required: true
+          schema:
+            type: integer
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ScenarioStaffMemberUpdate"
+      responses:
+        "200":
+          description: Updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ScenarioStaffMember"
+        "404":
+          description: Not found
+    delete:
+      operationId: removeScenarioStaffMember
+      tags: [scenarioStaff]
+      summary: Remove a staff member from a scenario
+      parameters:
+        - name: scenarioId
+          in: path
+          required: true
+          schema:
+            type: integer
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "204":
+          description: Removed
+        "404":
+          description: Not found
+
+components:
+  schemas:
+    HealthStatus:
+      type: object
+      properties:
+        status:
+          type: string
+      required:
+        - status
+
+    # ─── Business Goal ───────────────────────
+    BusinessGoal:
+      type: object
+      required:
+        - id
+        - name
+        - timeHorizon
+        - ownerPayGoal
+        - secondOwnerPayGoal
+        - annualOverheadGoal
+        - businessProfitGoal
+        - buildingFundGoal
+        - emergencyReserveGoal
+        - growthFundGoal
+        - desiredCliniciansCount
+        - desiredOwnerClinicalCaseload
+        - notes
+        - createdAt
+        - updatedAt
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        timeHorizon:
+          type: string
+          enum: [1year, 3year, 5year, 10year]
+        ownerPayGoal:
+          type: number
+        secondOwnerPayGoal:
+          type: number
+        annualOverheadGoal:
+          type: number
+        businessProfitGoal:
+          type: number
+        buildingFundGoal:
+          type: number
+        emergencyReserveGoal:
+          type: number
+        growthFundGoal:
+          type: number
+        desiredCliniciansCount:
+          type: integer
+        desiredOwnerClinicalCaseload:
+          type: integer
+        notes:
+          type: ["string", "null"]
+        createdAt:
+          type: string
+        updatedAt:
+          type: string
+
+    BusinessGoalInput:
+      type: object
+      required:
+        - name
+      properties:
+        name:
+          type: string
+        timeHorizon:
+          type: string
+          enum: [1year, 3year, 5year, 10year]
+        ownerPayGoal:
+          type: number
+        secondOwnerPayGoal:
+          type: number
+        annualOverheadGoal:
+          type: number
+        businessProfitGoal:
+          type: number
+        buildingFundGoal:
+          type: number
+        emergencyReserveGoal:
+          type: number
+        growthFundGoal:
+          type: number
+        desiredCliniciansCount:
+          type: integer
+        desiredOwnerClinicalCaseload:
+          type: integer
+        notes:
+          type: string
+
+    BusinessGoalUpdate:
+      type: object
+      properties:
+        name:
+          type: string
+        timeHorizon:
+          type: string
+          enum: [1year, 3year, 5year, 10year]
+        ownerPayGoal:
+          type: number
+        secondOwnerPayGoal:
+          type: number
+        annualOverheadGoal:
+          type: number
+        businessProfitGoal:
+          type: number
+        buildingFundGoal:
+          type: number
+        emergencyReserveGoal:
+          type: number
+        growthFundGoal:
+          type: number
+        desiredCliniciansCount:
+          type: integer
+        desiredOwnerClinicalCaseload:
+          type: integer
+        notes:
+          type: string
+
+    # ─── Current Reality ─────────────────────
+    CurrentReality:
+      type: object
+      required:
+        - id
+        - currentOwnerPay
+        - currentSecondOwnerPay
+        - currentAnnualOverhead
+        - currentBusinessProfit
+        - currentCashReserve
+        - currentBuildingFund
+        - currentCliniciansCount
+        - currentAvgSessionRate
+        - currentAvgSessionsPerWeek
+        - currentAvgWeeksWorkedPerYear
+        - updatedAt
+      properties:
+        id:
+          type: integer
+        currentOwnerPay:
+          type: number
+        currentSecondOwnerPay:
+          type: number
+        currentAnnualOverhead:
+          type: number
+        currentBusinessProfit:
+          type: number
+        currentCashReserve:
+          type: number
+        currentBuildingFund:
+          type: number
+        currentCliniciansCount:
+          type: integer
+        currentAvgSessionRate:
+          type: number
+        currentAvgSessionsPerWeek:
+          type: number
+        currentAvgWeeksWorkedPerYear:
+          type: number
+        updatedAt:
+          type: string
+
+    CurrentRealityInput:
+      type: object
+      properties:
+        currentOwnerPay:
+          type: number
+        currentSecondOwnerPay:
+          type: number
+        currentAnnualOverhead:
+          type: number
+        currentBusinessProfit:
+          type: number
+        currentCashReserve:
+          type: number
+        currentBuildingFund:
+          type: number
+        currentCliniciansCount:
+          type: integer
+        currentAvgSessionRate:
+          type: number
+        currentAvgSessionsPerWeek:
+          type: number
+        currentAvgWeeksWorkedPerYear:
+          type: number
+
+    # ─── Clinician ───────────────────────────
+    Clinician:
+      type: object
+      required:
+        - id
+        - label
+        - roleType
+        - classification
+        - sessionRate
+        - sessionsPerWeek
+        - weeksWorkedPerYear
+        - preCapClinicianSplit
+        - preCapPracticeSplit
+        - capEnabled
+        - capAmount
+        - postCapClinicianSplit
+        - postCapPracticeSplit
+        - w2EmployerFicaPct
+        - futaSutaPct
+        - workersCompPct
+        - otherEmployerBurdenPct
+        - nonClinicalHoursPerWeek
+        - nonClinicalHourlyRate
+        - createdAt
+        - updatedAt
+      properties:
+        id:
+          type: integer
+        label:
+          type: string
+        roleType:
+          type: string
+          enum: [senior_clinician, associate, owner, contractor, other]
+        classification:
+          type: string
+          enum: [w2, 1099, owner, other]
+        sessionRate:
+          type: number
+        sessionsPerWeek:
+          type: number
+        weeksWorkedPerYear:
+          type: number
+        preCapClinicianSplit:
+          type: number
+        preCapPracticeSplit:
+          type: number
+        capEnabled:
+          type: boolean
+        capAmount:
+          type: number
+        postCapClinicianSplit:
+          type: number
+        postCapPracticeSplit:
+          type: number
+        w2EmployerFicaPct:
+          type: number
+        futaSutaPct:
+          type: number
+        workersCompPct:
+          type: number
+        otherEmployerBurdenPct:
+          type: number
+        nonClinicalHoursPerWeek:
+          type: number
+        nonClinicalHourlyRate:
+          type: number
+        goalId:
+          type: ["integer", "null"]
+        notes:
+          type: ["string", "null"]
+        createdAt:
+          type: string
+        updatedAt:
+          type: string
+
+    ClinicianInput:
+      type: object
+      required:
+        - label
+      properties:
+        goalId:
+          type: integer
+        label:
+          type: string
+        roleType:
+          type: string
+          enum: [senior_clinician, associate, owner, contractor, other]
+        classification:
+          type: string
+          enum: [w2, 1099, owner, other]
+        sessionRate:
+          type: number
+        sessionsPerWeek:
+          type: number
+        weeksWorkedPerYear:
+          type: number
+        preCapClinicianSplit:
+          type: number
+        preCapPracticeSplit:
+          type: number
+        capEnabled:
+          type: boolean
+        capAmount:
+          type: number
+        postCapClinicianSplit:
+          type: number
+        postCapPracticeSplit:
+          type: number
+        w2EmployerFicaPct:
+          type: number
+        futaSutaPct:
+          type: number
+        workersCompPct:
+          type: number
+        otherEmployerBurdenPct:
+          type: number
+        nonClinicalHoursPerWeek:
+          type: number
+        nonClinicalHourlyRate:
+          type: number
+        notes:
+          type: string
+
+    ClinicianUpdate:
+      type: object
+      properties:
+        label:
+          type: string
+        roleType:
+          type: string
+          enum: [senior_clinician, associate, owner, contractor, other]
+        classification:
+          type: string
+          enum: [w2, 1099, owner, other]
+        sessionRate:
+          type: number
+        sessionsPerWeek:
+          type: number
+        weeksWorkedPerYear:
+          type: number
+        preCapClinicianSplit:
+          type: number
+        preCapPracticeSplit:
+          type: number
+        capEnabled:
+          type: boolean
+        capAmount:
+          type: number
+        postCapClinicianSplit:
+          type: number
+        postCapPracticeSplit:
+          type: number
+        w2EmployerFicaPct:
+          type: number
+        futaSutaPct:
+          type: number
+        workersCompPct:
+          type: number
+        otherEmployerBurdenPct:
+          type: number
+        nonClinicalHoursPerWeek:
+          type: number
+        nonClinicalHourlyRate:
+          type: number
+        notes:
+          type: string
+
+    # ─── Scenario ────────────────────────────
+    Scenario:
+      type: object
+      required:
+        - id
+        - name
+        - notes
+        - businessGoalId
+        - createdAt
+        - updatedAt
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        notes:
+          type: ["string", "null"]
+        businessGoalId:
+          type: ["integer", "null"]
+        createdAt:
+          type: string
+        updatedAt:
+          type: string
+
+    ScenarioDetail:
+      type: object
+      required:
+        - id
+        - name
+        - notes
+        - businessGoalId
+        - clinicians
+        - staffMembers
+        - createdAt
+        - updatedAt
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        notes:
+          type: ["string", "null"]
+        businessGoalId:
+          type: ["integer", "null"]
+        clinicians:
+          type: array
+          items:
+            $ref: "#/components/schemas/ScenarioClinician"
+        staffMembers:
+          type: array
+          items:
+            $ref: "#/components/schemas/ScenarioStaffMember"
+        createdAt:
+          type: string
+        updatedAt:
+          type: string
+
+    ScenarioInput:
+      type: object
+      required:
+        - name
+      properties:
+        name:
+          type: string
+        notes:
+          type: string
+        businessGoalId:
+          type: integer
+
+    ScenarioUpdate:
+      type: object
+      properties:
+        name:
+          type: string
+        notes:
+          type: string
+        businessGoalId:
+          type: ["integer", "null"]
+
+    # ─── Scenario Clinician ───────────────────
+    ScenarioClinician:
+      type: object
+      required:
+        - id
+        - scenarioId
+        - label
+        - roleType
+        - classification
+        - sessionRate
+        - sessionsPerWeek
+        - weeksWorkedPerYear
+        - preCapClinicianSplit
+        - preCapPracticeSplit
+        - capEnabled
+        - capAmount
+        - postCapClinicianSplit
+        - postCapPracticeSplit
+        - w2EmployerFicaPct
+        - futaSutaPct
+        - workersCompPct
+        - otherEmployerBurdenPct
+        - createdAt
+        - updatedAt
+      properties:
+        id:
+          type: integer
+        scenarioId:
+          type: integer
+        sourceCliniciánId:
+          type: ["integer", "null"]
+        label:
+          type: string
+        roleType:
+          type: string
+          enum: [senior_clinician, associate, owner, contractor, other]
+        classification:
+          type: string
+          enum: [w2, 1099, owner, other]
+        sessionRate:
+          type: number
+        sessionsPerWeek:
+          type: number
+        weeksWorkedPerYear:
+          type: number
+        preCapClinicianSplit:
+          type: number
+        preCapPracticeSplit:
+          type: number
+        capEnabled:
+          type: boolean
+        capAmount:
+          type: number
+        postCapClinicianSplit:
+          type: number
+        postCapPracticeSplit:
+          type: number
+        w2EmployerFicaPct:
+          type: number
+        futaSutaPct:
+          type: number
+        workersCompPct:
+          type: number
+        otherEmployerBurdenPct:
+          type: number
+        notes:
+          type: ["string", "null"]
+        createdAt:
+          type: string
+        updatedAt:
+          type: string
+
+    ScenarioClinicianInput:
+      type: object
+      required:
+        - label
+      properties:
+        sourceCliniciánId:
+          type: integer
+        label:
+          type: string
+        roleType:
+          type: string
+          enum: [senior_clinician, associate, owner, contractor, other]
+        classification:
+          type: string
+          enum: [w2, 1099, owner, other]
+        sessionRate:
+          type: number
+        sessionsPerWeek:
+          type: number
+        weeksWorkedPerYear:
+          type: number
+        preCapClinicianSplit:
+          type: number
+        preCapPracticeSplit:
+          type: number
+        capEnabled:
+          type: boolean
+        capAmount:
+          type: number
+        postCapClinicianSplit:
+          type: number
+        postCapPracticeSplit:
+          type: number
+        w2EmployerFicaPct:
+          type: number
+        futaSutaPct:
+          type: number
+        workersCompPct:
+          type: number
+        otherEmployerBurdenPct:
+          type: number
+        notes:
+          type: string
+
+    ScenarioClinicianUpdate:
+      type: object
+      properties:
+        label:
+          type: string
+        roleType:
+          type: string
+          enum: [senior_clinician, associate, owner, contractor, other]
+        classification:
+          type: string
+          enum: [w2, 1099, owner, other]
+        sessionRate:
+          type: number
+        sessionsPerWeek:
+          type: number
+        weeksWorkedPerYear:
+          type: number
+        preCapClinicianSplit:
+          type: number
+        preCapPracticeSplit:
+          type: number
+        capEnabled:
+          type: boolean
+        capAmount:
+          type: number
+        postCapClinicianSplit:
+          type: number
+        postCapPracticeSplit:
+          type: number
+        w2EmployerFicaPct:
+          type: number
+        futaSutaPct:
+          type: number
+        workersCompPct:
+          type: number
+        otherEmployerBurdenPct:
+          type: number
+        notes:
+          type: string
+
+    # ─── Staff Member ─────────────────────────
+    StaffMember:
+      type: object
+      required:
+        - id
+        - label
+        - roleType
+        - classification
+        - weeksPerYear
+        - w2EmployerFicaPct
+        - futaSutaPct
+        - workersCompPct
+        - otherEmployerBurdenPct
+        - annualSalary
+        - hourlyRate
+        - hoursPerWeek
+        - goalId
+        - notes
+        - createdAt
+        - updatedAt
+      properties:
+        id:
+          type: integer
+        goalId:
+          type: ["integer", "null"]
+        label:
+          type: string
+        roleType:
+          type: string
+          enum: [admin, billing, front_desk, other]
+        classification:
+          type: string
+          enum: [w2, contractor]
+        annualSalary:
+          type: ["number", "null"]
+        hourlyRate:
+          type: ["number", "null"]
+        hoursPerWeek:
+          type: ["number", "null"]
+        weeksPerYear:
+          type: number
+        w2EmployerFicaPct:
+          type: number
+        futaSutaPct:
+          type: number
+        workersCompPct:
+          type: number
+        otherEmployerBurdenPct:
+          type: number
+        notes:
+          type: ["string", "null"]
+        createdAt:
+          type: string
+        updatedAt:
+          type: string
+
+    StaffMemberInput:
+      type: object
+      required:
+        - label
+      properties:
+        goalId:
+          type: integer
+        label:
+          type: string
+        roleType:
+          type: string
+          enum: [admin, billing, front_desk, other]
+        classification:
+          type: string
+          enum: [w2, contractor]
+        annualSalary:
+          type: number
+        hourlyRate:
+          type: number
+        hoursPerWeek:
+          type: number
+        weeksPerYear:
+          type: number
+        w2EmployerFicaPct:
+          type: number
+        futaSutaPct:
+          type: number
+        workersCompPct:
+          type: number
+        otherEmployerBurdenPct:
+          type: number
+        notes:
+          type: string
+
+    StaffMemberUpdate:
+      type: object
+      properties:
+        label:
+          type: string
+        roleType:
+          type: string
+          enum: [admin, billing, front_desk, other]
+        classification:
+          type: string
+          enum: [w2, contractor]
+        annualSalary:
+          type: number
+        hourlyRate:
+          type: number
+        hoursPerWeek:
+          type: number
+        weeksPerYear:
+          type: number
+        w2EmployerFicaPct:
+          type: number
+        futaSutaPct:
+          type: number
+        workersCompPct:
+          type: number
+        otherEmployerBurdenPct:
+          type: number
+        notes:
+          type: string
+
+    # ─── Scenario Staff Member ─────────────────
+    ScenarioStaffMember:
+      type: object
+      required:
+        - id
+        - scenarioId
+        - label
+        - roleType
+        - classification
+        - weeksPerYear
+        - w2EmployerFicaPct
+        - futaSutaPct
+        - workersCompPct
+        - otherEmployerBurdenPct
+        - annualSalary
+        - hourlyRate
+        - hoursPerWeek
+        - sourceStaffMemberId
+        - notes
+        - createdAt
+        - updatedAt
+      properties:
+        id:
+          type: integer
+        scenarioId:
+          type: integer
+        sourceStaffMemberId:
+          type: ["integer", "null"]
+        label:
+          type: string
+        roleType:
+          type: string
+          enum: [admin, billing, front_desk, other]
+        classification:
+          type: string
+          enum: [w2, contractor]
+        annualSalary:
+          type: ["number", "null"]
+        hourlyRate:
+          type: ["number", "null"]
+        hoursPerWeek:
+          type: ["number", "null"]
+        weeksPerYear:
+          type: number
+        w2EmployerFicaPct:
+          type: number
+        futaSutaPct:
+          type: number
+        workersCompPct:
+          type: number
+        otherEmployerBurdenPct:
+          type: number
+        notes:
+          type: ["string", "null"]
+        createdAt:
+          type: string
+        updatedAt:
+          type: string
+
+    ScenarioStaffMemberInput:
+      type: object
+      required:
+        - label
+      properties:
+        sourceStaffMemberId:
+          type: integer
+        label:
+          type: string
+        roleType:
+          type: string
+          enum: [admin, billing, front_desk, other]
+        classification:
+          type: string
+          enum: [w2, contractor]
+        annualSalary:
+          type: number
+        hourlyRate:
+          type: number
+        hoursPerWeek:
+          type: number
+        weeksPerYear:
+          type: number
+        w2EmployerFicaPct:
+          type: number
+        futaSutaPct:
+          type: number
+        workersCompPct:
+          type: number
+        otherEmployerBurdenPct:
+          type: number
+        notes:
+          type: string
+
+    ScenarioStaffMemberUpdate:
+      type: object
+      properties:
+        label:
+          type: string
+        roleType:
+          type: string
+          enum: [admin, billing, front_desk, other]
+        classification:
+          type: string
+          enum: [w2, contractor]
+        annualSalary:
+          type: number
+        hourlyRate:
+          type: number
+        hoursPerWeek:
+          type: number
+        weeksPerYear:
+          type: number
+        w2EmployerFicaPct:
+          type: number
+        futaSutaPct:
+          type: number
+        workersCompPct:
+          type: number
+        otherEmployerBurdenPct:
+          type: number
+        notes:
+          type: string
