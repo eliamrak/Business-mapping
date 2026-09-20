@@ -2,3 +2,4 @@
 - [Orval codegen conflict fix](orval-codegen-conflict.md) — api-zod/src/index.ts must only export from generated/api, not generated/types, to avoid dual-export conflicts on request body types.
 - [GitHub upload quirks](github-upload-quirks.md) — empty repos need a bootstrap commit; throttle connector blob uploads to avoid the 10-request-per-second limit.
 - [Clerk authorization model](clerk-authorization.md) — owner email maps to owner access; future invited emails map to hub roles while clinician presenter links stay public.
+- [Production schema publishing](production-schema-publishing.md) — managed production tables may lag development until the app is published; auth owner access must not depend on role-table availability.

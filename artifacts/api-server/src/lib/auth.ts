@@ -4,10 +4,11 @@ import {
   randomUUID,
 } from "node:crypto";
 import { Router, type RequestHandler } from "express";
-import { getAuth } from "@clerk/express";
+import { clerkClient, getAuth } from "@clerk/express";
 import { eq } from "drizzle-orm";
 import { db, hubUsersTable } from "@workspace/db";
 import { z } from "@workspace/practice";
+import { logger } from "./logger";
 
 const hash = (password: string) => {
   const salt = randomBytes(16).toString("hex");
@@ -33,16 +34,42 @@ export const requireAccess: RequestHandler = async (req, res, next) => {
       .json({ error: "Sign in to continue.", code: "SIGN_IN_REQUIRED" });
 
   const claims = auth.sessionClaims as Record<string, unknown> | null;
-  const email =
+  let email =
     typeof claims?.email === "string" ? claims.email.toLowerCase() : null;
+  if (!email) {
+    try {
+      const user = await clerkClient.users.getUser(auth.userId);
+      email = user.primaryEmailAddress?.emailAddress?.toLowerCase() ?? null;
+    } catch (err) {
+      logger.error({ err, userId: auth.userId }, "Failed to resolve Clerk user");
+      return res.status(503).json({
+        error: "Authentication is temporarily unavailable. Try again shortly.",
+        code: "AUTH_LOOKUP_FAILED",
+      });
+    }
+  }
   const ownerEmail = process.env.EMC_OWNER_EMAIL?.trim().toLowerCase();
+  if (!ownerEmail)
+    return res.status(503).json({
+      error: "The dashboard owner has not been configured.",
+      code: "AUTH_SETUP_REQUIRED",
+    });
   let role = "owner";
   let actor = email ?? auth.userId;
   if (!email || email !== ownerEmail) {
-    const [user] = await db
-      .select()
-      .from(hubUsersTable)
-      .where(eq(hubUsersTable.email, email ?? ""));
+    let user;
+    try {
+      [user] = await db
+        .select()
+        .from(hubUsersTable)
+        .where(eq(hubUsersTable.email, email ?? ""));
+    } catch (err) {
+      logger.warn(
+        { err, email },
+        "Could not check invited user because the authorization table is unavailable",
+      );
+      user = undefined;
+    }
     if (!user || user.disabled)
       return res.status(403).json({
         error: "This Google account has not been invited to the dashboard.",

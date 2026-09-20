@@ -137,12 +137,23 @@ function Router() {
 
 function SignInPage() {
   return (
-    <div className="flex min-h-[100dvh] items-center justify-center bg-background px-4">
-      <SignIn
-        routing="path"
-        path={`${basePath}/sign-in`}
-        signUpUrl={`${basePath}/sign-up`}
-      />
+    <div className="flex min-h-[100dvh] flex-col items-center justify-center gap-4 bg-background px-4">
+      <div>
+        <SignIn
+          routing="path"
+          path={`${basePath}/sign-in`}
+          signUpUrl={`${basePath}/sign-up`}
+        />
+      </div>
+      <p className="text-sm text-slate-600">
+        Need a new account?{" "}
+        <a
+          className="font-medium text-teal-700 underline underline-offset-4"
+          href={`${basePath}/sign-up`}
+        >
+          Create one
+        </a>
+      </p>
     </div>
   );
 }
