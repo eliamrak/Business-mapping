@@ -1001,6 +1001,7 @@ export function forecast(
       else if (kind === "tax") explicitTax += amount;
       else if (kind === "reserve") explicitReserves += amount;
       else if (kind === "owner") explicitOwner += amount;
+      else if (kind === "marketing") marketing += amount;
       else overhead += amount;
     }
     const oneTime = events
@@ -1178,7 +1179,7 @@ export function forecast(
       clinicianPay:
         "Existing compensation function with annual cap progression, effective terms and non-clinical pay; configured salary/hourly/session overrides apply.",
       overhead:
-        "Active recurring budget lines, prorated for effective dates, plus one-time events and hire support. Campaign spend and legacy staff payroll are separate.",
+        "Active non-marketing operating budget lines, prorated for effective dates, plus one-time events and hire support. Marketing and legacy staff payroll are separate.",
       profit:
         "Earned revenue + other income - clinician pay - employer burden - staff cost - overhead - marketing - fees - owner payroll/burden.",
       familyTakeHome:
@@ -1211,7 +1212,7 @@ export function forecast(
       staffCost:
         "Existing staff annual salary/hourly cost with payroll burden / 12. Only the selected compensation team is included.",
       marketing:
-        "Advertising spend plus campaign operating costs, prorated for active dates.",
+        "Advertising spend plus campaign operating costs and additional marketing-category budget lines, prorated for active dates. Budget lines are additive, not copies of campaign spend.",
       adSpend:
         "Campaign advertising budgets applied day by day, including dated proposed spend changes.",
       fees: "Cash collections x payment-processing percentage.",
@@ -1229,7 +1230,7 @@ export function forecast(
         "Cash operating profit less tax allocation, reserves and owner distributions.",
       breakEvenSessions:
         "Fixed overhead, support staff, owner payroll/burden and marketing divided by current contribution per session. This is a local-volume estimate.",
-      cac: "All current campaign costs / new clients reaching conversion this month; conversion delays can make month-to-month CAC uneven.",
+      cac: "All current marketing costs / new clients reaching conversion this month; conversion delays can make month-to-month CAC uneven.",
       cpl: "Advertising spend / modeled leads; zero or missing leads produce an unknown result.",
       attendance:
         "Manual attendance or completed / scheduled sessions in the selected historical window; missing historical data falls back to the stated manual assumption.",
@@ -1254,7 +1255,7 @@ export function forecast(
       .filter(
         (b) =>
           !b.planningOnly &&
-          ["expense", "facility", "marketing"].includes(
+          ["expense", "facility"].includes(
             workspace.categories.find((c) => c.id === b.categoryId)?.kind ??
               "expense",
           ),
@@ -1346,17 +1347,19 @@ export function observed(
   const transactions = workspace.transactions.filter((t) =>
     periods.some((p) => p.id === t.periodId),
   );
-  const overhead =
+  const expenseTotal = (kinds: string[]) =>
     periods.length && periods.every((p) => p.expensesComplete)
       ? transactions
           .filter((t) =>
-            ["expense", "facility", "marketing"].includes(
+            kinds.includes(
               workspace.categories.find((c) => c.id === t.categoryId)?.kind ??
                 "",
             ),
           )
           .reduce((n, t) => n + t.amount, 0)
       : null;
+  const overhead = expenseTotal(["expense", "facility"]),
+    marketing = expenseTotal(["marketing"]);
   const selected = context.clinicians.filter((c) =>
     workspace.settings.teamId === null
       ? c.goalId == null
@@ -1388,10 +1391,16 @@ export function observed(
     owner = sum("ownerPay"),
     distribution = sum("distributions"),
     ownerClinical = sum("ownerClinicalPay");
-  const profit = [revenue, pay, burden, staff, owner, overhead].every(
-    (x) => x !== null,
-  )
-    ? revenue! - pay! - burden! - staff! - owner! - overhead!
+  const profit = [
+    revenue,
+    pay,
+    burden,
+    staff,
+    owner,
+    overhead,
+    marketing,
+  ].every((x) => x !== null)
+    ? revenue! - pay! - burden! - staff! - owner! - overhead! - marketing!
     : null;
   const values = calculateCustomKpis(
     workspace,
@@ -1414,7 +1423,7 @@ export function observed(
       distributions: distribution,
       taxReserve: sum("taxes"),
       reserves: sum("reserves"),
-      marketing: fs("spend"),
+      marketing,
       leads: fs("leads"),
       clients: fs("clients"),
       consultations: fs("scheduled"),
@@ -1424,9 +1433,7 @@ export function observed(
           ? fs("spend")! / fs("leads")!
           : null,
       cac:
-        fs("spend") !== null && fs("clients")
-          ? fs("spend")! / fs("clients")!
-          : null,
+        marketing !== null && fs("clients") ? marketing / fs("clients")! : null,
       consultationPct:
         fs("scheduled") !== null && fs("leads")
           ? (fs("scheduled")! / fs("leads")!) * 100
@@ -1607,7 +1614,7 @@ export function evaluateObservedRules(workspace: Workspace, context: Context) {
       .filter(
         (b) =>
           !b.planningOnly &&
-          ["expense", "facility", "marketing"].includes(
+          ["expense", "facility"].includes(
             workspace.categories.find((c) => c.id === b.categoryId)?.kind ??
               "expense",
           ),

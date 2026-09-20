@@ -14,6 +14,8 @@ import {
   campaignSchema,
   campaignEconomics,
   periodSchema,
+  transactionSchema,
+  observed,
   funnelSchema,
   customKpiSchema,
   calculateCustomKpis,
@@ -64,6 +66,121 @@ const setup = () => {
   });
   return w;
 };
+test("actual and forecast marketing costs stay separate from overhead without changing total profit", () => {
+  const w = setup(),
+    end = "2026-01-31";
+  const rent = categorySchema.parse({
+    id: id(),
+    name: "Rent",
+    kind: "facility",
+  });
+  const ads = categorySchema.parse({
+    id: id(),
+    name: "Marketing",
+    kind: "marketing",
+  });
+  w.categories.push(rent, ads);
+  w.budgets.push(
+    budgetSchema.parse({
+      id: id(),
+      name: "Rent",
+      categoryId: rent.id,
+      start,
+      cadence: "monthly",
+      amount: 500,
+    }),
+    budgetSchema.parse({
+      id: id(),
+      name: "Creative services",
+      categoryId: ads.id,
+      start,
+      cadence: "monthly",
+      amount: 100,
+    }),
+  );
+  const campaign = campaignSchema.parse({
+    id: id(),
+    name: "Test campaign",
+    source: "Search",
+    method: "cpl",
+    start,
+    monthlySpend: 200,
+  });
+  w.campaigns.push(campaign);
+  const projected = forecast(w, context)[0];
+  assert.equal(projected.values.overhead, 500);
+  assert.equal(projected.budgetValues?.overhead, 500);
+  assert.ok(Math.abs(projected.values.marketing! - 300) < 1e-8);
+  assert.ok(Math.abs(projected.values.adSpend! - 200) < 1e-8);
+  assert.ok(
+    Math.abs(
+      projected.values.profit! -
+        (projected.values.revenue! -
+          projected.values.clinicianPay! -
+          projected.values.employerBurden! -
+          projected.values.staffCost! -
+          800 -
+          projected.values.fees! -
+          projected.values.ownerPayroll!),
+    ) < 1e-8,
+  );
+  const period = periodSchema.parse({
+    id: id(),
+    name: "January",
+    start,
+    end,
+    status: "finalized",
+    expensesComplete: true,
+    earnedRevenue: 1000,
+    revenue: 1000,
+    clinicianPay: 100,
+    employerBurden: 0,
+    staffPay: 0,
+    ownerPay: 0,
+  });
+  w.periods.push(period);
+  w.transactions.push(
+    transactionSchema.parse({
+      id: id(),
+      periodId: period.id,
+      categoryId: rent.id,
+      date: start,
+      description: "Rent",
+      amount: 500,
+    }),
+    transactionSchema.parse({
+      id: id(),
+      periodId: period.id,
+      categoryId: ads.id,
+      date: start,
+      description: "Advertising and creative services",
+      amount: 300,
+    }),
+  );
+  w.funnels.push(
+    funnelSchema.parse({
+      id: id(),
+      periodId: period.id,
+      campaignId: campaign.id,
+      spend: 200,
+      leads: 10,
+      scheduled: 5,
+      attended: 5,
+      clients: 2,
+      firstSessions: 2,
+    }),
+  );
+  const actual = observed(w, context, start, end).values;
+  assert.equal(actual.overhead, 500);
+  assert.equal(actual.marketing, 300);
+  assert.equal(actual.adSpend, 200);
+  assert.equal(actual.cpl, 20);
+  assert.equal(actual.cac, 150);
+  assert.equal(actual.profit, 100);
+  period.expensesComplete = false;
+  assert.equal(observed(w, context, start, end).values.marketing, null);
+  assert.equal(observed(w, context, start, end).values.adSpend, 200);
+});
 const condition = (patch = {}) =>
   conditionSchema.parse({
     id: id(),

@@ -42,7 +42,7 @@ advanced item in EXPANSION_PLAN.md is finished.
 
 ## Verified
 
-- 64 unit/model/PDF tests; exact legacy calculation parity over 864 input cases.
+- 65 unit/model/PDF tests; exact legacy calculation parity over 864 input cases.
 - 22 database/API tests: permissions, conflicts/retries, approvals, CSV/XLSX,
   source provenance, legacy sharing/copying/staff/scenarios, full PostgreSQL
   backup/restore comparison, additive migration preservation and atomic
@@ -57,7 +57,8 @@ advanced item in EXPANSION_PLAN.md is finished.
 
 ## Remaining Scope / Limits
 
-- No GitHub push, Replit sync, production migration, publication or Agent usage.
+- Expansion commit 0227dc0 was pushed to GitHub and fast-forwarded into Replit.
+  No production migration, publication or Replit Agent usage has occurred.
 - PDF/images are retained for manual review; OCR extraction is not implemented.
 - Goal searches are bounded to 500 combinations, three hiring profiles, one
   campaign and one room template per search. Results are feasible within the
@@ -72,6 +73,9 @@ advanced item in EXPANSION_PLAN.md is finished.
   larger databases use pg_dump, protected secrets and a separate restore target.
 - Production owner authentication, production backup/migration review and
   hosted login/persistence checks are required before publication.
+- Marketing-category expenses are distinct from operating overhead in actuals
+  and forecasts. Actual marketing costs come from finalized financial entries;
+  funnel ad spend stays separate. Marketing budget lines add to campaign costs.
 - Browser checks are representative, not proof of every legacy control/export.
   Staging, real-schema restore and accessibility checks remain release gates.
 

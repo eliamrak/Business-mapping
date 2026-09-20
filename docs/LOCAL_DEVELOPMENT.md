@@ -79,11 +79,15 @@ authenticated API. They cover imports, source provenance, permissions,
 corrections, concurrent writes, approvals, legacy APIs and full dump/restore.
 Never target production.
 
-The 2026-09-20 checkpoint passed 64 unit/model/PDF tests and 22 API/database tests.
+The 2026-09-20 checkpoint passed 65 unit/model/PDF tests and 22 API/database tests.
 Legacy formulas matched the original commit across 864 compensation inputs plus
 staff/goal/reality cases. Scoped type checks and production builds passed.
 Existing UI source-map diagnostics and a large main-bundle warning remain;
 they are not build failures.
+
+The web tsconfig resolves React declarations through its own installed
+dependency. This avoids mixing the mobile workspace's older hoisted types
+with the dashboard types in Replit's pnpm 10 installation.
 
 Browser checks: budget edit, location/KPI creation, finalized correction,
 multi-channel approval and preserved baseline, CSV mapping/review/confirmation,
@@ -191,7 +195,10 @@ schema/data and hosted recovery have not yet been reviewed or rehearsed.
 
 ## Release Gate
 
-No GitHub push, Replit sync, production migration or publish has occurred.
+Expansion commit 0227dc0 was pushed to GitHub and fast-forwarded into Replit.
+No production migration or publish has occurred. Owner authentication is not
+yet configured. Keep the existing live deployment unchanged until these gates
+are satisfied.
 
 1. Release approval was given on 2026-09-20 for this expansion. Inspect the
    target before each external step; approval does not bypass security gates.
