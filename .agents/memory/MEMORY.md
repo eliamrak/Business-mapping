@@ -1,2 +1,3 @@
 - [Goal-scoped clinicians](goal-scoped-clinicians.md) — clinicians have nullable goalId FK; sandbox loads per goal with cliniciansLoadedForGoalIdRef guard to prevent refetch from overwriting local state.
 - [Orval codegen conflict fix](orval-codegen-conflict.md) — api-zod/src/index.ts must only export from generated/api, not generated/types, to avoid dual-export conflicts on request body types.
+- [GitHub upload quirks](github-upload-quirks.md) — empty repos need a bootstrap commit; throttle connector blob uploads to avoid the 10-request-per-second limit.
