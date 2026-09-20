@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 96 96" role="img" aria-labelledby="title desc">
+  <title id="title">EMCounseling</title>
+  <desc id="desc">A teal and navy EMC monogram</desc>
+  <rect width="96" height="96" rx="22" fill="#153555"/>
+  <path d="M22 25h30v9H32v10h17v8H32v10h20v9H22V25Z" fill="#5eead4"/>
+  <path d="M59 25h9l6 12 6-12h9v46h-9V43l-6 12-6-12v28h-9V25Z" fill="#fff"/>
+</svg>

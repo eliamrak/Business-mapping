@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
+import { useClerk, useUser } from "@clerk/react";
 import {
   Save,
   Plus,
@@ -237,15 +238,11 @@ export default function Settings(props: ViewProps) {
   const [tab, setTab] = useState("rules"),
     [error, setError] = useState("");
   const { workspace, months, edit, table, save } = props;
+  const { signOut } = useClerk();
+  const { user } = useUser();
   const signals = evaluateRules(workspace, months);
   const recorded = evaluateObservedRules(workspace, props.context);
-  const auth = useQuery({
-    queryKey: ["auth-status"],
-    queryFn: () =>
-      customFetch<{ localPreview: boolean; configured: boolean }>(
-        "/api/auth/status",
-      ),
-  });
+  const email = user?.primaryEmailAddress?.emailAddress ?? "your Clerk account";
   return (
     <>
       <Tabs
@@ -394,38 +391,28 @@ export default function Settings(props: ViewProps) {
             <h2>
               <Shield /> Access
             </h2>
-            <span className="hub-status">
-              {auth.data?.localPreview
-                ? "Local preview"
-                : auth.data?.configured
-                  ? "Owner authentication configured"
-                  : "Setup required"}
-            </span>
+            <span className="hub-status">Clerk authentication</span>
           </div>
           <p className="hub-muted">
-            Owner: all financial and planning areas. Data entry: session and
-            lead-generation updates only. No additional users are created
-            automatically.
+            Signed in as <strong>{email}</strong>. Google sign-in and account
+            access are managed by Clerk. Future internal users can be invited
+            and assigned an app role without bringing back local passwords.
           </p>
-          <AccessUsers />
-          {!auth.data?.localPreview && (
-            <button
-              className="pr-button"
-              onClick={() => {
-                if (
-                  window.dispatchEvent(
-                    new Event("emc-discard", { cancelable: true }),
-                  )
+          <button
+            className="pr-button"
+            onClick={() => {
+              if (
+                window.dispatchEvent(
+                  new Event("emc-discard", { cancelable: true }),
                 )
-                  void customFetch("/api/auth/logout", { method: "POST" })
-                    .then(() => location.reload())
-                    .catch((e) => setError(e.message));
-              }}
-            >
-              <LogOut />
-              Sign out
-            </button>
-          )}
+              )
+                void signOut({ redirectUrl: import.meta.env.BASE_URL || "/" })
+                  .catch((e) => setError(e.message));
+            }}
+          >
+            <LogOut />
+            Sign out
+          </button>
         </>
       )}
       {error && (

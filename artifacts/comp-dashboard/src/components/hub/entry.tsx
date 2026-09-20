@@ -1,4 +1,5 @@
 import { useRef, useState } from "react";
+import { useClerk } from "@clerk/react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Save, LogOut, RotateCcw } from "lucide-react";
 import { customFetch, ApiError } from "@workspace/api-client-react";
@@ -17,6 +18,7 @@ type EntryContext = {
 };
 export default function Entry() {
   const cache = useQueryClient();
+  const { signOut } = useClerk();
   const query = useQuery({
     queryKey: ["hub-entry"],
     queryFn: () => customFetch<EntryContext>("/api/hub/entry"),
@@ -174,9 +176,8 @@ export default function Entry() {
             className="pr-button"
             onClick={async () => {
               if (!mayDiscard()) return;
-              await customFetch("/api/auth/logout", { method: "POST" });
               cache.clear();
-              location.reload();
+              await signOut({ redirectUrl: import.meta.env.BASE_URL || "/" });
             }}
           >
             <LogOut />

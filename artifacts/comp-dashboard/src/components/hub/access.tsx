@@ -1,97 +1,83 @@
-import { useState, type ReactNode } from "react";
+import type { ReactNode } from "react";
+import { useAuth } from "@clerk/react";
 import { useQuery } from "@tanstack/react-query";
-import { LockKeyhole, LogIn } from "lucide-react";
-import { customFetch, ApiError } from "@workspace/api-client-react";
+import { LockKeyhole, LogIn, UserPlus } from "lucide-react";
+import { ApiError, customFetch } from "@workspace/api-client-react";
 import "@/pages/practice.css";
 import Entry from "./entry";
+
+const basePath = import.meta.env.BASE_URL.replace(/\/$/, "");
+
 export default function Access({ children }: { children: ReactNode }) {
-  const status = useQuery({
-    queryKey: ["auth-status"],
-    queryFn: () =>
-      customFetch<{ localPreview: boolean; configured: boolean }>(
-        "/api/auth/status",
-      ),
-    retry: false,
-    refetchInterval: 60000,
-  });
+  const { isLoaded, isSignedIn } = useAuth();
   const me = useQuery({
     queryKey: ["auth-me"],
     queryFn: () => customFetch<{ actor: string; role: string }>("/api/auth/me"),
-    enabled:
-      !!status.data && !status.data.localPreview && status.data.configured,
+    enabled: isLoaded && !!isSignedIn,
     retry: false,
-    refetchInterval: 60000,
   });
-  const [email, setEmail] = useState(""),
-    [password, setPassword] = useState(""),
-    [error, setError] = useState(""),
-    [pending, setPending] = useState(false);
-  const expired = me.error instanceof ApiError && me.error.status === 401;
-  if (!expired && me.data?.role === "data_entry") return <Entry />;
-  if (status.data?.localPreview || (me.data && !expired))
-    return <>{children}</>;
-  async function login(e: React.FormEvent) {
-    e.preventDefault();
-    setPending(true);
-    try {
-      await customFetch("/api/auth/login", {
-        method: "POST",
-        body: JSON.stringify({ email, password }),
-      });
-      setPassword("");
-      await me.refetch();
-    } catch {
-      setError("Sign-in failed. Check your email and password.");
-    } finally {
-      setPending(false);
-    }
+
+  if (!isLoaded) {
+    return (
+      <main className="practice-theme hub-login" data-appearance="light">
+        <div>
+          <LockKeyhole />
+          <h1>EMCounseling</h1>
+          <p>Connecting to secure sign-in...</p>
+        </div>
+      </main>
+    );
   }
+
+  if (isSignedIn && me.isPending) {
+    return (
+      <main className="practice-theme hub-login" data-appearance="light">
+        <div>
+          <LockKeyhole />
+          <h1>EMCounseling</h1>
+          <p>Checking your workspace access...</p>
+        </div>
+      </main>
+    );
+  }
+
+  if (isSignedIn && me.isError) {
+    const accessDenied = me.error instanceof ApiError && me.error.status === 403;
+    return (
+      <main className="practice-theme hub-login" data-appearance="light">
+        <div>
+          <LockKeyhole />
+          <h1>EMCounseling</h1>
+          <p role="alert">
+            {accessDenied
+              ? "Your account is not authorized for this workspace."
+              : "The app could not verify your workspace access. Refresh and try again."}
+          </p>
+        </div>
+      </main>
+    );
+  }
+
+  if (isSignedIn && me.data?.role === "data_entry") return <Entry />;
+  if (isSignedIn) return <>{children}</>;
+
   return (
     <main className="practice-theme hub-login" data-appearance="light">
       <div>
         <LockKeyhole />
         <h1>EMCounseling</h1>
-        {status.isPending ? (
-          <p>Connecting...</p>
-        ) : status.isError ? (
-          <p role="alert">
-            Cannot reach the app. Refresh after the server is available.
-          </p>
-        ) : !status.data?.configured ? (
-          <p>Owner authentication must be configured before live use.</p>
-        ) : (
-          <form onSubmit={login}>
-            <label className="pr-field">
-              Email
-              <input
-                type="email"
-                autoComplete="username"
-                required
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-              />
-            </label>
-            <label className="pr-field">
-              Password
-              <input
-                type="password"
-                autoComplete="current-password"
-                required
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-              />
-            </label>
-            {error && (
-              <p role="alert" className="pr-error">
-                {error}
-              </p>
-            )}
-            <button className="pr-button pr-primary" disabled={pending}>
-              <LogIn />
-              {pending ? "Signing in..." : "Sign in"}
-            </button>
-          </form>
-        )}
+        <p>Compensation strategy and practice planning for your team.</p>
+        <a className="pr-button pr-primary" href={`${basePath}/sign-in`}>
+          <LogIn />
+          Sign in with Google
+        </a>
+        <a className="pr-button" href={`${basePath}/sign-up`}>
+          <UserPlus />
+          Create an account
+        </a>
+        <p className="hub-muted">
+          Access is limited to invited internal users.
+        </p>
       </div>
     </main>
   );
