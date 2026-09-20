@@ -48,16 +48,21 @@ advanced item in EXPANSION_PLAN.md is finished.
   backup/restore comparison, additive migration preservation and atomic
   business-data recovery/rollback/replay checks in disposable databases.
 - Library, API and dashboard type checks; API and dashboard production builds.
+- Code release checks also passed on Replit at 0579d23: all 65 unit/model/PDF
+  tests, scoped type checks and both production builds. The API/database suite
+  ran only against disposable local databases, never production.
 - Browser saves: budgets, locations, custom KPI, finalized-period correction,
   combined campaign approval, reviewed CSV budget import, saved goal search,
-  rolling rules and multiple-response sandbox drafts.
+  rolling rules, dated KPI versions, multiple-response sandbox drafts and
+  a feasible goal-search result saved as a proposal without plan promotion.
 - All eight sections render without page overflow at 1440px and at 320px with
   larger text. Dark/light and mobile rule-dialog checks passed.
 - Original compensation formulas, navigation and session workspace preserved.
 
 ## Remaining Scope / Limits
 
-- Expansion commit 0227dc0 was pushed to GitHub and fast-forwarded into Replit.
+- Expansion and final corrections through 0579d23 were pushed to GitHub and
+  fast-forwarded into Replit. Its working tree was clean after release checks.
   No production migration, publication or Replit Agent usage has occurred.
 - PDF/images are retained for manual review; OCR extraction is not implemented.
 - Goal searches are bounded to 500 combinations, three hiring profiles, one
@@ -73,6 +78,9 @@ advanced item in EXPANSION_PLAN.md is finished.
   larger databases use pg_dump, protected secrets and a separate restore target.
 - Production owner authentication, production backup/migration review and
   hosted login/persistence checks are required before publication.
+- Replit production still has the seven original tables (including 36 clinician
+  records and four goals). No new hub/session tables or fictional preview data
+  were added there. The existing live deployment remains unchanged.
 - Marketing-category expenses are distinct from operating overhead in actuals
   and forecasts. Actual marketing costs come from finalized financial entries;
   funnel ad spend stays separate. Marketing budget lines add to campaign costs.

@@ -195,7 +195,8 @@ schema/data and hosted recovery have not yet been reviewed or rehearsed.
 
 ## Release Gate
 
-Expansion commit 0227dc0 was pushed to GitHub and fast-forwarded into Replit.
+Expansion and final fixes through 0579d23 were pushed to GitHub and
+fast-forwarded into Replit. The full code release check passed on Replit.
 No production migration or publish has occurred. Owner authentication is not
 yet configured. Keep the existing live deployment unchanged until these gates
 are satisfied.
