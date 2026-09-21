@@ -201,14 +201,19 @@ export const fields: Record<Collection, Field[]> = {
   campaigns: [
     name,
     { key: "source", label: "Lead source" },
-    select("method", "Estimation method", [
-      "cpl",
-      "cac",
-      "clicks",
-      "historical",
-      "manual",
-      "custom",
-    ]),
+    {
+      key: "method",
+      label: "Estimate new clients using",
+      type: "select",
+      options: [
+        { value: "cpl", label: "Cost per lead + conversion rates" },
+        { value: "cac", label: "Cost per acquired client" },
+        { value: "historical", label: "Past campaign performance" },
+        { value: "manual", label: "Manual lead and client estimate" },
+        { value: "clicks", label: "Impressions and click funnel" },
+        { value: "custom", label: "Custom KPI formula" },
+      ],
+    },
     n("monthlySpend", "Monthly ad spend ($)"),
     ...range,
     n("cpl", "Cost per lead ($)"),
@@ -565,7 +570,9 @@ export function newRecord(
 export function fieldOptions(
   field: Field,
   workspace: Workspace,
-  context: { clinicians: { id: number; label: string }[] },
+  context: {
+    clinicians: { id: number; label: string; goalId?: number | null }[];
+  },
   record: Record<string, unknown>,
 ) {
   if (field.key === "targetId") {
@@ -590,10 +597,14 @@ export function fieldOptions(
         : [{ value: "", label: "Practice-wide" }];
   }
   if (field.source === "legacyClinicians")
-    return context.clinicians.map((c) => ({
-      value: String(c.id),
-      label: c.label,
-    }));
+    return context.clinicians
+      .filter(
+        (clinician) => (clinician.goalId ?? null) === workspace.settings.teamId,
+      )
+      .map((c) => ({
+        value: String(c.id),
+        label: c.label,
+      }));
   if (field.source === "metrics")
     return [
       ...metrics.map(([value, label]) => ({ value, label })),

@@ -552,12 +552,12 @@ export default function Practice() {
         </span>
         <a
           className="pr-rail-link"
-          href={`${import.meta.env.BASE_URL}hub`}
-          aria-label="Business hub"
-          title="Business hub"
+          href={`${import.meta.env.BASE_URL}workspace`}
+          aria-label="My Practice"
+          title="My Practice"
         >
           <LayoutDashboard />
-          <span>Hub</span>
+          <span>My Practice</span>
         </a>
         <Tooltip>
           <TooltipTrigger asChild>

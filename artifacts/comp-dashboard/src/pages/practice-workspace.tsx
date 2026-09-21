@@ -55,6 +55,7 @@ import {
   type PracticeCopy,
 } from "@/lib/practice-goals";
 import { calculateGoalPace, type PacePoint } from "@/lib/goal-pace";
+import { resolveWorkspaceDefaults } from "@/lib/workspace-defaults";
 import { newRecord } from "@/components/hub/config";
 import RecordEditor from "@/components/hub/record-editor";
 import RecordTable from "@/components/hub/record-table";
@@ -262,11 +263,21 @@ export default function PracticeWorkspace() {
   } | null>(null);
   const pendingGoal = useRef<Proposal | null>(null);
   const sandbox = mode === "sandbox";
-  const workspace = sandbox && draft ? draft.workspace : query.data?.data;
+  const storedWorkspace = sandbox && draft ? draft.workspace : query.data?.data;
   const context = sandbox && draft ? draft.context : contextQuery.data;
+  const resolved = useMemo(
+    () =>
+      storedWorkspace && context
+        ? resolveWorkspaceDefaults(storedWorkspace, context, teams.data)
+        : null,
+    [storedWorkspace, context, teams.data],
+  );
+  const workspace = resolved?.workspace;
+  const forecastWorkspace = resolved?.forecastWorkspace;
   const months = useMemo(
-    () => (workspace && context ? forecast(workspace, context) : []),
-    [workspace, context],
+    () =>
+      forecastWorkspace && context ? forecast(forecastWorkspace, context) : [],
+    [forecastWorkspace, context],
   );
   const baselineMonths = useMemo(
     () =>
@@ -596,8 +607,11 @@ export default function PracticeWorkspace() {
       );
   }
   function startSandbox() {
-    if (!query.data || !contextQuery.data) return;
-    const copy = copyPractice(query.data.data, contextQuery.data);
+    if (!query.data || !contextQuery.data || !workspace) return;
+    const copy = copyPractice(
+      forecastWorkspace ?? workspace,
+      contextQuery.data,
+    );
     setBase(copy);
     setDraft(structuredClone(copy));
     setSourceRevision(query.data.revision);
@@ -607,14 +621,14 @@ export default function PracticeWorkspace() {
   }
   function openGoal(goal: Proposal) {
     const copy = readPracticeGoal(goal);
-    if (!copy || !query.data || !contextQuery.data) return;
+    if (!copy || !query.data || !contextQuery.data || !workspace) return;
     if (changes.length) {
       setError(
         "Save the current sandbox as a goal, or reset it, before opening another goal.",
       );
       return;
     }
-    setBase(copyPractice(query.data.data, contextQuery.data));
+    setBase(copyPractice(forecastWorkspace ?? workspace, contextQuery.data));
     setDraft(copyPractice(copy.workspace, copy.context));
     setSourceRevision(copy.sourceRevision);
     setMode("sandbox");
@@ -996,9 +1010,11 @@ export default function PracticeWorkspace() {
                           }).catch((e) => setError(errorText(e)))
                         }
                       >
-                        <option value="unassigned">
-                          Unassigned clinicians
-                        </option>
+                        {!teams.data?.length && (
+                          <option value="unassigned">
+                            No saved compensation team
+                          </option>
+                        )}
                         {teams.data?.map((t) => (
                           <option key={t.id} value={t.id}>
                             {t.name}
@@ -1249,7 +1265,7 @@ export default function PracticeWorkspace() {
                     {detailButton("hiring", "Hiring costs")}
                     {!sandbox && (
                       <a href="/" target="_blank" rel="noreferrer">
-                        Full compensation tools
+                        Open detailed compensation
                         <ChevronRight />
                       </a>
                     )}
@@ -1431,7 +1447,14 @@ export default function PracticeWorkspace() {
                     </>
                   )}
                   {!active(workspace.campaigns).length && (
-                    <p className="pw-empty">No campaigns yet.</p>
+                    <div className="pw-empty">
+                      <ChartNoAxesCombined />
+                      <h3>No lead sources set up yet</h3>
+                      <p>
+                        Add Google Ads, Meta, referrals, or another source to
+                        estimate leads and record results in one place.
+                      </p>
+                    </div>
                   )}
                 </>
               )}
@@ -1538,9 +1561,27 @@ export default function PracticeWorkspace() {
                       </tbody>
                     </table>
                   </div>
-                  {!active(workspace.budgets).length && (
-                    <p className="pw-empty">No budget lines yet.</p>
-                  )}
+                  {!active(workspace.budgets).length &&
+                    (resolved?.inherited.overhead ? (
+                      <div className="pw-notice">
+                        <strong>
+                          Using {money(resolved.goal?.annualOverheadGoal)} per
+                          year from {resolved.goal?.name}
+                        </strong>
+                        <span>
+                          Add detailed expenses here when you are ready. They
+                          will replace this single overhead estimate.
+                        </span>
+                      </div>
+                    ) : (
+                      <div className="pw-empty">
+                        <h3>No operating expenses yet</h3>
+                        <p>
+                          Add recurring expenses individually or import a budget
+                          to build the overhead total.
+                        </p>
+                      </div>
+                    ))}
                   <div className="pw-secondary-links">
                     {detailButton("categories", "Categories")}
                     {!sandbox && (
@@ -2273,6 +2314,19 @@ export default function PracticeWorkspace() {
                       </div>
                     ))}
                   </div>
+                  {resolved &&
+                    Object.values(resolved.inherited).some(Boolean) && (
+                      <p className="pw-notice">
+                        Starting from{" "}
+                        {resolved.goal?.name ?? "your compensation plan"}.
+                        {!context.sessions.some((record) =>
+                          people.some(
+                            (person) => person.id === record.clinicianId,
+                          ),
+                        ) &&
+                          " Desired sessions are used until recorded sessions are available."}
+                      </p>
+                    )}
                   {selectedGoal && comparableGoal && (
                     <section className="pw-pace" aria-label="Goal pace">
                       <div className="pw-section-heading">
@@ -2450,7 +2504,7 @@ export default function PracticeWorkspace() {
                       className="pw-text-button"
                       onClick={() => setSettings("forecast")}
                     >
-                      Forecast assumptions
+                      How this estimate is calculated
                       <ChevronRight />
                     </button>
                     {detailButton("goals", "Metric targets")}
