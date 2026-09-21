@@ -192,7 +192,7 @@ async function startMetro(expoPublicDomain, expoPublicReplId) {
 }
 
 async function downloadFile(url, outputPath) {
-  const maxAttempts = 4;
+  const maxAttempts = 8;
 
   for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
     const controller = new AbortController();
@@ -204,7 +204,9 @@ async function downloadFile(url, outputPath) {
       const response = await fetch(url, { signal: controller.signal });
 
       if (!response.ok) {
-        const error = new Error(`HTTP ${response.status}`);
+        const responseBody = (await response.text()).slice(0, 1_000).trim();
+        const detail = responseBody ? `: ${responseBody}` : "";
+        const error = new Error(`HTTP ${response.status}${detail}`);
         error.status = response.status;
         throw error;
       }
@@ -234,7 +236,7 @@ async function downloadFile(url, outputPath) {
         throw error;
       }
 
-      const delayMs = 2 ** attempt * 1_000;
+      const delayMs = Math.min(attempt * 5_000, 30_000);
       console.warn(
         `Temporary bundle server error (${error.message}); retrying in ${delayMs / 1_000}s (${attempt}/${maxAttempts})`,
       );
@@ -537,6 +539,9 @@ async function main() {
   clearMetroCache();
 
   await startMetro(domain, expoPublicReplId);
+  // Metro can report healthy before its dependency graph is ready under the
+  // constrained deployment builder. Give it a brief warm-up before bundling.
+  await new Promise((resolve) => setTimeout(resolve, 5_000));
 
   const downloadTimeout = 600000;
   const downloadPromise = downloadBundlesAndManifests(timestamp);
