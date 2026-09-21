@@ -192,38 +192,56 @@ async function startMetro(expoPublicDomain, expoPublicReplId) {
 }
 
 async function downloadFile(url, outputPath) {
-  const controller = new AbortController();
-  const fiveMinMS = 5 * 60 * 1_000;
-  const timeoutId = setTimeout(() => controller.abort(), fiveMinMS);
+  const maxAttempts = 4;
 
-  try {
-    console.log(`Downloading: ${url}`);
-    const response = await fetch(url, { signal: controller.signal });
+  for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+    const controller = new AbortController();
+    const fiveMinMS = 5 * 60 * 1_000;
+    const timeoutId = setTimeout(() => controller.abort(), fiveMinMS);
 
-    if (!response.ok) {
-      throw new Error(`HTTP ${response.status}`);
+    try {
+      console.log(`Downloading: ${url}`);
+      const response = await fetch(url, { signal: controller.signal });
+
+      if (!response.ok) {
+        const error = new Error(`HTTP ${response.status}`);
+        error.status = response.status;
+        throw error;
+      }
+
+      const file = fs.createWriteStream(outputPath);
+      await pipeline(Readable.fromWeb(response.body), file);
+
+      const fileSize = fs.statSync(outputPath).size;
+
+      if (fileSize === 0) {
+        fs.unlinkSync(outputPath);
+        throw new Error("Downloaded file is empty");
+      }
+
+      return;
+    } catch (error) {
+      if (fs.existsSync(outputPath)) {
+        fs.unlinkSync(outputPath);
+      }
+
+      if (error.name === "AbortError") {
+        throw new Error(`Download timeout after 5m: ${url}`);
+      }
+
+      const retryable = error.status >= 500 && error.status < 600;
+      if (!retryable || attempt === maxAttempts) {
+        throw error;
+      }
+
+      const delayMs = 2 ** attempt * 1_000;
+      console.warn(
+        `Temporary bundle server error (${error.message}); retrying in ${delayMs / 1_000}s (${attempt}/${maxAttempts})`,
+      );
+      await new Promise((resolve) => setTimeout(resolve, delayMs));
+    } finally {
+      clearTimeout(timeoutId);
     }
-
-    const file = fs.createWriteStream(outputPath);
-    await pipeline(Readable.fromWeb(response.body), file);
-
-    const fileSize = fs.statSync(outputPath).size;
-
-    if (fileSize === 0) {
-      fs.unlinkSync(outputPath);
-      throw new Error("Downloaded file is empty");
-    }
-  } catch (error) {
-    if (fs.existsSync(outputPath)) {
-      fs.unlinkSync(outputPath);
-    }
-
-    if (error.name === "AbortError") {
-      throw new Error(`Download timeout after 5m: ${url}`);
-    }
-    throw error;
-  } finally {
-    clearTimeout(timeoutId);
   }
 }
 
