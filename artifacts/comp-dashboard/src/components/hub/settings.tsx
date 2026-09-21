@@ -11,6 +11,9 @@ import {
   UserPlus,
   Shield,
   LogOut,
+  CalendarRange,
+  Gauge,
+  Users,
 } from "lucide-react";
 import { customFetch, useListBusinessGoals } from "@workspace/api-client-react";
 import {
@@ -141,6 +144,34 @@ export function SettingsEditor({
       onClose();
   };
   const goals = useListBusinessGoals();
+  const desiredForTeam = (teamId: number | null) =>
+    context.clinicians
+      .filter((clinician) => (clinician.goalId ?? null) === teamId)
+      .reduce((sum, clinician) => sum + clinician.sessionsPerWeek, 0);
+  const desiredWeekly = desiredForTeam(draft.teamId);
+  const inferredPace =
+    draft.baselineMode === "historical"
+      ? "historical"
+      : draft.baselineWeeklySessions !== null &&
+          Math.abs(draft.baselineWeeklySessions - desiredWeekly) < 0.001
+        ? "desired"
+        : "custom";
+  const [paceChoice, setPaceChoice] = useState<
+    "historical" | "desired" | "custom"
+  >(inferredPace);
+  const update = (key: keyof typeof draft, value: unknown) =>
+    setDraft({ ...draft, [key]: value });
+  const field = (definition: Field) => (
+    <InputField
+      key={definition.key}
+      field={definition}
+      value={draft[definition.key as keyof typeof draft]}
+      workspace={workspace}
+      context={context}
+      record={draft}
+      onChange={(value) => update(definition.key as keyof typeof draft, value)}
+    />
+  );
   async function save(e: React.FormEvent) {
     e.preventDefault();
     const result = settingsSchema.safeParse(draft);
@@ -168,7 +199,7 @@ export function SettingsEditor({
       }}
     >
       <DialogContent
-        className="practice-theme practice-dialog hub-editor"
+        className={`practice-theme practice-dialog hub-editor ${section === "forecast" ? "hub-forecast-editor" : ""}`}
         data-appearance={theme}
         onPointerDownOutside={(e) => e.preventDefault()}
       >
@@ -178,45 +209,262 @@ export function SettingsEditor({
               ? "Money & family settings"
               : "Forecast assumptions"}
           </DialogTitle>
-          <DialogDescription>Active-plan assumptions</DialogDescription>
+          <DialogDescription>
+            {section === "forecast"
+              ? "Set the starting point for your active plan"
+              : "Active-plan assumptions"}
+          </DialogDescription>
         </DialogHeader>
         <form onSubmit={save}>
-          <div className="hub-form-grid">
-            {section === "forecast" && (
-              <label className="pr-field">
-                Compensation team
-                <select
-                  value={draft.teamId ?? ""}
-                  onChange={(e) =>
-                    setDraft({
-                      ...draft,
-                      teamId: e.target.value ? Number(e.target.value) : null,
-                    })
-                  }
+          {section === "forecast" ? (
+            <div className="hub-forecast-setup">
+              <section>
+                <div className="hub-forecast-section-heading">
+                  <Users />
+                  <div>
+                    <h3>Plan frame</h3>
+                    <p>The people and time covered by this forecast</p>
+                  </div>
+                </div>
+                <div className="hub-form-grid hub-forecast-plan-grid">
+                  <label className="pr-field">
+                    Clinicians included
+                    <select
+                      value={draft.teamId ?? ""}
+                      onChange={(event) => {
+                        const teamId = event.target.value
+                          ? Number(event.target.value)
+                          : null;
+                        setDraft({
+                          ...draft,
+                          teamId,
+                          ...(paceChoice === "desired"
+                            ? {
+                                baselineMode: "manual",
+                                baselineWeeklySessions: desiredForTeam(teamId),
+                              }
+                            : {}),
+                        });
+                      }}
+                    >
+                      <option value="">Unassigned clinicians</option>
+                      {goals.data?.map((goal) => (
+                        <option key={goal.id} value={goal.id}>
+                          {goal.name}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <label className="pr-field">
+                    Plan starts
+                    <input
+                      type="date"
+                      value={draft.forecastStart}
+                      onChange={(event) =>
+                        update("forecastStart", event.target.value)
+                      }
+                    />
+                  </label>
+                  <label className="pr-field">
+                    Plan length
+                    <select
+                      value={draft.horizonMonths}
+                      onChange={(event) =>
+                        update("horizonMonths", Number(event.target.value))
+                      }
+                    >
+                      {![12, 24, 36, 48, 60].includes(draft.horizonMonths) && (
+                        <option value={draft.horizonMonths}>
+                          {draft.horizonMonths} months
+                        </option>
+                      )}
+                      <option value="12">1 year</option>
+                      <option value="24">2 years</option>
+                      <option value="36">3 years</option>
+                      <option value="48">4 years</option>
+                      <option value="60">5 years</option>
+                    </select>
+                  </label>
+                </div>
+              </section>
+
+              <section>
+                <div className="hub-forecast-section-heading">
+                  <Gauge />
+                  <div>
+                    <h3>Starting session pace</h3>
+                    <p>Choose what month one should be based on</p>
+                  </div>
+                </div>
+                <div
+                  className="hub-choice-list"
+                  role="radiogroup"
+                  aria-label="Starting session pace"
                 >
-                  <option value="">Unassigned clinicians</option>
-                  {goals.data?.map((g) => (
-                    <option key={g.id} value={g.id}>
-                      {g.name}
-                    </option>
-                  ))}
-                </select>
-              </label>
-            )}
-            {(settingsFields[section] ?? settingsFields.forecast).map(
-              (field) => (
-                <InputField
-                  key={field.key}
-                  field={field}
-                  value={draft[field.key as keyof typeof draft]}
-                  workspace={workspace}
-                  context={context}
-                  record={draft}
-                  onChange={(v) => setDraft({ ...draft, [field.key]: v })}
-                />
-              ),
-            )}
-          </div>
+                  <label>
+                    <input
+                      type="radio"
+                      name="pace"
+                      checked={paceChoice === "historical"}
+                      onChange={() => {
+                        setPaceChoice("historical");
+                        update("baselineMode", "historical");
+                      }}
+                    />
+                    <span>
+                      <strong>Recent completed sessions</strong>
+                      <small>
+                        Uses the session tracker from {draft.historicalStart}{" "}
+                        through {draft.historicalEnd}
+                      </small>
+                    </span>
+                  </label>
+                  <label>
+                    <input
+                      type="radio"
+                      name="pace"
+                      checked={paceChoice === "desired"}
+                      onChange={() => {
+                        setPaceChoice("desired");
+                        setDraft({
+                          ...draft,
+                          baselineMode: "manual",
+                          baselineWeeklySessions: desiredWeekly,
+                        });
+                      }}
+                    />
+                    <span>
+                      <strong>Clinicians' desired sessions</strong>
+                      <small>
+                        {desiredWeekly.toLocaleString()} sessions per week
+                        across this team
+                      </small>
+                    </span>
+                  </label>
+                  <label>
+                    <input
+                      type="radio"
+                      name="pace"
+                      checked={paceChoice === "custom"}
+                      onChange={() => {
+                        setPaceChoice("custom");
+                        setDraft({
+                          ...draft,
+                          baselineMode: "manual",
+                          baselineWeeklySessions:
+                            draft.baselineWeeklySessions ?? desiredWeekly,
+                        });
+                      }}
+                    />
+                    <span>
+                      <strong>Custom starting pace</strong>
+                      <small>Use a specific completed-session estimate</small>
+                    </span>
+                  </label>
+                </div>
+                {paceChoice === "custom" && (
+                  <div className="hub-forecast-inline-field">
+                    {field(
+                      numeric(
+                        "baselineWeeklySessions",
+                        "Completed sessions per week at the start",
+                        { max: 10000 },
+                      ),
+                    )}
+                  </div>
+                )}
+              </section>
+
+              <section>
+                <div className="hub-forecast-section-heading">
+                  <CalendarRange />
+                  <div>
+                    <h3>Attendance &amp; collections</h3>
+                    <p>
+                      How scheduled care becomes completed and paid sessions
+                    </p>
+                  </div>
+                </div>
+                <div className="hub-form-grid">
+                  <label className="pr-field">
+                    Attendance estimate
+                    <select
+                      value={draft.attendanceMode}
+                      onChange={(event) =>
+                        update("attendanceMode", event.target.value)
+                      }
+                    >
+                      <option value="historical">
+                        Use recorded attendance
+                      </option>
+                      <option value="manual">Set an attendance rate</option>
+                    </select>
+                  </label>
+                  {draft.attendanceMode === "manual" &&
+                    field(percent("attendancePct", "Expected attendance (%)"))}
+                  {field(
+                    percent(
+                      "collectionPct",
+                      "Expected collections from billed fees (%)",
+                    ),
+                  )}
+                </div>
+              </section>
+
+              <details className="hub-forecast-advanced">
+                <summary>Growth, history &amp; cash timing</summary>
+                <div className="hub-form-grid">
+                  {[
+                    { key: "practiceName", label: "Practice name" },
+                    {
+                      key: "historicalStart",
+                      label: "Recorded window starts",
+                      type: "date",
+                    },
+                    {
+                      key: "historicalEnd",
+                      label: "Recorded window ends",
+                      type: "date",
+                    },
+                    percent(
+                      "baselineRetentionPct",
+                      "Existing monthly caseload retained (%)",
+                    ),
+                    numeric(
+                      "organicClientsPerMonth",
+                      "New clients not tied to campaigns / month",
+                    ),
+                    numeric(
+                      "retentionMonths",
+                      "Average months a new client stays",
+                      { min: 1, max: 120 },
+                    ),
+                    numeric(
+                      "sessionsPerClientMonth",
+                      "Sessions per client / month",
+                      { max: 31 },
+                    ),
+                    numeric("collectionDelayMonths", "Payment delay (months)", {
+                      max: 12,
+                      step: "1",
+                    }),
+                    numeric(
+                      "openingReceivables",
+                      "Existing receivables collected in month one ($)",
+                    ),
+                    percent(
+                      "defaultInPersonPct",
+                      "Default in-person share (%)",
+                    ),
+                  ].map(field)}
+                </div>
+              </details>
+            </div>
+          ) : (
+            <div className="hub-form-grid">
+              {(settingsFields[section] ?? settingsFields.money).map(field)}
+            </div>
+          )}
           {error && (
             <p className="pr-error hub-error" role="alert">
               {error}

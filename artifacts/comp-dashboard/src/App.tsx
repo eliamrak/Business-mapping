@@ -22,6 +22,7 @@ import ClinicianPresenterPage from "@/pages/clinician-presenter";
 import Practice from "@/pages/practice";
 import Hub from "@/pages/hub";
 import Access from "@/components/hub/access";
+import PracticeWorkspace from "@/pages/practice-workspace";
 
 const clerkPubKey = publishableKeyFromHost(
   window.location.hostname,
@@ -107,6 +108,11 @@ function Router() {
     <Switch>
       <Route path="/sign-in/*?" component={SignInPage} />
       <Route path="/sign-up/*?" component={SignUpPage} />
+      <Route path="/workspace">
+        <Access>
+          <PracticeWorkspace />
+        </Access>
+      </Route>
       <Route path="/hub/:section">
         {(params) => (
           <Access>

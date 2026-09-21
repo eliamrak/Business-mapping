@@ -366,6 +366,102 @@
   border-radius: 3px;
   padding: 9px;
 }
+.hub-forecast-editor {
+  max-width: 760px;
+}
+.hub-forecast-setup {
+  display: grid;
+  gap: 28px;
+  margin-top: 18px;
+}
+.hub-forecast-setup > section {
+  padding-bottom: 26px;
+  border-bottom: 1px solid var(--pr-line);
+}
+.hub-forecast-section-heading {
+  display: flex;
+  align-items: flex-start;
+  gap: 11px;
+  margin-bottom: 16px;
+}
+.hub-forecast-section-heading > svg {
+  width: 18px;
+  height: 18px;
+  margin-top: 1px;
+  color: var(--pr-accent);
+}
+.hub-forecast-section-heading h3,
+.hub-forecast-section-heading p {
+  margin: 0;
+}
+.hub-forecast-section-heading h3 {
+  font-size: 14px;
+}
+.hub-forecast-section-heading p {
+  margin-top: 4px;
+  color: var(--pr-muted);
+  font-size: 11px;
+}
+.hub-forecast-plan-grid {
+  grid-template-columns: 1.4fr 1fr 1fr;
+  margin-bottom: 0;
+}
+.hub-choice-list {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+.hub-choice-list > label {
+  min-height: 92px;
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 13px;
+  border: 1px solid var(--pr-line);
+  border-radius: 6px;
+  background: var(--pr-bg);
+  cursor: pointer;
+}
+.hub-choice-list > label:has(input:checked) {
+  border-color: var(--pr-accent);
+  background: color-mix(in srgb, var(--pr-accent) 7%, var(--pr-bg));
+}
+.hub-choice-list input {
+  margin-top: 2px;
+  accent-color: var(--pr-accent);
+}
+.hub-choice-list span,
+.hub-choice-list strong,
+.hub-choice-list small {
+  display: block;
+}
+.hub-choice-list strong {
+  color: var(--pr-text);
+  font-size: 12px;
+  line-height: 1.3;
+}
+.hub-choice-list small {
+  margin-top: 6px;
+  color: var(--pr-muted);
+  font-size: 10px;
+  line-height: 1.4;
+}
+.hub-forecast-inline-field {
+  max-width: 280px;
+  margin-top: 14px;
+}
+.hub-forecast-advanced {
+  padding-bottom: 8px;
+}
+.hub-forecast-advanced > summary {
+  padding: 12px 0;
+  color: var(--pr-text);
+  font-size: 12px;
+  font-weight: 600;
+}
+.hub-forecast-advanced[open] > summary {
+  margin-bottom: 8px;
+}
 .hub-span {
   grid-column: 1/-1;
 }
@@ -656,6 +752,18 @@
   }
   .hub-form-grid {
     gap: 18px 12px;
+  }
+  .hub-forecast-plan-grid {
+    grid-template-columns: 1fr 1fr;
+  }
+  .hub-forecast-plan-grid > :first-child {
+    grid-column: 1 / -1;
+  }
+  .hub-choice-list {
+    grid-template-columns: 1fr;
+  }
+  .hub-choice-list > label {
+    min-height: 0;
   }
   .hub-tabs {
     gap: 20px;
