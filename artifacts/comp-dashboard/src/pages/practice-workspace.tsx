@@ -18,6 +18,7 @@ import {
   ChevronRight,
   PanelTop,
   ChartNoAxesCombined,
+  Download,
 } from "lucide-react";
 import {
   LineChart,
@@ -37,6 +38,7 @@ import {
   type Collection,
   type Clinician,
   type Proposal,
+  type Values,
 } from "@workspace/practice/hub";
 import { daysInclusive } from "@workspace/practice";
 import { calculateClinicianMetrics } from "@workspace/practice/compensation";
@@ -56,6 +58,10 @@ import {
 } from "@/lib/practice-goals";
 import { calculateGoalPace, type PacePoint } from "@/lib/goal-pace";
 import { resolveWorkspaceDefaults } from "@/lib/workspace-defaults";
+import {
+  buildPracticeProjection,
+  type PracticeView,
+} from "@/lib/practice-projection";
 import { newRecord } from "@/components/hub/config";
 import RecordEditor from "@/components/hub/record-editor";
 import RecordTable from "@/components/hub/record-table";
@@ -63,6 +69,14 @@ import Settings, { SettingsEditor } from "@/components/hub/settings";
 import Updates from "@/components/hub/updates";
 import { type ViewProps, fmt, monthLabel } from "@/components/hub/views";
 import WorkspaceSessions from "@/components/practice/workspace-sessions";
+import SandboxView from "@/components/sandbox-view";
+import BusinessGoalsTab from "@/components/tabs/business-goals-tab";
+import CurrentRealityTab from "@/components/tabs/current-reality-tab";
+import TeamBuilderTab from "@/components/tabs/team-builder-tab";
+import ClinicianImpactViewTab from "@/components/tabs/clinician-impact-tab";
+import ScenarioBuilderTab from "@/components/tabs/scenario-builder-tab";
+import ScenarioComparisonTab from "@/components/tabs/scenario-comparison-tab";
+import PDFExportTab from "@/components/tabs/export-tab";
 import {
   Dialog,
   DialogContent,
@@ -75,6 +89,41 @@ import "@/pages/hub.css";
 import "@/pages/practice-workspace.css";
 
 type Mode = "practice" | "sandbox" | "goals";
+type IntegratedTool =
+  | "team"
+  | "impact"
+  | "reality"
+  | "business-goals"
+  | "compensation-model"
+  | "scenarios"
+  | "compare";
+type ToolTab = { id: IntegratedTool | null; label: string };
+
+function IntegratedToolContent({
+  tool,
+  teamId,
+}: {
+  tool: IntegratedTool;
+  teamId: number | null;
+}) {
+  switch (tool) {
+    case "team":
+      return <TeamBuilderTab teamId={teamId} />;
+    case "impact":
+      return <ClinicianImpactViewTab teamId={teamId} />;
+    case "reality":
+      return <CurrentRealityTab />;
+    case "business-goals":
+      return <BusinessGoalsTab />;
+    case "compensation-model":
+      return <SandboxView />;
+    case "scenarios":
+      return <ScenarioBuilderTab />;
+    case "compare":
+      return <ScenarioComparisonTab />;
+  }
+}
+
 type PaceMetric = "sessions" | "revenue" | "profit";
 type Section =
   | "clinicians"
@@ -96,6 +145,22 @@ const sections: { id: Section; label: string }[] = [
   { id: "summary", label: "Summary" },
 ];
 const money = (n: number | null | undefined) => fmt(n, "currency");
+const operatingCost = (values: Values, ownerBurdenPct: number) =>
+  (values.clinicianPay ?? 0) +
+  (values.employerBurden ?? 0) +
+  (values.staffCost ?? 0) +
+  (values.overhead ?? 0) +
+  (values.marketing ?? 0) +
+  (values.fees ?? 0) +
+  (values.ownerPayroll ?? 0) * (1 + ownerBurdenPct / 100);
+const periodLabel = (start: string, end: string) => {
+  const short = (date: string) =>
+    new Date(date + "T12:00:00").toLocaleDateString("en-US", {
+      month: "short",
+      day: "numeric",
+    });
+  return `${short(start)} - ${short(end)}, ${end.slice(0, 4)}`;
+};
 const metrics = [
   { key: "revenue", label: "Revenue" },
   { key: "profit", label: "Profit" },
@@ -228,6 +293,11 @@ export default function PracticeWorkspace() {
   });
   const teams = useListBusinessGoals();
   const [mode, setMode] = useState<Mode>("practice");
+  const [integratedTool, setIntegratedTool] = useState<IntegratedTool | null>(
+    null,
+  );
+  const [exportOpen, setExportOpen] = useState(false);
+  const [practiceView, setPracticeView] = useState<PracticeView>("plan");
   const [section, setSection] = useState<Section>("clinicians");
   const [draft, setDraft] = useState<PracticeCopy | null>(null);
   const [base, setBase] = useState<PracticeCopy | null>(null);
@@ -262,22 +332,64 @@ export default function PracticeWorkspace() {
     action: string;
   } | null>(null);
   const pendingGoal = useRef<Proposal | null>(null);
+  const today = new Date().toLocaleDateString("en-CA");
   const sandbox = mode === "sandbox";
+  const savedResolved = useMemo(
+    () =>
+      query.data?.data && contextQuery.data
+        ? resolveWorkspaceDefaults(
+            query.data.data,
+            contextQuery.data,
+            teams.data,
+          )
+        : null,
+    [query.data, contextQuery.data, teams.data],
+  );
   const storedWorkspace = sandbox && draft ? draft.workspace : query.data?.data;
   const context = sandbox && draft ? draft.context : contextQuery.data;
   const resolved = useMemo(
     () =>
-      storedWorkspace && context
+      sandbox && storedWorkspace && context
         ? resolveWorkspaceDefaults(storedWorkspace, context, teams.data)
-        : null,
-    [storedWorkspace, context, teams.data],
+        : savedResolved,
+    [sandbox, storedWorkspace, context, teams.data, savedResolved],
   );
   const workspace = resolved?.workspace;
   const forecastWorkspace = resolved?.forecastWorkspace;
+  const planProjection = useMemo(
+    () =>
+      savedResolved && contextQuery.data
+        ? buildPracticeProjection(
+            savedResolved.forecastWorkspace,
+            contextQuery.data,
+            "plan",
+            today,
+          )
+        : null,
+    [savedResolved, contextQuery.data, today],
+  );
+  const viewProjection = useMemo(
+    () =>
+      sandbox
+        ? null
+        : practiceView === "plan"
+          ? planProjection
+          : forecastWorkspace && context
+            ? buildPracticeProjection(
+                forecastWorkspace,
+                context,
+                "actual",
+                today,
+              )
+            : null,
+    [sandbox, practiceView, planProjection, forecastWorkspace, context, today],
+  );
   const months = useMemo(
     () =>
-      forecastWorkspace && context ? forecast(forecastWorkspace, context) : [],
-    [forecastWorkspace, context],
+      sandbox && forecastWorkspace && context
+        ? forecast(forecastWorkspace, context)
+        : (viewProjection?.months ?? []),
+    [sandbox, forecastWorkspace, context, viewProjection],
   );
   const baselineMonths = useMemo(
     () =>
@@ -349,10 +461,19 @@ export default function PracticeWorkspace() {
           ) < 0.001
         ? "desired"
         : "manual";
+  const recordedFinancialPeriods = useMemo(
+    () =>
+      workspace && context
+        ? observedSeries(workspace, context).sort((a, b) =>
+            b.date.localeCompare(a.date),
+          )
+        : [],
+    [workspace, context],
+  );
   const actualPaceSeries = useMemo<PacePoint[]>(() => {
     if (!workspace || !context) return [];
     if (paceMetric !== "sessions")
-      return observedSeries(workspace, context).map((row) => ({
+      return recordedFinancialPeriods.map((row) => ({
         date: row.date,
         value: row.values[paceMetric] ?? null,
       }));
@@ -383,7 +504,7 @@ export default function PracticeWorkspace() {
         date: period.date,
         value: (period.value / period.days) * 30.4375,
       }));
-  }, [workspace, context, paceMetric]);
+  }, [workspace, context, paceMetric, recordedFinancialPeriods]);
   const goalPace = useMemo(
     () =>
       selectedGoal && comparableGoal
@@ -404,21 +525,41 @@ export default function PracticeWorkspace() {
     ],
   );
   const summaryChartData = useMemo(() => {
-    const actualByMonth = new Map(
-      actualPaceSeries.map((point) => [point.date.slice(0, 7), point.value]),
-    );
-    return months.map((row) => ({
+    const projectionStart = months[0]?.date;
+    const history = actualPaceSeries
+      .filter(
+        (point) =>
+          point.date <= today && point.date < (projectionStart ?? today),
+      )
+      .map((point) => ({
+        date: monthLabel(point.date),
+        sortDate: point.date,
+        estimated: null as number | null,
+        goal: undefined as number | undefined,
+        actual: point.value,
+      }));
+    const projected = months.map((row) => ({
       date: monthLabel(row.date),
+      sortDate: row.date,
       estimated: row.values[paceMetric],
       goal: comparableGoal
         ? selectedMonths.find(
             (goal) => goal.date.slice(0, 7) === row.date.slice(0, 7),
           )?.values[paceMetric]
         : undefined,
-      actual: actualByMonth.get(row.date.slice(0, 7)),
+      actual: null as number | null,
     }));
-  }, [months, selectedMonths, actualPaceSeries, paceMetric, comparableGoal]);
-  const today = new Date().toLocaleDateString("en-CA");
+    return [...history, ...projected].sort((a, b) =>
+      a.sortDate.localeCompare(b.sortDate),
+    );
+  }, [
+    months,
+    selectedMonths,
+    actualPaceSeries,
+    paceMetric,
+    comparableGoal,
+    today,
+  ]);
   useEffect(() => {
     const warn = (e: BeforeUnloadEvent) => {
       if (changes.length) {
@@ -606,33 +747,41 @@ export default function PracticeWorkspace() {
         "Updated desired session projection",
       );
   }
-  function startSandbox() {
-    if (!query.data || !contextQuery.data || !workspace) return;
-    const copy = copyPractice(
-      forecastWorkspace ?? workspace,
-      contextQuery.data,
-    );
+  function startSandbox(source?: PracticeCopy) {
+    if (!query.data) return;
+    const copy =
+      source ??
+      (contextQuery.data && planProjection
+        ? copyPractice(planProjection.projectionWorkspace, contextQuery.data)
+        : null);
+    if (!copy) return;
     setBase(copy);
     setDraft(structuredClone(copy));
     setSourceRevision(query.data.revision);
     setMode("sandbox");
+    setMarketingTab("campaigns");
+    setMoneyMonthIndex(0);
     setError("");
     setMessage("");
   }
   function openGoal(goal: Proposal) {
     const copy = readPracticeGoal(goal);
-    if (!copy || !query.data || !contextQuery.data || !workspace) return;
+    if (!copy || !query.data || !contextQuery.data || !planProjection) return;
     if (changes.length) {
       setError(
         "Save the current sandbox as a goal, or reset it, before opening another goal.",
       );
       return;
     }
-    setBase(copyPractice(forecastWorkspace ?? workspace, contextQuery.data));
+    setBase(
+      copyPractice(planProjection.projectionWorkspace, contextQuery.data),
+    );
     setDraft(copyPractice(copy.workspace, copy.context));
     setSourceRevision(copy.sourceRevision);
     setMode("sandbox");
     setSection("clinicians");
+    setMarketingTab("campaigns");
+    setMoneyMonthIndex(0);
     setGoalName(goal.name + " - revision");
     setError("");
   }
@@ -659,13 +808,65 @@ export default function PracticeWorkspace() {
       setError(errorText(e));
     }
   }
-  function navigate(next: Mode) {
+  async function navigate(next: Mode) {
     if (busy.current || sessionEditing) return;
+    if (integratedTool) {
+      if (next === "sandbox" && !draft && query.data) {
+        busy.current = true;
+        try {
+          const [freshContext, freshTeams] = await Promise.all([
+            contextQuery.refetch(),
+            teams.refetch(),
+          ]);
+          if (!freshContext.data)
+            throw new Error("Could not refresh clinician records.");
+          const resolved = resolveWorkspaceDefaults(
+            query.data.data,
+            freshContext.data,
+            freshTeams.data,
+          );
+          const projected = buildPracticeProjection(
+            resolved.forecastWorkspace,
+            freshContext.data,
+            "plan",
+            today,
+          );
+          setIntegratedTool(null);
+          startSandbox(
+            copyPractice(projected.projectionWorkspace, freshContext.data),
+          );
+        } catch (error) {
+          setError(errorText(error));
+        } finally {
+          busy.current = false;
+        }
+        return;
+      }
+      void contextQuery.refetch();
+      void teams.refetch();
+    }
+    setIntegratedTool(null);
     setError("");
+    if (next === "practice") {
+      setMarketingTab(practiceView === "actual" ? "results" : "campaigns");
+      setMoneyMonthIndex(0);
+    }
+    if (next === "sandbox") {
+      setMarketingTab("campaigns");
+      setMoneyMonthIndex(0);
+    }
     if (next === "sandbox" && !draft) startSandbox();
     else setMode(next);
     if (section === "documents" || section === "settings")
       setSection("clinicians");
+  }
+
+  function showTool(next: IntegratedTool | null) {
+    if (integratedTool && integratedTool !== next) {
+      void contextQuery.refetch();
+      void teams.refetch();
+    }
+    setIntegratedTool(next);
   }
 
   if (query.isPending || contextQuery.isPending)
@@ -685,7 +886,55 @@ export default function PracticeWorkspace() {
         </button>
       </div>
     );
+  const toolTabs: ToolTab[] =
+    mode === "goals"
+      ? [
+          { id: null, label: "Saved goals" },
+          { id: "business-goals", label: "Compensation targets" },
+          { id: "compensation-model", label: "Compensation model" },
+        ]
+      : sandbox
+        ? [
+            { id: null, label: "Working copy" },
+            { id: "scenarios", label: "Saved compensation scenarios" },
+            { id: "compare", label: "Compare scenarios" },
+          ]
+        : section === "clinicians"
+          ? [
+              { id: null, label: "Clinicians" },
+              { id: "team", label: "Team details" },
+              { id: "impact", label: "Pay comparison" },
+            ]
+          : section === "summary"
+            ? [
+                { id: null, label: "Summary" },
+                { id: "reality", label: "Compensation baseline" },
+              ]
+            : [];
+  const visibleTool = toolTabs.some((tab) => tab.id === integratedTool)
+    ? integratedTool
+    : null;
+  const toolNotice =
+    visibleTool === "reality"
+      ? "This older manual baseline is separate from the recorded sessions and financial periods in My Practice."
+      : visibleTool === "scenarios" || visibleTool === "compare"
+        ? "Saved compensation scenarios are separate from this working copy. Editing them will not apply a change to My Practice or the current Sandbox."
+        : visibleTool === "compensation-model"
+          ? "Changes to this compensation model save to its linked team and business goal. Use Sandbox to test changes without saving them to the plan."
+          : null;
   const people = selectedPeople;
+  const recordedClinicianCount =
+    viewProjection?.clinicianPace.filter(
+      (person) => person.recordedWeekly !== null,
+    ).length ?? 0;
+  const recordedExpenses = workspace.transactions
+    .filter(
+      (transaction) =>
+        workspace.categories.find(
+          (category) => category.id === transaction.categoryId,
+        )?.kind !== "income",
+    )
+    .sort((a, b) => b.date.localeCompare(a.date));
   const moneyMonth = months[Math.min(moneyMonthIndex, months.length - 1)];
   const moneyValues = moneyMonth?.values ?? {};
   const ownerBurden =
@@ -704,7 +953,7 @@ export default function PracticeWorkspace() {
   const otherBusinessIncome =
     beforeOwnerPay - (moneyValues.revenue ?? 0) + operatingCosts;
   const activeAllocations = active(workspace.allocations);
-  const householdDistributionPct = activeAllocations
+  const familyDistributionPct = activeAllocations
     .filter(
       (allocation) =>
         allocation.kind === "distribution" && allocation.household,
@@ -713,19 +962,10 @@ export default function PracticeWorkspace() {
   const totalDistributionPct = activeAllocations
     .filter((allocation) => allocation.kind === "distribution")
     .reduce((sum, allocation) => sum + allocation.percent, 0);
-  const householdDistributions = activeAllocations.length
+  const familyDistributions = activeAllocations.length
     ? (moneyValues.distributions ?? 0) *
-      (totalDistributionPct
-        ? householdDistributionPct / totalDistributionPct
-        : 0)
+      (totalDistributionPct ? familyDistributionPct / totalDistributionPct : 0)
     : (moneyValues.distributions ?? 0);
-  const householdWithholding =
-    ((moneyValues.ownerPayroll ?? 0) +
-      (workspace.settings.includeOwnerClinical
-        ? (moneyValues.ownerClinicalPay ?? 0)
-        : 0) +
-      householdDistributions) *
-    (workspace.settings.householdWithholdingPct / 100);
   const endpoint = months.at(-1);
   const baselineEndpoint = baselineMonths.find(
     (m) => m.date === endpoint?.date,
@@ -831,9 +1071,13 @@ export default function PracticeWorkspace() {
             Settings
           </button>
           {!sandbox && (
-            <a href="/" target="_blank" rel="noreferrer">
+            <a
+              href={`${import.meta.env.BASE_URL}reference`}
+              target="_blank"
+              rel="noreferrer"
+            >
               <PanelTop />
-              Original tools
+              Reference layout
             </a>
           )}
           {import.meta.env.DEV && (
@@ -856,27 +1100,37 @@ export default function PracticeWorkspace() {
             </h1>
           </div>
           <div className="pw-actions">
+            <button
+              className="pw-button"
+              onClick={() => setExportOpen(true)}
+              title="Export compensation reports"
+            >
+              <Download />
+              Reports
+            </button>
             {sandbox ? (
-              <>
-                <button
-                  className="pw-icon"
-                  aria-label="Reset sandbox"
-                  title="Reset sandbox from My Practice"
-                  onClick={() => setResetDialog(true)}
-                >
-                  <RotateCcw />
-                </button>
-                <button
-                  className="pw-button pw-primary"
-                  onClick={() => {
-                    setGoalDialog(true);
-                    setError("");
-                  }}
-                >
-                  <Flag />
-                  Save as goal
-                </button>
-              </>
+              !visibleTool && (
+                <>
+                  <button
+                    className="pw-icon"
+                    aria-label="Reset sandbox"
+                    title="Reset sandbox from My Practice"
+                    onClick={() => setResetDialog(true)}
+                  >
+                    <RotateCcw />
+                  </button>
+                  <button
+                    className="pw-button pw-primary"
+                    onClick={() => {
+                      setGoalDialog(true);
+                      setError("");
+                    }}
+                  >
+                    <Flag />
+                    Save as goal
+                  </button>
+                </>
+              )
             ) : mode === "practice" ? (
               <button className="pw-button" onClick={() => navigate("sandbox")}>
                 <FlaskConical />
@@ -890,6 +1144,47 @@ export default function PracticeWorkspace() {
             )}
           </div>
         </header>
+        {mode === "practice" && !visibleTool && (
+          <div className="pw-view-bar">
+            <div
+              className="pw-view-switch"
+              role="group"
+              aria-label="Practice projection"
+            >
+              <button
+                type="button"
+                aria-pressed={practiceView === "plan"}
+                disabled={saving || sessionEditing}
+                onClick={() => {
+                  setPracticeView("plan");
+                  setMarketingTab("campaigns");
+                  setMoneyMonthIndex(0);
+                }}
+              >
+                Plan
+              </button>
+              <button
+                type="button"
+                aria-pressed={practiceView === "actual"}
+                disabled={saving || sessionEditing}
+                onClick={() => {
+                  setPracticeView("actual");
+                  setMarketingTab("results");
+                  setMoneyMonthIndex(0);
+                }}
+              >
+                Actual + forecast
+              </button>
+            </div>
+            <span>
+              {practiceView === "plan"
+                ? "Desired sessions and planned business assumptions"
+                : recordedClinicianCount
+                  ? `${recordedClinicianCount} of ${viewProjection?.clinicianPace.length ?? 0} clinicians recorded in the last 8 weeks; gaps use desired sessions`
+                  : "No sessions recorded in the last 8 weeks; using desired sessions"}
+            </span>
+          </div>
+        )}
         {error && (
           <div className="pw-error" role="alert">
             {error}
@@ -902,24 +1197,59 @@ export default function PracticeWorkspace() {
             </button>
           </div>
         )}
+        {mode === "goals" && toolTabs.length > 0 && (
+          <nav className="pw-tool-tabs" aria-label="Views in this area">
+            {toolTabs.map((tab) => (
+              <button
+                key={tab.id ?? "overview"}
+                type="button"
+                aria-current={visibleTool === tab.id ? "page" : undefined}
+                disabled={saving || sessionEditing}
+                onClick={() => showTool(tab.id)}
+              >
+                {tab.label}
+              </button>
+            ))}
+          </nav>
+        )}
         {mode !== "goals" && (
           <>
-            <nav
-              className="pw-sections"
-              aria-label={sandbox ? "Sandbox sections" : "Practice sections"}
-            >
-              {sections.map((s) => (
-                <button
-                  key={s.id}
-                  aria-current={section === s.id ? "page" : undefined}
-                  disabled={saving || sessionEditing}
-                  onClick={() => setSection(s.id)}
-                >
-                  {s.label}
-                </button>
-              ))}
-            </nav>
-            {sandbox && (
+            {(!sandbox || !visibleTool) && (
+              <nav
+                className="pw-sections"
+                aria-label={sandbox ? "Sandbox sections" : "Practice sections"}
+              >
+                {sections.map((s) => (
+                  <button
+                    key={s.id}
+                    aria-current={section === s.id ? "page" : undefined}
+                    disabled={saving || sessionEditing}
+                    onClick={() => {
+                      if (integratedTool) showTool(null);
+                      setSection(s.id);
+                    }}
+                  >
+                    {s.label}
+                  </button>
+                ))}
+              </nav>
+            )}
+            {toolTabs.length > 0 && (
+              <nav className="pw-tool-tabs" aria-label="Views in this area">
+                {toolTabs.map((tab) => (
+                  <button
+                    key={tab.id ?? "overview"}
+                    type="button"
+                    aria-current={visibleTool === tab.id ? "page" : undefined}
+                    disabled={saving || sessionEditing}
+                    onClick={() => showTool(tab.id)}
+                  >
+                    {tab.label}
+                  </button>
+                ))}
+              </nav>
+            )}
+            {sandbox && !visibleTool && (
               <div className="pw-sandbox-timeline">
                 <span className="pw-tag">
                   <FlaskConical />
@@ -986,7 +1316,18 @@ export default function PracticeWorkspace() {
                 </button>
               </div>
             )}
-            <div className="pw-content">
+            {visibleTool && (
+              <div className="pw-content">
+                <div className="pw-integrated-tool">
+                  {toolNotice && <p className="pw-tool-notice">{toolNotice}</p>}
+                  <IntegratedToolContent
+                    tool={visibleTool}
+                    teamId={workspace.settings.teamId}
+                  />
+                </div>
+              </div>
+            )}
+            <div className="pw-content" hidden={!!visibleTool}>
               {section === "clinicians" && (
                 <>
                   {heading(
@@ -1042,21 +1383,27 @@ export default function PracticeWorkspace() {
                           Plan a hire
                         </button>
                       ) : (
-                        <a
+                        <button
                           className="pw-button"
-                          href="/?view=team"
-                          target="_blank"
-                          rel="noreferrer"
+                          onClick={() => showTool("team")}
                         >
                           <Plus />
                           Manage team
-                        </a>
+                        </button>
                       )}
                     </>,
                   )}
                   <div className="pw-clinicians">
                     {people.map((person) => {
                       const result = calculateClinicianMetrics(person);
+                      const classification = String(
+                        person.classification,
+                      ).toLowerCase();
+                      const projected =
+                        months[0]?.clinicians[String(person.id)];
+                      const pace = viewProjection?.clinicianPace.find(
+                        (item) => item.id === person.id,
+                      );
                       const setting = workspace.clinicians.find(
                         (c) =>
                           c.clinicianId === person.id &&
@@ -1074,10 +1421,34 @@ export default function PracticeWorkspace() {
                             </span>
                             <div>
                               <h3>{person.label}</h3>
-                              <span>
-                                {String(person.classification).toUpperCase()}
-                                {setting ? " / " + setting.status : ""}
-                              </span>
+                              <div className="pw-person-meta">
+                                <select
+                                  className="pw-person-classification"
+                                  aria-label={`${person.label} classification`}
+                                  title="Classification affects pay and employer costs"
+                                  value={classification}
+                                  disabled={saving || sessionEditing}
+                                  onChange={(event) =>
+                                    void patchPerson(person, {
+                                      classification: event.target.value,
+                                    }).catch((error) =>
+                                      setError(errorText(error)),
+                                    )
+                                  }
+                                >
+                                  <option value="1099">1099</option>
+                                  <option value="w2">W2</option>
+                                  <option value="owner">Owner</option>
+                                  {!["1099", "w2", "owner"].includes(
+                                    classification,
+                                  ) && (
+                                    <option value={classification}>
+                                      {String(person.classification)}
+                                    </option>
+                                  )}
+                                </select>
+                                {setting && <span>{setting.status}</span>}
+                              </div>
                             </div>
                             <EditButton
                               label={
@@ -1156,7 +1527,9 @@ export default function PracticeWorkspace() {
                                 value={person.weeksWorkedPerYear}
                                 max={52.18}
                                 onSave={(n) =>
-                                  patchPerson(person, { weeksWorkedPerYear: n })
+                                  patchPerson(person, {
+                                    weeksWorkedPerYear: n,
+                                  })
                                 }
                               />
                             </div>
@@ -1224,16 +1597,34 @@ export default function PracticeWorkspace() {
                             </div>
                           </details>
                           <footer>
-                            <span>At desired sessions / month</span>
+                            <span>
+                              {mode === "practice" && practiceView === "actual"
+                                ? pace?.recordedWeekly !== null
+                                  ? `Projected at ${fmt(pace?.usedWeekly)} sessions / week`
+                                  : "Projected from desired sessions / week"
+                                : "At desired sessions / month"}
+                            </span>
                             <dl>
                               <div>
                                 <dt>Revenue</dt>
-                                <dd>{money(result.annualProduction / 12)}</dd>
+                                <dd>
+                                  {money(
+                                    mode === "practice" &&
+                                      practiceView === "actual"
+                                      ? projected?.revenue
+                                      : result.annualProduction / 12,
+                                  )}
+                                </dd>
                               </div>
                               <div>
                                 <dt>Est. clinician pay</dt>
                                 <dd>
-                                  {money(result.clinicianCompensation / 12)}
+                                  {money(
+                                    mode === "practice" &&
+                                      practiceView === "actual"
+                                      ? projected?.clinicianPay
+                                      : result.clinicianCompensation / 12,
+                                  )}
                                 </dd>
                               </div>
                             </dl>
@@ -1264,10 +1655,13 @@ export default function PracticeWorkspace() {
                     {detailButton("terms", "Future pay changes")}
                     {detailButton("hiring", "Hiring costs")}
                     {!sandbox && (
-                      <a href="/" target="_blank" rel="noreferrer">
-                        Open detailed compensation
+                      <button
+                        className="pw-text-button"
+                        onClick={() => showTool("impact")}
+                      >
+                        Compare clinician pay
                         <ChevronRight />
-                      </a>
+                      </button>
                     )}
                   </div>
                 </>
@@ -1482,7 +1876,9 @@ export default function PracticeWorkspace() {
                           value={room.weeklyHours}
                           max={168}
                           onSave={(n) =>
-                            patchRecord("rooms", room.id, { weeklyHours: n })
+                            patchRecord("rooms", room.id, {
+                              weeklyHours: n,
+                            })
                           }
                         />
                         <div>
@@ -1545,7 +1941,9 @@ export default function PracticeWorkspace() {
                                   b.cadence === "percent_revenue" ? "%" : "$"
                                 }
                                 onSave={(n) =>
-                                  patchRecord("budgets", b.id, { amount: n })
+                                  patchRecord("budgets", b.id, {
+                                    amount: n,
+                                  })
                                 }
                               />
                             </td>
@@ -1584,7 +1982,7 @@ export default function PracticeWorkspace() {
                     ))}
                   <div className="pw-secondary-links">
                     {detailButton("categories", "Categories")}
-                    {!sandbox && (
+                    {!sandbox && practiceView === "plan" && (
                       <>
                         {detailButton("transactions", "Recorded expenses")}
                         <button
@@ -1597,6 +1995,59 @@ export default function PracticeWorkspace() {
                       </>
                     )}
                   </div>
+                  {mode === "practice" && practiceView === "actual" && (
+                    <section
+                      className="pw-projection-table"
+                      aria-label="Recorded expenses"
+                    >
+                      {heading(
+                        "Recorded expenses",
+                        "Expenses you have entered for completed periods",
+                        add("transactions", "Record expense"),
+                      )}
+                      <div className="pw-table-scroll">
+                        <table className="pw-table">
+                          <thead>
+                            <tr>
+                              <th>Date</th>
+                              <th>Expense</th>
+                              <th>Category</th>
+                              <th>Amount</th>
+                              <th />
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {recordedExpenses.slice(0, 8).map((transaction) => (
+                              <tr key={transaction.id}>
+                                <th>{transaction.date}</th>
+                                <td>{transaction.description}</td>
+                                <td>
+                                  {workspace.categories.find(
+                                    (category) =>
+                                      category.id === transaction.categoryId,
+                                  )?.name ?? "Uncategorized"}
+                                </td>
+                                <td>{money(transaction.amount)}</td>
+                                <td>
+                                  <EditButton
+                                    label={"Edit " + transaction.description}
+                                    onClick={() =>
+                                      edit("transactions", transaction)
+                                    }
+                                  />
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                      {!recordedExpenses.length && (
+                        <p className="pw-notice">No expenses recorded yet.</p>
+                      )}
+                      {recordedExpenses.length > 8 &&
+                        detailButton("transactions", "All recorded expenses")}
+                    </section>
+                  )}
                 </>
               )}
               {section === "money" && (
@@ -1605,6 +2056,15 @@ export default function PracticeWorkspace() {
                     "Money flow",
                     "See where each monthly dollar comes from and where it goes",
                     <div className="pw-money-period">
+                      {mode === "practice" && practiceView === "actual" && (
+                        <button
+                          className="pw-button"
+                          onClick={() => edit("periods")}
+                        >
+                          <Plus />
+                          Record a period
+                        </button>
+                      )}
                       <label>
                         Forecast month
                         <select
@@ -1638,7 +2098,11 @@ export default function PracticeWorkspace() {
                               : "No forecast month"}
                           </p>
                         </div>
-                        <span>Live estimate</span>
+                        <span>
+                          {mode === "practice" && practiceView === "actual"
+                            ? "Projected from recent sessions"
+                            : "Plan estimate"}
+                        </span>
                       </div>
 
                       <div className="pw-money-group-label">Income</div>
@@ -1818,7 +2282,11 @@ export default function PracticeWorkspace() {
                       aria-label="Monthly money summary"
                     >
                       <h3>Owner view</h3>
-                      <p>One month, fully connected</p>
+                      <p>
+                        {monthLabel(
+                          moneyMonth?.date ?? workspace.settings.forecastStart,
+                        )}
+                      </p>
                       <dl>
                         <div>
                           <dt>Total income</dt>
@@ -1846,8 +2314,14 @@ export default function PracticeWorkspace() {
                         </div>
                       </dl>
                       <div className="pw-money-summary-result">
-                        <span>Family take-home</span>
+                        <span>Planned family take-home</span>
                         <strong>{money(moneyValues.familyTakeHome)}</strong>
+                        {(moneyValues.profit ?? 0) < 0 && (
+                          <small>
+                            Owner pay remains planned while practice profit is
+                            negative.
+                          </small>
+                        )}
                       </div>
                     </aside>
                   </div>
@@ -1887,7 +2361,9 @@ export default function PracticeWorkspace() {
                                 budget.cadence === "percent_revenue" ? "%" : "$"
                               }
                               onSave={(n) =>
-                                patchRecord("budgets", budget.id, { amount: n })
+                                patchRecord("budgets", budget.id, {
+                                  amount: n,
+                                })
                               }
                             />
                             <EditButton
@@ -1951,8 +2427,8 @@ export default function PracticeWorkspace() {
                       <div>
                         <h3>Allocate positive cash profit</h3>
                         <p>
-                          Taxes and reserves stay in the business; household
-                          distributions flow to the family
+                          Taxes and reserves stay in the business; marked owner
+                          distributions go to the family
                         </p>
                       </div>
                       {add("allocations", "Add allocation")}
@@ -2049,13 +2525,64 @@ export default function PracticeWorkspace() {
                     </div>
                   </section>
 
+                  {mode === "practice" && practiceView === "actual" && (
+                    <section
+                      className="pw-projection-table"
+                      aria-label="Recorded financial periods"
+                    >
+                      {heading(
+                        "Recorded financial periods",
+                        "Finalized figures entered for completed periods",
+                        detailButton("periods", "Review periods"),
+                      )}
+                      {recordedFinancialPeriods.length ? (
+                        <div className="pw-table-scroll">
+                          <table className="pw-table">
+                            <thead>
+                              <tr>
+                                <th>Period</th>
+                                <th>Earned revenue</th>
+                                <th>Clinician pay</th>
+                                <th>Overhead</th>
+                                <th>Profit</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {recordedFinancialPeriods
+                                .slice(0, 6)
+                                .map((period) => (
+                                  <tr key={period.periodStart + period.date}>
+                                    <th>
+                                      {periodLabel(
+                                        period.periodStart ?? period.date,
+                                        period.date,
+                                      )}
+                                    </th>
+                                    <td>{money(period.values.revenue)}</td>
+                                    <td>{money(period.values.clinicianPay)}</td>
+                                    <td>{money(period.values.overhead)}</td>
+                                    <td>{money(period.values.profit)}</td>
+                                  </tr>
+                                ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      ) : (
+                        <p className="pw-notice">
+                          No finalized financial periods yet. The money flow
+                          above uses planned rates and budgets with recent
+                          session pace.
+                        </p>
+                      )}
+                    </section>
+                  )}
+
                   <section className="pw-owner-flow">
                     <div className="pw-section-heading">
                       <div>
-                        <h3>Owner pay &amp; household</h3>
+                        <h3>Family take-home from the practice</h3>
                         <p>
-                          The final step: what leaves the practice and what
-                          reaches your family
+                          Owner pay and distributions, not a household budget
                         </p>
                       </div>
                     </div>
@@ -2139,94 +2666,19 @@ export default function PracticeWorkspace() {
                       </div>
                       <div className="pw-owner-line">
                         <div>
-                          <strong>Household distributions</strong>
-                          <span>Distribution buckets marked for family</span>
+                          <strong>Owner distributions</strong>
+                          <span>Distributions marked for family above</span>
                         </div>
                         <span />
-                        <b>{money(householdDistributions)}</b>
-                      </div>
-                      <div className="pw-owner-line">
-                        <div>
-                          <strong>Household withholding / reserve</strong>
-                          <span>Held back from owner cash flows</span>
-                        </div>
-                        <NumberField
-                          label="Household withholding rate"
-                          value={workspace.settings.householdWithholdingPct}
-                          max={100}
-                          unit="%"
-                          onSave={(n) =>
-                            saveWorkspace(
-                              {
-                                ...workspace,
-                                settings: {
-                                  ...workspace.settings,
-                                  householdWithholdingPct: n,
-                                },
-                              },
-                              "Updated household withholding",
-                            )
-                          }
-                        />
-                        <b>-{money(householdWithholding)}</b>
-                      </div>
-                      <div className="pw-owner-line">
-                        <div>
-                          <strong>Other household income</strong>
-                          <span>Income outside the practice</span>
-                        </div>
-                        <NumberField
-                          label="Other household income per month"
-                          value={workspace.settings.otherHouseholdIncome}
-                          unit="$"
-                          onSave={(n) =>
-                            saveWorkspace(
-                              {
-                                ...workspace,
-                                settings: {
-                                  ...workspace.settings,
-                                  otherHouseholdIncome: n,
-                                },
-                              },
-                              "Updated other household income",
-                            )
-                          }
-                        />
-                        <b>{money(workspace.settings.otherHouseholdIncome)}</b>
-                      </div>
-                      <div className="pw-owner-line">
-                        <div>
-                          <strong>Household benefits cost</strong>
-                          <span>Benefits paid from household cash flow</span>
-                        </div>
-                        <NumberField
-                          label="Household benefits cost per month"
-                          value={workspace.settings.householdBenefitsCost}
-                          unit="$"
-                          onSave={(n) =>
-                            saveWorkspace(
-                              {
-                                ...workspace,
-                                settings: {
-                                  ...workspace.settings,
-                                  householdBenefitsCost: n,
-                                },
-                              },
-                              "Updated household benefits cost",
-                            )
-                          }
-                        />
-                        <b>
-                          -{money(workspace.settings.householdBenefitsCost)}
-                        </b>
+                        <b>{money(familyDistributions)}</b>
                       </div>
                       <div className="pw-owner-line pw-owner-total">
                         <div>
-                          <strong>Estimated family take-home</strong>
+                          <strong>Planned family take-home</strong>
                           <span>
-                            Payroll + included clinical pay + household
-                            distributions + other income, after withholding and
-                            benefits
+                            Owner payroll + included clinical pay + marked
+                            distributions. Payroll is before personal tax
+                            withholding.
                           </span>
                         </div>
                         <span />
@@ -2240,43 +2692,43 @@ export default function PracticeWorkspace() {
                 <>
                   {heading(
                     "Practice summary",
-                    "Estimated / " +
-                      monthLabel(workspace.settings.forecastStart),
+                    (mode === "practice" && practiceView === "actual"
+                      ? "Actual + forecast / "
+                      : "Plan / ") +
+                      monthLabel(
+                        months[0]?.date ?? workspace.settings.forecastStart,
+                      ),
                     <div className="pw-summary-controls">
-                      <label>
-                        Projection starts from
-                        <select
-                          aria-label="Projection basis"
-                          value={projectionBasis}
-                          onChange={(e) => {
-                            const next = e.target.value;
-                            if (next === "manual") {
-                              setSettings("forecast");
-                              return;
+                      {(sandbox || practiceView === "plan") && (
+                        <label>
+                          Plan sessions
+                          <select
+                            aria-label="Plan session basis"
+                            value={
+                              projectionBasis === "manual"
+                                ? "manual"
+                                : "desired"
                             }
-                            void saveWorkspace({
-                              ...workspace,
-                              settings: {
-                                ...workspace.settings,
-                                baselineMode:
-                                  next === "historical"
-                                    ? "historical"
-                                    : "manual",
-                                baselineWeeklySessions:
-                                  next === "desired"
-                                    ? desiredWeeklyTotal
-                                    : workspace.settings.baselineWeeklySessions,
-                              },
-                            }).catch((e) => setError(errorText(e)));
-                          }}
-                        >
-                          <option value="historical">
-                            Recent actual sessions
-                          </option>
-                          <option value="desired">Desired sessions</option>
-                          <option value="manual">Custom weekly pace</option>
-                        </select>
-                      </label>
+                            onChange={(e) => {
+                              if (e.target.value === "manual") {
+                                setSettings("forecast");
+                                return;
+                              }
+                              void saveWorkspace({
+                                ...workspace,
+                                settings: {
+                                  ...workspace.settings,
+                                  baselineMode: "manual",
+                                  baselineWeeklySessions: desiredWeeklyTotal,
+                                },
+                              }).catch((e) => setError(errorText(e)));
+                            }}
+                          >
+                            <option value="desired">Desired sessions</option>
+                            <option value="manual">Custom weekly pace</option>
+                          </select>
+                        </label>
+                      )}
                       <label>
                         Compare with
                         <select
@@ -2314,6 +2766,31 @@ export default function PracticeWorkspace() {
                       </div>
                     ))}
                   </div>
+                  {mode === "practice" && practiceView === "actual" && (
+                    <section
+                      className="pw-recorded-pulse"
+                      aria-label="Recorded session pace"
+                    >
+                      <div>
+                        <span>Recent session pace</span>
+                        <strong>
+                          {fmt(viewProjection?.projectedWeekly)} / week
+                        </strong>
+                        <small>
+                          {recordedClinicianCount} clinician
+                          {recordedClinicianCount === 1 ? "" : "s"} with
+                          records; missing days use desired sessions
+                        </small>
+                      </div>
+                      <button
+                        className="pw-text-button"
+                        onClick={() => setSection("sessions")}
+                      >
+                        Edit recorded sessions
+                        <ChevronRight />
+                      </button>
+                    </section>
+                  )}
                   {resolved &&
                     Object.values(resolved.inherited).some(Boolean) && (
                       <p className="pw-notice">
@@ -2327,6 +2804,104 @@ export default function PracticeWorkspace() {
                           " Desired sessions are used until recorded sessions are available."}
                       </p>
                     )}
+                  {mode === "practice" &&
+                    practiceView === "actual" &&
+                    !!viewProjection?.recentPeriods.length && (
+                      <section
+                        className="pw-projection-table"
+                        aria-label="Recent recorded periods"
+                      >
+                        <div className="pw-section-heading">
+                          <div>
+                            <h3>Recent periods</h3>
+                            <p>
+                              Recorded sessions are counted; missing clinician
+                              entries use desired sessions.
+                            </p>
+                          </div>
+                        </div>
+                        <div className="pw-table-scroll">
+                          <table className="pw-table">
+                            <thead>
+                              <tr>
+                                <th>Period ending</th>
+                                <th>Recorded</th>
+                                <th>Estimated gap</th>
+                                <th>Working total</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {viewProjection.recentPeriods.map((period) => (
+                                <tr key={period.start + period.end}>
+                                  <th>
+                                    {periodLabel(period.start, period.end)}
+                                  </th>
+                                  <td>{fmt(period.recorded)}</td>
+                                  <td>{fmt(period.estimated)}</td>
+                                  <td>{fmt(period.total)}</td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      </section>
+                    )}
+                  <section
+                    className="pw-projection-table"
+                    aria-label="Six month outlook"
+                  >
+                    <div className="pw-section-heading">
+                      <div>
+                        <h3>Six-month outlook</h3>
+                        <p>
+                          {mode === "practice" && practiceView === "actual"
+                            ? "Projected from recorded pace, with planned rates and costs"
+                            : "Projected from your plan"}
+                        </p>
+                      </div>
+                    </div>
+                    <div className="pw-table-scroll">
+                      <table className="pw-table">
+                        <thead>
+                          <tr>
+                            <th>Month</th>
+                            <th>Sessions</th>
+                            <th>Revenue</th>
+                            <th>Operating cost</th>
+                            <th>Profit</th>
+                            <th>Planned family take-home</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {months.slice(0, 6).map((row) => {
+                            return (
+                              <tr key={row.date}>
+                                <th>{monthLabel(row.date)}</th>
+                                <td>{fmt(row.values.sessions)}</td>
+                                <td>{money(row.values.revenue)}</td>
+                                <td>
+                                  {money(
+                                    operatingCost(
+                                      row.values,
+                                      workspace.settings.ownerPayrollBurdenPct,
+                                    ),
+                                  )}
+                                </td>
+                                <td>{money(row.values.profit)}</td>
+                                <td>{money(row.values.familyTakeHome)}</td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+                    {months.some((row) => (row.values.profit ?? 0) < 0) && (
+                      <p className="pw-projection-note">
+                        Planned family take-home includes owner pay; it can
+                        remain positive while practice profit is negative.
+                      </p>
+                    )}
+                  </section>
                   {selectedGoal && comparableGoal && (
                     <section className="pw-pace" aria-label="Goal pace">
                       <div className="pw-section-heading">
@@ -2472,7 +3047,11 @@ export default function PracticeWorkspace() {
                         />
                         <Line
                           dataKey="estimated"
-                          name={"Estimated " + paceLabels[paceMetric]}
+                          name={
+                            (mode === "practice" && practiceView === "actual"
+                              ? "Forecast "
+                              : "Plan ") + paceLabels[paceMetric]
+                          }
                           type="monotone"
                           stroke="#39755b"
                           strokeWidth={2}
@@ -2481,7 +3060,7 @@ export default function PracticeWorkspace() {
                         {selectedGoal && (
                           <Line
                             dataKey="goal"
-                            name="Goal revenue"
+                            name="Saved goal"
                             type="monotone"
                             stroke="#537eaa"
                             strokeDasharray="4 4"
@@ -2502,16 +3081,35 @@ export default function PracticeWorkspace() {
                   <div className="pw-secondary-links">
                     <button
                       className="pw-text-button"
-                      onClick={() => setSettings("forecast")}
+                      onClick={() =>
+                        mode === "practice" && practiceView === "actual"
+                          ? setSection("sessions")
+                          : setSettings("forecast")
+                      }
                     >
-                      How this estimate is calculated
+                      {mode === "practice" && practiceView === "actual"
+                        ? "Review session history"
+                        : "Forecast assumptions"}
                       <ChevronRight />
                     </button>
                     {detailButton("goals", "Metric targets")}
                   </div>
                 </>
               )}
-              {section === "settings" && <Settings {...props} />}
+              {section === "settings" && (
+                <>
+                  <Settings {...props} />
+                  <a
+                    className="pw-text-button"
+                    href={`${import.meta.env.BASE_URL}reference`}
+                    target="_blank"
+                    rel="noreferrer"
+                  >
+                    Original layout for reference
+                    <ChevronRight />
+                  </a>
+                </>
+              )}
               {section === "documents" && !sandbox && (
                 <>
                   <button
@@ -2526,8 +3124,19 @@ export default function PracticeWorkspace() {
             </div>
           </>
         )}
-        {mode === "goals" && (
+        {mode === "goals" && visibleTool && (
           <div className="pw-content">
+            <div className="pw-integrated-tool">
+              {toolNotice && <p className="pw-tool-notice">{toolNotice}</p>}
+              <IntegratedToolContent
+                tool={visibleTool}
+                teamId={workspace.settings.teamId}
+              />
+            </div>
+          </div>
+        )}
+        {mode === "goals" && (
+          <div className="pw-content" hidden={!!visibleTool}>
             <div className="pw-section-heading">
               <div>
                 <h2>Saved goals</h2>
@@ -2600,18 +3209,20 @@ export default function PracticeWorkspace() {
             </div>
           </div>
         )}
-        {sandbox && (
+        {sandbox && !visibleTool && (
           <aside className="pw-impact" aria-label="Sandbox impact">
             <div className="pw-impact-heading">
               <span>
                 <ChartNoAxesCombined />
-                At {endpoint ? monthLabel(endpoint.date) : "goal"}
+                Sandbox vs My Practice plan /{" "}
+                {endpoint ? monthLabel(endpoint.date) : "goal"}
               </span>
               <button
                 className="pw-text-button"
                 onClick={() => setChangeDetails((v) => !v)}
               >
-                {changes.length} {changes.length === 1 ? "change" : "changes"}
+                Review {changes.length}{" "}
+                {changes.length === 1 ? "change" : "changes"}
                 <ChevronRight />
               </button>
             </div>
@@ -2622,17 +3233,49 @@ export default function PracticeWorkspace() {
                 return (
                   <div key={m.key}>
                     <span>{m.label} / month</span>
-                    <div>
-                      <small>{money(before)}</small>
+                    <div className="pw-impact-comparison">
+                      <small>
+                        <span>My Practice</span>
+                        {money(before)}
+                      </small>
                       <ArrowRight />
-                      <strong>{money(after)}</strong>
+                      <strong>
+                        <span>Sandbox</span>
+                        {money(after)}
+                      </strong>
                     </div>
                     {before != null && after != null && (
                       <em>
-                        {after - before >= 0 ? "+" : ""}
+                        Change: {after - before >= 0 ? "+" : ""}
                         {money(after - before)}
                       </em>
                     )}
+                    {m.key === "profit" && after != null && after < 0 && (
+                      <small>Practice still runs at a loss.</small>
+                    )}
+                    {m.key === "profit" && baselineEndpoint && endpoint && (
+                      <small>
+                        Operating costs:{" "}
+                        {money(
+                          operatingCost(
+                            baselineEndpoint.values,
+                            base?.workspace.settings.ownerPayrollBurdenPct ?? 0,
+                          ),
+                        )}{" "}
+                        to{" "}
+                        {money(
+                          operatingCost(
+                            endpoint.values,
+                            workspace.settings.ownerPayrollBurdenPct,
+                          ),
+                        )}
+                      </small>
+                    )}
+                    {m.key === "familyTakeHome" &&
+                      before === after &&
+                      (endpoint?.values.profit ?? 0) < 0 && (
+                        <small>Planned owner pay is unchanged.</small>
+                      )}
                   </div>
                 );
               })}
@@ -2667,19 +3310,42 @@ export default function PracticeWorkspace() {
           <span>
             {saving
               ? "Saving..."
-              : message ||
-                (sandbox ? "My Practice is unchanged" : "My Practice")}
+              : visibleTool
+                ? visibleTool === "team"
+                  ? "Team changes save to My Practice"
+                  : visibleTool === "compensation-model"
+                    ? "Changes here save to the linked compensation plan"
+                    : "Saved compensation records"
+                : message ||
+                  (sandbox ? "My Practice is unchanged" : "My Practice")}
           </span>
-          {months.some((m) => m.warnings.length > 0) && mode !== "goals" && (
-            <details>
-              <summary>Forecast checks</summary>
-              {[...new Set(months.flatMap((m) => m.warnings))].map((w) => (
-                <p key={w}>{w}</p>
-              ))}
-            </details>
-          )}
+          {!visibleTool &&
+            months.some((m) => m.warnings.length > 0) &&
+            mode !== "goals" && (
+              <details>
+                <summary>Forecast checks</summary>
+                {[...new Set(months.flatMap((m) => m.warnings))].map((w) => (
+                  <p key={w}>{w}</p>
+                ))}
+              </details>
+            )}
         </footer>
       </main>
+      <Dialog open={exportOpen} onOpenChange={setExportOpen}>
+        <DialogContent
+          className="practice-theme pw-export-dialog"
+          data-appearance="light"
+        >
+          <DialogHeader>
+            <DialogTitle>Compensation reports</DialogTitle>
+            <DialogDescription>
+              Reports use saved compensation records, not unsaved Sandbox
+              changes.
+            </DialogDescription>
+          </DialogHeader>
+          <PDFExportTab />
+        </DialogContent>
+      </Dialog>
       {editor && (
         <RecordEditor
           key={editor.record.id as string}

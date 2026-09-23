@@ -287,7 +287,7 @@ export default function Hub({ section = "overview" }: { section?: string }) {
         <div className="hub-nav-bottom">
           <a href={import.meta.env.BASE_URL}>
             <ArrowLeft />
-            Compensation tools
+            My Practice
           </a>
           <a href={`${import.meta.env.BASE_URL}practice`}>
             <Users />

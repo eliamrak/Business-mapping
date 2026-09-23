@@ -167,14 +167,14 @@ export default function Dashboard() {
               <LayoutDashboard className="h-4 w-4 text-primary" />
             </div>
             <h1 className="text-base sm:text-lg font-semibold tracking-tight text-foreground truncate">
-              <span className="hidden sm:inline">Comp Strategy Dashboard</span>
-              <span className="sm:hidden">Comp Dashboard</span>
+              <span className="hidden sm:inline">Original compensation layout</span>
+              <span className="sm:hidden">Original layout</span>
             </h1>
           </div>
 
           <div className="flex items-center gap-2">
             <Button variant="outline" size="sm" asChild>
-              <a href={`${import.meta.env.BASE_URL}workspace`}>My Practice</a>
+              <a href={import.meta.env.BASE_URL}>My Practice</a>
             </Button>
             <Button variant="outline" size="sm" asChild>
               <a href={`${import.meta.env.BASE_URL}practice`}>

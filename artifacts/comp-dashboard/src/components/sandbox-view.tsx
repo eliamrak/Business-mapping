@@ -1935,7 +1935,7 @@ function ImportStaffDialog({
 
 // ─── SandboxView (main export) ───────────────────────────────────────────────
 
-export default function SandboxView({ onShowAdvanced }: { onShowAdvanced: () => void }) {
+export default function SandboxView({ onShowAdvanced }: { onShowAdvanced?: () => void }) {
   const { data: apiGoals, isLoading: loadingGoals } = useListBusinessGoals();
 
   const createClinician = useCreateClinician();
@@ -2510,15 +2510,17 @@ export default function SandboxView({ onShowAdvanced }: { onShowAdvanced: () => 
       </div>
 
       <div className="flex items-center justify-between pt-4 mt-4 border-t">
-        <Button
-          variant="ghost"
-          size="sm"
-          className="text-xs text-muted-foreground h-7"
-          onClick={onShowAdvanced}
-        >
-          <Settings2 className="h-3.5 w-3.5 mr-1.5" />
-          Advanced view
-        </Button>
+        {onShowAdvanced && (
+          <Button
+            variant="ghost"
+            size="sm"
+            className="text-xs text-muted-foreground h-7"
+            onClick={onShowAdvanced}
+          >
+            <Settings2 className="h-3.5 w-3.5 mr-1.5" />
+            Advanced view
+          </Button>
+        )}
         <Button
           variant="ghost"
           size="sm"

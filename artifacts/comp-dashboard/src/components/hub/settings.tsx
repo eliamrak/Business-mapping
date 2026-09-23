@@ -108,14 +108,11 @@ const settingsFields: Record<string, Field[]> = {
     percent("taxPct", "Tax allocation of positive cash profit (%)"),
     percent("reservePct", "Reserve allocation (%)"),
     percent("distributionPct", "Distribution allocation (%)"),
-    percent("householdWithholdingPct", "Family cash withholding / reserve (%)"),
     {
       key: "includeOwnerClinical",
       label: "Include owner clinical compensation in family cash",
       type: "checkbox",
     },
-    numeric("otherHouseholdIncome", "Other household income / month ($)"),
-    numeric("householdBenefitsCost", "Household benefits cost / month ($)"),
     numeric("targetProfitMonthly", "Target operating profit / month ($)"),
   ],
 };

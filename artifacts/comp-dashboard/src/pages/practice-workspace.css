@@ -14,9 +14,9 @@
   box-sizing: border-box;
   letter-spacing: 0;
 }
-.pw-app button,
-.pw-app input,
-.pw-app select {
+.pw-app button:not(.pw-integrated-tool *),
+.pw-app input:not(.pw-integrated-tool *),
+.pw-app select:not(.pw-integrated-tool *) {
   font: inherit;
 }
 .pw-app button,
@@ -31,35 +31,35 @@
   opacity: 0.5;
   cursor: wait;
 }
-.pw-app svg {
+.pw-app svg:not(.pw-integrated-tool *) {
   width: 18px;
   height: 18px;
   flex-shrink: 0;
 }
-.pw-app h1,
-.pw-app h2,
-.pw-app h3,
-.pw-app p {
+.pw-app h1:not(.pw-integrated-tool *),
+.pw-app h2:not(.pw-integrated-tool *),
+.pw-app h3:not(.pw-integrated-tool *),
+.pw-app p:not(.pw-integrated-tool *) {
   margin: 0;
 }
-.pw-app h1 {
+.pw-app h1:not(.pw-integrated-tool *) {
   font-size: 28px;
   font-weight: 600;
   line-height: 1.3;
 }
-.pw-app h2 {
+.pw-app h2:not(.pw-integrated-tool *) {
   font-size: 19px;
   font-weight: 600;
 }
-.pw-app h3 {
+.pw-app h3:not(.pw-integrated-tool *) {
   font-size: 15px;
   font-weight: 600;
 }
-.pw-app small {
+.pw-app small:not(.pw-integrated-tool *) {
   font-size: 12px;
 }
-.pw-app p,
-.pw-app small {
+.pw-app p:not(.pw-integrated-tool *),
+.pw-app small:not(.pw-integrated-tool *) {
   color: #617168;
 }
 .pw-rail {
@@ -150,6 +150,41 @@
   justify-content: space-between;
   gap: 16px;
 }
+.pw-view-bar {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  padding: 0 38px 18px;
+  color: #627268;
+  font-size: 12px;
+}
+.pw-view-bar > span {
+  min-width: 0;
+}
+.pw-view-switch {
+  display: inline-flex;
+  padding: 3px;
+  gap: 2px;
+  flex-shrink: 0;
+  border: 1px solid #d7e1da;
+  border-radius: 6px;
+  background: #f3f7f4;
+}
+.pw-view-switch button {
+  min-height: 32px;
+  padding: 5px 13px;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: #536459;
+  font-size: 12px;
+}
+.pw-view-switch button[aria-pressed="true"] {
+  background: #fff;
+  color: #245338;
+  font-weight: 600;
+  box-shadow: 0 1px 3px #1935271a;
+}
 .pw-eyebrow {
   font-size: 12px;
   color: #79847d;
@@ -224,6 +259,47 @@
   color: #315b42;
   font-weight: 600;
 }
+.pw-tool-tabs {
+  display: flex;
+  gap: 4px;
+  overflow-x: auto;
+  padding: 0 38px;
+  border-bottom: 1px solid #e3e8e4;
+  background: #f8faf8;
+}
+.pw-tool-tabs button {
+  min-height: 42px;
+  padding: 9px 13px;
+  white-space: nowrap;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  background: none;
+  color: #66766b;
+  font-size: 12px;
+}
+.pw-tool-tabs button[aria-current] {
+  border-bottom-color: #386f50;
+  color: #315b42;
+  font-weight: 600;
+}
+.pw-tool-tabs button:disabled {
+  opacity: 0.55;
+}
+.pw-integrated-tool {
+  min-width: 0;
+}
+.pw-tool-notice {
+  margin-bottom: 24px;
+  padding: 11px 0;
+  border-block: 1px solid #e0e9e2;
+  font-size: 12px;
+}
+.pw-export-dialog {
+  width: min(95vw, 1050px);
+  max-width: none;
+  max-height: 90vh;
+  overflow-y: auto;
+}
 .pw-content {
   padding: 28px 38px 30px;
   max-width: 1480px;
@@ -240,7 +316,7 @@
   font-size: 13px;
   margin-top: 6px;
 }
-.pw-app select,
+.pw-app select:not(.pw-integrated-tool *),
 .pw-period input,
 .pw-sandbox-timeline input {
   min-height: 36px;
@@ -297,6 +373,32 @@
 .pw-person header span:not(.pw-avatar) {
   font-size: 11px;
   color: #748076;
+}
+.pw-person-meta {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 3px;
+}
+.pw-person-classification {
+  max-width: 110px;
+  padding: 3px 22px 3px 5px;
+  border: 1px solid #cbd9ce;
+  border-radius: 4px;
+  background: #f8fbf9;
+  color: #334e3c;
+  font: inherit;
+  font-size: 11px;
+  cursor: pointer;
+}
+.pw-person-classification:focus-visible {
+  outline: 2px solid #2f6b4e;
+  outline-offset: 2px;
+}
+.pw-person-classification:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
 }
 .pw-avatar {
   width: 34px;
@@ -1128,6 +1230,12 @@
 .pw-money-summary-result strong {
   display: block;
 }
+.pw-money-summary-result small {
+  display: block;
+  margin-top: 8px;
+  color: #785e4b;
+  line-height: 1.4;
+}
 .pw-money-summary-result span {
   color: #5e6f63;
   font-size: 10px;
@@ -1303,6 +1411,45 @@
   font-weight: 500;
   margin-top: 10px;
 }
+.pw-recorded-pulse {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 20px;
+  padding: 15px 0 19px;
+  border-top: 1px solid #e3e9e4;
+}
+.pw-recorded-pulse > div {
+  display: grid;
+  gap: 4px;
+}
+.pw-recorded-pulse span {
+  color: #60746a;
+  font-size: 11px;
+}
+.pw-recorded-pulse strong {
+  font-size: 19px;
+  font-weight: 600;
+}
+.pw-recorded-pulse small {
+  color: #617168;
+}
+.pw-projection-table {
+  margin: 26px 0;
+  padding-top: 22px;
+  border-top: 1px solid #e3e9e4;
+}
+.pw-projection-table .pw-section-heading {
+  margin-bottom: 15px;
+}
+.pw-projection-table .pw-table th,
+.pw-projection-table .pw-table td {
+  padding: 11px 12px;
+}
+.pw-projection-note {
+  margin-top: 10px !important;
+  font-size: 12px;
+}
 .pw-chart {
   width: 100%;
   height: 300px;
@@ -1419,6 +1566,16 @@
   gap: 10px;
   flex-wrap: wrap;
 }
+.pw-impact-comparison small,
+.pw-impact-comparison strong {
+  display: grid;
+  gap: 4px;
+}
+.pw-impact-values .pw-impact-comparison span {
+  font-size: 10px;
+  margin: 0;
+  color: #718497;
+}
 .pw-impact-values strong {
   font-size: 20px;
   font-weight: 500;
@@ -1427,6 +1584,11 @@
 .pw-impact-values small {
   color: #718497;
   font-size: 13px;
+}
+.pw-impact-values > div > small {
+  display: block;
+  margin-top: 6px;
+  font-size: 11px;
 }
 .pw-impact-values svg {
   width: 14px;
@@ -1527,9 +1689,15 @@
   .pw-content {
     padding-inline: 24px;
   }
+  .pw-view-bar {
+    padding-inline: 24px;
+  }
   .pw-sections {
     padding-inline: 24px;
     gap: 20px;
+  }
+  .pw-tool-tabs {
+    padding-inline: 24px;
   }
   .pw-campaign {
     gap: 15px;
@@ -1596,6 +1764,22 @@
   .pw-header {
     padding: 23px 18px 20px;
   }
+  .pw-view-bar {
+    padding: 0 18px 15px;
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 8px;
+  }
+  .pw-view-switch {
+    width: 100%;
+  }
+  .pw-view-switch button {
+    flex: 1;
+  }
+  .pw-recorded-pulse {
+    align-items: flex-start;
+    flex-direction: column;
+  }
   .pw-header h1 {
     font-size: 25px;
   }
@@ -1606,6 +1790,9 @@
   .pw-sections {
     padding: 0 18px;
     gap: 22px;
+  }
+  .pw-tool-tabs {
+    padding-inline: 18px;
   }
   .pw-content {
     padding: 24px 18px;
@@ -1731,7 +1918,6 @@
   }
   .pw-money-summary {
     position: static;
-    order: -1;
   }
   .pw-money-row {
     grid-template-columns: minmax(0, 1fr) 120px;

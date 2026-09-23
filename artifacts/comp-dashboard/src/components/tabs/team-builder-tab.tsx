@@ -4,7 +4,8 @@ import {
   useUpdateClinician, useDuplicateClinician,
   getListCliniciansQueryKey,
   useListStaffMembers, useCreateStaffMember, useUpdateStaffMember, useDeleteStaffMember,
-  getListStaffMembersQueryKey
+  getListStaffMembersQueryKey,
+  useListBusinessGoals,
 } from "@workspace/api-client-react";
 import type { Clinician, StaffMember } from "@workspace/api-client-react";
 import { Card, CardHeader, CardTitle, CardContent, CardFooter } from "@/components/ui/card";
@@ -317,14 +318,18 @@ function StaffMemberDialog({
 
 // ─── Main Component ───────────────────────────────────────────────────────────
 
-export default function TeamBuilderTab() {
-  const { data: clinicians, isLoading: clinLoading } = useListClinicians();
+export default function TeamBuilderTab({ teamId }: { teamId?: number | null } = {}) {
+  const { data: allClinicians, isLoading: clinLoading } = useListClinicians();
+  const { data: businessGoals } = useListBusinessGoals();
   const createClinician = useCreateClinician();
   const updateClinician = useUpdateClinician();
   const deleteClinician = useDeleteClinician();
   const duplicateClinician = useDuplicateClinician();
 
-  const { data: staffMembers, isLoading: staffLoading } = useListStaffMembers();
+  const { data: allStaffMembers, isLoading: staffLoading } = useListStaffMembers();
+  const clinicians = teamId === undefined ? allClinicians : allClinicians?.filter(c => (c.goalId ?? null) === teamId);
+  const staffMembers = teamId === undefined ? allStaffMembers : allStaffMembers?.filter(s => (s.goalId ?? null) === teamId);
+  const staffGoalId = teamId === undefined ? (businessGoals?.[0]?.id ?? null) : teamId;
   const createStaff = useCreateStaffMember();
   const updateStaff = useUpdateStaffMember();
   const deleteStaff = useDeleteStaffMember();
@@ -374,7 +379,7 @@ export default function TeamBuilderTab() {
   };
 
   const handleCreateClinician = () => {
-    createClinician.mutate({ data: defaultClinicianForm as never }, {
+    createClinician.mutate({ data: { ...defaultClinicianForm, ...(teamId !== undefined ? { goalId: teamId } : {}) } as never }, {
       onSuccess: (c) => { invalidateClinicians(); openEditClinician(c); toast({ title: "Clinician added" }); },
       onError: () => toast({ title: "Create failed", variant: "destructive" }),
     });
@@ -391,7 +396,11 @@ export default function TeamBuilderTab() {
   });
 
   const handleCreateStaff = () => {
-    createStaff.mutate({ data: { label: "New Staff Member", roleType: "admin", classification: "w2", annualSalary: 45000 } as never }, {
+    if (staffGoalId === null) {
+      toast({ title: "Choose a practice team before adding staff", variant: "destructive" });
+      return;
+    }
+    createStaff.mutate({ data: { label: "New Staff Member", roleType: "admin", classification: "w2", annualSalary: 45000, goalId: staffGoalId } as never }, {
       onSuccess: (s) => {
         invalidateStaff();
         setEditStaff(s);
@@ -555,11 +564,15 @@ export default function TeamBuilderTab() {
               ? <ChevronDown className="h-4 w-4 text-muted-foreground ml-2 shrink-0" />
               : <ChevronRight className="h-4 w-4 text-muted-foreground ml-2 shrink-0" />}
           </button>
-          <Button onClick={handleCreateStaff} variant="outline" className="min-h-[44px]">
+          <Button onClick={handleCreateStaff} disabled={staffGoalId === null} variant="outline" className="min-h-[44px]">
             <Plus className="h-4 w-4 mr-2" />
             Add Staff Member
           </Button>
         </div>
+
+        {staffGoalId === null && (
+          <p className="text-sm text-muted-foreground">Select a compensation team before adding staff.</p>
+        )}
 
         {staffExpanded && (
           <>
@@ -572,7 +585,7 @@ export default function TeamBuilderTab() {
                 <p className="text-muted-foreground max-w-sm mt-2 mb-4 text-sm">
                   Add office managers, billing coordinators, front desk staff, and other non-clinical team members.
                 </p>
-                <Button variant="outline" onClick={handleCreateStaff}>Add Staff Member</Button>
+                <Button variant="outline" onClick={handleCreateStaff} disabled={staffGoalId === null}>Add Staff Member</Button>
               </Card>
             ) : (
               <>

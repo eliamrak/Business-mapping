@@ -225,6 +225,8 @@ test("owner cash waterfall reconciles without double-counting reserves or distri
   w.settings.distributionPct = 50;
   w.settings.ownerPayrollMonthly = 500;
   w.settings.householdWithholdingPct = 10;
+  w.settings.otherHouseholdIncome = 900;
+  w.settings.householdBenefitsCost = 200;
   w.settings.openingCash = 10000;
   const v = forecast(w, context)[0].values;
   close(v.taxReserve, v.profit! * 0.2);
@@ -232,7 +234,7 @@ test("owner cash waterfall reconciles without double-counting reserves or distri
   close(v.distributions, v.profit! * 0.5);
   close(v.retainedCash, v.profit! * 0.2);
   close(v.cash, 10000 + v.retainedCash!);
-  close(v.familyTakeHome, (500 + v.distributions!) * 0.9);
+  close(v.familyTakeHome, 500 + v.distributions!);
 });
 test("saved workspace rejects cycles, overlaps and invalid allocations", () => {
   const w = setup(),

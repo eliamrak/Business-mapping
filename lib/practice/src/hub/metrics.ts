@@ -30,7 +30,7 @@ export const metrics = [
   ["distributions", "Owner distributions", "currency", "Family"],
   ["retainedCash", "Available cash change", "currency", "Cash"],
   ["cash", "Available cash balance", "currency", "Cash"],
-  ["familyTakeHome", "Estimated family take-home", "currency", "Family"],
+  ["familyTakeHome", "Family pay from practice", "currency", "Family"],
   ["breakEvenSessions", "Break-even sessions", "number", "Finances"],
   ["cac", "Acquisition cost", "currency", "Growth"],
   ["ltv", "Revenue lifetime value", "currency", "Growth"],

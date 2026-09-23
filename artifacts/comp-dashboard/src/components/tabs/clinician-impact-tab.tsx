@@ -486,10 +486,12 @@ function W2vs1099SummarySection({ clinicians }: { clinicians: Clinician[] }) {
   );
 }
 
-export default function ClinicianImpactViewTab() {
-  const { data: clinicians, isLoading: isLoadingClinicians } = useListClinicians();
+export default function ClinicianImpactViewTab({ teamId }: { teamId?: number | null } = {}) {
+  const { data: allClinicians, isLoading: isLoadingClinicians } = useListClinicians();
   const { data: scenarios, isLoading: isLoadingScenarios } = useListScenarios();
-  const { data: staffMembers } = useListStaffMembers();
+  const { data: allStaffMembers } = useListStaffMembers();
+  const clinicians = teamId === undefined ? allClinicians : allClinicians?.filter(c => (c.goalId ?? null) === teamId);
+  const staffMembers = teamId === undefined ? allStaffMembers : allStaffMembers?.filter(s => (s.goalId ?? null) === teamId);
 
   const totalStaffCost = staffMembers?.reduce((sum, s) => {
     const { totalAnnualCost } = calculateStaffMemberCost({

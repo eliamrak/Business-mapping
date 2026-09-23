@@ -563,14 +563,14 @@ export default function Practice() {
           <TooltipTrigger asChild>
             <a
               className="pr-rail-link"
-              href={import.meta.env.BASE_URL}
-              aria-label="Compensation and planning"
+              href={`${import.meta.env.BASE_URL}reference`}
+              aria-label="Original compensation layout"
             >
               <SlidersHorizontal />
-              <span>Planning</span>
+              <span>Original</span>
             </a>
           </TooltipTrigger>
-          <TooltipContent>Compensation and planning</TooltipContent>
+          <TooltipContent>Original compensation layout</TooltipContent>
         </Tooltip>
         <div className="pr-rail-bottom">
           <IconButton

@@ -130,9 +130,14 @@ function Router() {
           <Practice />
         </Access>
       </Route>
-      <Route path="/">
+      <Route path="/reference">
         <Access>
           <Dashboard />
+        </Access>
+      </Route>
+      <Route path="/">
+        <Access>
+          <PracticeWorkspace />
         </Access>
       </Route>
       <Route path="/present/:token" component={ClinicianPresenterPage} />

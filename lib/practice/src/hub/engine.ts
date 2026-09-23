@@ -43,6 +43,9 @@ export type ForecastMonth = {
   warnings: string[];
   constraint: string;
 };
+export type ForecastOptions = {
+  baselineWeeklyByClinician?: Record<number, number>;
+};
 import { metrics, metricMap } from "./metrics.ts";
 export { metrics, metricMap } from "./metrics.ts";
 export const registeredMetrics = (
@@ -373,6 +376,7 @@ export function forecast(
   proposed: PlanEvent[] = [],
   demandMultiplier = 1,
   compareMarketing = true,
+  options: ForecastOptions = {},
 ): ForecastMonth[] {
   const settings = workspace.settings;
   const issues = eventIssues([...workspace.events, ...proposed]);
@@ -396,8 +400,15 @@ export function forecast(
   )
     ? history.reduce((n, h) => n + (h.averagePerRecordedWeek ?? 0), 0)
     : null;
-  const baseWeekly =
-    settings.baselineMode === "manual"
+  const baseWeekly = options.baselineWeeklyByClinician
+    ? selected.reduce(
+        (total, clinician) =>
+          total +
+          (options.baselineWeeklyByClinician?.[clinician.id] ??
+            clinician.sessionsPerWeek),
+        0,
+      )
+    : settings.baselineMode === "manual"
       ? settings.baselineWeeklySessions
       : historicalWeekly;
   const results: ForecastMonth[] = [];
@@ -821,13 +832,29 @@ export function forecast(
         const limits = new Map(
           people.map((c) => [c.instance, availableFor(c)]),
         );
-        const free = [...limits.values()].reduce((n, v) => n + v, 0);
+        const preferences =
+          pass === 0 && options.baselineWeeklyByClinician
+            ? new Map(
+                people.map((c) => [
+                  c.instance,
+                  Math.min(
+                    limits.get(c.instance) ?? 0,
+                    (c.instance === String(c.id)
+                      ? (options.baselineWeeklyByClinician?.[c.id] ??
+                        c.sessionsPerWeek)
+                      : 0) * weeks,
+                  ),
+                ]),
+              )
+            : limits;
+        const free = [...preferences.values()].reduce((n, v) => n + v, 0);
         const need = requested - total;
         for (const c of ordered) {
           const available = limits.get(c.instance) ?? 0;
+          const preferred = preferences.get(c.instance) ?? 0;
           let wanted = Math.min(
               available,
-              free > 0 ? (need * available) / free : 0,
+              free > 0 ? (Math.min(need, free) * preferred) / free : 0,
             ),
             provided = 0;
           const eligible = eligibleFor(c);
@@ -1080,12 +1107,9 @@ export function forecast(
         ) ?? 0)
       : distributions;
     const familyTakeHome =
-      (ownerPayroll +
-        (setting.includeOwnerClinical ? ownerClinicalPay : 0) +
-        familyDistribution) *
-        (1 - setting.householdWithholdingPct / 100) +
-      setting.otherHouseholdIncome -
-      setting.householdBenefitsCost;
+      ownerPayroll +
+      (setting.includeOwnerClinical ? ownerClinicalPay : 0) +
+      familyDistribution;
     const contributionPerSession = ratio(
       revenue - clinicianPay - employerBurden - fees,
       sessions,
@@ -1183,7 +1207,7 @@ export function forecast(
       profit:
         "Earned revenue + other income - clinician pay - employer burden - staff cost - overhead - marketing - fees - owner payroll/burden.",
       familyTakeHome:
-        "Owner payroll + included owner clinical pay + household distributions, less explicit household withholding and benefits, plus other household income. These are estimates, not tax advice.",
+        "Owner payroll + included owner clinical pay + distributions marked for family. This tracks payments from the practice, not outside household income or personal expenses; payroll is before personal withholding.",
       cash: "Opening available cash + cumulative cash collections/income - cash expenses - tax/reserve allocations - distributions. Reserves are ring-fenced, not available operating cash.",
       utilization:
         "Completed sessions / available clinician sessions. Capacity accounts for working weeks and hire ramp.",
@@ -1451,12 +1475,9 @@ export function observed(
         owner !== null &&
         distribution !== null &&
         (!workspace.settings.includeOwnerClinical || ownerClinical !== null)
-          ? (owner +
-              distribution +
-              (workspace.settings.includeOwnerClinical ? ownerClinical! : 0)) *
-              (1 - workspace.settings.householdWithholdingPct / 100) -
-            workspace.settings.householdBenefitsCost * calendarMonths(periods) +
-            workspace.settings.otherHouseholdIncome * calendarMonths(periods)
+          ? owner +
+            distribution +
+            (workspace.settings.includeOwnerClinical ? ownerClinical! : 0)
           : null,
     },
     end,
@@ -1477,21 +1498,6 @@ export function observed(
     ),
     warnings,
   };
-}
-
-function calendarMonths(periods: { start: string; end: string }[]) {
-  return periods.reduce((sum, p) => {
-    for (
-      let date = monthDate(p.start);
-      date <= p.end;
-      date = monthDate(date, 1)
-    ) {
-      sum +=
-        activeDays(p, date, monthEnd(date)) /
-        daysInclusive(date, monthEnd(date));
-    }
-    return sum;
-  }, 0);
 }
 
 export function observedSeries(
@@ -1784,21 +1790,10 @@ export function solveGoal(
           ? (target + fixed) / margin
           : null;
   if (metric === "familyTakeHome") {
-    const keep =
-      ((1 - workspace.settings.householdWithholdingPct / 100) *
-        workspace.settings.distributionPct) /
-      100;
+    const keep = workspace.settings.distributionPct / 100;
     required =
       keep > 0 && margin > 0
-        ? (Math.max(
-            0,
-            target -
-              (v.ownerPayroll ?? 0) *
-                (1 - workspace.settings.householdWithholdingPct / 100),
-          ) /
-            keep +
-            fixed) /
-          margin
+        ? (Math.max(0, target - (v.ownerPayroll ?? 0)) / keep + fixed) / margin
         : null;
   }
   const perClinician = selected.length

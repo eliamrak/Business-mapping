@@ -110,7 +110,7 @@ export async function managementReport(
   if (sections.includes("forecast")) {
     page(
       "Active forecast",
-      `${months.length} months from ${workspace.settings.forecastStart}. Projections depend on entered data and assumptions. Cash collections, operating profit and household income are distinct.`,
+      `${months.length} months from ${workspace.settings.forecastStart}. Projections depend on entered data and assumptions. Cash collections, operating profit and family payments from the practice are distinct.`,
     );
     table(
       [

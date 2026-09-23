@@ -202,10 +202,11 @@ test("salary is prorated to active dates and opening cap balances affect the for
     forecast(w, { ...context, clinicians: [c] })[0].values.revenue! * 0.75,
   );
 });
-test("cash collections and earned revenue stay distinct in actuals; household monthly amounts follow the period", () => {
+test("recorded family pay excludes outside household income and costs", () => {
   const w = setup();
   w.settings.otherHouseholdIncome = 310;
   w.settings.householdBenefitsCost = 155;
+  w.settings.includeOwnerClinical = true;
   w.periods = [
     periodSchema.parse({
       id: id(),
@@ -216,15 +217,15 @@ test("cash collections and earned revenue stay distinct in actuals; household mo
       revenue: 1200,
       earnedRevenue: 2000,
       expensesComplete: true,
-      ownerPay: 0,
-      ownerClinicalPay: 0,
-      distributions: 0,
+      ownerPay: 500,
+      ownerClinicalPay: 50,
+      distributions: 70,
     }),
   ];
   const v = observed(w, context, start, "2026-01-31").values;
   close(v.revenue, 2000);
   close(v.collections, 1200);
-  close(v.familyTakeHome, 75);
+  close(v.familyTakeHome, 620);
 });
 test("recorded rules require contiguous finalized periods and do not count missing intervals", () => {
   const w = setup();
