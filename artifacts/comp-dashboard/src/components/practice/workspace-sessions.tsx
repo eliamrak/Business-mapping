@@ -18,6 +18,7 @@ import {
 import type { Context } from "@workspace/practice/hub";
 import { saveSessionRecord } from "@/lib/session-api";
 import SessionImportDialog from "./session-import-dialog";
+import BulkSessionEntry from "./bulk-session-entry";
 
 type Draft = {
   completed: string;
@@ -100,6 +101,10 @@ export default function WorkspaceSessions({
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
   const [importOpen, setImportOpen] = useState(false);
+  const [entryMode, setEntryMode] = useState<"single" | "bulk">(
+    records.length ? "single" : "bulk",
+  );
+  const [bulkState, setBulkState] = useState({ dirty: false, busy: false });
   const [historyRange, setHistoryRange] = useState("180");
   const [customRange, setCustomRange] = useState({
     start: shift(today, -179),
@@ -166,9 +171,9 @@ export default function WorkspaceSessions({
   };
   const dirty = people.some((person) => changed(person.id));
   useEffect(() => {
-    onEditingChange(dirty || importOpen);
+    onEditingChange(dirty || bulkState.dirty || bulkState.busy || importOpen);
     const warn = (event: BeforeUnloadEvent) => {
-      if (dirty || importOpen) {
+      if (dirty || bulkState.dirty || bulkState.busy || importOpen) {
         event.preventDefault();
         event.returnValue = "";
       }
@@ -178,7 +183,7 @@ export default function WorkspaceSessions({
       onEditingChange(false);
       window.removeEventListener("beforeunload", warn);
     };
-  }, [dirty, importOpen, onEditingChange]);
+  }, [dirty, bulkState.dirty, bulkState.busy, importOpen, onEditingChange]);
 
   const setDraft = (personId: number, key: keyof Draft, next: string) => {
     setDrafts((current) => ({
@@ -319,10 +324,10 @@ export default function WorkspaceSessions({
           {!sandbox && (
             <button
               className="pw-button"
-              disabled={dirty || busy}
+              disabled={dirty || busy || bulkState.dirty || bulkState.busy}
               onClick={() => setImportOpen(true)}
             >
-              <Upload /> Import history
+              <Upload /> Upload file
             </button>
           )}
           <details className="pw-menu">
@@ -356,6 +361,17 @@ export default function WorkspaceSessions({
       </div>
 
       {!sandbox && (
+        <div className="pw-segmented pw-session-entry-modes" role="tablist" aria-label="Session entry">
+          <button role="tab" aria-selected={entryMode === "single"}
+            disabled={bulkState.dirty || bulkState.busy}
+            onClick={() => setEntryMode("single")}>One period</button>
+          <button role="tab" aria-selected={entryMode === "bulk"}
+            disabled={dirty || busy}
+            onClick={() => setEntryMode("bulk")}>Bulk entry</button>
+        </div>
+      )}
+
+      {!sandbox && entryMode === "single" && (
         <div className="pw-session-entry">
           <div className="pw-session-toolbar">
             <button
@@ -550,6 +566,16 @@ export default function WorkspaceSessions({
         </div>
       )}
 
+      {!sandbox && entryMode === "bulk" && (
+        <BulkSessionEntry
+          people={people}
+          records={records}
+          initialRange={range}
+          onSaved={onSaved}
+          onStateChange={setBulkState}
+        />
+      )}
+
       {sandbox && (
         <p className="pw-notice">
           Recorded sessions remain unchanged in Sandbox. Change desired sessions
@@ -622,7 +648,7 @@ export default function WorkspaceSessions({
               <tr key={`${period.start}-${period.end}`}>
                 <th>
                   <button
-                    disabled={dirty || sandbox}
+                    disabled={dirty || bulkState.dirty || bulkState.busy || sandbox}
                     onClick={() =>
                       setRange({ start: period.start, end: period.end })
                     }
