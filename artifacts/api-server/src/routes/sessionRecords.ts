@@ -8,9 +8,11 @@ import {
   hubWorkspacesTable,
   hubAttachmentsTable,
 } from "@workspace/db";
-import { sessionWriteSchema, type SessionRecord } from "@workspace/practice";
+import { sessionWriteSchema, type SessionRecord, z } from "@workspace/practice";
 import { workspaceSchema } from "@workspace/practice/hub";
+import Papa from "papaparse";
 import { logger } from "../lib/logger";
+import { spreadsheetPreview } from "../lib/spreadsheet-preview";
 
 const router = Router();
 const positiveId = (value: unknown) =>
@@ -31,6 +33,39 @@ class SessionConflict extends Error {
     super(message);
   }
 }
+
+router.post("/session-records/import-preview", async (req, res) => {
+  const parsed = z
+    .object({
+      name: z.string().trim().min(1).max(180),
+      data: z.string().max(14_000_000),
+    })
+    .strict()
+    .safeParse(req.body);
+  if (!parsed.success)
+    return res.status(400).json({ error: "Choose a CSV or XLSX file up to 10 MB." });
+  const { name, data } = parsed.data;
+  if (!/\.(csv|xlsx)$/i.test(name) || !/^[A-Za-z0-9+/]*={0,2}$/.test(data))
+    return res.status(400).json({ error: "Choose a valid CSV or XLSX file." });
+  const bytes = Buffer.from(data, "base64");
+  if (!bytes.length || bytes.length > 10 * 1024 * 1024)
+    return res.status(400).json({ error: "File must be between 1 byte and 10 MB." });
+  try {
+    if (/\.xlsx$/i.test(name)) return res.json(await spreadsheetPreview(data));
+    const result = Papa.parse<string[]>(bytes.toString("utf8"), {
+      skipEmptyLines: "greedy",
+      preview: 1001,
+    });
+    if (result.errors.length)
+      return res.status(400).json({ error: "The CSV file could not be read." });
+    return res.json({
+      sheets: [{ name: "CSV", rows: result.data.map((row) => row.slice(0, 80)) }],
+      limited: result.meta.truncated || result.data.some((row) => row.length > 80),
+    });
+  } catch {
+    return res.status(400).json({ error: "The spreadsheet could not be read." });
+  }
+});
 
 router.get("/session-records", async (req, res) => {
   const goal = req.query.goalId;
