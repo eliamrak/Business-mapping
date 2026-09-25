@@ -6,6 +6,7 @@ import {
   RotateCcw,
   Save,
   SlidersHorizontal,
+  Upload,
 } from "lucide-react";
 import {
   daysInclusive,
@@ -16,6 +17,7 @@ import {
 } from "@workspace/practice";
 import type { Context } from "@workspace/practice/hub";
 import { saveSessionRecord } from "@/lib/session-api";
+import SessionImportDialog from "./session-import-dialog";
 
 type Draft = {
   completed: string;
@@ -97,6 +99,7 @@ export default function WorkspaceSessions({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
+  const [importOpen, setImportOpen] = useState(false);
   const [historyRange, setHistoryRange] = useState("180");
   const [customRange, setCustomRange] = useState({
     start: shift(today, -179),
@@ -163,9 +166,9 @@ export default function WorkspaceSessions({
   };
   const dirty = people.some((person) => changed(person.id));
   useEffect(() => {
-    onEditingChange(dirty);
+    onEditingChange(dirty || importOpen);
     const warn = (event: BeforeUnloadEvent) => {
-      if (dirty) {
+      if (dirty || importOpen) {
         event.preventDefault();
         event.returnValue = "";
       }
@@ -175,7 +178,7 @@ export default function WorkspaceSessions({
       onEditingChange(false);
       window.removeEventListener("beforeunload", warn);
     };
-  }, [dirty, onEditingChange]);
+  }, [dirty, importOpen, onEditingChange]);
 
   const setDraft = (personId: number, key: keyof Draft, next: string) => {
     setDrafts((current) => ({
@@ -312,33 +315,44 @@ export default function WorkspaceSessions({
           <h2>Sessions</h2>
           <p>Enter the whole team's biweekly totals in one pass</p>
         </div>
-        <details className="pw-menu">
-          <summary>
-            <SlidersHorizontal /> Display
-          </summary>
-          <div>
-            {(
-              [
-                ["desired", "Desired totals"],
-                ["fullness", "Fullness"],
-                ["weekly", "Weekly average"],
-                ["cancelled", "Cancelled"],
-                ["recent", "Last 2 months"],
-              ] as const
-            ).map(([key, label]) => (
-              <label key={key}>
-                <input
-                  type="checkbox"
-                  checked={columns[key]}
-                  onChange={(event) =>
-                    setColumns({ ...columns, [key]: event.target.checked })
-                  }
-                />
-                {label}
-              </label>
-            ))}
-          </div>
-        </details>
+        <div className="pw-actions">
+          {!sandbox && (
+            <button
+              className="pw-button"
+              disabled={dirty || busy}
+              onClick={() => setImportOpen(true)}
+            >
+              <Upload /> Import history
+            </button>
+          )}
+          <details className="pw-menu">
+            <summary>
+              <SlidersHorizontal /> Display
+            </summary>
+            <div>
+              {(
+                [
+                  ["desired", "Desired totals"],
+                  ["fullness", "Fullness"],
+                  ["weekly", "Weekly average"],
+                  ["cancelled", "Cancelled"],
+                  ["recent", "Last 2 months"],
+                ] as const
+              ).map(([key, label]) => (
+                <label key={key}>
+                  <input
+                    type="checkbox"
+                    checked={columns[key]}
+                    onChange={(event) =>
+                      setColumns({ ...columns, [key]: event.target.checked })
+                    }
+                  />
+                  {label}
+                </label>
+              ))}
+            </div>
+          </details>
+        </div>
       </div>
 
       {!sandbox && (
@@ -739,6 +753,17 @@ export default function WorkspaceSessions({
         >
           Open detailed session reporting
         </a>
+      )}
+      {importOpen && (
+        <SessionImportDialog
+          context={context}
+          teamId={teamId}
+          onSaved={onSaved}
+          onClose={(note) => {
+            setImportOpen(false);
+            if (note) setMessage(note);
+          }}
+        />
       )}
     </section>
   );
