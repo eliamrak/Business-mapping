@@ -1,14 +1,19 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { ApiError } from "@workspace/api-client-react";
 import {
+  ArrowDownRight,
+  ArrowRight,
+  ArrowUpRight,
   ChevronLeft,
   ChevronRight,
+  PencilLine,
   RotateCcw,
   Save,
   SlidersHorizontal,
   Upload,
 } from "lucide-react";
 import {
+  dateRangeSchema,
   daysInclusive,
   sessionInputSchema,
   z,
@@ -17,6 +22,7 @@ import {
 } from "@workspace/practice";
 import type { Context } from "@workspace/practice/hub";
 import { saveSessionRecord } from "@/lib/session-api";
+import { summarizeSessionOverview } from "@/lib/session-overview";
 import SessionImportDialog from "./session-import-dialog";
 import BulkSessionEntry from "./bulk-session-entry";
 
@@ -104,8 +110,10 @@ export default function WorkspaceSessions({
   const [entryMode, setEntryMode] = useState<"single" | "bulk">(
     records.length ? "single" : "bulk",
   );
+  const [entryOpen, setEntryOpen] = useState(!records.length);
+  const entryRef = useRef<HTMLDivElement>(null);
   const [bulkState, setBulkState] = useState({ dirty: false, busy: false });
-  const [historyRange, setHistoryRange] = useState("180");
+  const [historyRange, setHistoryRange] = useState("4periods");
   const [customRange, setCustomRange] = useState({
     start: shift(today, -179),
     end: today,
@@ -273,16 +281,54 @@ export default function WorkspaceSessions({
     }
   }
 
-  const filteredPeriods = periods.filter((period) => {
-    if (historyRange === "all") return true;
-    const bounds =
-      historyRange === "custom"
-        ? customRange
-        : { start: shift(today, 1 - Number(historyRange)), end: today };
-    return period.end >= bounds.start && period.start <= bounds.end;
-  });
+  const completedPeriods = periods.filter((period) => period.end <= today);
+  const currentFour = completedPeriods.slice(0, 4);
+  const previousFour = completedPeriods.slice(4, 8);
+  const bounds = historyRange === "custom"
+    ? customRange
+    : historyRange === "all" || historyRange === "4periods"
+      ? null
+      : { start: shift(today, 1 - Number(historyRange)), end: today };
+  const boundsValid = !bounds || dateRangeSchema.safeParse(bounds).success;
+  const filteredPeriods = historyRange === "4periods"
+    ? currentFour
+    : periods.filter((period) =>
+      boundsValid && (!bounds || (period.end >= bounds.start && period.start <= bounds.end)),
+    );
+  const previousBounds = bounds && boundsValid
+    ? {
+        start: shift(bounds.start, -daysInclusive(bounds.start, bounds.end)),
+        end: shift(bounds.start, -1),
+      }
+    : null;
+  const previousOverviewRecords = historyRange === "4periods"
+    ? previousFour.flatMap((period) => period.records)
+    : previousBounds
+      ? records.filter((record) => record.end >= previousBounds.start && record.end <= previousBounds.end)
+      : [];
   const recordFor = (period: Period, personId: number) =>
     period.records.find((record) => record.clinicianId === personId);
+  const overviewFor = (personId: number) => {
+    const current = (historyRange === "4periods"
+      ? currentFour.flatMap((period) => period.records)
+      : bounds
+        ? boundsValid
+          ? records.filter((record) => record.end >= bounds.start && record.end <= bounds.end)
+          : []
+        : records
+    ).filter((record) => record.clinicianId === personId);
+    const previous = previousOverviewRecords.filter((record) => record.clinicianId === personId);
+    const summary = summarizeSessionOverview(
+      current, previous,
+      people.find((person) => person.id === personId)?.sessionsPerWeek ?? 0,
+    );
+    return {
+      ...summary,
+      trendWeekly: historyRange === "4periods" && (current.length < 4 || previous.length < 4)
+        ? null
+        : summary.trendWeekly,
+    };
+  };
   const statsFor = (personId: number) => {
     const entries = filteredPeriods
       .map((period) => recordFor(period, personId))
@@ -318,7 +364,7 @@ export default function WorkspaceSessions({
       <div className="pw-section-heading">
         <div>
           <h2>Sessions</h2>
-          <p>Enter the whole team's biweekly totals in one pass</p>
+          <p>Biweekly session pace</p>
         </div>
         <div className="pw-actions">
           {!sandbox && (
@@ -360,7 +406,90 @@ export default function WorkspaceSessions({
         </div>
       </div>
 
+      <div className="pw-session-overview-heading">
+        <div>
+          <h3>Team pace</h3>
+          <p>{filteredPeriods.length} recorded period{filteredPeriods.length === 1 ? "" : "s"} in view</p>
+        </div>
+        <div className="pw-session-range">
+          <select
+            aria-label="Session date range"
+            value={historyRange}
+            onChange={(event) => setHistoryRange(event.target.value)}
+          >
+            <option value="4periods">Last 4 periods</option>
+            <option value="30">Last 30 days</option>
+            <option value="60">Last 60 days</option>
+            <option value="90">Last 90 days</option>
+            <option value="180">Last 6 months</option>
+            <option value="all">All history</option>
+            <option value="custom">Custom dates</option>
+          </select>
+          {historyRange === "custom" && (
+            <>
+              <input aria-label="Range starts" type="date" value={customRange.start}
+                onChange={(event) => setCustomRange({ ...customRange, start: event.target.value })} />
+              <input aria-label="Range ends" type="date" value={customRange.end}
+                onChange={(event) => setCustomRange({ ...customRange, end: event.target.value })} />
+            </>
+          )}
+        </div>
+      </div>
+      {!!people.length && (
+        <div className="pw-session-overview" aria-label="Clinician session pace">
+          {people.map((person, index) => {
+            const { latest, averageWeekly, goalWeekly, openWeekly, overGoalWeekly, fullness, trendWeekly, count } = overviewFor(person.id);
+            const trend = trendWeekly == null ? "empty" : trendWeekly > 0 ? "up" : trendWeekly < 0 ? "down" : "flat";
+            return (
+              <div className="pw-session-overview-row" key={person.id}>
+                <div className="pw-session-overview-name">
+                  <span className={`pw-session-avatar pw-avatar-${index % 3}`}>{person.label.slice(0, 1).toUpperCase()}</span>
+                  <div><strong>{person.label}</strong><small>{count} recorded period{count === 1 ? "" : "s"}{latest ? `, through ${shortDate(latest.end)}` : ""}</small></div>
+                </div>
+                <div className="pw-session-overview-stat pw-session-overview-capacity">
+                  <span>Sessions / week</span>
+                  <div className="pw-session-capacity-values">
+                    <div><strong>{display(averageWeekly)}</strong><small>avg completed</small></div>
+                    <div><strong>{display(openWeekly)}</strong><small>estimated room</small></div>
+                  </div>
+                  <div className="pw-session-fill-track" aria-hidden="true">
+                    <span style={{ width: `${Math.min(Math.max(fullness ?? 0, 0), 100)}%` }} />
+                  </div>
+                  <small>{goalWeekly > 0
+                    ? `Goal ${display(goalWeekly)} / week, ${display(fullness, "%")} filled${overGoalWeekly ? `, ${display(overGoalWeekly)} over goal` : ""}`
+                    : "No weekly goal set"}</small>
+                </div>
+                <div className="pw-session-overview-stat pw-session-overview-trend" data-trend={trend}>
+                  <span>Trend</span>
+                  <strong>{trendWeekly == null ? "-" : <>
+                    {trend === "up" ? <ArrowUpRight aria-hidden="true" />
+                      : trend === "down" ? <ArrowDownRight aria-hidden="true" />
+                        : <ArrowRight aria-hidden="true" />}
+                    {trendWeekly > 0 ? "+" : ""}{display(trendWeekly)}
+                  </>}</strong>
+                  <small>{trendWeekly == null
+                    ? "Not enough earlier data"
+                    : historyRange === "4periods" ? "vs previous 4 periods"
+                      : historyRange === "custom" ? "vs previous date range"
+                        : `vs previous ${historyRange} days`}</small>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+
       {!sandbox && (
+        <div className="pw-session-entry-control">
+          <button className="pw-button" type="button" aria-expanded={entryOpen}
+            disabled={entryOpen && (dirty || busy || bulkState.dirty || bulkState.busy)}
+            onClick={() => setEntryOpen(!entryOpen)}>
+            <PencilLine /> {entryOpen ? "Close entry" : "Enter or edit totals"}
+          </button>
+        </div>
+      )}
+
+      {!sandbox && entryOpen && <div ref={entryRef}>
         <div className="pw-segmented pw-session-entry-modes" role="tablist" aria-label="Session entry">
           <button role="tab" aria-selected={entryMode === "single"}
             disabled={bulkState.dirty || bulkState.busy}
@@ -369,9 +498,8 @@ export default function WorkspaceSessions({
             disabled={dirty || busy}
             onClick={() => setEntryMode("bulk")}>Bulk entry</button>
         </div>
-      )}
 
-      {!sandbox && entryMode === "single" && (
+      {entryMode === "single" && (
         <div className="pw-session-entry">
           <div className="pw-session-toolbar">
             <button
@@ -566,7 +694,7 @@ export default function WorkspaceSessions({
         </div>
       )}
 
-      {!sandbox && entryMode === "bulk" && (
+      {entryMode === "bulk" && (
         <BulkSessionEntry
           people={people}
           records={records}
@@ -575,6 +703,7 @@ export default function WorkspaceSessions({
           onStateChange={setBulkState}
         />
       )}
+      </div>}
 
       {sandbox && (
         <p className="pw-notice">
@@ -596,41 +725,7 @@ export default function WorkspaceSessions({
       <div className="pw-session-history-heading">
         <div>
           <h3>Biweekly history</h3>
-          <p>Click a period to reopen it above</p>
-        </div>
-        <div className="pw-actions">
-          <select
-            aria-label="Session history range"
-            value={historyRange}
-            onChange={(event) => setHistoryRange(event.target.value)}
-          >
-            <option value="30">Last 30 days</option>
-            <option value="60">Last 60 days</option>
-            <option value="90">Last 90 days</option>
-            <option value="180">Last 6 months</option>
-            <option value="all">All history</option>
-            <option value="custom">Custom dates</option>
-          </select>
-          {historyRange === "custom" && (
-            <>
-              <input
-                aria-label="History start"
-                type="date"
-                value={customRange.start}
-                onChange={(event) =>
-                  setCustomRange({ ...customRange, start: event.target.value })
-                }
-              />
-              <input
-                aria-label="History end"
-                type="date"
-                value={customRange.end}
-                onChange={(event) =>
-                  setCustomRange({ ...customRange, end: event.target.value })
-                }
-              />
-            </>
-          )}
+          <p>Select a period to edit its totals</p>
         </div>
       </div>
       <div className="pw-session-matrix-wrap">
@@ -649,9 +744,12 @@ export default function WorkspaceSessions({
                 <th>
                   <button
                     disabled={dirty || bulkState.dirty || bulkState.busy || sandbox}
-                    onClick={() =>
-                      setRange({ start: period.start, end: period.end })
-                    }
+                    onClick={() => {
+                      setRange({ start: period.start, end: period.end });
+                      setEntryMode("single");
+                      setEntryOpen(true);
+                      requestAnimationFrame(() => entryRef.current?.scrollIntoView({ block: "start" }));
+                    }}
                   >
                     <strong>{shortDate(period.start)}</strong>
                     <span>to {shortDate(period.end)}</span>

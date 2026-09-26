@@ -3,7 +3,7 @@ import { RotateCcw, Save } from "lucide-react";
 import { ApiError } from "@workspace/api-client-react";
 import { dateSchema, type SessionRecord, type SessionWrite } from "@workspace/practice";
 import type { Clinician } from "@workspace/practice/hub";
-import { saveSessionRecord } from "@/lib/session-api";
+import { saveSessionRecordBounded } from "@/lib/session-api";
 import {
   MAX_BULK_PERIODS,
   buildBulkPeriods,
@@ -11,6 +11,7 @@ import {
   parsePastedTotals,
   planBulkSessions,
   shiftBulkDate,
+  writeBulkSessions,
   type BulkPeriod,
 } from "@/lib/bulk-sessions";
 
@@ -40,6 +41,8 @@ export default function BulkSessionEntry({
   const [rowCount, setRowCount] = useState(12);
   const [overrides, setOverrides] = useState<Record<string, string>>({});
   const [busy, setBusy] = useState(false);
+  const [savedCount, setSavedCount] = useState(0);
+  const [saveTotal, setSaveTotal] = useState(0);
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
   const pending = useRef(new Map<string, SessionWrite>());
@@ -112,25 +115,16 @@ export default function BulkSessionEntry({
   async function save() {
     if (busy || built.error || plan.issues.length || !plan.entries.length) return;
     setBusy(true);
+    setSavedCount(0);
+    setSaveTotal(plan.entries.length);
     setError("");
     const savedKeys: string[] = [];
     try {
-      for (const item of plan.entries) {
-        const previous = pending.current.get(item.key);
-        const command: SessionWrite = previous &&
-          JSON.stringify(previous.entry) === JSON.stringify(item.entry) &&
-          previous.expectedRevision === item.expectedRevision
-          ? previous
-          : {
-              requestId: crypto.randomUUID(),
-              expectedRevision: item.expectedRevision,
-              entry: item.entry,
-            };
-        pending.current.set(item.key, command);
-        await saveSessionRecord(command);
-        savedKeys.push(item.key);
-        pending.current.delete(item.key);
-      }
+      const result = await writeBulkSessions(
+        plan.entries, pending.current, saveSessionRecordBounded, setSavedCount,
+      );
+      savedKeys.push(...result.savedKeys);
+      if (result.error) throw result.error;
       await onSaved();
       setOverrides((current) => {
         const next = { ...current };
@@ -149,9 +143,11 @@ export default function BulkSessionEntry({
           return next;
         });
       }
-      setError(`${savedKeys.length} totals saved. ${
+      setError(`${savedKeys.length} of ${plan.entries.length} totals confirmed saved. ${
         cause instanceof ApiError
           ? ((cause.data as { error?: string })?.error ?? cause.message)
+          : cause instanceof Error && cause.name === "TimeoutError"
+            ? "A request took too long to confirm. It may still have reached the server."
           : cause instanceof Error ? cause.message : "The next total was not confirmed."
       } Review the remaining cells before retrying.`);
     } finally {
@@ -197,7 +193,9 @@ export default function BulkSessionEntry({
             }}
           />
         </label>
-        <span className="pw-bulk-summary">{plan.entries.length} ready to save</span>
+        <span className="pw-bulk-summary" role="status">
+          {busy ? `${savedCount} of ${saveTotal} saved` : `${plan.entries.length} ready to save`}
+        </span>
       </div>
       {built.error && <p className="pw-error" role="alert">{built.error}</p>}
       <div className="pw-bulk-table-wrap">
@@ -244,7 +242,7 @@ export default function BulkSessionEntry({
       {error && <p className="pw-error" role="alert">{error}</p>}
       {message && <p className="pw-success" role="status">{message}</p>}
       <div className="pw-session-savebar">
-        <div><strong>{dirty ? `${plan.entries.length} changed totals` : "Ready for totals"}</strong>
+        <div><strong>{busy ? `${savedCount} of ${saveTotal} saved` : dirty ? `${plan.entries.length} changed totals` : "Ready for totals"}</strong>
           <span>{built.periods.length ? `${shortDate(built.periods[0].start)} - ${shortDate(built.periods.at(-1)!.end)}` : "Check first period dates"}</span></div>
         {dirty && <button className="pw-button" disabled={busy} onClick={() => {
           setOverrides({});
@@ -252,7 +250,7 @@ export default function BulkSessionEntry({
           setError("");
         }}><RotateCcw /> Discard</button>}
         <button className="pw-button pw-primary" disabled={busy || !plan.entries.length || !!plan.issues.length || !!built.error}
-          onClick={() => void save()}><Save /> {busy ? "Saving..." : "Save totals"}</button>
+          onClick={() => void save()}><Save /> {busy ? `Saving ${savedCount}/${saveTotal}` : "Save totals"}</button>
       </div>
     </div>
   );

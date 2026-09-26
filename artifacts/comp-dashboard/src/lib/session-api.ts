@@ -11,11 +11,16 @@ export const listSessionRecords = (team: string, signal?: AbortSignal) =>
     `/api/session-records?goalId=${encodeURIComponent(team)}`,
     { signal },
   );
-export const saveSessionRecord = (command: SessionWrite) =>
+const postSessionRecord = (command: SessionWrite, signal?: AbortSignal) =>
   customFetch<SessionRecord>("/api/session-records", {
     method: "POST",
     body: JSON.stringify(command),
+    signal,
   });
+export const saveSessionRecord = (command: SessionWrite) =>
+  postSessionRecord(command);
+export const saveSessionRecordBounded = (command: SessionWrite) =>
+  postSessionRecord(command, AbortSignal.timeout(30_000));
 export const sessionHistory = (id: number, signal?: AbortSignal) =>
   customFetch<SessionHistory[]>(`/api/session-records/${id}/history`, {
     signal,

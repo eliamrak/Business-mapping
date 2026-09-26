@@ -4,6 +4,7 @@ import {
   sessionInputSchema,
   type SessionInput,
   type SessionRecord,
+  type SessionWrite,
 } from "@workspace/practice";
 
 export const MAX_BULK_PERIODS = 52;
@@ -114,4 +115,37 @@ export function planBulkSessions(
     }
   }
   return { entries, issues };
+}
+
+export async function writeBulkSessions(
+  entries: BulkEntry[],
+  pending: Map<string, SessionWrite>,
+  saveRecord: (command: SessionWrite) => Promise<unknown>,
+  onProgress: (saved: number) => void,
+): Promise<{ savedKeys: string[]; error: unknown | null }> {
+  const savedKeys: string[] = [];
+  for (let index = 0; index < entries.length; index += 4) {
+    const batch = entries.slice(index, index + 4);
+    const results = await Promise.allSettled(batch.map(async (item) => {
+      const previous = pending.get(item.key);
+      const command: SessionWrite = previous &&
+        JSON.stringify(previous.entry) === JSON.stringify(item.entry) &&
+        previous.expectedRevision === item.expectedRevision
+        ? previous
+        : {
+            requestId: crypto.randomUUID(),
+            expectedRevision: item.expectedRevision,
+            entry: item.entry,
+          };
+      pending.set(item.key, command);
+      await saveRecord(command);
+      savedKeys.push(item.key);
+      pending.delete(item.key);
+      onProgress(savedKeys.length);
+    }));
+    const failed = results.find((result) => result.status === "rejected");
+    if (failed?.status === "rejected")
+      return { savedKeys, error: failed.reason };
+  }
+  return { savedKeys, error: null };
 }

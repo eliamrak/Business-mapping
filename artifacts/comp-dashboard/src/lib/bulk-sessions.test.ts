@@ -6,6 +6,7 @@ import {
   bulkCellKey,
   parsePastedTotals,
   planBulkSessions,
+  writeBulkSessions,
 } from "./bulk-sessions.ts";
 
 const clinicians = [
@@ -88,4 +89,36 @@ test("invalid totals, overlapping periods, and inconsistent details block writes
   assert.match(planBulkSessions(periods, clinicians, { [key]: "24" }, [
     record({ scheduled: 21 }),
   ]).issues[0].message, /Scheduled sessions/);
+});
+
+test("bulk writes finish the current batch, stop on failure, and retry with the same request ID", async () => {
+  const periods = buildBulkPeriods("2026-04-09", "2026-04-22", 3);
+  const overrides = Object.fromEntries(periods.flatMap((period) =>
+    clinicians.map((person) => [bulkCellKey(period.start, person.id), "10"]),
+  ));
+  const { entries } = planBulkSessions(periods, clinicians, overrides, []);
+  const pending = new Map();
+  const calls: Array<{ key: string; requestId: string }> = [];
+  const progress: number[] = [];
+  let fail = true;
+  const saveRecord = async (command: { requestId: string; entry: { start: string; clinicianId: number } }) => {
+    const key = bulkCellKey(command.entry.start, command.entry.clinicianId);
+    calls.push({ key, requestId: command.requestId });
+    if (key === entries[1].key && fail) throw new Error("temporary failure");
+  };
+  const first = await writeBulkSessions(entries, pending, saveRecord, (count) => progress.push(count));
+  assert.equal(first.savedKeys.length, 3);
+  assert.match(String(first.error), /temporary failure/);
+  assert.equal(calls.length, 4);
+  assert.deepEqual(progress, [1, 2, 3]);
+  assert.equal(pending.size, 1);
+
+  fail = false;
+  const remaining = entries.filter((entry) => !first.savedKeys.includes(entry.key));
+  const second = await writeBulkSessions(remaining, pending, saveRecord, () => {});
+  assert.equal(second.error, null);
+  assert.equal(second.savedKeys.length, 3);
+  assert.equal(pending.size, 0);
+  assert.equal(calls.find((call) => call.key === entries[1].key)?.requestId,
+    calls.findLast((call) => call.key === entries[1].key)?.requestId);
 });
