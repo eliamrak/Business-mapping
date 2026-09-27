@@ -37,6 +37,7 @@ const moneySettings = [
   "minimumCash",
   "ownerPayrollMonthly",
   "ownerPayrollBurdenPct",
+  "familyW2ClinicianId",
   "householdWithholdingPct",
   "includeOwnerClinical",
   "otherHouseholdIncome",
@@ -92,6 +93,7 @@ export function exportSection(
     workspace.allocations = w.allocations;
     workspace.transactions = w.transactions;
     workspace.periods = w.periods;
+    workspace.familyPaychecks = w.familyPaychecks;
     workspace.settings = Object.fromEntries(
       moneySettings.map((key) => [key, w.settings[key]]),
     ) as Partial<Workspace["settings"]>;
@@ -282,19 +284,27 @@ export function importSection(
       !part.settings
     )
       throw new Error("Money flow export is incomplete.");
-    if (moneySettings.some((key) => part.settings![key] === undefined))
+    if (moneySettings.some((key) => key !== "familyW2ClinicianId" && part.settings![key] === undefined))
       throw new Error("Money flow export is incomplete.");
     w.allocations = part.allocations;
     if (destination !== "today") {
       w.transactions = part.transactions;
       w.periods = part.periods;
+      w.familyPaychecks = part.familyPaychecks ?? [];
     }
     w.settings = {
       ...w.settings,
       ...Object.fromEntries(
-        moneySettings.map((key) => [key, part.settings![key]]),
+        moneySettings
+          .filter((key) => part.settings![key] !== undefined)
+          .map((key) => [key, part.settings![key]]),
       ),
     };
+    if (
+      w.settings.familyW2ClinicianId !== null &&
+      !c.clinicians.some((person) => person.id === w.settings.familyW2ClinicianId)
+    )
+      throw new Error("Import the matching clinician team before this money flow section.");
   }
   return validatePracticeCopy({
     workspace: workspaceSchema.parse(w),

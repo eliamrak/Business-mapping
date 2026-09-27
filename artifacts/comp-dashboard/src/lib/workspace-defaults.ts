@@ -49,6 +49,7 @@ export function resolveWorkspaceDefaults(
     ? (goal.ownerPayGoal + goal.secondOwnerPayGoal) / 12
     : 0;
   const inheritOwnerPay =
+    stored.settings.familyW2ClinicianId === null &&
     stored.settings.ownerPayrollMonthly === 0 && ownerPayMonthly > 0;
   const inheritProfitGoal =
     stored.settings.targetProfitMonthly === 0 &&

@@ -266,13 +266,21 @@ test("section transfer replaces only its section and protects Today history", ()
   });
   target.workspace.periods = [oldPeriod];
   source.workspace.periods = [newPeriod];
+  source.workspace.settings.familyW2ClinicianId = 1;
+  target.workspace.settings.familyW2ClinicianId = 1;
+  const oldPaycheck = { id: crypto.randomUUID(), clinicianId: 1, date: "2026-08-15", netAmount: 1800 };
+  const newPaycheck = { id: crypto.randomUUID(), clinicianId: 1, date: "2026-09-15", netAmount: 2000 };
+  target.workspace.familyPaychecks = [oldPaycheck];
+  source.workspace.familyPaychecks = [newPaycheck];
   const money = exportSection(source, "money", "planning");
   assert.deepEqual(importSection(target, money, "today").workspace.periods, [
     oldPeriod,
   ]);
+  assert.deepEqual(importSection(target, money, "today").workspace.familyPaychecks, [oldPaycheck]);
   assert.deepEqual(importSection(target, money, "sandbox").workspace.periods, [
     newPeriod,
   ]);
+  assert.deepEqual(importSection(target, money, "sandbox").workspace.familyPaychecks, [newPaycheck]);
 });
 test("each section can move into a blank modeled business", () => {
   const source = fixture();

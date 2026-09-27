@@ -127,6 +127,7 @@ export const clinicianSettingSchema = z.object({
     .default("existing_split"),
   payAmount: money.default(0),
   paidHoursPerWeek: z.number().min(0).max(100).default(0),
+  expectedSessionRevenue: money.nullable().default(null),
   openingCapContribution: money.nullable().default(null),
 });
 export const termSchema = z.object({
@@ -209,6 +210,12 @@ export const transactionSchema = z.object({
   budgetId: optionalId,
   attachmentId: optionalId,
   campaignId: optionalId,
+});
+export const familyPaycheckSchema = z.object({
+  id,
+  clinicianId: z.number().int().positive(),
+  date: dateSchema,
+  netAmount: money,
 });
 export const periodSchema = z.object({
   ...named,
@@ -577,6 +584,7 @@ export const settingsSchema = z.object({
   sessionsPerClientMonth: z.number().min(0).max(31).default(4),
   ownerPayrollMonthly: money.default(0),
   ownerPayrollBurdenPct: percent.default(0),
+  familyW2ClinicianId: z.number().int().positive().nullable().default(null),
   householdWithholdingPct: percent.default(0),
   includeOwnerClinical: z.boolean().default(true),
   otherHouseholdIncome: money.default(0),
@@ -602,6 +610,7 @@ export const workspaceSchema = z
     campaigns: z.array(campaignSchema).max(2000),
     funnels: z.array(funnelSchema).max(30000),
     transactions: z.array(transactionSchema).max(50000),
+    familyPaychecks: z.array(familyPaycheckSchema).max(10000).default(() => []),
     periods: z.array(periodSchema).max(5000),
     allocations: z.array(allocationSchema).max(2000),
     hiring: z.array(hiringSchema).max(2000),
@@ -969,7 +978,7 @@ export type PlanEvent = z.infer<typeof eventSchema>;
 export type Proposal = z.infer<typeof proposalSchema>;
 export type Rule = z.infer<typeof ruleSchema>;
 export type Period = z.infer<typeof periodSchema>;
-export type Collection = Exclude<keyof Workspace, "settings">;
+export type Collection = Exclude<keyof Workspace, "settings" | "familyPaychecks">;
 export const collections: Collection[] = [
   "categories",
   "budgets",

@@ -393,6 +393,16 @@ export function forecast(
   const staff = context.staff.filter((c) =>
     settings.teamId === null ? c.goalId == null : c.goalId === settings.teamId,
   );
+  const priorMonth = monthDate(settings.forecastStart, -1);
+  const familyPaychecks = workspace.familyPaychecks.filter(
+    (paycheck) =>
+      paycheck.clinicianId === settings.familyW2ClinicianId &&
+      paycheck.date >= priorMonth &&
+      paycheck.date <= monthEnd(priorMonth),
+  );
+  const familyNetMonthly = familyPaychecks.length
+    ? familyPaychecks.reduce((sum, paycheck) => sum + paycheck.netAmount, 0)
+    : null;
   const history = selected.map((c) =>
     summarizeSessions(
       context.sessions.filter((s) => s.clinicianId === c.id),
@@ -654,6 +664,7 @@ export function forecast(
           payMode: "existing_split",
           payAmount: 0,
           paidHoursPerWeek: 0,
+          expectedSessionRevenue: null,
           openingCapContribution: 0,
         },
       });
@@ -696,11 +707,18 @@ export function forecast(
               ?.payMode ??
             c.op?.payMode ??
             "existing_split";
+          const listedRate = datedValue(c.sessionRate, rates, date, date);
+          const expectedRate = c.op?.expectedSessionRevenue;
           return {
             date,
             mode,
             amount: datedValue(c.op?.payAmount ?? 0, payChanges, date, date),
-            rate: datedValue(c.sessionRate, rates, date, date),
+            rate:
+              expectedRate == null
+                ? listedRate
+                : c.sessionRate > 0
+                  ? (listedRate * expectedRate) / c.sessionRate
+                  : expectedRate,
             split: datedValue(c.preCapClinicianSplit, splits, date, date),
             capacity:
               (availableHours > 0
@@ -1259,7 +1277,9 @@ export function forecast(
     );
     const retainedCash = cashProfit - taxReserve - reserves - distributions;
     cash += retainedCash;
-    const familyDistribution = configured
+    const familyDistribution = settings.familyW2ClinicianId !== null
+      ? distributions
+      : configured
       ? distributions *
         (ratio(
           buckets
@@ -1270,10 +1290,13 @@ export function forecast(
             .reduce((n, b) => n + b.percent, 0),
         ) ?? 0)
       : distributions;
-    const familyTakeHome =
-      ownerPayroll +
-      (setting.includeOwnerClinical ? ownerClinicalPay : 0) +
-      familyDistribution;
+    const familyTakeHome = settings.familyW2ClinicianId !== null
+      ? familyNetMonthly === null
+        ? null
+        : familyNetMonthly + familyDistribution
+      : ownerPayroll +
+        (setting.includeOwnerClinical ? ownerClinicalPay : 0) +
+        familyDistribution;
     const contributionPerSession = ratio(
       revenue - clinicianPay - employerBurden - fees,
       sessions,
@@ -2119,6 +2142,7 @@ export function affordablePay(
         payAmount: 0,
         paidHoursPerWeek: 0,
         payMode: "existing_split" as const,
+        expectedSessionRevenue: null,
         openingCapContribution: null,
       };
   data.clinicians = [

@@ -44,6 +44,7 @@ import {
   roomSchema,
   campaignSchema,
   clinicianSettingSchema,
+  allocationSchema,
   type Workspace,
   type Context,
   type Collection,
@@ -91,6 +92,7 @@ import Settings, { SettingsEditor } from "@/components/hub/settings";
 import Updates from "@/components/hub/updates";
 import { type ViewProps, fmt, monthLabel } from "@/components/hub/views";
 import WorkspaceSessions from "@/components/practice/workspace-sessions";
+import MoneyFlowToday from "@/components/practice/money-flow-today";
 import WeeklyBlocks from "@/components/practice/weekly-blocks";
 import SandboxView from "@/components/sandbox-view";
 import BusinessGoalsTab from "@/components/tabs/business-goals-tab";
@@ -548,6 +550,13 @@ export default function PracticeWorkspace() {
       : buildPracticeProjection(next, context, practiceView, today).months;
   }, [stagedValidation, context, teams.data, sandbox, practiceView, today]);
   const months = stagedValidation?.success ? stagedMonths : savedMonths;
+  const moneyFlowWorkspace = useMemo(
+    () =>
+      stagedValidation?.success && context
+        ? resolveWorkspaceDefaults(stagedValidation.data, context, teams.data).forecastWorkspace
+        : forecastWorkspace,
+    [stagedValidation, context, teams.data, forecastWorkspace],
+  );
   const baselineMonths = useMemo(
     () =>
       base && workspace
@@ -898,6 +907,68 @@ export default function PracticeWorkspace() {
     setStagedLabels((prior) => ({ ...prior, settings: label }));
     setReviewStaged(false);
   }
+  function stageFamilyPaycheck(
+    id: string,
+    next: Workspace["familyPaychecks"][number] | null,
+  ) {
+    if (!workspace) return;
+    setStagedWorkspace((prior) => {
+      const current = prior ?? workspace;
+      return {
+        ...current,
+        familyPaychecks: next === null
+          ? current.familyPaychecks.filter((item) => item.id !== id)
+          : current.familyPaychecks.some((item) => item.id === id)
+            ? current.familyPaychecks.map((item) => item.id === id ? next : item)
+            : [...current.familyPaychecks, next],
+      };
+    });
+    setStagedLabels((prior) => ({ ...prior, ["familyPaychecks:" + id]: "Net paycheck" }));
+    setReviewStaged(false);
+  }
+  function stageFund(
+    name: string,
+    kind: "tax" | "reserve" | "distribution" | "retained",
+    percent: number,
+    start: string,
+  ) {
+    if (!workspace) return;
+    const current = workingWorkspace;
+    const defaults = [
+      ["Tax fund", "tax", current.settings.taxPct],
+      ["Business reserves", "reserve", current.settings.reservePct],
+      ["Your distribution", "distribution", current.settings.distributionPct],
+    ] as const;
+    const existing = current.allocations.some((item) => !item.archived)
+      ? current.allocations
+      : defaults.filter(([, , share]) => share > 0).map(([label, purpose, share]) =>
+          allocationSchema.parse({
+            id: crypto.randomUUID(),
+            name: label,
+            kind: purpose,
+            percent: share,
+            start,
+            household: purpose === "distribution",
+          }),
+        );
+    const record = allocationSchema.parse({
+      id: crypto.randomUUID(),
+      name,
+      kind,
+      percent,
+      start,
+      household: kind === "distribution",
+    });
+    setStagedWorkspace({
+      ...current,
+      allocations: [...existing, record],
+    });
+    setStagedLabels((prior) => ({
+      ...prior,
+      ["allocations:" + record.id]: "Added " + name,
+    }));
+    setReviewStaged(false);
+  }
   function stageNew(collection: InlineCollection) {
     if (!workingWorkspace) return;
     let current = workingWorkspace;
@@ -1004,6 +1075,40 @@ export default function PracticeWorkspace() {
       }));
       setReviewStaged(false);
     }
+  }
+  function stageClinicianAverageRate(person: Clinician, rate: number | null) {
+    if (!workingWorkspace) return;
+    const profile = workingWorkspace.clinicians.find(
+      (row) => row.clinicianId === person.id && row.status !== "archived",
+    );
+    if (profile) {
+      stageRecord(
+        "clinicians",
+        profile.id,
+        { expectedSessionRevenue: rate },
+        person.label + " expected average session revenue",
+      );
+      return;
+    }
+    const record = clinicianSettingSchema.parse({
+      id: crypto.randomUUID(),
+      clinicianId: person.id,
+      start: context?.sessions
+        .filter((item) => item.clinicianId === person.id)
+        .map((item) => item.start)
+        .sort()[0] ?? today,
+      desiredWeeklySessions: person.sessionsPerWeek,
+      expectedSessionRevenue: rate,
+    });
+    setStagedWorkspace({
+      ...workingWorkspace,
+      clinicians: [...workingWorkspace.clinicians, record],
+    });
+    setStagedLabels((prior) => ({
+      ...prior,
+      ["clinicians:" + record.id]: person.label + " expected average session revenue",
+    }));
+    setReviewStaged(false);
   }
   async function commitStaged() {
     if (!stagedWorkspace) return;
@@ -2251,7 +2356,19 @@ export default function PracticeWorkspace() {
                                 patchPerson(person, { sessionsPerWeek: n })
                               }
                             />
+                            <NumberField
+                              label={person.label + " expected average revenue per completed session"}
+                              caption="Avg. earned / session"
+                              value={setting?.expectedSessionRevenue ?? person.sessionRate}
+                              unit="$"
+                              onSave={async (rate) => stageClinicianAverageRate(person, rate)}
+                            />
                           </div>
+                          {setting?.expectedSessionRevenue !== null && setting?.expectedSessionRevenue !== undefined && (
+                            <button className="pw-text-button" onClick={() => stageClinicianAverageRate(person, null)}>
+                              Use listed session fee for estimate
+                            </button>
+                          )}
                           <div className="pw-pay-structure">
                             <span>Clinician / practice split</span>
                             <strong>
@@ -3834,23 +3951,35 @@ export default function PracticeWorkspace() {
                   )}
                 </>
               )}
-              {section === "money" && (
+              {section === "money" && mode === "practice" && (
+                <MoneyFlowToday
+                  workspace={moneyFlowWorkspace ?? workingWorkspace}
+                  context={context}
+                  today={today}
+                  onPayeeChange={(id) => stageSettings({
+                    familyW2ClinicianId: id,
+                    ...(id !== null && resolved?.inherited.ownerPay ? { ownerPayrollMonthly: 0 } : {}),
+                  }, "Family W2 paycheck")}
+                  onAddPaycheck={(paycheck) => stageFamilyPaycheck(paycheck.id, paycheck)}
+                  onUpdatePaycheck={(id, patch) => {
+                    const previous = workingWorkspace.familyPaychecks.find((item) => item.id === id);
+                    if (previous) stageFamilyPaycheck(id, { ...previous, ...patch });
+                  }}
+                  onRemovePaycheck={(id) => stageFamilyPaycheck(id, null)}
+                  onAllocationPercent={(id, percent) => stageRecord("allocations", id, { percent }, "Fund allocation")}
+                  onDefaultAllocationPercent={(key, percent) => stageSettings({ [key]: percent }, "Fund allocation")}
+                  onAddFund={stageFund}
+                  onEditFunds={() => setDetail("allocations")}
+                  onNavigate={(target) => setSection(target)}
+                  onLegacyPayrollChange={(amount) => stageSettings({ ownerPayrollMonthly: amount }, "Separate owner payroll")}
+                />
+              )}
+              {section === "money" && mode !== "practice" && (
                 <>
                   {heading(
                     "Money flow",
-                    practiceView === "actual" && !sandbox
-                      ? "Recorded year to date, then the months ahead"
-                      : "Planned monthly income, costs, and family pay",
+                    "Modeled monthly income, costs, and family pay",
                     <div className="pw-money-period">
-                      {mode === "practice" && practiceView === "actual" && (
-                        <button
-                          className="pw-button"
-                          onClick={() => edit("periods")}
-                        >
-                          <Plus />
-                          Record a period
-                        </button>
-                      )}
                       <label>
                         Forecast month
                         <select
@@ -3873,7 +4002,7 @@ export default function PracticeWorkspace() {
                       />
                     </div>,
                   )}
-                  {mode === "practice" && practiceView === "actual" && (
+                  {!sandbox && practiceView === "actual" && (
                     <section
                       className="pw-money-ytd"
                       aria-label="Year to date actuals"
@@ -3933,61 +4062,6 @@ export default function PracticeWorkspace() {
                       )}
                     </section>
                   )}
-                  <div className="pw-money-forward">
-                    <div className="pw-edit-item-heading">
-                      <h3>
-                        {practiceView === "actual" && !sandbox
-                          ? "Next six months · forecast"
-                          : "Monthly plan"}
-                      </h3>
-                      <span>Choose a month to see its flow below</span>
-                    </div>
-                    <div className="pw-table-scroll">
-                      <table className="pw-table">
-                        <thead>
-                          <tr>
-                            <th>Month</th>
-                            <th>Revenue</th>
-                            <th>Operating costs</th>
-                            <th>Profit</th>
-                            <th>Planned family take-home</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {months
-                            .slice(
-                              0,
-                              practiceView === "actual" && !sandbox
-                                ? 6
-                                : workspace.settings.horizonMonths,
-                            )
-                            .map((month, index) => (
-                              <tr key={month.date}>
-                                <th>
-                                  <button
-                                    className="pw-text-button"
-                                    onClick={() => setMoneyMonthIndex(index)}
-                                  >
-                                    {monthLabel(month.date)}
-                                  </button>
-                                </th>
-                                <td>{money(month.values.revenue)}</td>
-                                <td>
-                                  {money(
-                                    operatingCost(
-                                      month.values,
-                                      workspace.settings.ownerPayrollBurdenPct,
-                                    ),
-                                  )}
-                                </td>
-                                <td>{money(month.values.profit)}</td>
-                                <td>{money(month.values.familyTakeHome)}</td>
-                              </tr>
-                            ))}
-                        </tbody>
-                      </table>
-                    </div>
-                  </div>
                   <div className="pw-money-workspace">
                     <div className="pw-money-ledger">
                       <div className="pw-money-ledger-heading">
@@ -4000,9 +4074,7 @@ export default function PracticeWorkspace() {
                           </p>
                         </div>
                         <span>
-                          {mode === "practice" && practiceView === "actual"
-                            ? "Projected from recent sessions"
-                            : "Model estimate"}
+                          Model estimate
                         </span>
                       </div>
 
@@ -4526,7 +4598,7 @@ export default function PracticeWorkspace() {
                     </div>
                   </section>
 
-                  {mode === "practice" && practiceView === "actual" && (
+                  {!sandbox && practiceView === "actual" && (
                     <section
                       className="pw-projection-table"
                       aria-label="Recorded financial periods"
@@ -4897,7 +4969,7 @@ export default function PracticeWorkspace() {
                             <th>Revenue</th>
                             <th>Operating cost</th>
                             <th>Profit</th>
-                            <th>Planned family take-home</th>
+                            <th>Est. family take-home</th>
                           </tr>
                         </thead>
                         <tbody>
@@ -4923,7 +4995,12 @@ export default function PracticeWorkspace() {
                         </tbody>
                       </table>
                     </div>
-                    {months.some((row) => (row.values.profit ?? 0) < 0) && (
+                    {workspace.settings.familyW2ClinicianId !== null && months.some((row) => row.values.familyTakeHome === null) && (
+                      <p className="pw-projection-note">
+                        Enter a completed month of net W2 deposits in Money flow to estimate future family take-home. Distributions are modeled from positive profit.
+                      </p>
+                    )}
+                    {workspace.settings.familyW2ClinicianId === null && months.some((row) => (row.values.profit ?? 0) < 0) && (
                       <p className="pw-projection-note">
                         Planned family take-home includes owner pay; it can
                         remain positive while practice profit is negative.

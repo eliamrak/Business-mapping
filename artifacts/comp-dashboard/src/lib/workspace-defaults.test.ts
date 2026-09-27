@@ -78,6 +78,15 @@ test("detailed workspace values are not replaced by compensation defaults", () =
   assert.equal(result.inherited.overhead, true);
   assert.equal(result.forecastWorkspace.settings.overheadFloorMonthly, 10_000);
 });
+test("selecting a family W2 clinician does not inherit a second owner payroll", () => {
+  const workspace = emptyWorkspace("2026-09-20");
+  workspace.settings.teamId = 7;
+  workspace.settings.familyW2ClinicianId = 1;
+  const result = resolveWorkspaceDefaults(workspace, context, goals);
+  assert.equal(result.workspace.settings.ownerPayrollMonthly, 0);
+  assert.equal(result.inherited.ownerPay, false);
+  assert.equal(result.forecastWorkspace.settings.overheadFloorMonthly, 10_000);
+});
 test("partial or marketing budgets cannot erase inherited overhead", () => {
   const workspace = emptyWorkspace("2026-09-20");
   const marketing = categorySchema.parse({
