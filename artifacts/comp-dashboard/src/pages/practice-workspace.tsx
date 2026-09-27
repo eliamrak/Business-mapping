@@ -19,6 +19,7 @@ import {
   PanelTop,
   ChartNoAxesCombined,
   Download,
+  Save,
 } from "lucide-react";
 import {
   LineChart,
@@ -31,8 +32,14 @@ import {
 } from "recharts";
 import {
   forecast,
+  observed,
   observedSeries,
   workspaceSchema,
+  budgetSchema,
+  categorySchema,
+  roomSchema,
+  campaignSchema,
+  clinicianSettingSchema,
   type Workspace,
   type Context,
   type Collection,
@@ -69,6 +76,7 @@ import Settings, { SettingsEditor } from "@/components/hub/settings";
 import Updates from "@/components/hub/updates";
 import { type ViewProps, fmt, monthLabel } from "@/components/hub/views";
 import WorkspaceSessions from "@/components/practice/workspace-sessions";
+import WeeklyBlocks from "@/components/practice/weekly-blocks";
 import SandboxView from "@/components/sandbox-view";
 import BusinessGoalsTab from "@/components/tabs/business-goals-tab";
 import CurrentRealityTab from "@/components/tabs/current-reality-tab";
@@ -145,6 +153,18 @@ const sections: { id: Section; label: string }[] = [
   { id: "summary", label: "Summary" },
 ];
 const money = (n: number | null | undefined) => fmt(n, "currency");
+const changeValue = (value: unknown) =>
+  value === null || value === undefined || value === ""
+    ? "Not set"
+    : typeof value === "boolean"
+      ? value
+        ? "Yes"
+        : "No"
+      : Array.isArray(value)
+        ? `${value.length} recurring ${value.length === 1 ? "block" : "blocks"}`
+        : typeof value === "object"
+          ? "Updated"
+          : String(value);
 const operatingCost = (values: Values, ownerBurdenPct: number) =>
   (values.clinicianPay ?? 0) +
   (values.employerBurden ?? 0) +
@@ -161,6 +181,33 @@ const periodLabel = (start: string, end: string) => {
     });
   return `${short(start)} - ${short(end)}, ${end.slice(0, 4)}`;
 };
+const roomHours = (room: Workspace["rooms"][number]) =>
+  room.blocks.length
+    ? room.blocks.reduce(
+        (sum, block) => sum + block.endHour - block.startHour,
+        0,
+      )
+    : room.weeklyHours;
+const assignedRoomHours = (room: Workspace["rooms"][number]) =>
+  room.assignments.reduce(
+    (total, assigned) =>
+      total +
+      (room.blocks.length
+        ? room.blocks
+            .filter((open) => open.day === assigned.day)
+            .reduce(
+              (sum, open) =>
+                sum +
+                Math.max(
+                  0,
+                  Math.min(open.endHour, assigned.endHour) -
+                    Math.max(open.startHour, assigned.startHour),
+                ),
+              0,
+            )
+        : assigned.endHour - assigned.startHour),
+    0,
+  );
 const metrics = [
   { key: "revenue", label: "Revenue" },
   { key: "profit", label: "Profit" },
@@ -265,6 +312,55 @@ function NumberField({
     </label>
   );
 }
+function DraftField({
+  label,
+  value,
+  onChange,
+  type = "text",
+  min,
+  max,
+  step,
+}: {
+  label: string;
+  value: string | number;
+  onChange: (value: string) => void;
+  type?: "text" | "number" | "date";
+  min?: number;
+  max?: number;
+  step?: number;
+}) {
+  const [text, setText] = useState(String(value));
+  useEffect(() => setText(String(value)), [value]);
+  return (
+    <label className="pw-draft-field">
+      <span>{label}</span>
+      <input
+        type={type}
+        aria-label={label}
+        min={min}
+        max={max}
+        step={type === "number" ? (step ?? "any") : undefined}
+        value={text}
+        onChange={(event) => setText(event.target.value)}
+        onBlur={() => {
+          if (
+            type === "number" &&
+            (!text.trim() ||
+              !Number.isFinite(Number(text)) ||
+              Number(text) < (min ?? 0) ||
+              Number(text) > (max ?? Infinity))
+          )
+            setText(String(value));
+          else if (text !== String(value)) onChange(text);
+        }}
+        onKeyDown={(event) => {
+          if (event.key === "Enter") event.currentTarget.blur();
+          if (event.key === "Escape") setText(String(value));
+        }}
+      />
+    </label>
+  );
+}
 function EditButton({
   label,
   onClick,
@@ -321,6 +417,11 @@ export default function PracticeWorkspace() {
   const [error, setError] = useState("");
   const [marketingTab, setMarketingTab] = useState("campaigns");
   const [moneyMonthIndex, setMoneyMonthIndex] = useState(0);
+  const [stagedWorkspace, setStagedWorkspace] = useState<Workspace | null>(
+    null,
+  );
+  const [stagedLabels, setStagedLabels] = useState<Record<string, string>>({});
+  const [reviewStaged, setReviewStaged] = useState(false);
   const [compareId, setCompareId] = useState("");
   const [paceMetric, setPaceMetric] = useState<PaceMetric>("sessions");
   const [changeDetails, setChangeDetails] = useState(false);
@@ -355,6 +456,7 @@ export default function PracticeWorkspace() {
     [sandbox, storedWorkspace, context, teams.data, savedResolved],
   );
   const workspace = resolved?.workspace;
+  const workingWorkspace = stagedWorkspace ?? workspace!;
   const forecastWorkspace = resolved?.forecastWorkspace;
   const planProjection = useMemo(
     () =>
@@ -384,13 +486,29 @@ export default function PracticeWorkspace() {
             : null,
     [sandbox, practiceView, planProjection, forecastWorkspace, context, today],
   );
-  const months = useMemo(
+  const savedMonths = useMemo(
     () =>
       sandbox && forecastWorkspace && context
         ? forecast(forecastWorkspace, context)
         : (viewProjection?.months ?? []),
     [sandbox, forecastWorkspace, context, viewProjection],
   );
+  const stagedValidation = useMemo(
+    () => (stagedWorkspace ? workspaceSchema.safeParse(stagedWorkspace) : null),
+    [stagedWorkspace],
+  );
+  const stagedMonths = useMemo(() => {
+    if (!stagedValidation?.success || !context) return [];
+    const next = resolveWorkspaceDefaults(
+      stagedValidation.data,
+      context,
+      teams.data,
+    ).forecastWorkspace;
+    return sandbox
+      ? forecast(next, context)
+      : buildPracticeProjection(next, context, practiceView, today).months;
+  }, [stagedValidation, context, teams.data, sandbox, practiceView, today]);
+  const months = stagedValidation?.success ? stagedMonths : savedMonths;
   const baselineMonths = useMemo(
     () =>
       base && workspace
@@ -415,6 +533,16 @@ export default function PracticeWorkspace() {
   const changes = useMemo(
     () => (draft && base ? practiceChanges(base, draft) : []),
     [base, draft],
+  );
+  const stagedDifferences = useMemo(
+    () =>
+      stagedWorkspace && workspace && context
+        ? practiceChanges(
+            copyPractice(workspace, context),
+            copyPractice(stagedWorkspace, context),
+          )
+        : [],
+    [stagedWorkspace, workspace, context],
   );
   const goals = useMemo(
     () =>
@@ -470,6 +598,53 @@ export default function PracticeWorkspace() {
         : [],
     [workspace, context],
   );
+  const moneyYtd = useMemo(
+    () =>
+      workspace && context
+        ? observed(workspace, context, today.slice(0, 4) + "-01-01", today)
+        : null,
+    [workspace, context, today],
+  );
+  const finalizedYtdCount =
+    workspace?.periods.filter(
+      (period) =>
+        !period.archived &&
+        period.status === "finalized" &&
+        period.start >= today.slice(0, 4) + "-01-01" &&
+        period.end <= today,
+    ).length ?? 0;
+  const moneyYtdGaps = useMemo(() => {
+    if (!workspace) return [];
+    const start = today.slice(0, 4) + "-01-01";
+    const periods = workspace.periods
+      .filter(
+        (period) =>
+          !period.archived &&
+          period.status === "finalized" &&
+          period.start >= start &&
+          period.end <= today,
+      )
+      .sort((a, b) => a.start.localeCompare(b.start));
+    const dayAfter = (date: string) =>
+      new Date(Date.parse(date + "T12:00:00Z") + 86_400_000)
+        .toISOString()
+        .slice(0, 10);
+    const gaps: string[] = [];
+    let cursor = start;
+    for (const period of periods) {
+      if (period.start > cursor)
+        gaps.push(
+          cursor +
+            " to " +
+            new Date(Date.parse(period.start + "T12:00:00Z") - 86_400_000)
+              .toISOString()
+              .slice(0, 10),
+        );
+      if (dayAfter(period.end) > cursor) cursor = dayAfter(period.end);
+    }
+    if (cursor <= today) gaps.push(cursor + " to " + today);
+    return gaps;
+  }, [workspace, today]);
   const actualPaceSeries = useMemo<PacePoint[]>(() => {
     if (!workspace || !context) return [];
     if (paceMetric !== "sessions")
@@ -562,14 +737,14 @@ export default function PracticeWorkspace() {
   ]);
   useEffect(() => {
     const warn = (e: BeforeUnloadEvent) => {
-      if (changes.length) {
+      if (changes.length || stagedWorkspace) {
         e.preventDefault();
         e.returnValue = "";
       }
     };
     window.addEventListener("beforeunload", warn);
     return () => window.removeEventListener("beforeunload", warn);
-  }, [changes.length]);
+  }, [changes.length, stagedWorkspace]);
 
   async function persist(data: Workspace, action: string) {
     if (busy.current)
@@ -624,14 +799,176 @@ export default function PracticeWorkspace() {
     }
   }
   async function saveWorkspace(data: Workspace, action = "Updated practice") {
+    if (stagedWorkspace && data !== stagedWorkspace)
+      throw new Error(
+        "Review or discard the pending edits before saving another change.",
+      );
     if (sandbox) {
       const parsed = workspaceSchema.parse(data);
       setDraft((d) => (d ? { ...d, workspace: parsed } : d));
       setMessage("Sandbox only");
     } else await persist(data, action);
   }
+  type InlineCollection =
+    | "budgets"
+    | "campaigns"
+    | "rooms"
+    | "clinicians"
+    | "allocations";
+  function stageRecord(
+    collection: InlineCollection,
+    id: string,
+    patch: Record<string, unknown>,
+    label: string,
+  ) {
+    if (!workspace) return;
+    setStagedWorkspace((prior) => {
+      const current = prior ?? workspace;
+      return {
+        ...current,
+        [collection]: current[collection].map((row) =>
+          row.id === id ? { ...row, ...patch } : row,
+        ),
+      } as Workspace;
+    });
+    setStagedLabels((prior) => ({ ...prior, [collection + ":" + id]: label }));
+    setReviewStaged(false);
+  }
+  function stageSettings(patch: Partial<Workspace["settings"]>, label: string) {
+    if (!workspace) return;
+    setStagedWorkspace((prior) => {
+      const current = prior ?? workspace;
+      return { ...current, settings: { ...current.settings, ...patch } };
+    });
+    setStagedLabels((prior) => ({ ...prior, settings: label }));
+    setReviewStaged(false);
+  }
+  function stageNew(collection: InlineCollection) {
+    if (!workingWorkspace) return;
+    let current = workingWorkspace;
+    let record: Workspace[InlineCollection][number];
+    if (collection === "budgets") {
+      let category = current.categories.find(
+        (c) => !c.archived && (c.kind === "expense" || c.kind === "facility"),
+      );
+      if (!category) {
+        category = categorySchema.parse({
+          id: crypto.randomUUID(),
+          name: "Operating expenses",
+          kind: "expense",
+        });
+        current = { ...current, categories: [...current.categories, category] };
+      }
+      record = budgetSchema.parse({
+        ...newRecord("budgets", current, today),
+        name: "New expense",
+        categoryId: category.id,
+        start: today,
+      });
+    } else if (collection === "campaigns") {
+      record = campaignSchema.parse({
+        ...newRecord("campaigns", current, today),
+        name: "New campaign",
+        source: "New source",
+        start: today,
+      });
+    } else if (collection === "rooms") {
+      record = roomSchema.parse({
+        ...newRecord("rooms", current, today),
+        name: "New room",
+        start: today,
+      });
+    } else return;
+    setStagedWorkspace({
+      ...current,
+      [collection]: [...current[collection], record],
+    } as Workspace);
+    setStagedLabels((prior) => ({
+      ...prior,
+      [collection + ":" + record.id]: "Added " + record.name,
+    }));
+    setReviewStaged(false);
+  }
+  function stageMarketingSupport() {
+    if (!workingWorkspace) return;
+    let current = workingWorkspace;
+    let category = current.categories.find(
+      (c) => !c.archived && c.kind === "marketing",
+    );
+    if (!category) {
+      category = categorySchema.parse({
+        id: crypto.randomUUID(),
+        name: "Marketing services",
+        kind: "marketing",
+      });
+      current = { ...current, categories: [...current.categories, category] };
+    }
+    const record = budgetSchema.parse({
+      ...newRecord("budgets", current, today),
+      name: "New marketing cost",
+      categoryId: category.id,
+      start: today,
+    });
+    setStagedWorkspace({ ...current, budgets: [...current.budgets, record] });
+    setStagedLabels((prior) => ({
+      ...prior,
+      ["budgets:" + record.id]: "Added marketing support cost",
+    }));
+    setReviewStaged(false);
+  }
+  function stageClinicianAvailability(
+    person: Clinician,
+    availability: Workspace["clinicians"][number]["availability"],
+  ) {
+    if (!workingWorkspace) return;
+    const profile = workingWorkspace.clinicians.find(
+      (row) => row.clinicianId === person.id,
+    );
+    if (profile)
+      stageRecord(
+        "clinicians",
+        profile.id,
+        { availability },
+        person.label + " availability",
+      );
+    else {
+      const record = clinicianSettingSchema.parse({
+        id: crypto.randomUUID(),
+        clinicianId: person.id,
+        start: today,
+        desiredWeeklySessions: person.sessionsPerWeek,
+        availability,
+      });
+      setStagedWorkspace({
+        ...workingWorkspace,
+        clinicians: [...workingWorkspace.clinicians, record],
+      });
+      setStagedLabels((prior) => ({
+        ...prior,
+        ["clinicians:" + record.id]: person.label + " availability",
+      }));
+      setReviewStaged(false);
+    }
+  }
+  async function commitStaged() {
+    if (!stagedWorkspace) return;
+    try {
+      await saveWorkspace(stagedWorkspace, "Updated practice inputs");
+      setStagedWorkspace(null);
+      setStagedLabels({});
+      setReviewStaged(false);
+    } catch (e) {
+      setError(errorText(e));
+    }
+  }
   function edit(collection: Collection, record?: Record<string, unknown>) {
     if (busy.current) return;
+    if (stagedWorkspace) {
+      setError(
+        "Review or discard pending edits before opening other settings.",
+      );
+      return;
+    }
     setDetail(null);
     if (workspace)
       setEditor({
@@ -809,6 +1146,12 @@ export default function PracticeWorkspace() {
     }
   }
   async function navigate(next: Mode) {
+    if (stagedWorkspace && next !== mode) {
+      setError(
+        "Review and save, or discard, the pending practice edits before switching areas.",
+      );
+      return;
+    }
     if (busy.current || sessionEditing) return;
     if (integratedTool) {
       if (next === "sandbox" && !draft && query.data) {
@@ -1685,9 +2028,37 @@ export default function PracticeWorkspace() {
                 <>
                   {heading(
                     "Marketing",
-                    active(workspace.campaigns).length + " lead sources",
-                    add("campaigns", "Add campaign"),
+                    "Ad spend drives lead estimates. Service costs complete the marketing total.",
+                    <button
+                      className="pw-button"
+                      onClick={() => stageNew("campaigns")}
+                    >
+                      <Plus />
+                      Add campaign
+                    </button>,
                   )}
+                  <div
+                    className="pw-marketing-breakdown"
+                    aria-label="Estimated marketing costs"
+                  >
+                    <div>
+                      <span>Ad spend / month</span>
+                      <strong>{money(months[0]?.values.adSpend)}</strong>
+                    </div>
+                    <div>
+                      <span>Services &amp; campaign costs</span>
+                      <strong>
+                        {money(
+                          (months[0]?.values.marketing ?? 0) -
+                            (months[0]?.values.adSpend ?? 0),
+                        )}
+                      </strong>
+                    </div>
+                    <div>
+                      <span>Total marketing cost</span>
+                      <strong>{money(months[0]?.values.marketing)}</strong>
+                    </div>
+                  </div>
                   <div
                     className="pw-segmented"
                     role="tablist"
@@ -1707,71 +2078,330 @@ export default function PracticeWorkspace() {
                     ))}
                   </div>
                   {marketingTab === "campaigns" ? (
-                    <div className="pw-list">
-                      {active(workspace.campaigns).map((c) => (
-                        <article className="pw-campaign" key={c.id}>
-                          <div>
+                    <div className="pw-edit-list">
+                      {active(workingWorkspace.campaigns).map((c) => (
+                        <section className="pw-edit-item" key={c.id}>
+                          <div className="pw-edit-item-heading">
                             <h3>{c.name}</h3>
-                            <p>{c.source}</p>
+                            <span>
+                              Estimated clients:{" "}
+                              {fmt(months[0]?.channels[c.id]?.clients)}
+                            </span>
+                          </div>
+                          <div className="pw-edit-grid">
+                            <DraftField
+                              label="Campaign name"
+                              value={c.name}
+                              onChange={(value) =>
+                                stageRecord(
+                                  "campaigns",
+                                  c.id,
+                                  { name: value },
+                                  c.name + " name",
+                                )
+                              }
+                            />
+                            <DraftField
+                              label="Lead source"
+                              value={c.source}
+                              onChange={(value) =>
+                                stageRecord(
+                                  "campaigns",
+                                  c.id,
+                                  { source: value },
+                                  c.name + " source",
+                                )
+                              }
+                            />
+                            <label className="pw-draft-field">
+                              <span>Estimate clients using</span>
+                              <select
+                                value={c.method}
+                                onChange={(event) =>
+                                  stageRecord(
+                                    "campaigns",
+                                    c.id,
+                                    { method: event.target.value },
+                                    c.name + " estimate method",
+                                  )
+                                }
+                              >
+                                {[
+                                  ["cpl", "Cost per lead"],
+                                  ["cac", "Cost per client"],
+                                  ["historical", "Past performance"],
+                                  ["manual", "Manual estimate"],
+                                  ["clicks", "Click funnel"],
+                                  ["custom", "Custom formula"],
+                                ].map(([value, label]) => (
+                                  <option value={value} key={value}>
+                                    {label}
+                                  </option>
+                                ))}
+                              </select>
+                            </label>
+                            <DraftField
+                              label="Monthly ad spend ($)"
+                              type="number"
+                              value={c.monthlySpend}
+                              onChange={(value) =>
+                                stageRecord(
+                                  "campaigns",
+                                  c.id,
+                                  { monthlySpend: Number(value) },
+                                  c.name + " ad spend",
+                                )
+                              }
+                            />
+                            <DraftField
+                              label="Other campaign costs ($/month)"
+                              type="number"
+                              value={c.otherMonthlyCost}
+                              onChange={(value) =>
+                                stageRecord(
+                                  "campaigns",
+                                  c.id,
+                                  { otherMonthlyCost: Number(value) },
+                                  c.name + " support cost",
+                                )
+                              }
+                            />
+                            {c.method === "cpl" && (
+                              <DraftField
+                                label="Cost per lead ($)"
+                                type="number"
+                                value={c.cpl}
+                                onChange={(value) =>
+                                  stageRecord(
+                                    "campaigns",
+                                    c.id,
+                                    { cpl: Number(value) },
+                                    c.name + " cost per lead",
+                                  )
+                                }
+                              />
+                            )}
+                            {c.method === "cac" && (
+                              <DraftField
+                                label="Cost per client ($)"
+                                type="number"
+                                value={c.cac}
+                                onChange={(value) =>
+                                  stageRecord(
+                                    "campaigns",
+                                    c.id,
+                                    { cac: Number(value) },
+                                    c.name + " cost per client",
+                                  )
+                                }
+                              />
+                            )}
+                            <DraftField
+                              label="Lead to consultation (%)"
+                              type="number"
+                              max={100}
+                              value={c.consultationPct}
+                              onChange={(value) =>
+                                stageRecord(
+                                  "campaigns",
+                                  c.id,
+                                  { consultationPct: Number(value) },
+                                  c.name + " consultation rate",
+                                )
+                              }
+                            />
+                            <DraftField
+                              label="Consultation attendance (%)"
+                              type="number"
+                              max={100}
+                              value={c.attendancePct}
+                              onChange={(value) =>
+                                stageRecord(
+                                  "campaigns",
+                                  c.id,
+                                  { attendancePct: Number(value) },
+                                  c.name + " attendance rate",
+                                )
+                              }
+                            />
+                            <DraftField
+                              label="Attended consultation to client (%)"
+                              type="number"
+                              max={100}
+                              value={c.closePct}
+                              onChange={(value) =>
+                                stageRecord(
+                                  "campaigns",
+                                  c.id,
+                                  { closePct: Number(value) },
+                                  c.name + " close rate",
+                                )
+                              }
+                            />
+                            <DraftField
+                              label="Forecast from"
+                              type="date"
+                              value={c.start}
+                              onChange={(value) =>
+                                stageRecord(
+                                  "campaigns",
+                                  c.id,
+                                  { start: value },
+                                  c.name + " start date",
+                                )
+                              }
+                            />
+                          </div>
+                          <div className="pw-secondary-links">
                             <button
                               className="pw-text-button"
+                              disabled={!!stagedWorkspace}
                               onClick={() => edit("campaigns", c)}
                             >
-                              {
-                                {
-                                  cpl: "Cost per lead",
-                                  cac: "Cost per client",
-                                  historical: "Past performance",
-                                  manual: "Manual estimate",
-                                  clicks: "Click funnel",
-                                  custom: "Custom formula",
-                                }[c.method]
+                              More campaign settings <ChevronRight />
+                            </button>
+                            <button
+                              className="pw-text-button"
+                              onClick={() =>
+                                stageRecord(
+                                  "campaigns",
+                                  c.id,
+                                  { archived: true },
+                                  "Archived " + c.name,
+                                )
                               }
-                              <ChevronRight />
+                            >
+                              Archive campaign
                             </button>
                           </div>
-                          <NumberField
-                            label={c.name + " monthly spend"}
-                            value={c.monthlySpend}
-                            unit="$"
-                            onSave={(n) =>
-                              patchRecord("campaigns", c.id, {
-                                monthlySpend: n,
-                              })
-                            }
-                          />
-                          {c.method === "cpl" ? (
-                            <NumberField
-                              label={c.name + " cost per lead"}
-                              value={c.cpl}
-                              unit="$"
-                              onSave={(n) =>
-                                patchRecord("campaigns", c.id, { cpl: n })
-                              }
-                            />
-                          ) : c.method === "cac" ? (
-                            <NumberField
-                              label={c.name + " cost per client"}
-                              value={c.cac}
-                              unit="$"
-                              onSave={(n) =>
-                                patchRecord("campaigns", c.id, { cac: n })
-                              }
-                            />
-                          ) : (
-                            <div>
-                              <span>Estimated clients / first month</span>
-                              <strong>
-                                {fmt(months[0]?.channels[c.id]?.clients)}
-                              </strong>
-                            </div>
-                          )}
-                          <EditButton
-                            label={"Edit " + c.name}
-                            onClick={() => edit("campaigns", c)}
-                          />
-                        </article>
+                        </section>
                       ))}
+                      <div className="pw-edit-item">
+                        <div className="pw-edit-item-heading">
+                          <h3>Marketing services and retainers</h3>
+                          <button
+                            className="pw-button"
+                            onClick={stageMarketingSupport}
+                          >
+                            <Plus />
+                            Add cost
+                          </button>
+                        </div>
+                        <p>
+                          Use this for agency fees or ongoing marketing services
+                          not already included in a campaign above. General
+                          practice technology belongs in Operating expenses.
+                        </p>
+                        {active(workingWorkspace.budgets)
+                          .filter(
+                            (b) =>
+                              workingWorkspace.categories.find(
+                                (category) => category.id === b.categoryId,
+                              )?.kind === "marketing",
+                          )
+                          .map((b) => (
+                            <div
+                              className="pw-edit-grid pw-support-row"
+                              key={b.id}
+                            >
+                              <DraftField
+                                label="Cost name"
+                                value={b.name}
+                                onChange={(value) =>
+                                  stageRecord(
+                                    "budgets",
+                                    b.id,
+                                    { name: value },
+                                    b.name + " name",
+                                  )
+                                }
+                              />
+                              <DraftField
+                                label="Amount ($)"
+                                type="number"
+                                value={b.amount}
+                                onChange={(value) =>
+                                  stageRecord(
+                                    "budgets",
+                                    b.id,
+                                    { amount: Number(value) },
+                                    b.name + " amount",
+                                  )
+                                }
+                              />
+                              <label className="pw-draft-field">
+                                <span>Frequency</span>
+                                <select
+                                  value={b.cadence}
+                                  onChange={(event) =>
+                                    stageRecord(
+                                      "budgets",
+                                      b.id,
+                                      { cadence: event.target.value },
+                                      b.name + " frequency",
+                                    )
+                                  }
+                                >
+                                  {[
+                                    "monthly",
+                                    "weekly",
+                                    "biweekly",
+                                    "annual",
+                                    "once",
+                                  ].map((cadence) => (
+                                    <option key={cadence} value={cadence}>
+                                      {cadence}
+                                    </option>
+                                  ))}
+                                </select>
+                              </label>
+                              {b.cadence === "monthly" && (
+                                <DraftField
+                                  label="Billing day"
+                                  type="number"
+                                  min={1}
+                                  max={31}
+                                  step={1}
+                                  value={b.billingDay}
+                                  onChange={(value) =>
+                                    stageRecord(
+                                      "budgets",
+                                      b.id,
+                                      { billingDay: Number(value) },
+                                      b.name + " billing day",
+                                    )
+                                  }
+                                />
+                              )}
+                              <DraftField
+                                label="Forecast from"
+                                type="date"
+                                value={b.start}
+                                onChange={(value) =>
+                                  stageRecord(
+                                    "budgets",
+                                    b.id,
+                                    { start: value },
+                                    b.name + " forecast date",
+                                  )
+                                }
+                              />
+                              <DraftField
+                                label="First bill date (optional)"
+                                type="date"
+                                value={b.billingReferenceStart ?? ""}
+                                onChange={(value) =>
+                                  stageRecord(
+                                    "budgets",
+                                    b.id,
+                                    { billingReferenceStart: value || null },
+                                    b.name + " first bill date",
+                                  )
+                                }
+                              />
+                            </div>
+                          ))}
+                      </div>
                     </div>
                   ) : (
                     <>
@@ -1856,51 +2486,398 @@ export default function PracticeWorkspace() {
                 <>
                   {heading(
                     "Rooms",
-                    "Space and available session hours",
-                    add("rooms", "Add room"),
+                    "Who can use each room, and when",
+                    <button
+                      className="pw-button"
+                      onClick={() => stageNew("rooms")}
+                    >
+                      <Plus />
+                      Add room
+                    </button>,
                   )}
-                  <div className="pw-list">
-                    {active(workspace.rooms).map((room) => (
-                      <article className="pw-room" key={room.id}>
-                        <Building2 />
-                        <div>
+                  <div className="pw-edit-list">
+                    {active(workingWorkspace.rooms).map((room) => (
+                      <section className="pw-edit-item" key={room.id}>
+                        <div className="pw-edit-item-heading">
                           <h3>{room.name}</h3>
-                          <p>
-                            {workspace.locations.find(
-                              (l) => l.id === room.locationId,
-                            )?.name ?? "No location assigned"}
-                          </p>
-                        </div>
-                        <NumberField
-                          label={room.name + " hours / week"}
-                          value={room.weeklyHours}
-                          max={168}
-                          onSave={(n) =>
-                            patchRecord("rooms", room.id, {
-                              weeklyHours: n,
-                            })
-                          }
-                        />
-                        <div>
-                          <span>Usable sessions / week</span>
-                          <strong>
+                          <span>
                             {fmt(
-                              (((room.weeklyHours * 60) / room.sessionMinutes) *
+                              (((roomHours(room) * 60) / room.sessionMinutes) *
                                 room.usablePct) /
                                 100,
-                            )}
-                          </strong>
+                            )}{" "}
+                            potential slots / week ·{" "}
+                            {room.usage === "dedicated"
+                              ? "reserved"
+                              : fmt(
+                                  Math.max(
+                                    0,
+                                    roomHours(room) - assignedRoomHours(room),
+                                  ),
+                                ) + " unassigned hours"}
+                          </span>
                         </div>
-                        <EditButton
-                          label={"Edit " + room.name}
-                          onClick={() => edit("rooms", room)}
+                        <div className="pw-edit-grid">
+                          <DraftField
+                            label="Room name"
+                            value={room.name}
+                            onChange={(value) =>
+                              stageRecord(
+                                "rooms",
+                                room.id,
+                                { name: value },
+                                room.name + " name",
+                              )
+                            }
+                          />
+                          <label className="pw-draft-field">
+                            <span>Location</span>
+                            <select
+                              value={room.locationId ?? ""}
+                              onChange={(event) =>
+                                stageRecord(
+                                  "rooms",
+                                  room.id,
+                                  { locationId: event.target.value || null },
+                                  room.name + " location",
+                                )
+                              }
+                            >
+                              <option value="">No location</option>
+                              {active(workingWorkspace.locations).map(
+                                (location) => (
+                                  <option value={location.id} key={location.id}>
+                                    {location.name}
+                                  </option>
+                                ),
+                              )}
+                            </select>
+                          </label>
+                          <label className="pw-draft-field">
+                            <span>Room use</span>
+                            <select
+                              value={room.usage}
+                              onChange={(event) =>
+                                stageRecord(
+                                  "rooms",
+                                  room.id,
+                                  {
+                                    usage: event.target.value,
+                                    dedicatedClinicianId:
+                                      event.target.value === "dedicated"
+                                        ? (room.dedicatedClinicianId ??
+                                          selectedPeople[0]?.id ??
+                                          null)
+                                        : null,
+                                  },
+                                  room.name + " room use",
+                                )
+                              }
+                            >
+                              <option value="shared">Shared / rotating</option>
+                              <option value="dedicated">Dedicated</option>
+                            </select>
+                          </label>
+                          {room.usage === "dedicated" && (
+                            <label className="pw-draft-field">
+                              <span>Reserved for</span>
+                              <select
+                                value={room.dedicatedClinicianId ?? ""}
+                                onChange={(event) =>
+                                  stageRecord(
+                                    "rooms",
+                                    room.id,
+                                    {
+                                      dedicatedClinicianId: Number(
+                                        event.target.value,
+                                      ),
+                                    },
+                                    room.name + " reserved clinician",
+                                  )
+                                }
+                              >
+                                <option value="">Select clinician</option>
+                                {selectedPeople.map((person) => (
+                                  <option key={person.id} value={person.id}>
+                                    {person.label}
+                                  </option>
+                                ))}
+                              </select>
+                            </label>
+                          )}
+                          <DraftField
+                            label="Available room hours / week"
+                            type="number"
+                            min={0}
+                            max={168}
+                            value={room.weeklyHours}
+                            onChange={(value) =>
+                              stageRecord(
+                                "rooms",
+                                room.id,
+                                { weeklyHours: Number(value) },
+                                room.name + " weekly hours",
+                              )
+                            }
+                          />
+                          <DraftField
+                            label="Session minutes"
+                            type="number"
+                            min={15}
+                            max={240}
+                            value={room.sessionMinutes}
+                            onChange={(value) =>
+                              stageRecord(
+                                "rooms",
+                                room.id,
+                                { sessionMinutes: Number(value) },
+                                room.name + " session length",
+                              )
+                            }
+                          />
+                          <DraftField
+                            label="Usable capacity (%)"
+                            type="number"
+                            min={0}
+                            max={100}
+                            value={room.usablePct}
+                            onChange={(value) =>
+                              stageRecord(
+                                "rooms",
+                                room.id,
+                                { usablePct: Number(value) },
+                                room.name + " usable capacity",
+                              )
+                            }
+                          />
+                          <label className="pw-draft-check">
+                            <input
+                              type="checkbox"
+                              checked={room.telehealthUsesRoom}
+                              onChange={(event) =>
+                                stageRecord(
+                                  "rooms",
+                                  room.id,
+                                  { telehealthUsesRoom: event.target.checked },
+                                  room.name + " telehealth use",
+                                )
+                              }
+                            />
+                            Telehealth uses this room
+                          </label>
+                        </div>
+                        <WeeklyBlocks
+                          label="Room opening hours"
+                          blocks={room.blocks}
+                          onChange={(blocks) =>
+                            stageRecord(
+                              "rooms",
+                              room.id,
+                              { blocks },
+                              room.name + " opening hours",
+                            )
+                          }
                         />
-                      </article>
+                        {room.usage === "shared" && (
+                          <>
+                            <WeeklyBlocks
+                              label="Recurring clinician blocks"
+                              blocks={room.assignments}
+                              people={selectedPeople}
+                              onChange={(assignments) =>
+                                stageRecord(
+                                  "rooms",
+                                  room.id,
+                                  { assignments },
+                                  room.name + " weekly assignments",
+                                )
+                              }
+                            />
+                            <div className="pw-weekly-title">
+                              <strong>Week exceptions</strong>
+                              <button
+                                className="pw-text-button"
+                                onClick={() => {
+                                  const date = new Date(today + "T12:00:00Z");
+                                  date.setUTCDate(
+                                    date.getUTCDate() -
+                                      ((date.getUTCDay() + 6) % 7),
+                                  );
+                                  stageRecord(
+                                    "rooms",
+                                    room.id,
+                                    {
+                                      skippedWeeks: [
+                                        ...room.skippedWeeks,
+                                        {
+                                          weekStart: date
+                                            .toISOString()
+                                            .slice(0, 10),
+                                          clinicianId:
+                                            selectedPeople[0]?.id ?? 0,
+                                        },
+                                      ],
+                                    },
+                                    room.name + " week exception",
+                                  );
+                                }}
+                                disabled={!selectedPeople.length}
+                              >
+                                <Plus />
+                                Skip a recurring week
+                              </button>
+                            </div>
+                            {room.skippedWeeks.map((exception, index) => (
+                              <div
+                                className="pw-weekly-row pw-weekly-exception"
+                                key={index}
+                              >
+                                <DraftField
+                                  label="Skip from date (7 days)"
+                                  type="date"
+                                  value={exception.weekStart}
+                                  onChange={(value) =>
+                                    stageRecord(
+                                      "rooms",
+                                      room.id,
+                                      {
+                                        skippedWeeks: room.skippedWeeks.map(
+                                          (entry, i) =>
+                                            i === index
+                                              ? { ...entry, weekStart: value }
+                                              : entry,
+                                        ),
+                                      },
+                                      room.name + " week exception",
+                                    )
+                                  }
+                                />
+                                <label>
+                                  <span>Clinician</span>
+                                  <select
+                                    value={exception.clinicianId}
+                                    onChange={(event) =>
+                                      stageRecord(
+                                        "rooms",
+                                        room.id,
+                                        {
+                                          skippedWeeks: room.skippedWeeks.map(
+                                            (entry, i) =>
+                                              i === index
+                                                ? {
+                                                    ...entry,
+                                                    clinicianId: Number(
+                                                      event.target.value,
+                                                    ),
+                                                  }
+                                                : entry,
+                                          ),
+                                        },
+                                        room.name + " week exception",
+                                      )
+                                    }
+                                  >
+                                    {selectedPeople.map((person) => (
+                                      <option key={person.id} value={person.id}>
+                                        {person.label}
+                                      </option>
+                                    ))}
+                                  </select>
+                                </label>
+                                <button
+                                  className="pw-icon"
+                                  title="Remove exception"
+                                  aria-label="Remove exception"
+                                  onClick={() =>
+                                    stageRecord(
+                                      "rooms",
+                                      room.id,
+                                      {
+                                        skippedWeeks: room.skippedWeeks.filter(
+                                          (_, i) => i !== index,
+                                        ),
+                                      },
+                                      room.name + " week exception",
+                                    )
+                                  }
+                                >
+                                  <X />
+                                </button>
+                              </div>
+                            ))}
+                          </>
+                        )}
+                        <div className="pw-secondary-links">
+                          <button
+                            className="pw-text-button"
+                            disabled={!!stagedWorkspace}
+                            onClick={() => edit("rooms", room)}
+                          >
+                            More room settings <ChevronRight />
+                          </button>
+                          <button
+                            className="pw-text-button"
+                            onClick={() =>
+                              stageRecord(
+                                "rooms",
+                                room.id,
+                                { archived: true },
+                                "Archived " + room.name,
+                              )
+                            }
+                          >
+                            Archive room
+                          </button>
+                        </div>
+                      </section>
                     ))}
                   </div>
-                  {!active(workspace.rooms).length && (
+                  {!active(workingWorkspace.rooms).length && (
                     <p className="pw-empty">No rooms yet.</p>
                   )}
+                  <div className="pw-edit-item">
+                    <div className="pw-edit-item-heading">
+                      <h3>Clinician availability</h3>
+                      <span>
+                        Compare time available with desired and recently
+                        completed sessions
+                      </span>
+                    </div>
+                    {selectedPeople.map((person) => {
+                      const profile = workingWorkspace.clinicians.find(
+                        (row) => row.clinicianId === person.id,
+                      );
+                      const pace = viewProjection?.clinicianPace.find(
+                        (row) => row.id === person.id,
+                      );
+                      return (
+                        <div className="pw-clinician-hours" key={person.id}>
+                          <div className="pw-edit-item-heading">
+                            <strong>{person.label}</strong>
+                            <span>
+                              {fmt(
+                                profile?.desiredWeeklySessions ??
+                                  person.sessionsPerWeek,
+                              )}{" "}
+                              desired /{" "}
+                              {pace?.recordedWeekly == null
+                                ? "no recent sessions"
+                                : fmt(pace.recordedWeekly) +
+                                  " recent sessions"}{" "}
+                              per week
+                            </span>
+                          </div>
+                          <WeeklyBlocks
+                            label={person.label + " recurring availability"}
+                            blocks={profile?.availability ?? []}
+                            onChange={(blocks) =>
+                              stageClinicianAvailability(person, blocks)
+                            }
+                          />
+                        </div>
+                      );
+                    })}
+                  </div>
                   <div className="pw-secondary-links">
                     {detailButton("locations", "Locations")}
                   </div>
@@ -1909,77 +2886,335 @@ export default function PracticeWorkspace() {
               {section === "budgets" && (
                 <>
                   {heading(
-                    "Budgets",
-                    "Overhead and planned expenses",
-                    add("budgets", "Add expense"),
+                    "Operating expenses",
+                    "Recurring costs that keep the practice running. Marketing costs live in Marketing.",
+                    <button
+                      className="pw-button"
+                      onClick={() => stageNew("budgets")}
+                    >
+                      <Plus />
+                      Add expense
+                    </button>,
                   )}
+                  <p className="pw-budget-date-note">
+                    Forecast from affects the estimate. Billing dates are only
+                    for your reference; monthly bills default to the 5th.
+                  </p>
+                  {resolved?.goal && resolved.goal.annualOverheadGoal > 0 && (
+                    <div className="pw-budget-basis">
+                      <div>
+                        <strong>Overhead basis</strong>
+                        <p>
+                          The compensation plan estimates{" "}
+                          {money(resolved.goal.annualOverheadGoal / 12)} per
+                          month. Entered expenses fill that allowance until you
+                          confirm the list is complete.
+                        </p>
+                      </div>
+                      <div
+                        className="pw-view-switch"
+                        role="group"
+                        aria-label="Overhead basis"
+                      >
+                        <button
+                          type="button"
+                          aria-pressed={
+                            workingWorkspace.settings.overheadMode ===
+                            "baseline"
+                          }
+                          onClick={() =>
+                            stageSettings(
+                              { overheadMode: "baseline" },
+                              "Overhead uses compensation estimate",
+                            )
+                          }
+                        >
+                          Keep estimate
+                        </button>
+                        <button
+                          type="button"
+                          aria-pressed={
+                            workingWorkspace.settings.overheadMode ===
+                            "detailed"
+                          }
+                          onClick={() =>
+                            stageSettings(
+                              { overheadMode: "detailed" },
+                              "Overhead uses entered expenses only",
+                            )
+                          }
+                        >
+                          Expenses complete
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                  {workingWorkspace.settings.overheadMode === "detailed" &&
+                    !active(workingWorkspace.budgets).some((budget) =>
+                      ["expense", "facility"].includes(
+                        workingWorkspace.categories.find(
+                          (category) => category.id === budget.categoryId,
+                        )?.kind ?? "",
+                      ),
+                    ) && (
+                      <p className="pw-money-warning">
+                        No operating expenses are entered. Switching to detailed
+                        expenses will forecast zero recurring overhead.
+                      </p>
+                    )}
                   <div className="pw-table-scroll">
-                    <table className="pw-table">
+                    <table className="pw-table pw-edit-table">
                       <thead>
                         <tr>
                           <th>Expense</th>
                           <th>Category</th>
-                          <th>Amount</th>
+                          <th>Amount / rate</th>
                           <th>Frequency</th>
+                          <th>Forecast from</th>
+                          <th>Billing day</th>
+                          <th>First bill date</th>
                           <th />
                         </tr>
                       </thead>
                       <tbody>
-                        {active(workspace.budgets).map((b) => (
-                          <tr key={b.id}>
-                            <th>{b.name}</th>
-                            <td>
-                              {workspace.categories.find(
+                        {active(workingWorkspace.budgets)
+                          .filter((b) =>
+                            ["expense", "facility"].includes(
+                              workingWorkspace.categories.find(
                                 (c) => c.id === b.categoryId,
-                              )?.name ?? "Uncategorized"}
-                            </td>
-                            <td>
-                              <NumberField
-                                label={b.name + " amount"}
-                                value={b.amount}
-                                unit={
-                                  b.cadence === "percent_revenue" ? "%" : "$"
-                                }
-                                onSave={(n) =>
-                                  patchRecord("budgets", b.id, {
-                                    amount: n,
-                                  })
-                                }
-                              />
-                            </td>
-                            <td>{b.cadence.replaceAll("_", " ")}</td>
-                            <td>
-                              <EditButton
-                                label={"Edit " + b.name}
-                                onClick={() => edit("budgets", b)}
-                              />
-                            </td>
-                          </tr>
-                        ))}
+                              )?.kind ?? "",
+                            ),
+                          )
+                          .map((b) => (
+                            <tr key={b.id}>
+                              <th>
+                                <DraftField
+                                  label={b.name + " expense name"}
+                                  value={b.name}
+                                  onChange={(value) =>
+                                    stageRecord(
+                                      "budgets",
+                                      b.id,
+                                      { name: value },
+                                      b.name + " name",
+                                    )
+                                  }
+                                />
+                              </th>
+                              <td>
+                                <label className="pw-draft-field">
+                                  <span>{b.name} category</span>
+                                  <select
+                                    value={b.categoryId}
+                                    onChange={(event) =>
+                                      stageRecord(
+                                        "budgets",
+                                        b.id,
+                                        { categoryId: event.target.value },
+                                        b.name + " category",
+                                      )
+                                    }
+                                  >
+                                    {active(workingWorkspace.categories)
+                                      .filter(
+                                        (c) =>
+                                          c.kind === "expense" ||
+                                          c.kind === "facility",
+                                      )
+                                      .map((c) => (
+                                        <option key={c.id} value={c.id}>
+                                          {c.name}
+                                        </option>
+                                      ))}
+                                  </select>
+                                </label>
+                              </td>
+                              <td>
+                                <DraftField
+                                  label={
+                                    b.name +
+                                    (b.cadence === "percent_revenue"
+                                      ? " percent of revenue"
+                                      : b.cadence === "per_session"
+                                        ? " cost per session ($)"
+                                        : " amount ($)")
+                                  }
+                                  type="number"
+                                  min={0}
+                                  value={b.amount}
+                                  onChange={(value) =>
+                                    stageRecord(
+                                      "budgets",
+                                      b.id,
+                                      { amount: Number(value) },
+                                      b.name + " amount",
+                                    )
+                                  }
+                                />
+                              </td>
+                              <td>
+                                <label className="pw-draft-field">
+                                  <span>{b.name} frequency</span>
+                                  <select
+                                    value={b.cadence}
+                                    onChange={(event) =>
+                                      stageRecord(
+                                        "budgets",
+                                        b.id,
+                                        { cadence: event.target.value },
+                                        b.name + " frequency",
+                                      )
+                                    }
+                                  >
+                                    {[
+                                      "monthly",
+                                      "weekly",
+                                      "biweekly",
+                                      "annual",
+                                      "once",
+                                      "per_session",
+                                      "percent_revenue",
+                                    ].map((cadence) => (
+                                      <option key={cadence} value={cadence}>
+                                        {cadence.replaceAll("_", " ")}
+                                      </option>
+                                    ))}
+                                  </select>
+                                </label>
+                              </td>
+                              <td>
+                                <DraftField
+                                  label={b.name + " effective date"}
+                                  type="date"
+                                  value={b.start}
+                                  onChange={(value) =>
+                                    stageRecord(
+                                      "budgets",
+                                      b.id,
+                                      { start: value },
+                                      b.name + " forecast date",
+                                    )
+                                  }
+                                />
+                              </td>
+                              <td>
+                                {b.cadence === "monthly" ? (
+                                  <DraftField
+                                    label={b.name + " billing day"}
+                                    type="number"
+                                    min={1}
+                                    max={31}
+                                    value={b.billingDay}
+                                    onChange={(value) =>
+                                      stageRecord(
+                                        "budgets",
+                                        b.id,
+                                        { billingDay: Number(value) },
+                                        b.name + " billing day",
+                                      )
+                                    }
+                                  />
+                                ) : (
+                                  <span className="pw-muted">
+                                    Use first bill date
+                                  </span>
+                                )}
+                              </td>
+                              <td>
+                                <DraftField
+                                  label={b.name + " first bill date"}
+                                  type="date"
+                                  value={b.billingReferenceStart ?? ""}
+                                  onChange={(value) =>
+                                    stageRecord(
+                                      "budgets",
+                                      b.id,
+                                      { billingReferenceStart: value || null },
+                                      b.name + " first bill date",
+                                    )
+                                  }
+                                />
+                              </td>
+                              <td>
+                                <EditButton
+                                  label={"Edit " + b.name}
+                                  onClick={() => edit("budgets", b)}
+                                />
+                              </td>
+                            </tr>
+                          ))}
                       </tbody>
                     </table>
                   </div>
-                  {!active(workspace.budgets).length &&
-                    (resolved?.inherited.overhead ? (
-                      <div className="pw-notice">
-                        <strong>
-                          Using {money(resolved.goal?.annualOverheadGoal)} per
-                          year from {resolved.goal?.name}
-                        </strong>
-                        <span>
-                          Add detailed expenses here when you are ready. They
-                          will replace this single overhead estimate.
-                        </span>
+                  {!active(workingWorkspace.budgets).some((b) =>
+                    ["expense", "facility"].includes(
+                      workingWorkspace.categories.find(
+                        (c) => c.id === b.categoryId,
+                      )?.kind ?? "",
+                    ),
+                  ) && (
+                    <div className="pw-empty">
+                      <h3>No operating expenses yet</h3>
+                      <p>
+                        Add recurring expenses individually or import a budget
+                        to build the overhead total.
+                      </p>
+                    </div>
+                  )}
+                  {active(workingWorkspace.budgets).some(
+                    (b) =>
+                      !["expense", "facility", "marketing"].includes(
+                        workingWorkspace.categories.find(
+                          (c) => c.id === b.categoryId,
+                        )?.kind ?? "",
+                      ),
+                  ) && (
+                    <section className="pw-edit-item">
+                      <div className="pw-edit-item-heading">
+                        <h3>Other plan lines</h3>
+                        <span>Income, owner pay, taxes, and reserves</span>
                       </div>
-                    ) : (
-                      <div className="pw-empty">
-                        <h3>No operating expenses yet</h3>
-                        <p>
-                          Add recurring expenses individually or import a budget
-                          to build the overhead total.
-                        </p>
-                      </div>
-                    ))}
+                      {active(workingWorkspace.budgets)
+                        .filter(
+                          (b) =>
+                            !["expense", "facility", "marketing"].includes(
+                              workingWorkspace.categories.find(
+                                (c) => c.id === b.categoryId,
+                              )?.kind ?? "",
+                            ),
+                        )
+                        .map((b) => (
+                          <div className="pw-money-source-row" key={b.id}>
+                            <div>
+                              <strong>{b.name}</strong>
+                              <span>
+                                {workingWorkspace.categories.find(
+                                  (c) => c.id === b.categoryId,
+                                )?.name ?? "Uncategorized"}{" "}
+                                · {b.cadence}
+                              </span>
+                            </div>
+                            <DraftField
+                              label={b.name + " amount"}
+                              type="number"
+                              value={b.amount}
+                              onChange={(value) =>
+                                stageRecord(
+                                  "budgets",
+                                  b.id,
+                                  { amount: Number(value) },
+                                  b.name + " amount",
+                                )
+                              }
+                            />
+                            <EditButton
+                              label={"Edit " + b.name}
+                              onClick={() => edit("budgets", b)}
+                            />
+                          </div>
+                        ))}
+                    </section>
+                  )}
                   <div className="pw-secondary-links">
                     {detailButton("categories", "Categories")}
                     {!sandbox && practiceView === "plan" && (
@@ -2054,7 +3289,9 @@ export default function PracticeWorkspace() {
                 <>
                   {heading(
                     "Money flow",
-                    "See where each monthly dollar comes from and where it goes",
+                    practiceView === "actual" && !sandbox
+                      ? "Recorded year to date, then the months ahead"
+                      : "Planned monthly income, costs, and family pay",
                     <div className="pw-money-period">
                       {mode === "practice" && practiceView === "actual" && (
                         <button
@@ -2087,6 +3324,121 @@ export default function PracticeWorkspace() {
                       />
                     </div>,
                   )}
+                  {mode === "practice" && practiceView === "actual" && (
+                    <section
+                      className="pw-money-ytd"
+                      aria-label="Year to date actuals"
+                    >
+                      <div className="pw-edit-item-heading">
+                        <h3>Year to date · recorded</h3>
+                        <span>
+                          {finalizedYtdCount} finalized{" "}
+                          {finalizedYtdCount === 1 ? "period" : "periods"}
+                          {moneyYtd?.dataThrough
+                            ? " · through " + moneyYtd.dataThrough
+                            : ""}
+                        </span>
+                      </div>
+                      <div className="pw-money-ytd-grid">
+                        {(
+                          [
+                            ["Earned revenue", moneyYtd?.values.revenue],
+                            ["Operating overhead", moneyYtd?.values.overhead],
+                            ["Marketing", moneyYtd?.values.marketing],
+                            ["Operating profit", moneyYtd?.values.profit],
+                            [
+                              "Family take-home",
+                              moneyYtd?.values.familyTakeHome,
+                            ],
+                          ] as const
+                        ).map(([label, amount]) => (
+                          <div key={label}>
+                            <span>{label}</span>
+                            <strong>{money(amount)}</strong>
+                          </div>
+                        ))}
+                      </div>
+                      {!finalizedYtdCount && (
+                        <p>
+                          No finalized financial periods yet. Recorded sessions
+                          inform the forecast, but they are not booked revenue.
+                        </p>
+                      )}
+                      {!!moneyYtdGaps.length && (
+                        <p className="pw-money-coverage">
+                          Recorded YTD is incomplete. Missing:{" "}
+                          {moneyYtdGaps.slice(0, 3).join(", ")}
+                          {moneyYtdGaps.length > 3
+                            ? ` and ${moneyYtdGaps.length - 3} more gaps`
+                            : ""}
+                          .
+                        </p>
+                      )}
+                      {!!moneyYtd?.warnings.length && (
+                        <details>
+                          <summary>Actuals coverage and missing data</summary>
+                          {moneyYtd.warnings.map((warning) => (
+                            <p key={warning}>{warning}</p>
+                          ))}
+                        </details>
+                      )}
+                    </section>
+                  )}
+                  <div className="pw-money-forward">
+                    <div className="pw-edit-item-heading">
+                      <h3>
+                        {practiceView === "actual" && !sandbox
+                          ? "Next six months · forecast"
+                          : "Monthly plan"}
+                      </h3>
+                      <span>Choose a month to see its flow below</span>
+                    </div>
+                    <div className="pw-table-scroll">
+                      <table className="pw-table">
+                        <thead>
+                          <tr>
+                            <th>Month</th>
+                            <th>Revenue</th>
+                            <th>Operating costs</th>
+                            <th>Profit</th>
+                            <th>Planned family take-home</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {months
+                            .slice(
+                              0,
+                              practiceView === "actual" && !sandbox
+                                ? 6
+                                : workspace.settings.horizonMonths,
+                            )
+                            .map((month, index) => (
+                              <tr key={month.date}>
+                                <th>
+                                  <button
+                                    className="pw-text-button"
+                                    onClick={() => setMoneyMonthIndex(index)}
+                                  >
+                                    {monthLabel(month.date)}
+                                  </button>
+                                </th>
+                                <td>{money(month.values.revenue)}</td>
+                                <td>
+                                  {money(
+                                    operatingCost(
+                                      month.values,
+                                      workspace.settings.ownerPayrollBurdenPct,
+                                    ),
+                                  )}
+                                </td>
+                                <td>{money(month.values.profit)}</td>
+                                <td>{money(month.values.familyTakeHome)}</td>
+                              </tr>
+                            ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
                   <div className="pw-money-workspace">
                     <div className="pw-money-ledger">
                       <div className="pw-money-ledger-heading">
@@ -2134,33 +3486,6 @@ export default function PracticeWorkspace() {
                         </button>
                         <b>{money(otherBusinessIncome)}</b>
                       </div>
-                      <div className="pw-money-row">
-                        <div>
-                          <strong>Cash collected</strong>
-                          <span>Revenue received after collection timing</span>
-                        </div>
-                        <NumberField
-                          label="Collection rate"
-                          caption="Collection rate"
-                          value={workspace.settings.collectionPct}
-                          max={100}
-                          unit="%"
-                          onSave={(n) =>
-                            saveWorkspace(
-                              {
-                                ...workspace,
-                                settings: {
-                                  ...workspace.settings,
-                                  collectionPct: n,
-                                },
-                              },
-                              "Updated collection rate",
-                            )
-                          }
-                        />
-                        <b>{money(moneyValues.collections)}</b>
-                      </div>
-
                       <div className="pw-money-group-label">
                         Cost to run the practice
                       </div>
@@ -2214,30 +3539,77 @@ export default function PracticeWorkspace() {
                           <b>-{money(amount as number | null)}</b>
                         </div>
                       ))}
-                      <div className="pw-money-row pw-money-cost">
+                      <div className="pw-money-row pw-money-cost pw-money-processing">
                         <div>
                           <strong>Payment processing</strong>
-                          <span>Fees charged on collections</span>
+                          <span>
+                            Estimated from projected completed sessions and
+                            successful payments
+                          </span>
                         </div>
-                        <NumberField
-                          label="Payment processing rate"
-                          caption="Fee rate"
-                          value={workspace.settings.processingPct}
-                          max={100}
-                          unit="%"
-                          onSave={(n) =>
-                            saveWorkspace(
-                              {
-                                ...workspace,
-                                settings: {
-                                  ...workspace.settings,
-                                  processingPct: n,
+                        <div className="pw-money-fee-inputs">
+                          <DraftField
+                            label="Rate (%)"
+                            type="number"
+                            max={100}
+                            value={workingWorkspace.settings.processingPct}
+                            onChange={(value) =>
+                              stageSettings(
+                                { processingPct: Number(value) },
+                                "Processing rate",
+                              )
+                            }
+                          />
+                          <DraftField
+                            label="Per successful payment ($)"
+                            type="number"
+                            value={
+                              workingWorkspace.settings
+                                .processingFixedPerTransaction
+                            }
+                            onChange={(value) =>
+                              stageSettings(
+                                {
+                                  processingFixedPerTransaction: Number(value),
                                 },
-                              },
-                              "Updated payment processing",
-                            )
-                          }
-                        />
+                                "Fixed processing fee",
+                              )
+                            }
+                          />
+                          <DraftField
+                            label="Payments per completed session"
+                            type="number"
+                            max={10}
+                            value={
+                              workingWorkspace.settings
+                                .processingTransactionsPerSession
+                            }
+                            onChange={(value) =>
+                              stageSettings(
+                                {
+                                  processingTransactionsPerSession:
+                                    Number(value),
+                                },
+                                "Estimated payment count",
+                              )
+                            }
+                          />
+                          <button
+                            className="pw-text-button"
+                            onClick={() =>
+                              stageSettings(
+                                {
+                                  processingPct: 3.15,
+                                  processingFixedPerTransaction: 0.3,
+                                  processingTransactionsPerSession: 1,
+                                },
+                                "SimplePractice fee estimate",
+                              )
+                            }
+                          >
+                            Use 3.15% + $0.30
+                          </button>
+                        </div>
                         <b>-{money(moneyValues.fees)}</b>
                       </div>
                       <div className="pw-money-row pw-money-subtotal">
@@ -2255,124 +3627,169 @@ export default function PracticeWorkspace() {
                           <strong>Operating profit</strong>
                           <span>After owner payroll and its employer cost</span>
                         </div>
-                        <NumberField
-                          label="Target monthly operating profit"
-                          caption="Monthly goal"
-                          value={workspace.settings.targetProfitMonthly}
-                          unit="$"
-                          onSave={(n) =>
-                            saveWorkspace(
-                              {
-                                ...workspace,
-                                settings: {
-                                  ...workspace.settings,
-                                  targetProfitMonthly: n,
-                                },
-                              },
-                              "Updated profit target",
+                        <DraftField
+                          label="Monthly profit goal ($)"
+                          type="number"
+                          value={workingWorkspace.settings.targetProfitMonthly}
+                          onChange={(value) =>
+                            stageSettings(
+                              { targetProfitMonthly: Number(value) },
+                              "Monthly profit goal",
                             )
                           }
                         />
                         <b>{money(moneyValues.profit)}</b>
                       </div>
                     </div>
-
-                    <aside
-                      className="pw-money-summary"
-                      aria-label="Monthly money summary"
-                    >
-                      <h3>Owner view</h3>
-                      <p>
-                        {monthLabel(
-                          moneyMonth?.date ?? workspace.settings.forecastStart,
-                        )}
-                      </p>
-                      <dl>
-                        <div>
-                          <dt>Total income</dt>
-                          <dd>
-                            {money(
-                              (moneyValues.revenue ?? 0) + otherBusinessIncome,
-                            )}
-                          </dd>
-                        </div>
-                        <div>
-                          <dt>Operating costs</dt>
-                          <dd>{money(operatingCosts)}</dd>
-                        </div>
-                        <div>
-                          <dt>Before owner pay</dt>
-                          <dd>{money(beforeOwnerPay)}</dd>
-                        </div>
-                        <div>
-                          <dt>Operating profit</dt>
-                          <dd>{money(moneyValues.profit)}</dd>
-                        </div>
-                        <div>
-                          <dt>Cash retained</dt>
-                          <dd>{money(moneyValues.retainedCash)}</dd>
-                        </div>
-                      </dl>
-                      <div className="pw-money-summary-result">
-                        <span>Planned family take-home</span>
-                        <strong>{money(moneyValues.familyTakeHome)}</strong>
-                        {(moneyValues.profit ?? 0) < 0 && (
-                          <small>
-                            Owner pay remains planned while practice profit is
-                            negative.
-                          </small>
-                        )}
-                      </div>
-                    </aside>
                   </div>
+                  <details className="pw-money-advanced">
+                    <summary>Collection exceptions</summary>
+                    <p>
+                      Most practices can leave these at 100% and no delay. The
+                      paid portion also affects estimated earned revenue.
+                    </p>
+                    <div className="pw-edit-grid">
+                      <DraftField
+                        label="Expected paid portion of fees (%)"
+                        type="number"
+                        max={100}
+                        value={workingWorkspace.settings.collectionPct}
+                        onChange={(value) =>
+                          stageSettings(
+                            { collectionPct: Number(value) },
+                            "Expected paid portion",
+                          )
+                        }
+                      />
+                      <DraftField
+                        label="Collection delay (months)"
+                        type="number"
+                        max={12}
+                        value={workingWorkspace.settings.collectionDelayMonths}
+                        onChange={(value) =>
+                          stageSettings(
+                            { collectionDelayMonths: Number(value) },
+                            "Collection delay",
+                          )
+                        }
+                      />
+                      <DraftField
+                        label="Opening receivables ($)"
+                        type="number"
+                        value={workingWorkspace.settings.openingReceivables}
+                        onChange={(value) =>
+                          stageSettings(
+                            { openingReceivables: Number(value) },
+                            "Opening receivables",
+                          )
+                        }
+                      />
+                      <DraftField
+                        label="Successful opening payments"
+                        type="number"
+                        max={1_000_000}
+                        step={1}
+                        value={
+                          workingWorkspace.settings
+                            .processingOpeningTransactions
+                        }
+                        onChange={(value) =>
+                          stageSettings(
+                            { processingOpeningTransactions: Number(value) },
+                            "Opening payment count",
+                          )
+                        }
+                      />
+                    </div>
+                    {workspace.settings.collectionDelayMonths > 0 && (
+                      <p>
+                        Projected cash received this month:{" "}
+                        {money(moneyValues.collections)}
+                      </p>
+                    )}
+                  </details>
 
                   <section className="pw-money-sources">
                     <div className="pw-section-heading">
                       <div>
                         <h3>Inputs behind the totals</h3>
                         <p>
-                          Edit the recurring amounts that feed the flow above
+                          Edit recurring amounts here or in their own sections
                         </p>
                       </div>
                     </div>
                     <div className="pw-money-source-grid">
                       <div>
                         <div className="pw-money-source-heading">
-                          <h3>Budget lines</h3>
+                          <h3>Operating expenses</h3>
                           <button
                             className="pw-icon"
                             title="Add expense"
                             aria-label="Add expense"
-                            onClick={() => edit("budgets")}
+                            onClick={() => stageNew("budgets")}
                           >
                             <Plus />
                           </button>
                         </div>
-                        {active(workspace.budgets).map((budget) => (
-                          <div className="pw-money-source-row" key={budget.id}>
-                            <div>
-                              <strong>{budget.name}</strong>
-                              <span>{budget.cadence.replaceAll("_", " ")}</span>
+                        {active(workingWorkspace.budgets)
+                          .filter((budget) =>
+                            ["expense", "facility"].includes(
+                              workingWorkspace.categories.find(
+                                (category) => category.id === budget.categoryId,
+                              )?.kind ?? "",
+                            ),
+                          )
+                          .map((budget) => (
+                            <div
+                              className="pw-money-source-row"
+                              key={budget.id}
+                            >
+                              <div>
+                                <strong>{budget.name}</strong>
+                                <span>
+                                  {budget.cadence.replaceAll("_", " ")}
+                                </span>
+                              </div>
+                              <DraftField
+                                label={`${budget.name} ${budget.cadence === "percent_revenue" ? "percent of revenue" : budget.cadence === "per_session" ? "cost per session ($)" : "amount ($)"}`}
+                                type="number"
+                                value={budget.amount}
+                                onChange={(value) =>
+                                  stageRecord(
+                                    "budgets",
+                                    budget.id,
+                                    { amount: Number(value) },
+                                    budget.name + " amount",
+                                  )
+                                }
+                              />
+                              <EditButton
+                                label={`Edit ${budget.name}`}
+                                onClick={() => edit("budgets", budget)}
+                              />
                             </div>
-                            <NumberField
-                              label={`${budget.name} amount`}
-                              value={budget.amount}
-                              unit={
-                                budget.cadence === "percent_revenue" ? "%" : "$"
-                              }
-                              onSave={(n) =>
-                                patchRecord("budgets", budget.id, {
-                                  amount: n,
-                                })
-                              }
-                            />
-                            <EditButton
-                              label={`Edit ${budget.name}`}
-                              onClick={() => edit("budgets", budget)}
-                            />
+                          ))}
+                        {(moneyValues.overhead ?? 0) >
+                          (moneyMonth?.budgetValues?.overhead ?? 0) + 0.01 && (
+                          <div className="pw-money-source-row">
+                            <div>
+                              <strong>
+                                Remaining overhead allowance and other costs
+                              </strong>
+                              <span>
+                                Compensation-plan baseline or dated expansion
+                                costs
+                              </span>
+                            </div>
+                            <strong>
+                              {money(
+                                (moneyValues.overhead ?? 0) -
+                                  (moneyMonth?.budgetValues?.overhead ?? 0),
+                              )}
+                            </strong>
                           </div>
-                        ))}
-                        {!active(workspace.budgets).length && (
+                        )}
+                        {!active(workingWorkspace.budgets).length && (
                           <p className="pw-empty">
                             No recurring budget lines yet.
                           </p>
@@ -2380,33 +3797,36 @@ export default function PracticeWorkspace() {
                       </div>
                       <div>
                         <div className="pw-money-source-heading">
-                          <h3>Marketing spend</h3>
+                          <h3>Ad spend and support costs</h3>
                           <button
                             className="pw-icon"
                             title="Add campaign"
                             aria-label="Add campaign"
-                            onClick={() => edit("campaigns")}
+                            onClick={() => stageNew("campaigns")}
                           >
                             <Plus />
                           </button>
                         </div>
-                        {active(workspace.campaigns).map((campaign) => (
+                        {active(workingWorkspace.campaigns).map((campaign) => (
                           <div
                             className="pw-money-source-row"
                             key={campaign.id}
                           >
                             <div>
                               <strong>{campaign.name}</strong>
-                              <span>{campaign.source}</span>
+                              <span>Ad spend · {campaign.source}</span>
                             </div>
-                            <NumberField
-                              label={`${campaign.name} monthly spend`}
+                            <DraftField
+                              label={`${campaign.name} monthly ad spend`}
+                              type="number"
                               value={campaign.monthlySpend}
-                              unit="$"
-                              onSave={(n) =>
-                                patchRecord("campaigns", campaign.id, {
-                                  monthlySpend: n,
-                                })
+                              onChange={(value) =>
+                                stageRecord(
+                                  "campaigns",
+                                  campaign.id,
+                                  { monthlySpend: Number(value) },
+                                  campaign.name + " ad spend",
+                                )
                               }
                             />
                             <EditButton
@@ -2415,7 +3835,40 @@ export default function PracticeWorkspace() {
                             />
                           </div>
                         ))}
-                        {!active(workspace.campaigns).length && (
+                        {active(workingWorkspace.budgets)
+                          .filter(
+                            (budget) =>
+                              workingWorkspace.categories.find(
+                                (category) => category.id === budget.categoryId,
+                              )?.kind === "marketing",
+                          )
+                          .map((budget) => (
+                            <div
+                              className="pw-money-source-row"
+                              key={budget.id}
+                            >
+                              <div>
+                                <strong>{budget.name}</strong>
+                                <span>
+                                  Marketing support · {budget.cadence}
+                                </span>
+                              </div>
+                              <DraftField
+                                label={`${budget.name} ${budget.cadence === "percent_revenue" ? "percent of revenue" : budget.cadence === "per_session" ? "cost per session ($)" : "amount ($)"}`}
+                                type="number"
+                                value={budget.amount}
+                                onChange={(value) =>
+                                  stageRecord(
+                                    "budgets",
+                                    budget.id,
+                                    { amount: Number(value) },
+                                    budget.name + " amount",
+                                  )
+                                }
+                              />
+                            </div>
+                          ))}
+                        {!active(workingWorkspace.campaigns).length && (
                           <p className="pw-empty">No active campaigns yet.</p>
                         )}
                       </div>
@@ -2433,8 +3886,8 @@ export default function PracticeWorkspace() {
                       </div>
                       {add("allocations", "Add allocation")}
                     </div>
-                    {activeAllocations.length ? (
-                      activeAllocations.map((allocation) => (
+                    {active(workingWorkspace.allocations).length ? (
+                      active(workingWorkspace.allocations).map((allocation) => (
                         <div key={allocation.id} className="pw-allocation">
                           <div>
                             <h3>{allocation.name}</h3>
@@ -2445,15 +3898,18 @@ export default function PracticeWorkspace() {
                                 : " / business"}
                             </p>
                           </div>
-                          <NumberField
-                            label={`${allocation.name} share`}
-                            value={allocation.percent}
+                          <DraftField
+                            label={`${allocation.name} share (%)`}
+                            type="number"
                             max={100}
-                            unit="%"
-                            onSave={(n) =>
-                              patchRecord("allocations", allocation.id, {
-                                percent: n,
-                              })
+                            value={allocation.percent}
+                            onChange={(value) =>
+                              stageRecord(
+                                "allocations",
+                                allocation.id,
+                                { percent: Number(value) },
+                                allocation.name + " allocation",
+                              )
                             }
                           />
                           <EditButton
@@ -2478,31 +3934,27 @@ export default function PracticeWorkspace() {
                           ],
                         ].map(([label, key, amount]) => (
                           <div key={String(key)}>
-                            <NumberField
-                              label={String(label)}
+                            <DraftField
+                              label={String(label) + " (%)"}
+                              type="number"
+                              max={100}
                               value={
-                                workspace.settings[
+                                workingWorkspace.settings[
                                   key as
                                     | "taxPct"
                                     | "reservePct"
                                     | "distributionPct"
                                 ]
                               }
-                              max={100}
-                              unit="%"
-                              onSave={(n) =>
-                                saveWorkspace(
+                              onChange={(value) =>
+                                stageSettings(
                                   {
-                                    ...workspace,
-                                    settings: {
-                                      ...workspace.settings,
-                                      [key as
-                                        | "taxPct"
-                                        | "reservePct"
-                                        | "distributionPct"]: n,
-                                    },
+                                    [key as
+                                      | "taxPct"
+                                      | "reservePct"
+                                      | "distributionPct"]: Number(value),
                                   },
-                                  `Updated ${String(label).toLowerCase()}`,
+                                  String(label) + " allocation",
                                 )
                               }
                             />
@@ -2592,20 +4044,14 @@ export default function PracticeWorkspace() {
                           <strong>Owner payroll</strong>
                           <span>Non-clinical monthly compensation</span>
                         </div>
-                        <NumberField
-                          label="Owner monthly payroll"
-                          value={workspace.settings.ownerPayrollMonthly}
-                          unit="$"
-                          onSave={(n) =>
-                            saveWorkspace(
-                              {
-                                ...workspace,
-                                settings: {
-                                  ...workspace.settings,
-                                  ownerPayrollMonthly: n,
-                                },
-                              },
-                              "Updated owner payroll",
+                        <DraftField
+                          label="Owner monthly payroll ($)"
+                          type="number"
+                          value={workingWorkspace.settings.ownerPayrollMonthly}
+                          onChange={(value) =>
+                            stageSettings(
+                              { ownerPayrollMonthly: Number(value) },
+                              "Owner payroll",
                             )
                           }
                         />
@@ -2616,21 +4062,17 @@ export default function PracticeWorkspace() {
                           <strong>Owner payroll burden</strong>
                           <span>Employer-side payroll cost</span>
                         </div>
-                        <NumberField
-                          label="Owner payroll employer burden"
-                          value={workspace.settings.ownerPayrollBurdenPct}
+                        <DraftField
+                          label="Owner payroll employer burden (%)"
+                          type="number"
                           max={100}
-                          unit="%"
-                          onSave={(n) =>
-                            saveWorkspace(
-                              {
-                                ...workspace,
-                                settings: {
-                                  ...workspace.settings,
-                                  ownerPayrollBurdenPct: n,
-                                },
-                              },
-                              "Updated owner payroll burden",
+                          value={
+                            workingWorkspace.settings.ownerPayrollBurdenPct
+                          }
+                          onChange={(value) =>
+                            stageSettings(
+                              { ownerPayrollBurdenPct: Number(value) },
+                              "Owner payroll burden",
                             )
                           }
                         />
@@ -2646,17 +4088,13 @@ export default function PracticeWorkspace() {
                         <label className="pw-toggle">
                           <input
                             type="checkbox"
-                            checked={workspace.settings.includeOwnerClinical}
+                            checked={
+                              workingWorkspace.settings.includeOwnerClinical
+                            }
                             onChange={(event) =>
-                              void saveWorkspace(
-                                {
-                                  ...workspace,
-                                  settings: {
-                                    ...workspace.settings,
-                                    includeOwnerClinical: event.target.checked,
-                                  },
-                                },
-                                "Updated owner clinical take-home",
+                              stageSettings(
+                                { includeOwnerClinical: event.target.checked },
+                                "Owner clinical take-home",
                               )
                             }
                           />
@@ -2684,6 +4122,47 @@ export default function PracticeWorkspace() {
                         <span />
                         <b>{money(moneyValues.familyTakeHome)}</b>
                       </div>
+                      <div className="pw-owner-line">
+                        <div>
+                          <strong>Available from projected operations</strong>
+                          <span>
+                            After practice costs, payroll burden, tax, and
+                            business reserves; before using existing cash
+                          </span>
+                        </div>
+                        <span />
+                        <b>
+                          {money(
+                            Math.max(
+                              0,
+                              beforeOwnerPay -
+                                ownerBurden -
+                                (moneyValues.taxReserve ?? 0) -
+                                (moneyValues.reserves ?? 0) +
+                                (workspace.settings.includeOwnerClinical
+                                  ? (moneyValues.ownerClinicalPay ?? 0)
+                                  : 0),
+                            ),
+                          )}
+                        </b>
+                      </div>
+                      {(moneyValues.familyTakeHome ?? 0) >
+                        Math.max(
+                          0,
+                          beforeOwnerPay -
+                            ownerBurden -
+                            (moneyValues.taxReserve ?? 0) -
+                            (moneyValues.reserves ?? 0) +
+                            (workspace.settings.includeOwnerClinical
+                              ? (moneyValues.ownerClinicalPay ?? 0)
+                              : 0),
+                        ) && (
+                        <p className="pw-money-warning">
+                          Planned family take-home is higher than this month’s
+                          modeled operating capacity. The difference would
+                          require existing cash or a change to the plan.
+                        </p>
+                      )}
                     </div>
                   </section>
                 </>
@@ -3302,6 +4781,114 @@ export default function PracticeWorkspace() {
                 ) : (
                   <p>No changes yet.</p>
                 )}
+              </div>
+            )}
+          </aside>
+        )}
+        {stagedWorkspace && (
+          <aside className="pw-staged" aria-label="Pending practice edits">
+            <div className="pw-staged-top">
+              <strong>
+                {stagedDifferences.length} pending{" "}
+                {stagedDifferences.length === 1 ? "change" : "changes"}
+              </strong>
+              <span>These edits are not saved yet.</span>
+              <button
+                className="pw-button"
+                type="button"
+                onClick={() => setReviewStaged((open) => !open)}
+              >
+                {reviewStaged ? "Hide review" : "Review changes"}
+              </button>
+              <button
+                className="pw-button"
+                type="button"
+                onClick={() => {
+                  setStagedWorkspace(null);
+                  setStagedLabels({});
+                  setReviewStaged(false);
+                }}
+              >
+                Discard
+              </button>
+            </div>
+            {reviewStaged && (
+              <div className="pw-staged-review">
+                <div>
+                  <h3>What changed</h3>
+                  <ul>
+                    {stagedDifferences.map((change, index) => (
+                      <li key={index}>
+                        <strong>{change.label}</strong>
+                        <span>
+                          {changeValue(change.before)} →{" "}
+                          {changeValue(change.after)}
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                  {stagedValidation && !stagedValidation.success && (
+                    <div className="pw-error" role="alert">
+                      {stagedValidation.error.issues
+                        .slice(0, 5)
+                        .map((issue) => (
+                          <p key={issue.path.join(".")}>
+                            {issue.path.join(".")}: {issue.message}
+                          </p>
+                        ))}
+                    </div>
+                  )}
+                </div>
+                <div>
+                  <h3>Estimated monthly effect</h3>
+                  {(
+                    [
+                      "revenue",
+                      "overhead",
+                      "marketing",
+                      "fees",
+                      "profit",
+                      "familyTakeHome",
+                    ] as const
+                  ).map((key) => {
+                    const before =
+                      savedMonths[
+                        Math.min(moneyMonthIndex, savedMonths.length - 1)
+                      ]?.values[key];
+                    const after = stagedMonths.find(
+                      (row) =>
+                        row.date ===
+                        savedMonths[
+                          Math.min(moneyMonthIndex, savedMonths.length - 1)
+                        ]?.date,
+                    )?.values[key];
+                    return (
+                      <div className="pw-staged-effect" key={key}>
+                        <span>
+                          {key === "familyTakeHome"
+                            ? "Planned family take-home"
+                            : key}
+                        </span>
+                        <span>
+                          {money(before)} <ArrowRight /> {money(after)}
+                        </span>
+                      </div>
+                    );
+                  })}
+                </div>
+                <button
+                  className="pw-button pw-primary"
+                  type="button"
+                  disabled={
+                    saving ||
+                    !stagedValidation?.success ||
+                    !stagedDifferences.length
+                  }
+                  onClick={() => void commitStaged()}
+                >
+                  <Save />
+                  Save changes
+                </button>
               </div>
             )}
           </aside>

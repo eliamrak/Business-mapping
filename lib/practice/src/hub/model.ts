@@ -38,6 +38,8 @@ export const budgetSchema = z.object({
   ...named,
   planningOnly: z.boolean().default(false),
   ...dates,
+  billingDay: z.number().int().min(1).max(31).default(5),
+  billingReferenceStart: dateSchema.nullable().default(null),
   categoryId: id,
   amount: money,
   cadence: z.enum([
@@ -68,6 +70,28 @@ export const roomSchema = z.object({
   sessionMinutes: z.number().int().min(15).max(240).default(60),
   usablePct: percent.default(85),
   telehealthUsesRoom: z.boolean().default(false),
+  usage: z.enum(["shared", "dedicated"]).default("shared"),
+  dedicatedClinicianId: z.number().int().positive().nullable().default(null),
+  assignments: z
+    .array(
+      z.object({
+        clinicianId: z.number().int().positive(),
+        day: z.number().int().min(0).max(6),
+        startHour: z.number().min(0).max(24),
+        endHour: z.number().min(0).max(24),
+      }),
+    )
+    .max(100)
+    .default([]),
+  skippedWeeks: z
+    .array(
+      z.object({
+        weekStart: dateSchema,
+        clinicianId: z.number().int().positive(),
+      }),
+    )
+    .max(200)
+    .default([]),
   blocks: z
     .array(
       z.object({
@@ -88,6 +112,16 @@ export const clinicianSettingSchema = z.object({
   inPersonPct: percent.default(100),
   locationId: optionalId,
   roomId: optionalId,
+  availability: z
+    .array(
+      z.object({
+        day: z.number().int().min(0).max(6),
+        startHour: z.number().min(0).max(24),
+        endHour: z.number().min(0).max(24),
+      }),
+    )
+    .max(100)
+    .default([]),
   payMode: z
     .enum(["existing_split", "salary", "hourly", "per_session"])
     .default("existing_split"),
@@ -524,6 +558,16 @@ export const settingsSchema = z.object({
   attendanceMode: z.enum(["manual", "historical"]).default("manual"),
   collectionPct: percent.default(100),
   processingPct: percent.default(0),
+  processingFixedPerTransaction: money.default(0),
+  processingTransactionsPerSession: z.number().min(0).max(10).default(1),
+  processingOpeningTransactions: z
+    .number()
+    .int()
+    .min(0)
+    .max(1_000_000)
+    .default(0),
+  overheadFloorMonthly: money.default(0),
+  overheadMode: z.enum(["baseline", "detailed"]).default("baseline"),
   collectionDelayMonths: z.number().int().min(0).max(12).default(0),
   openingReceivables: money.default(0),
   openingCash: z.number().finite().min(-1e10).max(1e10).default(0),
@@ -615,6 +659,11 @@ export const workspaceSchema = z
     data.rooms.forEach((r, i) => {
       if (!exists(data.locations, r.locationId))
         issue(["rooms", i, "locationId"], "Location not found.");
+      if (r.usage === "dedicated" && r.dedicatedClinicianId === null)
+        issue(
+          ["rooms", i, "dedicatedClinicianId"],
+          "Choose the clinician who has this room.",
+        );
       r.blocks.forEach((b, j) => {
         if (b.endHour <= b.startHour)
           issue(["rooms", i, "blocks", j], "End time must follow start time.");
@@ -629,6 +678,54 @@ export const workspaceSchema = z
         )
           issue(["rooms", i, "blocks", j], "Room availability blocks overlap.");
       });
+      r.assignments.forEach((b, j) => {
+        if (b.endHour <= b.startHour)
+          issue(
+            ["rooms", i, "assignments", j],
+            "End time must follow start time.",
+          );
+        if (
+          r.assignments.some(
+            (x, k) =>
+              k < j &&
+              x.day === b.day &&
+              x.startHour < b.endHour &&
+              b.startHour < x.endHour,
+          )
+        )
+          issue(
+            ["rooms", i, "assignments", j],
+            "Shared room assignments overlap.",
+          );
+        if (r.blocks.length) {
+          const openHours = r.blocks
+            .filter((open) => open.day === b.day)
+            .reduce(
+              (sum, open) =>
+                sum +
+                Math.max(
+                  0,
+                  Math.min(open.endHour, b.endHour) -
+                    Math.max(open.startHour, b.startHour),
+                ),
+              0,
+            );
+          if (openHours < b.endHour - b.startHour - 1e-8)
+            issue(
+              ["rooms", i, "assignments", j],
+              "Assignment must fit room opening hours.",
+            );
+        }
+      });
+      if (
+        !r.blocks.length &&
+        r.assignments.reduce((sum, b) => sum + b.endHour - b.startHour, 0) >
+          r.weeklyHours + 1e-8
+      )
+        issue(
+          ["rooms", i, "assignments"],
+          "Assigned hours exceed this room's weekly hours.",
+        );
     });
     data.transactions.forEach((t, i) => {
       const period = data.periods.find((p) => p.id === t.periodId);
@@ -693,6 +790,26 @@ export const workspaceSchema = z
       if (clinicianIds.has(c.clinicianId))
         issue(["clinicians", i], "Only one operating profile per clinician.");
       clinicianIds.add(c.clinicianId);
+      c.availability.forEach((b, j) => {
+        if (b.endHour <= b.startHour)
+          issue(
+            ["clinicians", i, "availability", j],
+            "End time must follow start time.",
+          );
+        if (
+          c.availability.some(
+            (x, k) =>
+              k < j &&
+              x.day === b.day &&
+              x.startHour < b.endHour &&
+              b.startHour < x.endHour,
+          )
+        )
+          issue(
+            ["clinicians", i, "availability", j],
+            "Clinician availability blocks overlap.",
+          );
+      });
       if (
         !exists(data.rooms, c.roomId) ||
         !exists(data.locations, c.locationId)

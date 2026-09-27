@@ -103,6 +103,16 @@ const settingsFields: Record<string, Field[]> = {
     numeric("openingCash", "Opening available cash ($)", { min: -1e10 }),
     numeric("minimumCash", "Minimum operating cash ($)"),
     percent("processingPct", "Payment-processing fee (%)"),
+    numeric("processingFixedPerTransaction", "Fee per successful payment ($)"),
+    numeric(
+      "processingTransactionsPerSession",
+      "Estimated payments per completed session",
+      { max: 10 },
+    ),
+    numeric("processingOpeningTransactions", "Successful opening payments", {
+      max: 1_000_000,
+      step: "1",
+    }),
     numeric("ownerPayrollMonthly", "Owner non-clinical payroll / month ($)"),
     percent("ownerPayrollBurdenPct", "Owner payroll employer burden (%)"),
     percent("taxPct", "Tax allocation of positive cash profit (%)"),
@@ -651,8 +661,9 @@ export default function Settings(props: ViewProps) {
                   new Event("emc-discard", { cancelable: true }),
                 )
               )
-                void signOut({ redirectUrl: import.meta.env.BASE_URL || "/" })
-                  .catch((e) => setError(e.message));
+                void signOut({
+                  redirectUrl: import.meta.env.BASE_URL || "/",
+                }).catch((e) => setError(e.message));
             }}
           >
             <LogOut />

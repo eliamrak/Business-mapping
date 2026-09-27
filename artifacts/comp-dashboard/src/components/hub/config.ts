@@ -114,6 +114,13 @@ export const fields: Record<Collection, Field[]> = {
     name,
     ref("categoryId", "Category", "categories"),
     n("amount", "Amount ($, or % for revenue-based lines)"),
+    n("billingDay", "Billing day of month", { min: 1, max: 31, step: "1" }),
+    {
+      key: "billingReferenceStart",
+      label: "First bill date (reference)",
+      type: "date",
+      optional: true,
+    },
     select("cadence", "Repeats", [
       "monthly",
       "weekly",

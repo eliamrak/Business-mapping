@@ -9,9 +9,6 @@ export type CompensationGoal = {
   businessProfitGoal: number;
 };
 
-const inheritedCategoryId = "00000000-0000-4000-8000-000000000101";
-const inheritedBudgetId = "00000000-0000-4000-8000-000000000102";
-
 export type WorkspaceDefaults = {
   workspace: Workspace;
   forecastWorkspace: Workspace;
@@ -52,8 +49,7 @@ export function resolveWorkspaceDefaults(
     ? (goal.ownerPayGoal + goal.secondOwnerPayGoal) / 12
     : 0;
   const inheritOwnerPay =
-    stored.settings.ownerPayrollMonthly === 0 &&
-    ownerPayMonthly > 0;
+    stored.settings.ownerPayrollMonthly === 0 && ownerPayMonthly > 0;
   const inheritProfitGoal =
     stored.settings.targetProfitMonthly === 0 &&
     (goal?.businessProfitGoal ?? 0) > 0;
@@ -76,51 +72,21 @@ export function resolveWorkspaceDefaults(
     },
   };
 
-  const hasActiveBudget = workspace.budgets.some(
-    (budget) => !budget.archived && !budget.planningOnly,
-  );
   const inheritOverhead =
-    !hasActiveBudget && (goal?.annualOverheadGoal ?? 0) > 0;
-  const forecastWorkspace: Workspace = inheritOverhead
-    ? {
-        ...workspace,
-        categories: [
-          ...workspace.categories,
-          {
-            id: inheritedCategoryId,
-            name: "Operating overhead",
-            archived: false,
-            notes: "Inherited from the current compensation plan.",
-            sourceAttachmentId: null,
-            parentId: null,
-            kind: "expense",
-            order: -1,
-            tags: ["compensation plan"],
-          },
-        ],
-        budgets: [
-          ...workspace.budgets,
-          {
-            id: inheritedBudgetId,
-            name: "Current annual overhead",
-            archived: false,
-            notes: "Inherited from the current compensation plan.",
-            sourceAttachmentId: null,
-            planningOnly: false,
-            start: workspace.settings.forecastStart,
-            end: null,
-            categoryId: inheritedCategoryId,
-            amount: goal?.annualOverheadGoal ?? 0,
-            cadence: "annual",
-            status: "committed",
-            locationId: null,
-            roomId: null,
-            campaignId: null,
-            clinicianId: null,
-          },
-        ],
-      }
-    : workspace;
+    workspace.settings.overheadMode === "baseline" &&
+    (goal?.annualOverheadGoal ?? 0) > 0;
+  const forecastWorkspace: Workspace = {
+    ...workspace,
+    settings: {
+      ...workspace.settings,
+      overheadFloorMonthly: inheritOverhead
+        ? Math.max(
+            workspace.settings.overheadFloorMonthly,
+            (goal?.annualOverheadGoal ?? 0) / 12,
+          )
+        : 0,
+    },
+  };
 
   return {
     workspace,

@@ -8,6 +8,7 @@ import {
   budgetSchema,
   campaignSchema,
   roomSchema,
+  clinicianSettingSchema,
   periodSchema,
   funnelSchema,
   eventSchema,
@@ -83,6 +84,14 @@ test("recurring budgets normalize calendar days and effective dates", () => {
     160,
   );
   close(budgetAmount({ ...b, cadence: "once" }, "2026-02-01", "2026-02-28"), 0);
+  close(
+    budgetAmount(
+      { ...b, billingDay: 5, billingReferenceStart: "2025-01-01" },
+      start,
+      "2026-01-31",
+    ),
+    1600,
+  );
 });
 test("CPL and CAC methods converge with compatible funnel rates", () => {
   const w = setup(),
@@ -208,6 +217,83 @@ test("room capacity limits in-person sessions but not telehealth", () => {
   close(forecast(w, context)[0].values.sessions, (5 * 31) / 7);
   w.settings.defaultInPersonPct = 0;
   close(forecast(w, context)[0].values.sessions, (20 * 31) / 7);
+});
+test("recurring clinician and shared-room availability caps sessions", () => {
+  const w = setup();
+  w.settings.baselineWeeklySessions = 40;
+  w.settings.defaultInPersonPct = 100;
+  w.clinicians.push(
+    clinicianSettingSchema.parse({
+      id: id(),
+      clinicianId: clinician.id,
+      start,
+      desiredWeeklySessions: 20,
+      availability: [{ day: 1, startHour: 9, endHour: 12 }],
+    }),
+  );
+  w.rooms.push(
+    roomSchema.parse({
+      id: id(),
+      name: "Shared",
+      start,
+      weeklyHours: 40,
+      usablePct: 100,
+      assignments: [
+        { clinicianId: clinician.id, day: 1, startHour: 10, endHour: 12 },
+      ],
+    }),
+  );
+  close(forecast(w, context)[0].values.sessions, 8);
+  w.rooms[0].skippedWeeks.push({
+    weekStart: "2026-01-05",
+    clinicianId: clinician.id,
+  });
+  close(forecast(w, context)[0].values.sessions, 6);
+  w.rooms[0].assignments = [];
+  w.rooms[0].blocks = [{ day: 2, startHour: 9, endHour: 12 }];
+  close(forecast(w, context)[0].values.sessions, 0);
+});
+test("room setup rejects conflicts and dedicated rooms stay reserved", () => {
+  const w = setup();
+  w.settings.defaultInPersonPct = 100;
+  const room = roomSchema.parse({
+    id: id(),
+    name: "Room",
+    start,
+    weeklyHours: 40,
+    usage: "dedicated",
+    dedicatedClinicianId: 2,
+  });
+  w.rooms.push(room);
+  close(forecast(w, context)[0].values.sessions, 0);
+  room.dedicatedClinicianId = 1;
+  room.assignments = [{ clinicianId: 2, day: 1, startHour: 9, endHour: 12 }];
+  close(forecast(w, context)[0].values.sessions, (20 * 31) / 7);
+  room.usage = "shared";
+  room.dedicatedClinicianId = null;
+  room.assignments = [
+    { clinicianId: 1, day: 1, startHour: 9, endHour: 12 },
+    { clinicianId: 1, day: 1, startHour: 11, endHour: 14 },
+  ];
+  assert.equal(workspaceSchema.safeParse(w).success, false);
+});
+test("processing charges percentage plus fixed fee on estimated successful payments", () => {
+  const w = setup();
+  w.settings.processingPct = 3.15;
+  w.settings.processingFixedPerTransaction = 0.3;
+  const values = forecast(w, context)[0].values;
+  close(values.fees, values.revenue! * 0.0315 + values.sessions! * 0.3);
+  w.settings.collectionPct = 50;
+  const partial = forecast(w, context)[0].values;
+  close(
+    partial.fees,
+    partial.revenue! * 0.0315 + partial.sessions! * 0.5 * 0.3,
+  );
+  w.settings.collectionDelayMonths = 1;
+  w.settings.openingReceivables = 100;
+  w.settings.processingOpeningTransactions = 2;
+  const delayed = forecast(w, context)[0].values;
+  close(delayed.fees, 100 * 0.0315 + 2 * 0.3);
 });
 test("cash collection delays remain distinct from earned revenue", () => {
   const w = setup();

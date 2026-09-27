@@ -646,6 +646,7 @@ export function forecast(
           inPersonPct: setting.defaultInPersonPct,
           locationId: null,
           roomId: null,
+          availability: [],
           payMode: "existing_split",
           payAmount: 0,
           paidHoursPerWeek: 0,
@@ -678,6 +679,11 @@ export function forecast(
           splits = changes("clinician.split", "clinicianSplit"),
           capacities = changes("clinician.capacity", "capacity"),
           payChanges = changes("clinician.payAmount", "payAmount");
+        const availableHours =
+          c.op?.availability.reduce(
+            (sum, block) => sum + block.endHour - block.startHour,
+            0,
+          ) ?? 0;
         const daily = datesIn(firstDay, lastDay).map((date) => {
           const mode =
             [...terms]
@@ -693,13 +699,33 @@ export function forecast(
             rate: datedValue(c.sessionRate, rates, date, date),
             split: datedValue(c.preCapClinicianSplit, splits, date, date),
             capacity:
-              (datedValue(
-                c.op?.desiredWeeklySessions ?? c.sessionsPerWeek,
-                capacities,
-                date,
-                date,
-              ) /
-                7) *
+              (availableHours > 0
+                ? (Math.min(
+                    datedValue(
+                      c.op?.desiredWeeklySessions ?? c.sessionsPerWeek,
+                      capacities,
+                      date,
+                      date,
+                    ),
+                    availableHours,
+                  ) *
+                    (c.op?.availability
+                      .filter(
+                        (block) =>
+                          block.day ===
+                          new Date(date + "T12:00:00Z").getUTCDay(),
+                      )
+                      .reduce(
+                        (sum, block) => sum + block.endHour - block.startHour,
+                        0,
+                      ) ?? 0)) /
+                  availableHours
+                : datedValue(
+                    c.op?.desiredWeeklySessions ?? c.sessionsPerWeek,
+                    capacities,
+                    date,
+                    date,
+                  ) / 7) *
               (c.weeksWorkedPerYear / 52.1786) *
               c.ramp,
           };
@@ -712,6 +738,16 @@ export function forecast(
           activeFraction: daily.length / days,
         };
       });
+    if (
+      workspace.rooms.some(
+        (room) =>
+          !room.archived && (room.blocks.length || room.assignments.length),
+      ) &&
+      people.some((person) => !person.op?.availability.length)
+    )
+      warnings.push(
+        "Some clinician availability is missing; room-time overlap is only partly verified.",
+      );
     const capacity = people.reduce((n, c) => n + c.capacity, 0),
       inPerson = capacity
         ? people.reduce((n, c) => n + c.capacity * c.inPerson, 0) / capacity
@@ -723,6 +759,8 @@ export function forecast(
       locationId: string | null;
       telehealthUsesRoom: boolean;
       capacity: number;
+      dedicatedClinicianId: number | null;
+      limits: Record<string, number> | null;
     }[] = [];
     const roomAvailability = (
       r: Workspace["rooms"][number],
@@ -755,6 +793,70 @@ export function forecast(
         return n + (((daily * 60) / r.sessionMinutes) * r.usablePct) / 100;
       }, 0);
     };
+    const assignmentLimits = (
+      r: Workspace["rooms"][number],
+      from: string,
+      to: string | null,
+    ) => {
+      const useAssignments = r.usage === "shared" && r.assignments.length > 0;
+      if (!useAssignments && !r.blocks.length) return null;
+      const limits: Record<string, number> = {};
+      for (const c of people) {
+        if (c.instance !== String(c.id)) continue;
+        let slots = 0;
+        for (const date of datesIn(
+          from > start ? from : start,
+          to && to < end ? to : end,
+        )) {
+          const day = new Date(date + "T12:00:00Z").getUTCDay();
+          const skipped =
+            useAssignments &&
+            r.skippedWeeks.some(
+              (week) =>
+                week.clinicianId === c.id &&
+                date >= week.weekStart &&
+                date <
+                  new Date(
+                    Date.parse(week.weekStart + "T12:00:00Z") + 7 * 86_400_000,
+                  )
+                    .toISOString()
+                    .slice(0, 10),
+            );
+          const assigned = skipped
+            ? []
+            : useAssignments
+              ? r.assignments.filter(
+                  (b) => b.day === day && b.clinicianId === c.id,
+                )
+              : r.blocks.filter((b) => b.day === day);
+          const roomOpen = r.blocks.filter((b) => b.day === day);
+          const clinicianOpen =
+            c.op?.availability.filter((b) => b.day === day) ?? [];
+          for (const block of assigned) {
+            const roomWindows = r.blocks.length ? roomOpen : [block];
+            const clinicianWindows = c.op?.availability.length
+              ? clinicianOpen
+              : [block];
+            for (const open of roomWindows)
+              for (const available of clinicianWindows) {
+                const hours = Math.max(
+                  0,
+                  Math.min(block.endHour, open.endHour, available.endHour) -
+                    Math.max(
+                      block.startHour,
+                      open.startHour,
+                      available.startHour,
+                    ),
+                );
+                slots +=
+                  (((hours * 60) / r.sessionMinutes) * r.usablePct) / 100;
+              }
+          }
+        }
+        limits[c.instance] = slots;
+      }
+      return limits;
+    };
     for (const r of workspace.rooms.filter(
       (r) => !r.planningOnly && active(r, start, end),
     )) {
@@ -765,6 +867,9 @@ export function forecast(
         locationId: r.locationId,
         telehealthUsesRoom: r.telehealthUsesRoom,
         capacity: available,
+        dedicatedClinicianId:
+          r.usage === "dedicated" ? r.dedicatedClinicianId : null,
+        limits: assignmentLimits(r, r.start, r.end),
       });
       roomCount++;
     }
@@ -778,6 +883,9 @@ export function forecast(
           locationId: r.locationId,
           telehealthUsesRoom: r.telehealthUsesRoom,
           capacity: available,
+          dedicatedClinicianId:
+            r.usage === "dedicated" ? r.dedicatedClinicianId : null,
+          limits: assignmentLimits(r, e.date, e.end),
         });
         roomCount += e.value;
       } else warnings.push(`${e.name}: room template not found.`);
@@ -789,6 +897,7 @@ export function forecast(
       warnings.push("No rooms configured; in-person capacity is unverified.");
     const allocate = (requested: number) => {
       const remaining = roomPools.map((r) => r.capacity),
+        usedByClinician = roomPools.map(() => new Map<string, number>()),
         assigned = new Map<string, number>();
       const ordered = [...people].sort(
         (a, b) =>
@@ -798,12 +907,17 @@ export function forecast(
       const eligibleFor = (c: (typeof people)[number]) =>
         roomPools
           .map((r, i) => ({ r, i }))
-          .filter(({ r }) =>
-            c.op?.roomId
-              ? r.id === c.op.roomId
-              : c.op?.locationId
-                ? r.locationId === c.op.locationId
-                : true,
+          .filter(
+            ({ r }) =>
+              (r.dedicatedClinicianId === null ||
+                (c.instance === String(c.id) &&
+                  r.dedicatedClinicianId === c.id)) &&
+              (r.limits === null || (r.limits[c.instance] ?? 0) > 0) &&
+              (c.op?.roomId
+                ? r.id === c.op.roomId
+                : c.op?.locationId
+                  ? r.locationId === c.op.locationId
+                  : true),
           );
       const availableFor = (c: (typeof people)[number]) => {
         const clinical = c.capacity - (assigned.get(c.instance) ?? 0),
@@ -817,7 +931,16 @@ export function forecast(
           clinical,
           eligible.reduce(
             (sum, { r, i }) =>
-              sum + remaining[i] / (r.telehealthUsesRoom ? 1 : c.inPerson),
+              sum +
+              Math.min(
+                remaining[i],
+                Math.max(
+                  0,
+                  (r.limits?.[c.instance] ?? Infinity) -
+                    (usedByClinician[i].get(c.instance) ?? 0),
+                ),
+              ) /
+                (r.telehealthUsesRoom ? 1 : c.inPerson),
             0,
           ),
         );
@@ -872,9 +995,21 @@ export function forecast(
               const fraction = r.telehealthUsesRoom ? 1 : c.inPerson;
               const count =
                 fraction > 0
-                  ? Math.min(wanted, remaining[i] / fraction)
+                  ? Math.min(
+                      wanted,
+                      remaining[i] / fraction,
+                      Math.max(
+                        0,
+                        (r.limits?.[c.instance] ?? Infinity) -
+                          (usedByClinician[i].get(c.instance) ?? 0),
+                      ) / fraction,
+                    )
                   : wanted;
               remaining[i] -= count * fraction;
+              usedByClinician[i].set(
+                c.instance,
+                (usedByClinician[i].get(c.instance) ?? 0) + count * fraction,
+              );
               provided += count;
               wanted -= count;
             }
@@ -986,7 +1121,8 @@ export function forecast(
       additionalIncome = 0,
       explicitTax = 0,
       explicitReserves = 0,
-      explicitOwner = 0;
+      explicitOwner = 0,
+      detailedOverhead = 0;
     const budgetLines: Record<string, number> = {};
     for (const original of workspace.budgets) {
       const b = { ...original };
@@ -1029,8 +1165,17 @@ export function forecast(
       else if (kind === "reserve") explicitReserves += amount;
       else if (kind === "owner") explicitOwner += amount;
       else if (kind === "marketing") marketing += amount;
-      else overhead += amount;
+      else {
+        overhead += amount;
+        detailedOverhead += amount;
+      }
     }
+    overhead += Math.max(
+      0,
+      (setting.overheadFloorMonthly * days) /
+        daysInclusive(monthDate(start), monthEnd(start)) -
+        detailedOverhead,
+    );
     const oneTime = events
       .filter((e) => e.enabled && e.date >= start && e.date <= end)
       .reduce((n, e) => n + e.oneTimeCost, 0);
@@ -1041,7 +1186,22 @@ export function forecast(
     );
     const ownerPayroll = setting.ownerPayrollMonthly + explicitOwner;
     const ownerBurden = (ownerPayroll * setting.ownerPayrollBurdenPct) / 100;
-    const fees = (collections * setting.processingPct) / 100;
+    const chargedSessions =
+      setting.collectionDelayMonths === 0
+        ? sessions
+        : collectionMonth >= 0
+          ? (results[collectionMonth].values.sessions ?? 0)
+          : 0;
+    const fees =
+      (collections * setting.processingPct) / 100 +
+      chargedSessions *
+        (setting.collectionPct / 100) *
+        setting.processingTransactionsPerSession *
+        setting.processingFixedPerTransaction +
+      (m === 0 && setting.collectionDelayMonths > 0
+        ? setting.processingOpeningTransactions *
+          setting.processingFixedPerTransaction
+        : 0);
     const profit =
       revenue +
       additionalIncome -
@@ -1203,7 +1363,7 @@ export function forecast(
       clinicianPay:
         "Existing compensation function with annual cap progression, effective terms and non-clinical pay; configured salary/hourly/session overrides apply.",
       overhead:
-        "Active non-marketing operating budget lines, prorated for effective dates, plus one-time events and hire support. Marketing and legacy staff payroll are separate.",
+        "Operating budget lines plus any remaining compensation-plan overhead allowance, one-time events and hire support. Marketing and staff payroll are separate.",
       profit:
         "Earned revenue + other income - clinician pay - employer burden - staff cost - overhead - marketing - fees - owner payroll/burden.",
       familyTakeHome:
@@ -1220,7 +1380,7 @@ export function forecast(
       capacity:
         "Sum of each active clinician's dated weekly capacity / 7, adjusted for working weeks, calendar days, credentialing delay and hire ramp.",
       roomCapacity:
-        "Usable hours in each active room x 60 / session minutes. Assigned room and location limits are shared across clinicians.",
+        "Usable hours in each active room x 60 / session minutes. Dedicated ownership, recurring shared blocks, clinician availability and location limits constrain access.",
       roomUtilization:
         "Room slots consumed, including configured telehealth occupancy, divided by usable room slots.",
       requiredRooms:
@@ -1239,7 +1399,7 @@ export function forecast(
         "Advertising spend plus campaign operating costs and additional marketing-category budget lines, prorated for active dates. Budget lines are additive, not copies of campaign spend.",
       adSpend:
         "Campaign advertising budgets applied day by day, including dated proposed spend changes.",
-      fees: "Cash collections x payment-processing percentage.",
+      fees: "Cash collections x processing percentage plus estimated successful payments x fixed fee. Payments default to completed sessions times the configured payments-per-session factor.",
       ownerPayroll:
         "Monthly non-clinical owner pay plus explicit owner-category budget lines.",
       ownerClinicalPay:
@@ -1951,6 +2111,7 @@ export function affordablePay(
         inPersonPct: workspace.settings.defaultInPersonPct,
         locationId: null,
         roomId: null,
+        availability: [],
         payAmount: 0,
         paidHoursPerWeek: 0,
         payMode: "existing_split" as const,

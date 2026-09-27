@@ -3,6 +3,8 @@ import assert from "node:assert/strict";
 import {
   emptyWorkspace,
   forecast,
+  budgetSchema,
+  categorySchema,
   type Context,
 } from "@workspace/practice/hub";
 import { resolveWorkspaceDefaults } from "./workspace-defaults.ts";
@@ -54,9 +56,8 @@ test("an empty workspace starts from the existing compensation plan", () => {
   assert.equal(result.workspace.settings.baselineWeeklySessions, 20);
   assert.equal(result.workspace.settings.ownerPayrollMonthly, 10_000);
   assert.equal(result.workspace.settings.targetProfitMonthly, 2_000);
-  assert.equal(result.forecastWorkspace.budgets.length, 1);
-  assert.equal(result.forecastWorkspace.budgets[0].amount, 120_000);
-  assert.equal(result.forecastWorkspace.budgets[0].cadence, "annual");
+  assert.equal(result.forecastWorkspace.budgets.length, 0);
+  assert.equal(result.forecastWorkspace.settings.overheadFloorMonthly, 10_000);
   const firstMonth = forecast(result.forecastWorkspace, context)[0];
   assert.ok((firstMonth.values.revenue ?? 0) > 0);
   assert.ok((firstMonth.values.overhead ?? 0) > 9_000);
@@ -75,5 +76,55 @@ test("detailed workspace values are not replaced by compensation defaults", () =
   assert.equal(result.inherited.ownerPay, false);
   assert.equal(result.inherited.profitGoal, false);
   assert.equal(result.inherited.overhead, true);
-  assert.equal(result.forecastWorkspace.budgets[0].amount, 120_000);
+  assert.equal(result.forecastWorkspace.settings.overheadFloorMonthly, 10_000);
+});
+test("partial or marketing budgets cannot erase inherited overhead", () => {
+  const workspace = emptyWorkspace("2026-09-20");
+  const marketing = categorySchema.parse({
+    id: crypto.randomUUID(),
+    name: "Ads",
+    kind: "marketing",
+  });
+  const rent = categorySchema.parse({
+    id: crypto.randomUUID(),
+    name: "Rent",
+    kind: "expense",
+  });
+  workspace.categories.push(marketing, rent);
+  workspace.budgets.push(
+    budgetSchema.parse({
+      id: crypto.randomUUID(),
+      name: "Ads support",
+      categoryId: marketing.id,
+      amount: 500,
+      cadence: "monthly",
+      start: "2026-09-20",
+    }),
+  );
+  const first = forecast(
+    resolveWorkspaceDefaults(workspace, context, goals).forecastWorkspace,
+    context,
+  )[0];
+  assert.ok((first.values.overhead ?? 0) > 9_000);
+  workspace.budgets.push(
+    budgetSchema.parse({
+      id: crypto.randomUUID(),
+      name: "Rent",
+      categoryId: rent.id,
+      amount: 2000,
+      cadence: "monthly",
+      start: "2026-09-20",
+    }),
+  );
+  const second = forecast(
+    resolveWorkspaceDefaults(workspace, context, goals).forecastWorkspace,
+    context,
+  )[0];
+  assert.ok((second.values.overhead ?? 0) > 9_000);
+  workspace.settings.overheadMode = "detailed";
+  const detailed = forecast(
+    resolveWorkspaceDefaults(workspace, context, goals).forecastWorkspace,
+    context,
+  )[0];
+  assert.ok((detailed.values.overhead ?? 0) < (second.values.overhead ?? 0));
 });
