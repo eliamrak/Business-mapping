@@ -969,7 +969,7 @@ export default function PracticeWorkspace() {
     }));
     setReviewStaged(false);
   }
-  function stageNew(collection: InlineCollection) {
+  function stageNew(collection: InlineCollection, start = today) {
     if (!workingWorkspace) return;
     let current = workingWorkspace;
     let record: Workspace[InlineCollection][number];
@@ -989,14 +989,14 @@ export default function PracticeWorkspace() {
         ...newRecord("budgets", current, today),
         name: "New expense",
         categoryId: category.id,
-        start: today,
+        start,
       });
     } else if (collection === "campaigns") {
       record = campaignSchema.parse({
         ...newRecord("campaigns", current, today),
         name: "New campaign",
         source: "New source",
-        start: today,
+        start,
       });
     } else if (collection === "rooms") {
       record = roomSchema.parse({
@@ -1015,7 +1015,7 @@ export default function PracticeWorkspace() {
     }));
     setReviewStaged(false);
   }
-  function stageMarketingSupport() {
+  function stageMarketingSupport(start = today) {
     if (!workingWorkspace) return;
     let current = workingWorkspace;
     let category = current.categories.find(
@@ -1033,7 +1033,7 @@ export default function PracticeWorkspace() {
       ...newRecord("budgets", current, today),
       name: "New marketing cost",
       categoryId: category.id,
-      start: today,
+      start,
     });
     setStagedWorkspace({ ...current, budgets: [...current.budgets, record] });
     setStagedLabels((prior) => ({
@@ -1108,6 +1108,42 @@ export default function PracticeWorkspace() {
       ...prior,
       ["clinicians:" + record.id]: person.label + " expected average session revenue",
     }));
+    setReviewStaged(false);
+  }
+  function stageClinicianModel(
+    person: Clinician,
+    patch: Partial<Workspace["clinicians"][number]>,
+    start: string,
+  ) {
+    if (!workingWorkspace) return;
+    const profiles = workingWorkspace.clinicians.filter(
+      (row) => row.clinicianId === person.id && row.status === "active",
+    );
+    const activeProfile = profiles
+      .filter((row) => row.start <= start && (!row.end || row.end >= start))
+      .sort((a, b) => b.start.localeCompare(a.start))[0];
+    if (activeProfile?.start === start) {
+      stageRecord("clinicians", activeProfile.id, patch, person.label + " money flow inputs");
+      return;
+    }
+    const nextProfile = profiles.filter((row) => row.start > start).sort((a, b) => a.start.localeCompare(b.start))[0];
+    const dayBefore = (date: string) =>
+      new Date(new Date(date + "T12:00:00Z").getTime() - 86_400_000).toISOString().slice(0, 10);
+    const end = activeProfile?.end ?? (nextProfile ? dayBefore(nextProfile.start) : null);
+    const record = clinicianSettingSchema.parse({
+      ...activeProfile,
+      id: crypto.randomUUID(),
+      clinicianId: person.id,
+      start,
+      end,
+      desiredWeeklySessions: activeProfile?.desiredWeeklySessions ?? person.sessionsPerWeek,
+      ...patch,
+    });
+    setStagedWorkspace({ ...workingWorkspace, clinicians: [
+      ...workingWorkspace.clinicians.map((row) => row.id === activeProfile?.id ? { ...row, end: dayBefore(start) } : row),
+      record,
+    ] });
+    setStagedLabels((prior) => ({ ...prior, ["clinicians:" + record.id]: person.label + " money flow inputs" }));
     setReviewStaged(false);
   }
   async function commitStaged() {
@@ -1253,6 +1289,23 @@ export default function PracticeWorkspace() {
         },
         "Updated desired session projection",
       );
+  }
+  async function patchStaff(member: Context["staff"][number], patch: Partial<Context["staff"][number]>) {
+    if (busy.current) throw new Error("A save is in progress. Please retry this change.");
+    busy.current = true;
+    setSaving(true);
+    try {
+      await customFetch("/api/staff/" + member.id, { method: "PATCH", body: JSON.stringify(patch) });
+      cache.setQueryData<Context>(["hub-context"], (old) => old ? {
+        ...old,
+        staff: old.staff.map((row) => row.id === member.id ? { ...row, ...patch } : row),
+      } : old);
+      void cache.invalidateQueries({ queryKey: ["/api/staff"] });
+      setMessage("Saved to Today");
+    } finally {
+      busy.current = false;
+      setSaving(false);
+    }
   }
   function addModeledClinician() {
     if (!draft) return;
@@ -2947,7 +3000,7 @@ export default function PracticeWorkspace() {
                           <h3>Marketing services and retainers</h3>
                           <button
                             className="pw-button"
-                            onClick={stageMarketingSupport}
+                            onClick={() => stageMarketingSupport()}
                           >
                             <Plus />
                             Add cost
@@ -3953,12 +4006,17 @@ export default function PracticeWorkspace() {
               )}
               {section === "money" && mode === "practice" && (
                 <MoneyFlowToday
-                  workspace={moneyFlowWorkspace ?? workingWorkspace}
+                  workspace={stagedWorkspace && !stagedValidation?.success
+                    ? workingWorkspace
+                    : moneyFlowWorkspace ?? workingWorkspace}
                   context={context}
                   today={today}
                   onPayeeChange={(id) => stageSettings({
                     familyW2ClinicianId: id,
-                    ...(id !== null && resolved?.inherited.ownerPay ? { ownerPayrollMonthly: 0 } : {}),
+                    ...(id !== null ? {
+                      ownerPayrollOverride: true,
+                      ...(resolved?.inherited.ownerPay ? { ownerPayrollMonthly: 0 } : {}),
+                    } : {}),
                   }, "Family W2 paycheck")}
                   onAddPaycheck={(paycheck) => stageFamilyPaycheck(paycheck.id, paycheck)}
                   onUpdatePaycheck={(id, patch) => {
@@ -3969,9 +4027,24 @@ export default function PracticeWorkspace() {
                   onAllocationPercent={(id, percent) => stageRecord("allocations", id, { percent }, "Fund allocation")}
                   onDefaultAllocationPercent={(key, percent) => stageSettings({ [key]: percent }, "Fund allocation")}
                   onAddFund={stageFund}
-                  onEditFunds={() => setDetail("allocations")}
+                  onFundPatch={(id, patch) => stageRecord("allocations", id, patch, "Fund details")}
+                  onFundRemove={(id) => stageRecord("allocations", id, { archived: true }, "Removed fund")}
+                  onSettingNumber={(key, value) => stageSettings({
+                    [key]: value,
+                    ...(key === "ownerPayrollMonthly" ? { ownerPayrollOverride: true } : {}),
+                    ...(key === "overheadFloorMonthly" ? { overheadFloorOverride: true } : {}),
+                  }, "Money flow settings")}
+                  onOverheadMode={(overheadMode) => stageSettings({ overheadMode }, "Overhead basis")}
+                  onAverageRate={(person, rate, start) => stageClinicianModel(person, { expectedSessionRevenue: rate }, start)}
+                  onClinicianModel={stageClinicianModel}
+                  onPersonPatch={patchPerson}
+                  onStaffPatch={patchStaff}
+                  onBudgetPatch={(id, patch) => stageRecord("budgets", id, patch, "Expense details")}
+                  onAddExpense={(start) => stageNew("budgets", start)}
+                  onAddMarketingCost={stageMarketingSupport}
+                  onCampaignPatch={(id, patch) => stageRecord("campaigns", id, patch, "Campaign costs")}
+                  onAddCampaign={(start) => stageNew("campaigns", start)}
                   onNavigate={(target) => setSection(target)}
-                  onLegacyPayrollChange={(amount) => stageSettings({ ownerPayrollMonthly: amount }, "Separate owner payroll")}
                 />
               )}
               {section === "money" && mode !== "practice" && (

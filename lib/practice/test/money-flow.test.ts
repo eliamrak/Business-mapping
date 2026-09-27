@@ -123,3 +123,28 @@ test("month-to-date processing uses the existing successful-payment assumption",
   close(flow.revenue, 1200);
   close(flow.processing, 1200 * 0.0315 + 20 * 0.75 * 0.30);
 });
+
+test("planned clinicians remain outside Today's operating totals", () => {
+  const workspace = setup();
+  workspace.clinicians[0].status = "planned";
+  const flow = monthFlow(workspace, context([record("2026-01-01", "2026-01-14", 20)]), "2026-01-01", "2026-01-15");
+  close(flow.revenue, 0);
+  close(flow.clinicianPay, 0);
+});
+
+test("month-to-date pay uses the clinician setup active in the selected month", () => {
+  const workspace = setup();
+  workspace.clinicians[0].end = "2026-01-31";
+  workspace.clinicians.push(clinicianSettingSchema.parse({
+    id: randomUUID(), clinicianId: 1, start: "2026-02-01",
+    desiredWeeklySessions: 20, payMode: "salary", payAmount: 60000,
+  }));
+  const data = context([
+    record("2026-01-01", "2026-01-14", 20),
+    { ...record("2026-02-01", "2026-02-14", 20), id: 2 },
+  ]);
+  const january = monthFlow(workspace, data, "2026-01-01", "2026-02-15");
+  const february = monthFlow(workspace, data, "2026-02-01", "2026-02-15");
+  close(january.familyGrossPay, 120000 / 12 * 14 / 31);
+  close(february.familyGrossPay, 60000 / 12 * 14 / 28);
+});

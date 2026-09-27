@@ -50,6 +50,7 @@ export function resolveWorkspaceDefaults(
     : 0;
   const inheritOwnerPay =
     stored.settings.familyW2ClinicianId === null &&
+    !stored.settings.ownerPayrollOverride &&
     stored.settings.ownerPayrollMonthly === 0 && ownerPayMonthly > 0;
   const inheritProfitGoal =
     stored.settings.targetProfitMonthly === 0 &&
@@ -75,17 +76,17 @@ export function resolveWorkspaceDefaults(
 
   const inheritOverhead =
     workspace.settings.overheadMode === "baseline" &&
+    !workspace.settings.overheadFloorOverride &&
     (goal?.annualOverheadGoal ?? 0) > 0;
   const forecastWorkspace: Workspace = {
     ...workspace,
     settings: {
       ...workspace.settings,
-      overheadFloorMonthly: inheritOverhead
-        ? Math.max(
-            workspace.settings.overheadFloorMonthly,
-            (goal?.annualOverheadGoal ?? 0) / 12,
-          )
-        : 0,
+      overheadFloorMonthly: workspace.settings.overheadMode === "detailed"
+        ? 0
+        : inheritOverhead
+          ? Math.max(workspace.settings.overheadFloorMonthly, (goal?.annualOverheadGoal ?? 0) / 12)
+          : workspace.settings.overheadFloorMonthly,
     },
   };
 

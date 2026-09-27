@@ -574,6 +574,7 @@ export const settingsSchema = z.object({
     .max(1_000_000)
     .default(0),
   overheadFloorMonthly: money.default(0),
+  overheadFloorOverride: z.boolean().default(false),
   overheadMode: z.enum(["baseline", "detailed"]).default("baseline"),
   collectionDelayMonths: z.number().int().min(0).max(12).default(0),
   openingReceivables: money.default(0),
@@ -583,6 +584,7 @@ export const settingsSchema = z.object({
   retentionMonths: z.number().min(1).max(120).default(6),
   sessionsPerClientMonth: z.number().min(0).max(31).default(4),
   ownerPayrollMonthly: money.default(0),
+  ownerPayrollOverride: z.boolean().default(false),
   ownerPayrollBurdenPct: percent.default(0),
   familyW2ClinicianId: z.number().int().positive().nullable().default(null),
   householdWithholdingPct: percent.default(0),

@@ -36,6 +36,7 @@ const moneySettings = [
   "openingCash",
   "minimumCash",
   "ownerPayrollMonthly",
+  "ownerPayrollOverride",
   "ownerPayrollBurdenPct",
   "familyW2ClinicianId",
   "householdWithholdingPct",
@@ -88,6 +89,7 @@ export function exportSection(
     workspace.settings = {
       overheadMode: w.settings.overheadMode,
       overheadFloorMonthly: w.settings.overheadFloorMonthly,
+      overheadFloorOverride: w.settings.overheadFloorOverride,
     };
   } else {
     workspace.allocations = w.allocations;
@@ -275,6 +277,7 @@ export function importSection(
       ...w.settings,
       overheadMode: part.settings.overheadMode,
       overheadFloorMonthly: part.settings.overheadFloorMonthly,
+      overheadFloorOverride: part.settings.overheadFloorOverride ?? w.settings.overheadFloorOverride,
     };
   } else {
     if (
@@ -284,7 +287,7 @@ export function importSection(
       !part.settings
     )
       throw new Error("Money flow export is incomplete.");
-    if (moneySettings.some((key) => key !== "familyW2ClinicianId" && part.settings![key] === undefined))
+    if (moneySettings.some((key) => !["familyW2ClinicianId", "ownerPayrollOverride"].includes(key) && part.settings![key] === undefined))
       throw new Error("Money flow export is incomplete.");
     w.allocations = part.allocations;
     if (destination !== "today") {

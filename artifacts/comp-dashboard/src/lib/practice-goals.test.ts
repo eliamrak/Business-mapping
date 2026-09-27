@@ -230,12 +230,17 @@ test("Sandbox models save independently from Planning scenarios", () => {
 test("section transfer replaces only its section and protects Today history", () => {
   const source = fixture();
   const target = fixture();
+  source.workspace.settings.overheadFloorOverride = true;
+  source.workspace.settings.overheadFloorMonthly = 4000;
+  source.workspace.settings.ownerPayrollOverride = true;
   target.workspace.budgets[0].amount = 400;
   target.workspace.campaigns[0].monthlySpend = 1200;
   const budget = exportSection(source, "budgets", "planning");
   assert.equal("campaigns" in budget.workspace, false);
   const result = importSection(target, budget, "today");
   assert.equal(result.workspace.budgets[0].amount, 1000);
+  assert.equal(result.workspace.settings.overheadFloorOverride, true);
+  assert.equal(result.workspace.settings.overheadFloorMonthly, 4000);
   assert.equal(result.workspace.campaigns[0].monthlySpend, 1200);
   assert.equal(target.workspace.budgets[0].amount, 400);
   assert.throws(() =>
@@ -273,6 +278,7 @@ test("section transfer replaces only its section and protects Today history", ()
   target.workspace.familyPaychecks = [oldPaycheck];
   source.workspace.familyPaychecks = [newPaycheck];
   const money = exportSection(source, "money", "planning");
+  assert.equal(importSection(target, money, "sandbox").workspace.settings.ownerPayrollOverride, true);
   assert.deepEqual(importSection(target, money, "today").workspace.periods, [
     oldPeriod,
   ]);

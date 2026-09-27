@@ -87,6 +87,22 @@ test("selecting a family W2 clinician does not inherit a second owner payroll", 
   assert.equal(result.inherited.ownerPay, false);
   assert.equal(result.forecastWorkspace.settings.overheadFloorMonthly, 10_000);
 });
+test("an explicit zero owner payroll does not reappear from the compensation goal", () => {
+  const workspace = emptyWorkspace("2026-09-20");
+  workspace.settings.ownerPayrollOverride = true;
+  workspace.settings.ownerPayrollMonthly = 0;
+  const result = resolveWorkspaceDefaults(workspace, context, goals);
+  assert.equal(result.workspace.settings.ownerPayrollMonthly, 0);
+  assert.equal(result.inherited.ownerPay, false);
+});
+test("an inline overhead baseline replaces the inherited goal when explicitly set", () => {
+  const workspace = emptyWorkspace("2026-09-20");
+  workspace.settings.overheadFloorOverride = true;
+  workspace.settings.overheadFloorMonthly = 4_000;
+  const result = resolveWorkspaceDefaults(workspace, context, goals);
+  assert.equal(result.forecastWorkspace.settings.overheadFloorMonthly, 4_000);
+  assert.equal(result.inherited.overhead, false);
+});
 test("partial or marketing budgets cannot erase inherited overhead", () => {
   const workspace = emptyWorkspace("2026-09-20");
   const marketing = categorySchema.parse({

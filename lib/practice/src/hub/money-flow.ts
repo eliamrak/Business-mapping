@@ -121,12 +121,12 @@ export function monthFlow(
   let familyGrossPay = 0;
   let familyEmployerBurden = 0;
   for (const person of people) {
-    const profile = workspace.clinicians.find(
-      (entry) => entry.clinicianId === person.id && entry.status !== "archived",
-    );
-    const activeProfile = profile && profile.start <= through &&
-      (!profile.end || profile.end >= start) ? profile : undefined;
-    if (activeProfile?.status !== undefined && activeProfile.status !== "active") continue;
+    const currentProfile = workspace.clinicians
+      .filter((entry) => entry.clinicianId === person.id && entry.status !== "archived" &&
+        entry.start <= through && (!entry.end || entry.end >= start))
+      .sort((a, b) => b.start.localeCompare(a.start))[0];
+    if (currentProfile?.status === "planned") continue;
+    const activeProfile = currentProfile;
     const count = sessionsByClinician.get(person.id) ?? 0;
     const rate = activeProfile?.expectedSessionRevenue ?? person.sessionRate;
     const earned = count * rate * workspace.settings.collectionPct / 100;
