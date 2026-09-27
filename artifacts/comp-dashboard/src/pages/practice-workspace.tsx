@@ -19,7 +19,10 @@ import {
   PanelTop,
   ChartNoAxesCombined,
   Download,
+  Upload,
   Save,
+  Trash2,
+  FolderOpen,
 } from "lucide-react";
 import {
   LineChart,
@@ -32,6 +35,7 @@ import {
 } from "recharts";
 import {
   forecast,
+  referencedClinicianIds,
   observed,
   observedSeries,
   workspaceSchema,
@@ -48,7 +52,10 @@ import {
   type Values,
 } from "@workspace/practice/hub";
 import { daysInclusive } from "@workspace/practice";
-import { calculateClinicianMetrics } from "@workspace/practice/compensation";
+import {
+  calculateClinicianMetrics,
+  calculateStaffMemberCost,
+} from "@workspace/practice/compensation";
 import {
   getHub,
   getContext,
@@ -58,11 +65,19 @@ import {
 } from "@/lib/hub-api";
 import {
   copyPractice,
-  makePracticeGoal,
+  makePlanningScenario,
+  makeSandboxModel,
+  blankPractice,
   readPracticeGoal,
   practiceChanges,
   type PracticeCopy,
 } from "@/lib/practice-goals";
+import {
+  exportSection,
+  importSection,
+  type SectionBundle,
+  type TransferSection,
+} from "@/lib/section-transfer";
 import { calculateGoalPace, type PacePoint } from "@/lib/goal-pace";
 import { resolveWorkspaceDefaults } from "@/lib/workspace-defaults";
 import {
@@ -393,10 +408,12 @@ export default function PracticeWorkspace() {
     null,
   );
   const [exportOpen, setExportOpen] = useState(false);
-  const [practiceView, setPracticeView] = useState<PracticeView>("plan");
+  const [practiceView] = useState<PracticeView>("actual");
   const [section, setSection] = useState<Section>("clinicians");
   const [draft, setDraft] = useState<PracticeCopy | null>(null);
+  const [draftMode, setDraftMode] = useState<"goals" | "sandbox" | null>(null);
   const [base, setBase] = useState<PracticeCopy | null>(null);
+  const [draftStart, setDraftStart] = useState<PracticeCopy | null>(null);
   const [sourceRevision, setSourceRevision] = useState(0);
   const [editor, setEditor] = useState<{
     collection: Collection;
@@ -406,6 +423,15 @@ export default function PracticeWorkspace() {
   const [detail, setDetail] = useState<Collection | null>(null);
   const [goalName, setGoalName] = useState("");
   const [goalDialog, setGoalDialog] = useState(false);
+  const [planningId, setPlanningId] = useState<string | null>(null);
+  const [sandboxId, setSandboxId] = useState<string | null>(null);
+  const [sandboxName, setSandboxName] = useState("");
+  const [sandboxDialog, setSandboxDialog] = useState(false);
+  const [sandboxLibraryOpen, setSandboxLibraryOpen] = useState(false);
+  const [transferOpen, setTransferOpen] = useState(false);
+  const [transferSection, setTransferSection] =
+    useState<TransferSection>("clinicians");
+  const [transferFile, setTransferFile] = useState<SectionBundle | null>(null);
   const [resetDialog, setResetDialog] = useState(false);
   const [archiveTarget, setArchiveTarget] = useState<{
     collection: Collection;
@@ -433,8 +459,10 @@ export default function PracticeWorkspace() {
     action: string;
   } | null>(null);
   const pendingGoal = useRef<Proposal | null>(null);
+  const pendingSandboxModel = useRef<Proposal | null>(null);
   const today = new Date().toLocaleDateString("en-CA");
-  const sandbox = mode === "sandbox";
+  const sandbox = mode === "sandbox" || (mode === "goals" && !!draft);
+  const planningEdit = mode === "goals" && !!draft;
   const savedResolved = useMemo(
     () =>
       query.data?.data && contextQuery.data
@@ -450,10 +478,21 @@ export default function PracticeWorkspace() {
   const context = sandbox && draft ? draft.context : contextQuery.data;
   const resolved = useMemo(
     () =>
-      sandbox && storedWorkspace && context
-        ? resolveWorkspaceDefaults(storedWorkspace, context, teams.data)
+      sandbox && storedWorkspace
+        ? {
+            workspace: storedWorkspace,
+            forecastWorkspace: storedWorkspace,
+            goal: null,
+            inherited: {
+              team: false,
+              sessionPace: false,
+              overhead: false,
+              ownerPay: false,
+              profitGoal: false,
+            },
+          }
         : savedResolved,
-    [sandbox, storedWorkspace, context, teams.data, savedResolved],
+    [sandbox, storedWorkspace, savedResolved],
   );
   const workspace = resolved?.workspace;
   const workingWorkspace = stagedWorkspace ?? workspace!;
@@ -531,6 +570,10 @@ export default function PracticeWorkspace() {
     ],
   );
   const changes = useMemo(
+    () => (draft && draftStart ? practiceChanges(draftStart, draft) : []),
+    [draftStart, draft],
+  );
+  const comparisonChanges = useMemo(
     () => (draft && base ? practiceChanges(base, draft) : []),
     [base, draft],
   );
@@ -546,10 +589,22 @@ export default function PracticeWorkspace() {
   );
   const goals = useMemo(
     () =>
-      active(query.data?.data.proposals ?? []).flatMap((goal) => {
-        const snapshot = readPracticeGoal(goal);
-        return snapshot ? [{ goal, snapshot }] : [];
-      }),
+      active(query.data?.data.proposals ?? [])
+        .filter((goal) => goal.baseline?.kind !== "sandbox-model-v1")
+        .flatMap((goal) => {
+          const snapshot = readPracticeGoal(goal);
+          return snapshot ? [{ goal, snapshot }] : [];
+        }),
+    [query.data],
+  );
+  const sandboxModels = useMemo(
+    () =>
+      active(query.data?.data.proposals ?? [])
+        .filter((model) => model.baseline?.kind === "sandbox-model-v1")
+        .flatMap((model) => {
+          const snapshot = readPracticeGoal(model);
+          return snapshot ? [{ model, snapshot }] : [];
+        }),
     [query.data],
   );
   const selectedGoal = goals.find((g) => g.goal.id === compareId);
@@ -784,7 +839,7 @@ export default function PracticeWorkspace() {
       );
       cache.setQueryData(hubKey, result);
       pending.current = null;
-      setMessage("Saved to My Practice");
+      setMessage("Saved to Today");
       void cache.invalidateQueries({ queryKey: ["hub-history"] });
     } catch (e) {
       if (e instanceof ApiError && [400, 409, 404].includes(e.status)) {
@@ -806,7 +861,7 @@ export default function PracticeWorkspace() {
     if (sandbox) {
       const parsed = workspaceSchema.parse(data);
       setDraft((d) => (d ? { ...d, workspace: parsed } : d));
-      setMessage("Sandbox only");
+      setMessage(mode === "goals" ? "Scenario only" : "Sandbox only");
     } else await persist(data, action);
   }
   type InlineCollection =
@@ -1024,12 +1079,22 @@ export default function PracticeWorkspace() {
           ...d,
           context: { ...d.context, clinicians },
           workspace:
-            followsDesired && patch.sessionsPerWeek !== undefined
+            (followsDesired || mode === "goals") &&
+            patch.sessionsPerWeek !== undefined
               ? {
                   ...d.workspace,
                   settings: {
                     ...d.workspace.settings,
-                    baselineWeeklySessions: nextTotal,
+                    baselineWeeklySessions:
+                      mode === "goals"
+                        ? Math.max(
+                            0,
+                            (d.workspace.settings.baselineWeeklySessions ??
+                              oldTotal) +
+                              nextTotal -
+                              oldTotal,
+                          )
+                        : nextTotal,
                   },
                 }
               : d.workspace,
@@ -1058,7 +1123,7 @@ export default function PracticeWorkspace() {
           : old,
       );
       void cache.invalidateQueries({ queryKey: ["/api/clinicians"] });
-      setMessage("Saved to My Practice");
+      setMessage("Saved to Today");
       updated = true;
     } finally {
       busy.current = false;
@@ -1084,16 +1149,149 @@ export default function PracticeWorkspace() {
         "Updated desired session projection",
       );
   }
-  function startSandbox(source?: PracticeCopy) {
+  function addModeledClinician() {
+    if (!draft) return;
+    const id =
+      Math.max(0, ...draft.context.clinicians.map((person) => person.id)) + 1;
+    const clinician: Clinician = {
+      id,
+      label: `New clinician ${id}`,
+      goalId: draft.workspace.settings.teamId,
+      classification: "1099",
+      sessionRate: 175,
+      sessionsPerWeek: 20,
+      weeksWorkedPerYear: 48,
+      capEnabled: false,
+      capAmount: 0,
+      preCapClinicianSplit: 60,
+      preCapPracticeSplit: 40,
+      postCapClinicianSplit: 60,
+      postCapPracticeSplit: 40,
+      w2EmployerFicaPct: 7.65,
+      futaSutaPct: 1,
+      workersCompPct: 0.5,
+      otherEmployerBurdenPct: 0,
+      nonClinicalHoursPerWeek: 0,
+      nonClinicalHourlyRate: 0,
+    };
+    setDraft((current) =>
+      current
+        ? {
+            ...current,
+            context: {
+              ...current.context,
+              clinicians: [...current.context.clinicians, clinician],
+            },
+            workspace: {
+              ...current.workspace,
+              settings: {
+                ...current.workspace.settings,
+                baselineWeeklySessions:
+                  (current.workspace.settings.baselineWeeklySessions ?? 0) +
+                  clinician.sessionsPerWeek,
+              },
+            },
+          }
+        : current,
+    );
+  }
+  function addModeledStaff() {
+    setDraft((current) =>
+      current
+        ? {
+            ...current,
+            context: {
+              ...current.context,
+              staff: [
+                ...current.context.staff,
+                {
+                  id:
+                    Math.max(
+                      0,
+                      ...current.context.staff.map((member) => member.id ?? 0),
+                    ) + 1,
+                  label: `New staff ${current.context.staff.length + 1}`,
+                  goalId: current.workspace.settings.teamId,
+                  annualSalary: 0,
+                  hourlyRate: null,
+                  hoursPerWeek: null,
+                  weeksPerYear: 48,
+                  classification: "w2",
+                  w2EmployerFicaPct: 7.65,
+                  futaSutaPct: 1,
+                  workersCompPct: 0.5,
+                  otherEmployerBurdenPct: 0,
+                },
+              ],
+            },
+          }
+        : current,
+    );
+  }
+  async function patchModeledStaff(
+    index: number,
+    patch: Partial<Context["staff"][number]>,
+  ) {
+    setDraft((current) =>
+      current
+        ? {
+            ...current,
+            context: {
+              ...current.context,
+              staff: current.context.staff.map((row, i) =>
+                i === index ? { ...row, ...patch } : row,
+              ),
+            },
+          }
+        : current,
+    );
+  }
+  function removeModeledClinician(person: Clinician) {
+    if (!draft) return;
+    if (
+      referencedClinicianIds(draft.workspace).has(person.id) ||
+      draft.context.sessions.some((record) => record.clinicianId === person.id)
+    ) {
+      setError(
+        "This clinician has linked settings or session history. Remove those links first, or set desired sessions to zero.",
+      );
+      return;
+    }
+    setDraft((current) =>
+      current
+        ? {
+            ...current,
+            context: {
+              ...current.context,
+              clinicians: current.context.clinicians.filter(
+                (row) => row.id !== person.id,
+              ),
+            },
+            workspace: {
+              ...current.workspace,
+              settings: {
+                ...current.workspace.settings,
+                baselineWeeklySessions: Math.max(
+                  0,
+                  (current.workspace.settings.baselineWeeklySessions ?? 0) -
+                    person.sessionsPerWeek,
+                ),
+              },
+            },
+          }
+        : current,
+    );
+  }
+  function startSandbox() {
     if (!query.data) return;
-    const copy =
-      source ??
-      (contextQuery.data && planProjection
-        ? copyPractice(planProjection.projectionWorkspace, contextQuery.data)
-        : null);
-    if (!copy) return;
+    const copy = blankPractice(today);
     setBase(copy);
+    setDraftStart(copy);
     setDraft(structuredClone(copy));
+    setDraftMode("sandbox");
+    setPlanningId(null);
+    setSandboxId(null);
+    setSandboxName("");
     setSourceRevision(query.data.revision);
     setMode("sandbox");
     setMarketingTab("campaigns");
@@ -1101,46 +1299,146 @@ export default function PracticeWorkspace() {
     setError("");
     setMessage("");
   }
-  function openGoal(goal: Proposal) {
-    const copy = readPracticeGoal(goal);
-    if (!copy || !query.data || !contextQuery.data || !planProjection) return;
-    if (changes.length) {
+  function startPlanning() {
+    if (!query.data || !contextQuery.data || !viewProjection) return;
+    if (draft && changes.length) {
       setError(
-        "Save the current sandbox as a goal, or reset it, before opening another goal.",
+        "Save or discard the open model before creating another scenario.",
       );
       return;
     }
-    setBase(
-      copyPractice(planProjection.projectionWorkspace, contextQuery.data),
+    const copy = copyPractice(
+      viewProjection.projectionWorkspace,
+      contextQuery.data,
     );
+    setBase(copy);
+    setDraftStart(copy);
+    setDraft(structuredClone(copy));
+    setDraftMode("goals");
+    setPlanningId(null);
+    setSourceRevision(query.data.revision);
+    setGoalName("");
+    setMode("goals");
+    setIntegratedTool(null);
+    setSection("clinicians");
+    setMessage("New scenario. Changes stay here until you save it.");
+    setError("");
+  }
+  function openGoal(goal: Proposal) {
+    const copy = readPracticeGoal(goal);
+    if (!copy || !query.data || !contextQuery.data || !planProjection) return;
+    if (planningEdit && changes.length) {
+      setError("Save or discard the current scenario before opening another.");
+      return;
+    }
+    setBase(
+      copyPractice(
+        viewProjection?.projectionWorkspace ??
+          planProjection.projectionWorkspace,
+        contextQuery.data,
+      ),
+    );
+    setDraftStart(copyPractice(copy.workspace, copy.context));
     setDraft(copyPractice(copy.workspace, copy.context));
+    setDraftMode("goals");
     setSourceRevision(copy.sourceRevision);
-    setMode("sandbox");
+    setPlanningId(goal.id);
+    setMode("goals");
+    setIntegratedTool(null);
     setSection("clinicians");
     setMarketingTab("campaigns");
     setMoneyMonthIndex(0);
-    setGoalName(goal.name + " - revision");
+    setGoalName(goal.name);
     setError("");
   }
   async function saveGoal() {
     if (!draft || !query.data || saving) return;
     try {
-      pendingGoal.current ??= makePracticeGoal(goalName, draft, sourceRevision);
+      const existing = planningId
+        ? query.data.data.proposals.find((p) => p.id === planningId)
+        : undefined;
+      pendingGoal.current ??= makePlanningScenario(
+        goalName,
+        draft,
+        sourceRevision,
+        mode === "sandbox" ? "sandbox" : "today",
+        existing,
+      );
       await persist(
         {
           ...query.data.data,
-          proposals: [...query.data.data.proposals, pendingGoal.current],
+          proposals: existing
+            ? query.data.data.proposals.map((p) =>
+                p.id === existing.id ? pendingGoal.current! : p,
+              )
+            : [...query.data.data.proposals, pendingGoal.current],
         },
-        "Saved sandbox as a goal",
+        "Saved planning scenario",
       );
       setCompareId(pendingGoal.current.id);
       pendingGoal.current = null;
       setGoalDialog(false);
       setGoalName("");
       setDraft(null);
+      setDraftMode(null);
       setBase(null);
+      setDraftStart(null);
+      setPlanningId(null);
+      setSandboxId(null);
       setMode("goals");
-      setMessage("Goal saved. My Practice is unchanged.");
+      setMessage("Scenario saved. Today is unchanged.");
+    } catch (e) {
+      setError(errorText(e));
+    }
+  }
+  function openSandboxModel(model: Proposal) {
+    if (changes.length) {
+      setError("Save or discard this Sandbox model before opening another.");
+      return;
+    }
+    const copy = readPracticeGoal(model);
+    if (!copy) return;
+    setDraft(copyPractice(copy.workspace, copy.context));
+    setDraftStart(copyPractice(copy.workspace, copy.context));
+    setBase(blankPractice(today));
+    setDraftMode("sandbox");
+    setSandboxId(model.id);
+    setSandboxName(model.name);
+    setSourceRevision(copy.sourceRevision);
+    setSandboxLibraryOpen(false);
+    setMode("sandbox");
+    setSection("clinicians");
+    setMessage("Saved model opened. Today is unchanged.");
+    setError("");
+  }
+  async function saveSandboxModel() {
+    if (!draft || !query.data || saving) return;
+    try {
+      const existing = sandboxId
+        ? query.data.data.proposals.find((p) => p.id === sandboxId)
+        : undefined;
+      pendingSandboxModel.current ??= makeSandboxModel(
+        sandboxName,
+        draft,
+        sourceRevision,
+        existing,
+      );
+      await persist(
+        {
+          ...query.data.data,
+          proposals: existing
+            ? query.data.data.proposals.map((p) =>
+                p.id === existing.id ? pendingSandboxModel.current! : p,
+              )
+            : [...query.data.data.proposals, pendingSandboxModel.current],
+        },
+        "Saved Sandbox model",
+      );
+      setSandboxId(pendingSandboxModel.current.id);
+      pendingSandboxModel.current = null;
+      setDraftStart(copyPractice(draft.workspace, draft.context));
+      setSandboxDialog(false);
+      setMessage("Sandbox model saved. Today and Planning are unchanged.");
     } catch (e) {
       setError(errorText(e));
     }
@@ -1153,36 +1451,22 @@ export default function PracticeWorkspace() {
       return;
     }
     if (busy.current || sessionEditing) return;
+    if (
+      draft &&
+      changes.length &&
+      next !== mode &&
+      next !== "practice" &&
+      next !== draftMode
+    ) {
+      setError(
+        "Save this scenario to Planning or discard its changes before opening another workspace.",
+      );
+      return;
+    }
     if (integratedTool) {
       if (next === "sandbox" && !draft && query.data) {
-        busy.current = true;
-        try {
-          const [freshContext, freshTeams] = await Promise.all([
-            contextQuery.refetch(),
-            teams.refetch(),
-          ]);
-          if (!freshContext.data)
-            throw new Error("Could not refresh clinician records.");
-          const resolved = resolveWorkspaceDefaults(
-            query.data.data,
-            freshContext.data,
-            freshTeams.data,
-          );
-          const projected = buildPracticeProjection(
-            resolved.forecastWorkspace,
-            freshContext.data,
-            "plan",
-            today,
-          );
-          setIntegratedTool(null);
-          startSandbox(
-            copyPractice(projected.projectionWorkspace, freshContext.data),
-          );
-        } catch (error) {
-          setError(errorText(error));
-        } finally {
-          busy.current = false;
-        }
+        setIntegratedTool(null);
+        startSandbox();
         return;
       }
       void contextQuery.refetch();
@@ -1198,8 +1482,18 @@ export default function PracticeWorkspace() {
       setMarketingTab("campaigns");
       setMoneyMonthIndex(0);
     }
-    if (next === "sandbox" && !draft) startSandbox();
-    else setMode(next);
+    if (next === "sandbox" && mode !== "sandbox" && draftMode !== "sandbox")
+      startSandbox();
+    else {
+      if (next === "goals" && draftMode === "sandbox") {
+        setDraft(null);
+        setDraftMode(null);
+        setBase(null);
+        setDraftStart(null);
+        setSandboxId(null);
+      }
+      setMode(next);
+    }
     if (section === "documents" || section === "settings")
       setSection("clinicians");
   }
@@ -1211,9 +1505,83 @@ export default function PracticeWorkspace() {
     }
     setIntegratedTool(next);
   }
+  function downloadSection() {
+    if (!workspace || !context) return;
+    const source =
+      mode === "practice" ? "today" : mode === "goals" ? "planning" : "sandbox";
+    const bundle = exportSection(
+      copyPractice(workspace, context),
+      transferSection,
+      source,
+    );
+    const url = URL.createObjectURL(
+      new Blob([JSON.stringify(bundle, null, 2)], { type: "application/json" }),
+    );
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = `emc-${source}-${transferSection}.json`;
+    anchor.click();
+    window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+  }
+  async function readTransferFile(file: File | undefined) {
+    setTransferFile(null);
+    if (!file) return;
+    try {
+      if (file.size > 15_000_000)
+        throw new Error("Section file exceeds 15 MB.");
+      const bundle = JSON.parse(await file.text()) as SectionBundle;
+      if (bundle?.kind !== "emc-section-v1")
+        throw new Error("Choose an EMC section export.");
+      if (bundle.section !== transferSection)
+        throw new Error(
+          `This file contains ${bundle.section}. Select that section to import it.`,
+        );
+      if (!workspace || !context) return;
+      importSection(
+        copyPractice(workspace, context),
+        bundle,
+        mode === "practice"
+          ? "today"
+          : mode === "goals"
+            ? "planning"
+            : "sandbox",
+      );
+      setTransferFile(bundle);
+      setError("");
+    } catch (e) {
+      setError(errorText(e));
+    }
+  }
+  async function applyTransfer() {
+    if (!workspace || !context || !transferFile) return;
+    try {
+      const next = importSection(
+        copyPractice(workspace, context),
+        transferFile,
+        mode === "practice"
+          ? "today"
+          : mode === "goals"
+            ? "planning"
+            : "sandbox",
+      );
+      if (mode === "practice")
+        await saveWorkspace(
+          next.workspace,
+          `Imported ${transferSection} section`,
+        );
+      else setDraft(next);
+      setTransferOpen(false);
+      setTransferFile(null);
+      setMessage(
+        `${transferSection} copied into ${mode === "practice" ? "Today" : mode === "goals" ? "Planning" : "Sandbox"}.`,
+      );
+    } catch (e) {
+      setError(errorText(e));
+    }
+  }
 
   if (query.isPending || contextQuery.isPending)
-    return <div className="pw-loading">Loading My Practice...</div>;
+    return <div className="pw-loading">Loading Today...</div>;
   if (!workspace || !context || query.isError || contextQuery.isError)
     return (
       <div className="pw-loading">
@@ -1230,18 +1598,14 @@ export default function PracticeWorkspace() {
       </div>
     );
   const toolTabs: ToolTab[] =
-    mode === "goals"
+    mode === "goals" && !draft
       ? [
-          { id: null, label: "Saved goals" },
+          { id: null, label: "Scenarios" },
           { id: "business-goals", label: "Compensation targets" },
           { id: "compensation-model", label: "Compensation model" },
         ]
       : sandbox
-        ? [
-            { id: null, label: "Working copy" },
-            { id: "scenarios", label: "Saved compensation scenarios" },
-            { id: "compare", label: "Compare scenarios" },
-          ]
+        ? [{ id: null, label: planningEdit ? "Scenario" : "Working copy" }]
         : section === "clinicians"
           ? [
               { id: null, label: "Clinicians" },
@@ -1259,9 +1623,9 @@ export default function PracticeWorkspace() {
     : null;
   const toolNotice =
     visibleTool === "reality"
-      ? "This older manual baseline is separate from the recorded sessions and financial periods in My Practice."
+      ? "This older manual baseline is separate from the recorded sessions and financial periods in Today."
       : visibleTool === "scenarios" || visibleTool === "compare"
-        ? "Saved compensation scenarios are separate from this working copy. Editing them will not apply a change to My Practice or the current Sandbox."
+        ? "Saved compensation scenarios are separate from this working copy. Editing them will not change Today."
         : visibleTool === "compensation-model"
           ? "Changes to this compensation model save to its linked team and business goal. Use Sandbox to test changes without saving them to the plan."
           : null;
@@ -1383,9 +1747,9 @@ export default function PracticeWorkspace() {
         <nav aria-label="Main navigation">
           {(
             [
-              { id: "practice", label: "My Practice", icon: Building2 },
+              { id: "practice", label: "Today", icon: Building2 },
+              { id: "goals", label: "Planning", icon: Flag },
               { id: "sandbox", label: "Sandbox", icon: FlaskConical },
-              { id: "goals", label: "Goals", icon: Flag },
             ] as const
           ).map((item) => (
             <button
@@ -1432,99 +1796,133 @@ export default function PracticeWorkspace() {
         <header className="pw-header">
           <div>
             <div className="pw-eyebrow">
-              {sandbox
-                ? "Working copy"
+              {mode === "sandbox"
+                ? "Independent model"
                 : mode === "goals"
-                  ? "Saved destinations"
-                  : "Your business"}
+                  ? "Your scenarios"
+                  : "Current business"}
             </div>
             <h1>
-              {sandbox ? "Sandbox" : mode === "goals" ? "Goals" : "My Practice"}
+              {mode === "sandbox"
+                ? "Sandbox"
+                : mode === "goals"
+                  ? "Planning"
+                  : "Today"}
             </h1>
           </div>
           <div className="pw-actions">
-            <button
-              className="pw-button"
-              onClick={() => setExportOpen(true)}
-              title="Export compensation reports"
-            >
-              <Download />
-              Reports
-            </button>
+            {mode === "practice" && (
+              <button
+                className="pw-button"
+                onClick={() => setExportOpen(true)}
+                title="Export compensation reports"
+              >
+                <Download />
+                Reports
+              </button>
+            )}
             {sandbox ? (
               !visibleTool && (
                 <>
                   <button
                     className="pw-icon"
-                    aria-label="Reset sandbox"
-                    title="Reset sandbox from My Practice"
+                    aria-label="Model settings"
+                    title="Model settings"
+                    onClick={() => setSection("settings")}
+                  >
+                    <Settings2 />
+                  </button>
+                  <button
+                    className="pw-icon"
+                    aria-label={
+                      planningEdit ? "Discard scenario edits" : "Reset sandbox"
+                    }
+                    title={
+                      planningEdit ? "Discard scenario edits" : "Reset sandbox"
+                    }
                     onClick={() => setResetDialog(true)}
                   >
                     <RotateCcw />
                   </button>
+                  {section !== "summary" &&
+                    section !== "settings" &&
+                    section !== "documents" && (
+                      <button
+                        className="pw-button"
+                        onClick={() => {
+                          setTransferSection(section);
+                          setTransferOpen(true);
+                        }}
+                      >
+                        <Download /> Move data
+                      </button>
+                    )}
+                  {mode === "sandbox" && (
+                    <>
+                      <button
+                        className="pw-button"
+                        onClick={() => setSandboxLibraryOpen(true)}
+                      >
+                        <FolderOpen /> Saved models
+                      </button>
+                      <button
+                        className="pw-button"
+                        onClick={() => {
+                          setGoalName(sandboxName);
+                          setGoalDialog(true);
+                          setError("");
+                        }}
+                      >
+                        <Flag /> Copy to Planning
+                      </button>
+                    </>
+                  )}
                   <button
                     className="pw-button pw-primary"
                     onClick={() => {
-                      setGoalDialog(true);
+                      if (planningEdit) setGoalDialog(true);
+                      else setSandboxDialog(true);
                       setError("");
                     }}
                   >
-                    <Flag />
-                    Save as goal
+                    <Save />
+                    {planningEdit ? "Save scenario" : "Save model"}
                   </button>
                 </>
               )
             ) : mode === "practice" ? (
-              <button className="pw-button" onClick={() => navigate("sandbox")}>
-                <FlaskConical />
-                Try a change
-              </button>
+              <>
+                {section !== "summary" &&
+                  section !== "settings" &&
+                  section !== "documents" && (
+                    <button
+                      className="pw-button"
+                      onClick={() => {
+                        setTransferSection(section);
+                        setTransferOpen(true);
+                      }}
+                    >
+                      <Download /> Move data
+                    </button>
+                  )}
+                <button className="pw-button" onClick={startPlanning}>
+                  <Flag /> New scenario
+                </button>
+              </>
             ) : (
-              <button className="pw-button" onClick={() => navigate("sandbox")}>
+              <button className="pw-button" onClick={startPlanning}>
                 <Plus />
-                Open Sandbox
+                New scenario
               </button>
             )}
           </div>
         </header>
         {mode === "practice" && !visibleTool && (
           <div className="pw-view-bar">
-            <div
-              className="pw-view-switch"
-              role="group"
-              aria-label="Practice projection"
-            >
-              <button
-                type="button"
-                aria-pressed={practiceView === "plan"}
-                disabled={saving || sessionEditing}
-                onClick={() => {
-                  setPracticeView("plan");
-                  setMarketingTab("campaigns");
-                  setMoneyMonthIndex(0);
-                }}
-              >
-                Plan
-              </button>
-              <button
-                type="button"
-                aria-pressed={practiceView === "actual"}
-                disabled={saving || sessionEditing}
-                onClick={() => {
-                  setPracticeView("actual");
-                  setMarketingTab("results");
-                  setMoneyMonthIndex(0);
-                }}
-              >
-                Actual + forecast
-              </button>
-            </div>
             <span>
-              {practiceView === "plan"
-                ? "Desired sessions and planned business assumptions"
-                : recordedClinicianCount
-                  ? `${recordedClinicianCount} of ${viewProjection?.clinicianPace.length ?? 0} clinicians recorded in the last 8 weeks; gaps use desired sessions`
-                  : "No sessions recorded in the last 8 weeks; using desired sessions"}
+              {recordedClinicianCount
+                ? `${recordedClinicianCount} of ${viewProjection?.clinicianPace.length ?? 0} clinicians recorded in the last 8 weeks; gaps use desired sessions`
+                : "No sessions recorded in the last 8 weeks; using desired sessions"}
             </span>
           </div>
         )}
@@ -1540,7 +1938,7 @@ export default function PracticeWorkspace() {
             </button>
           </div>
         )}
-        {mode === "goals" && toolTabs.length > 0 && (
+        {mode === "goals" && !draft && toolTabs.length > 0 && (
           <nav className="pw-tool-tabs" aria-label="Views in this area">
             {toolTabs.map((tab) => (
               <button
@@ -1555,7 +1953,7 @@ export default function PracticeWorkspace() {
             ))}
           </nav>
         )}
-        {mode !== "goals" && (
+        {(mode !== "goals" || !!draft) && (
           <>
             {(!sandbox || !visibleTool) && (
               <nav
@@ -1595,14 +1993,16 @@ export default function PracticeWorkspace() {
             {sandbox && !visibleTool && (
               <div className="pw-sandbox-timeline">
                 <span className="pw-tag">
-                  <FlaskConical />
-                  Sandbox only
+                  {planningEdit ? <Flag /> : <FlaskConical />}
+                  {planningEdit ? goalName || "New scenario" : "Sandbox only"}
                 </span>
                 <label>
                   Starting
                   <input
                     type="date"
-                    aria-label="Sandbox start"
+                    aria-label={
+                      planningEdit ? "Scenario start" : "Sandbox start"
+                    }
                     value={workspace.settings.forecastStart}
                     onChange={(e) => {
                       if (e.target.value)
@@ -1619,7 +2019,9 @@ export default function PracticeWorkspace() {
                 <label>
                   Looking ahead
                   <select
-                    aria-label="Sandbox horizon"
+                    aria-label={
+                      planningEdit ? "Scenario horizon" : "Sandbox horizon"
+                    }
                     value={workspace.settings.horizonMonths}
                     onChange={(e) =>
                       void saveWorkspace({
@@ -1677,53 +2079,46 @@ export default function PracticeWorkspace() {
                     "Clinicians & pay",
                     people.length + " clinicians",
                     <>
-                      <select
-                        aria-label="Practice team"
-                        disabled={saving}
-                        value={workspace.settings.teamId ?? "unassigned"}
-                        onChange={(e) =>
-                          void saveWorkspace({
-                            ...workspace,
-                            settings: {
-                              ...workspace.settings,
-                              teamId:
-                                e.target.value === "unassigned"
-                                  ? null
-                                  : Number(e.target.value),
-                            },
-                          }).catch((e) => setError(errorText(e)))
-                        }
-                      >
-                        {!teams.data?.length && (
-                          <option value="unassigned">
-                            No saved compensation team
-                          </option>
-                        )}
-                        {teams.data?.map((t) => (
-                          <option key={t.id} value={t.id}>
-                            {t.name}
-                          </option>
-                        ))}
-                      </select>
+                      {sandbox ? (
+                        <span className="pw-model-team">
+                          {planningEdit ? "Scenario team" : "Independent team"}
+                        </span>
+                      ) : (
+                        <select
+                          aria-label="Practice team"
+                          disabled={saving}
+                          value={workspace.settings.teamId ?? "unassigned"}
+                          onChange={(e) =>
+                            void saveWorkspace({
+                              ...workspace,
+                              settings: {
+                                ...workspace.settings,
+                                teamId:
+                                  e.target.value === "unassigned"
+                                    ? null
+                                    : Number(e.target.value),
+                              },
+                            }).catch((e) => setError(errorText(e)))
+                          }
+                        >
+                          {!teams.data?.length && (
+                            <option value="unassigned">
+                              No saved compensation team
+                            </option>
+                          )}
+                          {teams.data?.map((t) => (
+                            <option key={t.id} value={t.id}>
+                              {t.name}
+                            </option>
+                          ))}
+                        </select>
+                      )}
                       {sandbox ? (
                         <button
                           className="pw-button"
-                          onClick={() =>
-                            edit("events", {
-                              ...newRecord(
-                                "events",
-                                workspace,
-                                workspace.settings.forecastStart,
-                              ),
-                              name: "New clinician",
-                              field: "clinician.hire",
-                              targetId: String(people[0]?.id ?? ""),
-                              value: 20,
-                            })
-                          }
+                          onClick={addModeledClinician}
                         >
-                          <Plus />
-                          Plan a hire
+                          <Plus /> Add clinician
                         </button>
                       ) : (
                         <button
@@ -1763,7 +2158,20 @@ export default function PracticeWorkspace() {
                                 .join("")}
                             </span>
                             <div>
-                              <h3>{person.label}</h3>
+                              {sandbox ? (
+                                <input
+                                  className="pw-person-name"
+                                  aria-label={`Name for ${person.label}`}
+                                  value={person.label}
+                                  onChange={(event) =>
+                                    void patchPerson(person, {
+                                      label: event.target.value,
+                                    })
+                                  }
+                                />
+                              ) : (
+                                <h3>{person.label}</h3>
+                              )}
                               <div className="pw-person-meta">
                                 <select
                                   className="pw-person-classification"
@@ -1813,6 +2221,16 @@ export default function PracticeWorkspace() {
                                 )
                               }
                             />
+                            {sandbox && (
+                              <button
+                                className="pw-icon"
+                                aria-label={`Remove ${person.label} from model`}
+                                title="Remove from model"
+                                onClick={() => removeModeledClinician(person)}
+                              >
+                                <Trash2 />
+                              </button>
+                            )}
                           </header>
                           <div className="pw-number-grid">
                             <NumberField
@@ -1987,12 +2405,143 @@ export default function PracticeWorkspace() {
                   {!people.length && (
                     <div className="pw-empty">
                       <Users />
-                      <h3>No clinicians in this team</h3>
+                      <h3>No clinicians yet</h3>
                       <p>
-                        Select an existing team above to use its compensation
-                        structures.
+                        {sandbox
+                          ? "Add a clinician to begin this model."
+                          : "Add clinicians in Team details."}
                       </p>
                     </div>
+                  )}
+                  {sandbox && (
+                    <section
+                      className="pw-modeled-staff"
+                      aria-label="Staff pay in this model"
+                    >
+                      <div className="pw-section-heading">
+                        <div>
+                          <h3>Staff pay</h3>
+                          <p>Support roles in this model</p>
+                        </div>
+                        <button className="pw-button" onClick={addModeledStaff}>
+                          <Plus /> Add staff
+                        </button>
+                      </div>
+                      {context.staff
+                        .map((member, index) => ({ member, index }))
+                        .filter(
+                          ({ member }) =>
+                            (member.goalId ?? null) ===
+                            workspace.settings.teamId,
+                        )
+                        .map(({ member, index }) => (
+                          <div
+                            className="pw-modeled-staff-row"
+                            key={member.id ?? index}
+                          >
+                            <input
+                              aria-label={`Staff name ${index + 1}`}
+                              value={member.label ?? `Staff ${index + 1}`}
+                              onChange={(event) =>
+                                void patchModeledStaff(index, {
+                                  label: event.target.value,
+                                })
+                              }
+                            />
+                            <select
+                              aria-label={`Pay type for ${member.label ?? "staff"}`}
+                              value={
+                                member.annualSalary !== null
+                                  ? "salary"
+                                  : "hourly"
+                              }
+                              onChange={(event) =>
+                                void patchModeledStaff(
+                                  index,
+                                  event.target.value === "salary"
+                                    ? {
+                                        annualSalary: 0,
+                                        hourlyRate: null,
+                                        hoursPerWeek: null,
+                                      }
+                                    : {
+                                        annualSalary: null,
+                                        hourlyRate: 25,
+                                        hoursPerWeek: 40,
+                                      },
+                                )
+                              }
+                            >
+                              <option value="salary">Salary</option>
+                              <option value="hourly">Hourly</option>
+                            </select>
+                            {member.annualSalary !== null ? (
+                              <NumberField
+                                label={`${member.label ?? "Staff"} annual salary`}
+                                value={member.annualSalary ?? 0}
+                                unit="$"
+                                onSave={(value) =>
+                                  patchModeledStaff(index, {
+                                    annualSalary: value,
+                                  })
+                                }
+                              />
+                            ) : (
+                              <>
+                                <NumberField
+                                  label={`${member.label ?? "Staff"} hourly rate`}
+                                  value={member.hourlyRate ?? 0}
+                                  unit="$"
+                                  onSave={(value) =>
+                                    patchModeledStaff(index, {
+                                      hourlyRate: value,
+                                    })
+                                  }
+                                />
+                                <NumberField
+                                  label={`${member.label ?? "Staff"} weekly hours`}
+                                  value={member.hoursPerWeek ?? 0}
+                                  max={168}
+                                  onSave={(value) =>
+                                    patchModeledStaff(index, {
+                                      hoursPerWeek: value,
+                                    })
+                                  }
+                                />
+                              </>
+                            )}
+                            <span>
+                              {money(
+                                calculateStaffMemberCost(member)
+                                  .totalAnnualCost / 12,
+                              )}{" "}
+                              / month
+                            </span>
+                            <button
+                              className="pw-icon"
+                              aria-label={`Remove ${member.label ?? "staff"} from model`}
+                              title="Remove from model"
+                              onClick={() =>
+                                setDraft((current) =>
+                                  current
+                                    ? {
+                                        ...current,
+                                        context: {
+                                          ...current.context,
+                                          staff: current.context.staff.filter(
+                                            (_, i) => i !== index,
+                                          ),
+                                        },
+                                      }
+                                    : current,
+                                )
+                              }
+                            >
+                              <Trash2 />
+                            </button>
+                          </div>
+                        ))}
+                    </section>
                   )}
                   <div className="pw-secondary-links">
                     {detailButton("terms", "Future pay changes")}
@@ -2407,8 +2956,8 @@ export default function PracticeWorkspace() {
                     <>
                       {sandbox ? (
                         <p className="pw-notice">
-                          Recorded results stay in My Practice. Campaign
-                          estimates can be adjusted above.
+                          Recorded results stay in Today. Campaign estimates can
+                          be adjusted above.
                         </p>
                       ) : (
                         <div className="pw-secondary-links">
@@ -3453,7 +4002,7 @@ export default function PracticeWorkspace() {
                         <span>
                           {mode === "practice" && practiceView === "actual"
                             ? "Projected from recent sessions"
-                            : "Plan estimate"}
+                            : "Model estimate"}
                         </span>
                       </div>
 
@@ -4172,7 +4721,7 @@ export default function PracticeWorkspace() {
                   {heading(
                     "Practice summary",
                     (mode === "practice" && practiceView === "actual"
-                      ? "Actual + forecast / "
+                      ? "Today / "
                       : "Plan / ") +
                       monthLabel(
                         months[0]?.date ?? workspace.settings.forecastStart,
@@ -4603,7 +5152,7 @@ export default function PracticeWorkspace() {
             </div>
           </>
         )}
-        {mode === "goals" && visibleTool && (
+        {mode === "goals" && !draft && visibleTool && (
           <div className="pw-content">
             <div className="pw-integrated-tool">
               {toolNotice && <p className="pw-tool-notice">{toolNotice}</p>}
@@ -4614,11 +5163,11 @@ export default function PracticeWorkspace() {
             </div>
           </div>
         )}
-        {mode === "goals" && (
+        {mode === "goals" && !draft && (
           <div className="pw-content" hidden={!!visibleTool}>
             <div className="pw-section-heading">
               <div>
-                <h2>Saved goals</h2>
+                <h2>Saved scenarios</h2>
                 <p>
                   {goals.length} saved{" "}
                   {goals.length === 1 ? "version" : "versions"}
@@ -4628,12 +5177,12 @@ export default function PracticeWorkspace() {
             {!goals.length ? (
               <div className="pw-empty pw-goal-empty">
                 <Flag />
-                <h3>No saved goals yet</h3>
+                <h3>No scenarios yet</h3>
                 <button
                   className="pw-button pw-primary"
-                  onClick={() => navigate("sandbox")}
+                  onClick={startPlanning}
                 >
-                  Open Sandbox
+                  Create scenario
                   <ArrowRight />
                 </button>
               </div>
@@ -4661,7 +5210,7 @@ export default function PracticeWorkspace() {
                         </small>
                       </div>
                       <div>
-                        <span>Est. revenue at goal</span>
+                        <span>Estimated revenue</span>
                         <strong>
                           {money(projected?.values.revenue)}
                           <small> / month</small>
@@ -4688,20 +5237,20 @@ export default function PracticeWorkspace() {
             </div>
           </div>
         )}
-        {sandbox && !visibleTool && (
-          <aside className="pw-impact" aria-label="Sandbox impact">
+        {planningEdit && !visibleTool && (
+          <aside className="pw-impact" aria-label="Scenario comparison">
             <div className="pw-impact-heading">
               <span>
                 <ChartNoAxesCombined />
-                Sandbox vs My Practice plan /{" "}
-                {endpoint ? monthLabel(endpoint.date) : "goal"}
+                Scenario vs Today /{" "}
+                {endpoint ? monthLabel(endpoint.date) : "scenario"}
               </span>
               <button
                 className="pw-text-button"
                 onClick={() => setChangeDetails((v) => !v)}
               >
-                Review {changes.length}{" "}
-                {changes.length === 1 ? "change" : "changes"}
+                Review {comparisonChanges.length}{" "}
+                {comparisonChanges.length === 1 ? "change" : "changes"}
                 <ChevronRight />
               </button>
             </div>
@@ -4714,7 +5263,7 @@ export default function PracticeWorkspace() {
                     <span>{m.label} / month</span>
                     <div className="pw-impact-comparison">
                       <small>
-                        <span>My Practice</span>
+                        <span>Today</span>
                         {money(before)}
                       </small>
                       <ArrowRight />
@@ -4761,8 +5310,8 @@ export default function PracticeWorkspace() {
             </div>
             {changeDetails && (
               <div className="pw-changes">
-                {changes.length ? (
-                  changes.map((c, i) => (
+                {comparisonChanges.length ? (
+                  comparisonChanges.map((c, i) => (
                     <div key={i}>
                       <span>{c.label}</span>
                       <small>
@@ -4899,16 +5448,20 @@ export default function PracticeWorkspace() {
               ? "Saving..."
               : visibleTool
                 ? visibleTool === "team"
-                  ? "Team changes save to My Practice"
+                  ? "Team changes save to Today"
                   : visibleTool === "compensation-model"
                     ? "Changes here save to the linked compensation plan"
                     : "Saved compensation records"
                 : message ||
-                  (sandbox ? "My Practice is unchanged" : "My Practice")}
+                  (sandbox
+                    ? planningEdit
+                      ? "Today is unchanged"
+                      : "Sandbox only"
+                    : "Today")}
           </span>
           {!visibleTool &&
             months.some((m) => m.warnings.length > 0) &&
-            mode !== "goals" && (
+            (mode !== "goals" || planningEdit) && (
               <details>
                 <summary>Forecast checks</summary>
                 {[...new Set(months.flatMap((m) => m.warnings))].map((w) => (
@@ -4918,6 +5471,110 @@ export default function PracticeWorkspace() {
             )}
         </footer>
       </main>
+      <Dialog
+        open={transferOpen}
+        onOpenChange={(open) => {
+          setTransferOpen(open);
+          if (!open) setTransferFile(null);
+        }}
+      >
+        <DialogContent
+          className="practice-theme pw-save-dialog"
+          data-appearance="light"
+        >
+          <DialogHeader>
+            <DialogTitle>Move section data</DialogTitle>
+            <DialogDescription>
+              Export a section here, then import it in Today, Planning, or
+              Sandbox. Import replaces only the selected section. Recorded
+              sessions and clinician records cannot be replaced in Today.
+            </DialogDescription>
+          </DialogHeader>
+          <label className="pr-field">
+            Section
+            <select
+              value={transferSection}
+              onChange={(event) => {
+                setTransferSection(event.target.value as TransferSection);
+                setTransferFile(null);
+              }}
+            >
+              <option value="clinicians">Clinicians &amp; pay</option>
+              <option value="sessions">Sessions</option>
+              <option value="marketing">Marketing</option>
+              <option value="rooms">Rooms</option>
+              <option value="budgets">Budgets</option>
+              <option value="money">Money flow</option>
+            </select>
+          </label>
+          <button className="pw-button" onClick={downloadSection}>
+            <Download /> Export section
+          </button>
+          <label className="pr-field">
+            Import section file
+            <input
+              type="file"
+              accept="application/json,.json"
+              onChange={(event) =>
+                void readTransferFile(event.target.files?.[0])
+              }
+            />
+          </label>
+          {transferFile && (
+            <div className="pw-transfer-preview">
+              <strong>
+                {transferFile.section} from {transferFile.source}
+              </strong>
+              <span>
+                Exported {new Date(transferFile.exportedAt).toLocaleString()}
+              </span>
+              <span>
+                {[
+                  ...Object.entries(transferFile.workspace),
+                  ...Object.entries(transferFile.context),
+                ]
+                  .filter(([, rows]) => Array.isArray(rows))
+                  .map(
+                    ([name, rows]) => `${name}: ${(rows as unknown[]).length}`,
+                  )
+                  .join(", ")}
+              </span>
+              <span>
+                Will replace {transferFile.section} in{" "}
+                {mode === "practice"
+                  ? "Today"
+                  : mode === "goals"
+                    ? "this Planning scenario"
+                    : "Sandbox"}
+                . Other sections stay as they are.
+              </span>
+              {mode === "practice" &&
+                (transferSection === "marketing" ||
+                  transferSection === "money") && (
+                  <span>
+                    Recorded marketing and financial history in Today will stay
+                    unchanged.
+                  </span>
+                )}
+              {mode !== "practice" && (
+                <span>Save the scenario afterward to keep this change.</span>
+              )}
+              <button
+                className="pw-button pw-primary"
+                disabled={saving || !!stagedWorkspace}
+                onClick={() => void applyTransfer()}
+              >
+                <Upload /> Replace section
+              </button>
+            </div>
+          )}
+          {error && (
+            <p className="pw-error" role="alert">
+              {error}
+            </p>
+          )}
+        </DialogContent>
+      </Dialog>
       <Dialog open={exportOpen} onOpenChange={setExportOpen}>
         <DialogContent
           className="practice-theme pw-export-dialog"
@@ -4926,8 +5583,8 @@ export default function PracticeWorkspace() {
           <DialogHeader>
             <DialogTitle>Compensation reports</DialogTitle>
             <DialogDescription>
-              Reports use saved compensation records, not unsaved Sandbox
-              changes.
+              Reports use saved compensation records, not unsaved Planning or
+              Sandbox changes.
             </DialogDescription>
           </DialogHeader>
           <PDFExportTab />
@@ -4993,13 +5650,113 @@ export default function PracticeWorkspace() {
             <DialogHeader>
               <DialogTitle>{detail.replaceAll("_", " ")}</DialogTitle>
               <DialogDescription>
-                {sandbox ? "Sandbox settings" : "My Practice settings"}
+                {planningEdit
+                  ? "Planning settings"
+                  : sandbox
+                    ? "Sandbox settings"
+                    : "Today settings"}
               </DialogDescription>
             </DialogHeader>
             {table(detail)}
           </DialogContent>
         </Dialog>
       )}
+      <Dialog open={sandboxLibraryOpen} onOpenChange={setSandboxLibraryOpen}>
+        <DialogContent
+          className="practice-theme pw-save-dialog"
+          data-appearance="light"
+        >
+          <DialogHeader>
+            <DialogTitle>Saved Sandbox models</DialogTitle>
+            <DialogDescription>
+              Independent models stay separate from Today and Planning.
+            </DialogDescription>
+          </DialogHeader>
+          {sandboxModels.length ? (
+            sandboxModels.map(({ model, snapshot }) => (
+              <button
+                className="pw-saved-model"
+                key={model.id}
+                onClick={() => openSandboxModel(model)}
+              >
+                <strong>{model.name}</strong>
+                <span>
+                  Saved {new Date(snapshot.savedAt).toLocaleDateString()}
+                </span>
+                <ArrowRight />
+              </button>
+            ))
+          ) : (
+            <p>No saved models yet.</p>
+          )}
+          {error && (
+            <p className="pw-error" role="alert">
+              {error}
+            </p>
+          )}
+          <button
+            className="pw-button"
+            onClick={() => {
+              setSandboxLibraryOpen(false);
+              setResetDialog(true);
+            }}
+          >
+            <Plus /> Start blank model
+          </button>
+        </DialogContent>
+      </Dialog>
+      <Dialog
+        open={sandboxDialog}
+        onOpenChange={(open) => {
+          if (!saving) {
+            setSandboxDialog(open);
+            if (!open) pendingSandboxModel.current = null;
+          }
+        }}
+      >
+        <DialogContent
+          className="practice-theme pw-save-dialog"
+          data-appearance="light"
+        >
+          <DialogHeader>
+            <DialogTitle>Save Sandbox model</DialogTitle>
+            <DialogDescription>
+              This keeps a copy in Sandbox. Today and Planning stay unchanged.
+            </DialogDescription>
+          </DialogHeader>
+          <form
+            onSubmit={(event) => {
+              event.preventDefault();
+              void saveSandboxModel();
+            }}
+          >
+            <label className="pr-field">
+              Model name
+              <input
+                autoFocus
+                required
+                maxLength={120}
+                placeholder="e.g. Second location"
+                value={sandboxName}
+                disabled={!!pendingSandboxModel.current}
+                onChange={(event) => setSandboxName(event.target.value)}
+              />
+            </label>
+            {error && (
+              <p className="pw-error" role="alert">
+                {error}
+              </p>
+            )}
+            <button
+              className="pw-button pw-primary"
+              disabled={saving || !sandboxName.trim()}
+            >
+              <Save />{" "}
+              {saving ? "Saving..." : sandboxId ? "Update model" : "Save model"}
+            </button>
+          </form>
+        </DialogContent>
+      </Dialog>
       <Dialog
         open={goalDialog}
         onOpenChange={(open) => {
@@ -5014,8 +5771,10 @@ export default function PracticeWorkspace() {
           data-appearance="light"
         >
           <DialogHeader>
-            <DialogTitle>Save as a goal</DialogTitle>
-            <DialogDescription>My Practice stays unchanged.</DialogDescription>
+            <DialogTitle>
+              {planningEdit ? "Save scenario" : "Send model to Planning"}
+            </DialogTitle>
+            <DialogDescription>Today stays unchanged.</DialogDescription>
           </DialogHeader>
           <form
             onSubmit={(e) => {
@@ -5024,7 +5783,7 @@ export default function PracticeWorkspace() {
             }}
           >
             <label className="pr-field">
-              Goal name
+              Scenario name
               <input
                 autoFocus
                 required
@@ -5053,7 +5812,7 @@ export default function PracticeWorkspace() {
                 ? "Saving..."
                 : pendingGoal.current
                   ? "Retry save"
-                  : "Save goal"}
+                  : "Save scenario"}
             </button>
           </form>
         </DialogContent>
@@ -5064,20 +5823,30 @@ export default function PracticeWorkspace() {
           data-appearance="light"
         >
           <DialogHeader>
-            <DialogTitle>Start again from My Practice?</DialogTitle>
+            <DialogTitle>
+              {planningEdit
+                ? "Discard scenario edits?"
+                : "Start a blank Sandbox again?"}
+            </DialogTitle>
             <DialogDescription>
-              Unsaved sandbox changes will be discarded. Saved goals will
-              remain.
+              Unsaved changes will be discarded. Saved scenarios remain.
             </DialogDescription>
           </DialogHeader>
           <button
             className="pw-button pw-primary"
             onClick={() => {
-              startSandbox();
+              if (planningEdit) {
+                setDraft(null);
+                setDraftMode(null);
+                setBase(null);
+                setDraftStart(null);
+                setPlanningId(null);
+                setMode("goals");
+              } else startSandbox();
               setResetDialog(false);
             }}
           >
-            Reset sandbox
+            {planningEdit ? "Discard changes" : "Reset Sandbox"}
           </button>
         </DialogContent>
       </Dialog>

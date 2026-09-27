@@ -23,7 +23,11 @@ export type Clinician = ClinicianMetricsInput & {
   label: string;
   goalId?: number | null;
 };
-export type Staff = StaffCostInput & { goalId?: number | null };
+export type Staff = StaffCostInput & {
+  id?: number;
+  label?: string;
+  goalId?: number | null;
+};
 export type Context = {
   clinicians: Clinician[];
   staff: Staff[];

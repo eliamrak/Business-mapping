@@ -2817,3 +2817,90 @@
     width: 100%;
   }
 }
+.pw-person-name {
+  width: min(100%, 18rem);
+  border: 0;
+  border-bottom: 1px solid #c8d6ce;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-weight: 650;
+  padding: 0.15rem 0;
+}
+
+.pw-person-name:focus-visible {
+  outline: 2px solid #35664e;
+  outline-offset: 2px;
+}
+.pw-model-team {
+  color: #586c61;
+  font-size: 0.875rem;
+}
+.pw-transfer-preview {
+  display: grid;
+  gap: 0.5rem;
+  border-top: 1px solid #d8e1da;
+  padding-top: 1rem;
+}
+.pw-transfer-preview span {
+  color: #586c61;
+}
+.pw-modeled-staff {
+  margin-top: 1.5rem;
+  border-top: 1px solid #d8e1da;
+  padding-top: 1.25rem;
+}
+.pw-modeled-staff-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: end;
+  gap: 0.75rem;
+  border-bottom: 1px solid #e1e8e2;
+  padding: 0.8rem 0;
+}
+.pw-modeled-staff-row > input,
+.pw-modeled-staff-row > select {
+  min-height: 2.5rem;
+  max-width: 13rem;
+  border: 1px solid #c8d6ce;
+  border-radius: 4px;
+  background: white;
+  color: #26392e;
+  padding: 0.45rem 0.6rem;
+}
+.pw-modeled-staff-row .pw-number {
+  min-width: 9rem;
+  max-width: 13rem;
+}
+.pw-modeled-staff-row > span {
+  margin-left: auto;
+  color: #374e40;
+  white-space: nowrap;
+}
+.pw-saved-model {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 0.2rem 0.8rem;
+  width: 100%;
+  padding: 0.8rem 0;
+  border: 0;
+  border-bottom: 1px solid #d8e1da;
+  background: transparent;
+  text-align: left;
+  color: #26392e;
+  cursor: pointer;
+}
+.pw-saved-model strong {
+  grid-column: 1;
+}
+.pw-saved-model span {
+  grid-column: 1;
+  color: #63766a;
+  font-size: 0.85rem;
+}
+.pw-saved-model svg {
+  grid-column: 2;
+  grid-row: 1 / 3;
+  align-self: center;
+  width: 1rem;
+}

@@ -1,6 +1,7 @@
 import { z } from "zod/v4";
 import {
   workspaceSchema,
+  emptyWorkspace,
   proposalSchema,
   type Workspace,
   type Context,
@@ -35,6 +36,8 @@ const contextSchema = z.object({
   clinicians: z.array(clinicianSchema),
   staff: z.array(
     z.object({
+      id: z.number().int().positive().optional(),
+      label: z.string().optional(),
       goalId: z.number().int().positive().nullable().optional(),
       annualSalary: nonnegative.nullable().optional(),
       hourlyRate: nonnegative.nullable().optional(),
@@ -63,7 +66,20 @@ const snapshotSchema = z.object({
   workspace: workspaceSchema,
   context: contextSchema,
 });
+const planningSnapshotSchema = snapshotSchema.extend({
+  kind: z.literal("planning-scenario-v1"),
+  origin: z.enum(["today", "sandbox"]),
+});
+const sandboxSnapshotSchema = snapshotSchema.extend({
+  kind: z.literal("sandbox-model-v1"),
+});
 export type PracticeCopy = { workspace: Workspace; context: Context };
+export function validatePracticeCopy(copy: PracticeCopy): PracticeCopy {
+  return {
+    workspace: workspaceSchema.parse(copy.workspace),
+    context: contextSchema.parse(copy.context) as Context,
+  };
+}
 export function copyPractice(
   workspace: Workspace,
   context: Context,
@@ -98,7 +114,9 @@ export function makePracticeGoal(
 export function readPracticeGoal(
   goal: Proposal,
 ): (PracticeCopy & { savedAt: string; sourceRevision: number }) | null {
-  const result = snapshotSchema.safeParse(goal.baseline);
+  const result = z
+    .union([snapshotSchema, planningSnapshotSchema, sandboxSnapshotSchema])
+    .safeParse(goal.baseline);
   if (!result.success) return null;
   const { workspace, context, savedAt, sourceRevision } = result.data;
   return structuredClone({
@@ -107,6 +125,72 @@ export function readPracticeGoal(
     savedAt,
     sourceRevision,
   });
+}
+export function makePlanningScenario(
+  name: string,
+  copy: PracticeCopy,
+  sourceRevision: number,
+  origin: "today" | "sandbox",
+  existing?: Proposal,
+): Proposal {
+  const baseline = planningSnapshotSchema.parse({
+    kind: "planning-scenario-v1",
+    origin,
+    savedAt: new Date().toISOString(),
+    sourceRevision,
+    workspace: { ...copy.workspace, proposals: [] },
+    context: contextSchema.parse(copy.context),
+  });
+  return proposalSchema.parse({
+    ...(existing ?? {}),
+    id: existing?.id ?? crypto.randomUUID(),
+    name: name.trim(),
+    baseline,
+    changes: [],
+    status: "draft",
+  });
+}
+export function makeSandboxModel(
+  name: string,
+  copy: PracticeCopy,
+  sourceRevision: number,
+  existing?: Proposal,
+): Proposal {
+  const baseline = sandboxSnapshotSchema.parse({
+    kind: "sandbox-model-v1",
+    savedAt: new Date().toISOString(),
+    sourceRevision,
+    workspace: { ...copy.workspace, proposals: [] },
+    context: contextSchema.parse(copy.context),
+  });
+  return proposalSchema.parse({
+    ...(existing ?? {}),
+    id: existing?.id ?? crypto.randomUUID(),
+    name: name.trim(),
+    baseline,
+    changes: [],
+    status: "draft",
+  });
+}
+
+export function blankPractice(today: string): PracticeCopy {
+  const start = new Date(Date.parse(today.slice(0, 7) + "-01T12:00:00Z"));
+  start.setUTCMonth(start.getUTCMonth() + 1);
+  const workspace = emptyWorkspace(today);
+  return {
+    workspace: {
+      ...workspace,
+      settings: {
+        ...workspace.settings,
+        practiceName: "New business",
+        forecastStart: start.toISOString().slice(0, 10),
+        baselineMode: "manual",
+        baselineWeeklySessions: 0,
+        overheadMode: "detailed",
+      },
+    },
+    context: { clinicians: [], staff: [], sessions: [] },
+  };
 }
 export function practiceChanges(
   base: PracticeCopy,
@@ -157,10 +241,66 @@ export function practiceChanges(
         changes.push({ label: `Added ${name}`, before: null, after: "New" });
       else compare(name, old, record);
     }
+    for (const record of base.workspace[key]) {
+      if (!draft.workspace[key].some((row) => row.id === record.id))
+        changes.push({
+          label: `Removed ${"name" in record ? String(record.name) : key}`,
+          before: "Present",
+          after: null,
+        });
+    }
   }
   for (const person of draft.context.clinicians) {
     const old = base.context.clinicians.find((c) => c.id === person.id);
     if (old) compare(person.label, { ...old }, { ...person });
+    else
+      changes.push({
+        label: `Added ${person.label}`,
+        before: null,
+        after: "New",
+      });
   }
+  for (const person of base.context.clinicians) {
+    if (!draft.context.clinicians.some((row) => row.id === person.id))
+      changes.push({
+        label: `Removed ${person.label}`,
+        before: "Present",
+        after: null,
+      });
+  }
+  for (const [index, member] of draft.context.staff.entries()) {
+    const old =
+      member.id !== undefined
+        ? base.context.staff.find((row) => row.id === member.id)
+        : base.context.staff[index];
+    if (old)
+      compare(member.label ?? `Staff ${index + 1}`, { ...old }, { ...member });
+    else
+      changes.push({
+        label: `Added ${member.label ?? "staff"}`,
+        before: null,
+        after: "New",
+      });
+  }
+  for (const member of base.context.staff) {
+    if (
+      member.id !== undefined &&
+      !draft.context.staff.some((row) => row.id === member.id)
+    )
+      changes.push({
+        label: `Removed ${member.label ?? "staff"}`,
+        before: "Present",
+        after: null,
+      });
+  }
+  if (
+    JSON.stringify(base.context.sessions) !==
+    JSON.stringify(draft.context.sessions)
+  )
+    changes.push({
+      label: "Session history",
+      before: base.context.sessions.length,
+      after: draft.context.sessions.length,
+    });
   return changes;
 }

@@ -707,8 +707,8 @@ export default function WorkspaceSessions({
 
       {sandbox && (
         <p className="pw-notice">
-          Recorded sessions remain unchanged in Sandbox. Change desired sessions
-          from Clinicians &amp; Pay.
+          Recorded sessions stay separate from this model. Change desired sessions
+          in Clinicians &amp; Pay, or import a Sessions section.
         </p>
       )}
       {error && (

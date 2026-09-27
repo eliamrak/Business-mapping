@@ -61,9 +61,15 @@ export default function Sandbox(
     [variant, setVariant] = useState("expected"),
     [approveIds, setApproveIds] = useState<string[]>([]),
     [solo, setSolo] = useState("");
+  const legacyProposals = workspace.proposals.filter(
+    (proposal) =>
+      !["practice-goal-v1", "planning-scenario-v1", "sandbox-model-v1"].includes(
+        String(proposal.baseline?.kind),
+      ),
+  );
   const saved =
-    workspace.proposals.find((p) => p.id === selected) ??
-    workspace.proposals.find((p) => !p.archived);
+    legacyProposals.find((p) => p.id === selected) ??
+    legacyProposals.find((p) => !p.archived);
   const previousSaved = useRef(saved);
   useEffect(() => {
     setDraft((current) => {
@@ -207,7 +213,7 @@ export default function Sandbox(
             <option value="" disabled>
               Select proposal
             </option>
-            {workspace.proposals
+            {legacyProposals
               .filter((p) => !p.archived)
               .map((p) => (
                 <option key={p.id} value={p.id}>
