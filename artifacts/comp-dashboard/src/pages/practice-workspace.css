@@ -485,6 +485,7 @@
 }
 .pw-flow-profit strong,
 .pw-flow-takehome strong { font-size: 23px; }
+.pw-flow-row strong.pw-flow-missing { color: #68786d; font-size: 13px; font-weight: 500; white-space: normal; text-align: right; }
 .pw-flow-funds,
 .pw-flow-family { margin-top: 34px; }
 .pw-flow-section-heading { margin-bottom: 14px; }
@@ -532,7 +533,7 @@
 .pw-flow-add-fund .pw-button { min-height: 38px; white-space: nowrap; }
 .pw-flow-payee { display: grid; gap: 6px; max-width: 330px; margin: 14px 0; }
 .pw-flow-takehome { background: #eef4ef; padding: 14px 12px; border: 0; }
-.pw-flow-deposits { margin-top: 20px; }
+.pw-flow-deposits { margin: 4px 0 12px; }
 .pw-flow-deposits h4 { margin: 0 0 8px; font-size: 13px; }
 .pw-flow-deposit {
   display: grid;
