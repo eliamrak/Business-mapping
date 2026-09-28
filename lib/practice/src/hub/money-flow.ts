@@ -1,7 +1,7 @@
 import { daysInclusive } from "../index.ts";
 import { calculateClinicianMetrics, calculateStaffMemberCost } from "../compensation.ts";
 import { forecast, budgetAmount, monthEnd, type Context } from "./engine.ts";
-import { estimateW2NetPay } from "./family-pay.ts";
+import { estimateW2NetPay, semiMonthlyChecksThrough } from "./family-pay.ts";
 import type { Workspace } from "./model.ts";
 
 export type MonthFlow = {
@@ -28,7 +28,7 @@ export type MonthFlow = {
   retained: number | null;
   distribution: number | null;
   estimatedEmployeePayrollTax: number;
-  estimatedIncomeTax: number;
+  estimatedAdditionalWithholding: number;
   estimatedNetPay: number | null;
   familyTakeHome: number | null;
 };
@@ -83,7 +83,7 @@ export function monthFlow(
     retained: null,
     distribution: null,
     estimatedEmployeePayrollTax: 0,
-    estimatedIncomeTax: 0,
+    estimatedAdditionalWithholding: 0,
     estimatedNetPay: familyId === null ? null : 0,
     familyTakeHome: null,
   } satisfies MonthFlow;
@@ -133,7 +133,9 @@ export function monthFlow(
     revenue += earned;
     const mode = activeProfile?.payMode ?? "existing_split";
     let pay: number;
-    if (mode === "salary") pay = (activeProfile?.payAmount ?? 0) / 12 * fraction;
+    if (mode === "salary") pay = person.id === familyId
+      ? (activeProfile?.payAmount ?? 0) / 24 * semiMonthlyChecksThrough(start, through, activeProfile?.start ?? start)
+      : (activeProfile?.payAmount ?? 0) / 12 * fraction;
     else if (mode === "hourly")
       pay = (activeProfile?.payAmount ?? 0) * (activeProfile?.paidHoursPerWeek ?? 0) *
         (elapsed / 7) * person.weeksWorkedPerYear / 52.1786;
@@ -236,7 +238,7 @@ export function monthFlow(
     retained,
     distribution,
     estimatedEmployeePayrollTax: netPay.employeePayrollTax,
-    estimatedIncomeTax: netPay.incomeTax,
+    estimatedAdditionalWithholding: netPay.additionalWithholding,
     estimatedNetPay: familyId === null ? null : netPay.net,
     familyTakeHome: familyId === null ? null : netPay.net + distribution,
   };

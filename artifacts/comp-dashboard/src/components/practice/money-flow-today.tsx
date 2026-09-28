@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { ChevronDown, ChevronRight, Plus, Trash2 } from "lucide-react";
-import { monthFlow, type Context, type Workspace } from "@workspace/practice/hub";
+import { additionalWithholdingPctFromNet, estimateW2NetPay, monthFlow, type Context, type Workspace } from "@workspace/practice/hub";
 
 const currency = (value: number | null) => value === null
   ? "--"
@@ -135,7 +135,16 @@ export default function MoneyFlowToday({
       profile.start <= latestDepositDate && (!profile.end || profile.end >= month))
     .sort((a, b) => b.start.localeCompare(a.start))[0];
   const payee = context.clinicians.find((person) => person.id === workspace.settings.familyW2ClinicianId);
-  const payeeProfile = payee ? profileFor(payee) : undefined;
+  const payAsOf = flow.through ?? latestDepositDate;
+  const payeeProfile = payee ? workspace.clinicians
+    .filter((profile) => profile.clinicianId === payee.id && profile.status === "active" &&
+      profile.start <= payAsOf && (!profile.end || profile.end >= payAsOf))
+    .sort((a, b) => b.start.localeCompare(a.start))[0] : undefined;
+  const futurePayeeProfile = payee && flow.through ? workspace.clinicians.some((profile) =>
+    profile.clinicianId === payee.id && profile.status === "active" &&
+    profile.start > payAsOf && profile.start <= latestDepositDate) : false;
+  const annualFamilySalary = payeeProfile?.payMode === "salary" ? payeeProfile.payAmount : 0;
+  const estimatedNetCheck = Math.round(estimateW2NetPay(annualFamilySalary / 24, workspace.settings.estimatedIncomeTaxPct).net * 100) / 100;
   const currentAllocationRows = workspace.allocations.filter((row) => !row.archived && row.start <= latestDepositDate && (!row.end || row.end >= month));
   const defaultFunds = [
     { id: "tax", name: "Tax fund", key: "taxPct" as const, percent: workspace.settings.taxPct },
@@ -216,8 +225,7 @@ export default function MoneyFlowToday({
       <div className="pw-flow-group-title">Cost to run the practice</div>
       <div className="pw-flow-row"><span>Other clinician pay <small>Estimated from pay structures</small></span><strong>-{currency(flow.clinicianPay - flow.familyGrossPay)}</strong></div>
       <Sources label="Clinician pay setup">{people.filter((person) => person.id !== payee?.id).map(payRow)}</Sources>
-      {payee && <div className="pw-flow-row"><span>{payee.label} - gross W2 pay <small>Salary is a business cost even when sessions vary</small></span><strong>-{currency(flow.familyGrossPay)}</strong></div>}
-      {payee && <Sources label={`${payee.label} pay setup`}>{payRow(payee)}</Sources>}
+      {payee && <div className="pw-flow-row"><span>{payee.label} - gross W2 pay <small>Scheduled salary is a business cost even when sessions vary</small></span><strong>-{currency(flow.familyGrossPay)}</strong></div>}
       <div className="pw-flow-row"><span>Employer payroll costs</span><strong>-{currency(flow.employerBurden + flow.legacyOwnerBurden)}</strong></div>
       <Sources label="Employer payroll rates">
         {people.filter((person) => String(person.classification).toLowerCase() === "w2").map((person) => <SourceRow label={person.label} key={person.id}>
@@ -348,13 +356,23 @@ export default function MoneyFlowToday({
         <option value="w2">W2 employee</option><option value="owner">Owner</option><option value="1099">1099 contractor</option>
       </select></SourceRow>}
       {payee && String(payee.classification).toLowerCase() !== "w2" && <p className="pw-flow-warning">Set the selected clinician to W2 for employer payroll costs to be included.</p>}
-      {payee && payeeProfile?.payMode !== "salary" && <p className="pw-flow-warning">Set this clinician's pay method to Annual salary in the pay setup above.</p>}
+      {payee && payeeProfile?.payMode !== "salary" && <p className="pw-flow-warning">Enter an annual salary below to estimate W2 pay.</p>}
+      {payee && futurePayeeProfile && <p className="pw-flow-warning">A newer pay setup starts after {shortDate(payAsOf)} and is not included in this estimate yet.</p>}
       {payee && <>
-        <div className="pw-flow-row"><span>{payee.label} - estimated gross W2 pay <small>From the pay structure above, through {flow.through ? shortDate(flow.through) : label(month)}</small></span><strong>{currency(flow.familyGrossPay)}</strong></div>
+        <div className="pw-flow-row"><span>Annual gross salary <small>Enter once; paid on the 15th and last day of each month</small></span>
+          <InlineNumber label={`${payee.label} annual gross salary`} value={annualFamilySalary} prefix="$" onCommit={(amount) => onClinicianModel(payee, { payMode: "salary", payAmount: amount }, month)} /></div>
+        <div className="pw-flow-row"><span>Typical net per paycheck <small>Enter the amount that reaches your account once to calibrate the estimate</small></span>
+          <InlineNumber label={`${payee.label} typical net per paycheck`} value={estimatedNetCheck} prefix="$" onCommit={(net) => {
+            const rate = additionalWithholdingPctFromNet(annualFamilySalary / 24, net);
+            if (rate === null) { setChangeError("Enter annual salary first, then a net check no larger than gross pay after employee payroll tax."); return; }
+            onSettingNumber("estimatedIncomeTaxPct", rate);
+            setChangeError("");
+          }} /></div>
+        <div className="pw-flow-row"><span>{payee.label} - estimated gross W2 pay <small>Scheduled checks through {flow.through ? shortDate(flow.through) : label(month)}</small></span><strong>{currency(flow.familyGrossPay)}</strong></div>
         <div className="pw-flow-row"><span>Employee Social Security and Medicare <small>Approx. 7.65% of gross pay; separate from employer payroll costs</small></span><strong>-{currency(flow.estimatedEmployeePayrollTax)}</strong></div>
-        <div className="pw-flow-row pw-flow-tax-row"><span>Estimated income-tax withholding <small>Combined federal, state and local assumption; adjust to match your typical pay stub</small>
-          <InlineNumber label="Estimated income-tax withholding percentage" value={workspace.settings.estimatedIncomeTaxPct} suffix="%" max={100} onCommit={(value) => onSettingNumber("estimatedIncomeTaxPct", value)} /></span>
-          <strong>-{currency(flow.estimatedIncomeTax)}</strong></div>
+        <div className="pw-flow-row pw-flow-tax-row"><span>Other withholding and deductions <small>Calibrated from your typical net check; may include income tax, benefits or retirement</small>
+          <InlineNumber label="Additional withholding and deductions percentage" value={workspace.settings.estimatedIncomeTaxPct} suffix="%" max={100} onCommit={(value) => onSettingNumber("estimatedIncomeTaxPct", value)} /></span>
+          <strong>-{currency(flow.estimatedAdditionalWithholding)}</strong></div>
         <div className="pw-flow-row"><span>{payee.label} - estimated net W2 pay <small>No paycheck entry required</small></span><strong>{currency(flow.estimatedNetPay)}</strong></div>
       </>}
       <div className="pw-flow-row"><span>Your distribution <small>{distributionNote}</small></span><strong>{currency(flow.distribution)}</strong></div>

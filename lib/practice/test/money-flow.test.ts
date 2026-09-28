@@ -3,7 +3,8 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import {
   emptyWorkspace, workspaceSchema, clinicianSettingSchema,
-  familyPaycheckSchema, allocationSchema, monthFlow, forecast, type Context,
+  familyPaycheckSchema, allocationSchema, monthFlow, forecast,
+  additionalWithholdingPctFromNet, semiMonthlyChecksThrough, type Context,
 } from "../src/hub/index.ts";
 
 const wife = {
@@ -45,15 +46,15 @@ test("W2 salary estimates net family pay without using recorded deposits", () =>
   workspace.familyPaychecks.push(familyPaycheckSchema.parse({
     id: randomUUID(), clinicianId: 1, date: "2026-01-09", netAmount: 2000,
   }));
-  const flow = monthFlow(workspace, context([record("2026-01-01", "2026-01-14", 20)]), "2026-01-01", "2026-01-15");
-  assert.equal(flow.through, "2026-01-14");
+  const flow = monthFlow(workspace, context([record("2026-01-01", "2026-01-15", 20)]), "2026-01-01", "2026-01-15");
+  assert.equal(flow.through, "2026-01-15");
   close(flow.revenue, 1600);
-  close(flow.familyGrossPay, 120000 / 12 * 14 / 31);
+  close(flow.familyGrossPay, 120000 / 24);
   close(flow.familyEmployerBurden, flow.familyGrossPay * 0.1);
   close(flow.profit, 1600 - flow.familyGrossPay - flow.familyEmployerBurden - flow.processing);
   assert.equal(flow.distribution, 0);
   close(flow.estimatedEmployeePayrollTax, flow.familyGrossPay * 0.0765);
-  close(flow.estimatedIncomeTax, flow.familyGrossPay * 0.15);
+  close(flow.estimatedAdditionalWithholding, flow.familyGrossPay * 0.15);
   close(flow.estimatedNetPay, flow.familyGrossPay * (1 - 0.0765 - 0.15));
   close(flow.familyTakeHome, flow.estimatedNetPay!);
   assert.notEqual(flow.familyTakeHome, 2000);
@@ -120,7 +121,7 @@ test("named savings funds are allocations after profit, not business costs", () 
 
 test("income-tax assumption changes net pay, not business profit", () => {
   const workspace = setup();
-  const data = context([record("2026-01-01", "2026-01-14", 20)]);
+  const data = context([record("2026-01-01", "2026-01-15", 20)]);
   const original = monthFlow(workspace, data, "2026-01-01", "2026-01-15");
   workspace.settings.estimatedIncomeTaxPct = 20;
   const adjusted = monthFlow(workspace, data, "2026-01-01", "2026-01-15");
@@ -157,11 +158,36 @@ test("month-to-date pay uses the clinician setup active in the selected month", 
     desiredWeeklySessions: 20, payMode: "salary", payAmount: 60000,
   }));
   const data = context([
-    record("2026-01-01", "2026-01-14", 20),
-    { ...record("2026-02-01", "2026-02-14", 20), id: 2 },
+    record("2026-01-01", "2026-01-15", 20),
+    { ...record("2026-02-01", "2026-02-15", 20), id: 2 },
   ]);
   const january = monthFlow(workspace, data, "2026-01-01", "2026-02-15");
   const february = monthFlow(workspace, data, "2026-02-01", "2026-02-15");
-  close(january.familyGrossPay, 120000 / 12 * 14 / 31);
-  close(february.familyGrossPay, 60000 / 12 * 14 / 28);
+  close(january.familyGrossPay, 120000 / 24);
+  close(february.familyGrossPay, 60000 / 24);
+});
+
+test("a known net paycheck calibrates withholding and two scheduled checks", () => {
+  const workspace = setup();
+  workspace.clinicians[0].payAmount = 90000;
+  const additionalPct = additionalWithholdingPctFromNet(90000 / 24, 2741.42);
+  assert.ok(additionalPct !== null);
+  workspace.settings.estimatedIncomeTaxPct = additionalPct;
+  close(additionalPct, 19.245466666666662);
+  assert.equal(semiMonthlyChecksThrough("2026-02-01", "2026-02-27", "2026-02-01"), 1);
+  assert.equal(semiMonthlyChecksThrough("2026-02-01", "2026-02-28", "2026-02-01"), 2);
+  const beforeFirst = monthFlow(workspace, context([record("2026-09-01", "2026-09-14", 20)]), "2026-09-01", "2026-09-28");
+  close(beforeFirst.familyGrossPay, 0);
+  const first = monthFlow(workspace, context([record("2026-09-01", "2026-09-23", 20)]), "2026-09-01", "2026-09-28");
+  close(first.familyGrossPay, 3750);
+  close(first.estimatedEmployeePayrollTax, 286.875);
+  close(first.estimatedAdditionalWithholding, 721.705);
+  close(first.estimatedNetPay, 2741.42);
+  close(first.employerBurden, 375);
+  close(first.profit, first.revenue! - 3750 - 375 - first.processing);
+  close(first.familyTakeHome, 2741.42);
+  const full = monthFlow(workspace, context([record("2026-09-01", "2026-09-30", 20)]), "2026-09-01", "2026-09-30");
+  close(full.familyGrossPay, 7500);
+  close(full.estimatedNetPay, 5482.84);
+  close(forecast(workspace, context([]))[0].values.familyTakeHome, 5482.84);
 });

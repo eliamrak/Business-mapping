@@ -1386,7 +1386,7 @@ export function forecast(
       profit:
         "Earned revenue + other income - clinician pay - employer burden - staff cost - overhead - marketing - fees - owner payroll/burden.",
       familyTakeHome:
-        "Selected W2 clinician gross pay less estimated employee Social Security, Medicare and income tax, plus family distributions. Employer payroll costs are already in practice profit. This is an estimate, not a paycheck record.",
+        "Selected W2 clinician gross pay less estimated employee Social Security, Medicare and other withholding or deductions, plus family distributions. Employer payroll costs are already in practice profit. This is an estimate, not a paycheck record.",
       cash: "Opening available cash + cumulative cash collections/income - cash expenses - tax/reserve allocations - distributions. Reserves are ring-fenced, not available operating cash.",
       utilization:
         "Completed sessions / available clinician sessions. Capacity accounts for working weeks and hire ramp.",
