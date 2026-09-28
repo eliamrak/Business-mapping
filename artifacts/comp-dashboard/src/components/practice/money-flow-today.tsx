@@ -8,7 +8,6 @@ const currency = (value: number | null) => value === null
 const label = (date: string) => new Intl.DateTimeFormat("en-US", { month: "long", year: "numeric", timeZone: "UTC" }).format(new Date(date + "T12:00:00Z"));
 const shortDate = (date: string) => new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric", timeZone: "UTC" }).format(new Date(date + "T12:00:00Z"));
 
-type Paycheck = Workspace["familyPaychecks"][number];
 type Person = Context["clinicians"][number];
 type Staff = Context["staff"][number];
 type Profile = Workspace["clinicians"][number];
@@ -17,7 +16,7 @@ type Campaign = Workspace["campaigns"][number];
 type Fund = Workspace["allocations"][number];
 type NumberSetting = "processingPct" | "processingFixedPerTransaction" |
   "processingTransactionsPerSession" | "ownerPayrollMonthly" | "ownerPayrollBurdenPct" |
-  "overheadFloorMonthly";
+  "overheadFloorMonthly" | "estimatedIncomeTaxPct";
 
 function InlineNumber({ label: name, value, onCommit, prefix, suffix, max = 1e10 }: {
   label: string;
@@ -74,9 +73,6 @@ type Props = {
   context: Context;
   today: string;
   onPayeeChange: (id: number | null) => void;
-  onAddPaycheck: (paycheck: Paycheck) => void;
-  onUpdatePaycheck: (id: string, patch: Partial<Paycheck>) => void;
-  onRemovePaycheck: (id: string) => void;
   onAllocationPercent: (id: string, percent: number) => void;
   onDefaultAllocationPercent: (key: "taxPct" | "reservePct" | "distributionPct", percent: number) => void;
   onAddFund: (name: string, kind: "tax" | "reserve" | "distribution" | "retained", percent: number, start: string) => void;
@@ -97,15 +93,12 @@ type Props = {
 };
 
 export default function MoneyFlowToday({
-  workspace, context, today, onPayeeChange, onAddPaycheck, onUpdatePaycheck,
-  onRemovePaycheck, onAllocationPercent, onDefaultAllocationPercent,
+  workspace, context, today, onPayeeChange, onAllocationPercent, onDefaultAllocationPercent,
   onAddFund, onFundPatch, onFundRemove, onSettingNumber, onOverheadMode,
   onAverageRate, onClinicianModel, onPersonPatch, onStaffPatch, onBudgetPatch,
   onAddExpense, onAddMarketingCost, onCampaignPatch, onAddCampaign, onNavigate,
 }: Props) {
   const [view, setView] = useState<"current" | "previous">("current");
-  const [depositDate, setDepositDate] = useState(today);
-  const [depositAmount, setDepositAmount] = useState("");
   const [fundName, setFundName] = useState("");
   const [fundKind, setFundKind] = useState<"tax" | "reserve" | "distribution" | "retained">("reserve");
   const [fundPercent, setFundPercent] = useState("");
@@ -143,9 +136,6 @@ export default function MoneyFlowToday({
     .sort((a, b) => b.start.localeCompare(a.start))[0];
   const payee = context.clinicians.find((person) => person.id === workspace.settings.familyW2ClinicianId);
   const payeeProfile = payee ? profileFor(payee) : undefined;
-  const deposits = workspace.familyPaychecks
-    .filter((paycheck) => paycheck.clinicianId === workspace.settings.familyW2ClinicianId && paycheck.date >= month && paycheck.date <= latestDepositDate)
-    .sort((a, b) => b.date.localeCompare(a.date));
   const currentAllocationRows = workspace.allocations.filter((row) => !row.archived && row.start <= latestDepositDate && (!row.end || row.end >= month));
   const defaultFunds = [
     { id: "tax", name: "Tax fund", key: "taxPct" as const, percent: workspace.settings.taxPct },
@@ -165,7 +155,6 @@ export default function MoneyFlowToday({
       : distributionShare === 0
         ? "No share of profit assigned to your distribution above"
         : `Estimated from ${distributionShare}% of positive profit, not a recorded transfer`;
-  const canAdd = payee && depositDate >= month && depositDate <= latestDepositDate && depositAmount.trim() !== "" && Number.isFinite(Number(depositAmount)) && Number(depositAmount) >= 0;
   const payRow = (person: Person) => {
     const profile = profileFor(person);
     const mode = profile?.payMode ?? "existing_split";
@@ -191,8 +180,8 @@ export default function MoneyFlowToday({
     <header className="pw-today-flow-header">
       <div><h2>Money flow</h2><p>Where {label(month)} stands so far</p></div>
       <div className="pw-segmented" role="group" aria-label="Money flow period">
-        <button type="button" aria-pressed={view === "current"} onClick={() => { setView("current"); setDepositDate(today); }}>This month</button>
-        <button type="button" aria-pressed={view === "previous"} onClick={() => { setView("previous"); setDepositDate(new Date(Date.UTC(Number(previous.toISOString().slice(0, 4)), Number(previous.toISOString().slice(5, 7)), 0)).toISOString().slice(0, 10)); }}>Last month</button>
+        <button type="button" aria-pressed={view === "current"} onClick={() => setView("current")}>This month</button>
+        <button type="button" aria-pressed={view === "previous"} onClick={() => setView("previous")}>Last month</button>
       </div>
     </header>
     {changeError && <p className="pw-flow-warning" role="alert">{changeError}</p>}
@@ -345,8 +334,8 @@ export default function MoneyFlowToday({
     </section>
 
     <section className="pw-flow-family">
-      <div className="pw-flow-section-heading"><div><h3>Family take-home</h3><p>Net W2 deposits plus your distribution, without counting payroll twice</p></div></div>
-      <label className="pw-flow-payee">Whose paycheck counts toward family take-home?
+      <div className="pw-flow-section-heading"><div><h3>Family take-home</h3><p>Estimated net W2 pay plus your distribution</p></div></div>
+      <label className="pw-flow-payee">Whose W2 pay counts toward family take-home?
         <select value={workspace.settings.familyW2ClinicianId ?? ""} onChange={(event) => onPayeeChange(event.target.value ? Number(event.target.value) : null)}>
           <option value="">Select a clinician</option>
           {people.map((person) => <option key={person.id} value={person.id}>{person.label}</option>)}
@@ -360,33 +349,22 @@ export default function MoneyFlowToday({
       </select></SourceRow>}
       {payee && String(payee.classification).toLowerCase() !== "w2" && <p className="pw-flow-warning">Set the selected clinician to W2 for employer payroll costs to be included.</p>}
       {payee && payeeProfile?.payMode !== "salary" && <p className="pw-flow-warning">Set this clinician's pay method to Annual salary in the pay setup above.</p>}
-      <div className="pw-flow-row"><span>{payee?.label ?? "W2 owner"} - net deposited <small>{!payee
-        ? "Select a clinician above to enter deposited pay"
-        : deposits.length === 0
-          ? `No net paycheck entered for ${label(month)}; add the amount deposited below`
-          : `Paychecks entered through ${shortDate(latestDepositDate)}; gross pay is already counted above`}</small></span>
-        <strong className={flow.netPayDeposited === null ? "pw-flow-missing" : undefined}>{flow.netPayDeposited === null ? "Not entered" : currency(flow.netPayDeposited)}</strong></div>
-      <div className="pw-flow-deposits">
-        {deposits.length > 0 && <h4>Net paychecks deposited</h4>}
-        {deposits.map((paycheck) => <div className="pw-flow-deposit" key={paycheck.id}>
-          <input type="date" aria-label="Paycheck deposit date" min={month} max={latestDepositDate} value={paycheck.date} onChange={(event) => onUpdatePaycheck(paycheck.id, { date: event.target.value })} />
-          <label>$<input type="number" min="0" step="0.01" aria-label="Net paycheck deposited" value={paycheck.netAmount} onChange={(event) => onUpdatePaycheck(paycheck.id, { netAmount: Number(event.target.value) })} /></label>
-          <button type="button" className="pw-icon" aria-label="Remove net paycheck" title="Remove paycheck" onClick={() => onRemovePaycheck(paycheck.id)}><Trash2 /></button>
-        </div>)}
-        {payee && <div className="pw-flow-deposit pw-flow-add-deposit">
-          <input type="date" aria-label="New paycheck deposit date" min={month} max={latestDepositDate} value={depositDate} onChange={(event) => setDepositDate(event.target.value)} />
-          <label>$<input type="number" min="0" step="0.01" placeholder="Net deposit" aria-label="New net paycheck amount" value={depositAmount} onChange={(event) => setDepositAmount(event.target.value)} /></label>
-          <button type="button" className="pw-button" disabled={!canAdd} onClick={() => { onAddPaycheck({ id: crypto.randomUUID(), clinicianId: payee.id, date: depositDate, netAmount: Number(depositAmount) }); setDepositAmount(""); }}><Plus /> Add net paycheck</button>
-        </div>}
-      </div>
+      {payee && <>
+        <div className="pw-flow-row"><span>{payee.label} - estimated gross W2 pay <small>From the pay structure above, through {flow.through ? shortDate(flow.through) : label(month)}</small></span><strong>{currency(flow.familyGrossPay)}</strong></div>
+        <div className="pw-flow-row"><span>Employee Social Security and Medicare <small>Approx. 7.65% of gross pay; separate from employer payroll costs</small></span><strong>-{currency(flow.estimatedEmployeePayrollTax)}</strong></div>
+        <div className="pw-flow-row pw-flow-tax-row"><span>Estimated income-tax withholding <small>Combined federal, state and local assumption; adjust to match your typical pay stub</small>
+          <InlineNumber label="Estimated income-tax withholding percentage" value={workspace.settings.estimatedIncomeTaxPct} suffix="%" max={100} onCommit={(value) => onSettingNumber("estimatedIncomeTaxPct", value)} /></span>
+          <strong>-{currency(flow.estimatedIncomeTax)}</strong></div>
+        <div className="pw-flow-row"><span>{payee.label} - estimated net W2 pay <small>No paycheck entry required</small></span><strong>{currency(flow.estimatedNetPay)}</strong></div>
+      </>}
       <div className="pw-flow-row"><span>Your distribution <small>{distributionNote}</small></span><strong>{currency(flow.distribution)}</strong></div>
-      <div className="pw-flow-row pw-flow-takehome"><span>Family take-home <small>{flow.netPayDeposited === null
-        ? "Add a net paycheck above to complete this total"
+      <div className="pw-flow-row pw-flow-takehome"><span>Family take-home <small>{!payee
+        ? "Select a W2 clinician to estimate net pay"
         : flow.familyTakeHome === null
           ? "Add recorded sessions to estimate the distribution and total"
-          : "Deposited pay plus estimated distribution"}</small></span>
+          : "Estimated net W2 pay plus your distribution"}</small></span>
         <strong className={flow.familyTakeHome === null ? "pw-flow-missing" : undefined}>{flow.familyTakeHome === null
-          ? flow.netPayDeposited === null ? "Waiting for paycheck" : "Waiting for sessions"
+          ? payee ? "Waiting for sessions" : "Select W2 pay"
           : currency(flow.familyTakeHome)}</strong></div>
     </section>
     <div className="pw-flow-next"><button type="button" className="pw-text-button" onClick={() => onNavigate("summary")}>Next month and six-month forecast <ChevronRight /></button></div>

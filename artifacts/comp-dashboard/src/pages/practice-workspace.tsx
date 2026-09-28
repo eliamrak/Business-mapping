@@ -907,25 +907,6 @@ export default function PracticeWorkspace() {
     setStagedLabels((prior) => ({ ...prior, settings: label }));
     setReviewStaged(false);
   }
-  function stageFamilyPaycheck(
-    id: string,
-    next: Workspace["familyPaychecks"][number] | null,
-  ) {
-    if (!workspace) return;
-    setStagedWorkspace((prior) => {
-      const current = prior ?? workspace;
-      return {
-        ...current,
-        familyPaychecks: next === null
-          ? current.familyPaychecks.filter((item) => item.id !== id)
-          : current.familyPaychecks.some((item) => item.id === id)
-            ? current.familyPaychecks.map((item) => item.id === id ? next : item)
-            : [...current.familyPaychecks, next],
-      };
-    });
-    setStagedLabels((prior) => ({ ...prior, ["familyPaychecks:" + id]: "Net paycheck" }));
-    setReviewStaged(false);
-  }
   function stageFund(
     name: string,
     kind: "tax" | "reserve" | "distribution" | "retained",
@@ -4017,13 +3998,7 @@ export default function PracticeWorkspace() {
                       ownerPayrollOverride: true,
                       ...(resolved?.inherited.ownerPay ? { ownerPayrollMonthly: 0 } : {}),
                     } : {}),
-                  }, "Family W2 paycheck")}
-                  onAddPaycheck={(paycheck) => stageFamilyPaycheck(paycheck.id, paycheck)}
-                  onUpdatePaycheck={(id, patch) => {
-                    const previous = workingWorkspace.familyPaychecks.find((item) => item.id === id);
-                    if (previous) stageFamilyPaycheck(id, { ...previous, ...patch });
-                  }}
-                  onRemovePaycheck={(id) => stageFamilyPaycheck(id, null)}
+                  }, "Family W2 pay")}
                   onAllocationPercent={(id, percent) => stageRecord("allocations", id, { percent }, "Fund allocation")}
                   onDefaultAllocationPercent={(key, percent) => stageSettings({ [key]: percent }, "Fund allocation")}
                   onAddFund={stageFund}
@@ -4807,11 +4782,9 @@ export default function PracticeWorkspace() {
                       <div className="pw-owner-line pw-owner-total">
                         <div>
                           <strong>Planned family take-home</strong>
-                          <span>
-                            Owner payroll + included clinical pay + marked
-                            distributions. Payroll is before personal tax
-                            withholding.
-                          </span>
+                          <span>{workingWorkspace.settings.familyW2ClinicianId !== null
+                            ? "Selected W2 clinician pay after estimated employee taxes, plus distributions"
+                            : "Owner payroll + included clinical pay + marked distributions. Owner payroll is before personal withholding."}</span>
                         </div>
                         <span />
                         <b>{money(moneyValues.familyTakeHome)}</b>
@@ -5068,11 +5041,6 @@ export default function PracticeWorkspace() {
                         </tbody>
                       </table>
                     </div>
-                    {workspace.settings.familyW2ClinicianId !== null && months.some((row) => row.values.familyTakeHome === null) && (
-                      <p className="pw-projection-note">
-                        Enter a completed month of net W2 deposits in Money flow to estimate future family take-home. Distributions are modeled from positive profit.
-                      </p>
-                    )}
                     {workspace.settings.familyW2ClinicianId === null && months.some((row) => (row.values.profit ?? 0) < 0) && (
                       <p className="pw-projection-note">
                         Planned family take-home includes owner pay; it can

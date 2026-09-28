@@ -17,6 +17,7 @@ import type {
   Rule,
 } from "./model.ts";
 import { conditionResult } from "./conditions.ts";
+import { estimateW2NetPay } from "./family-pay.ts";
 
 export type Clinician = ClinicianMetricsInput & {
   id: number;
@@ -393,16 +394,6 @@ export function forecast(
   const staff = context.staff.filter((c) =>
     settings.teamId === null ? c.goalId == null : c.goalId === settings.teamId,
   );
-  const priorMonth = monthDate(settings.forecastStart, -1);
-  const familyPaychecks = workspace.familyPaychecks.filter(
-    (paycheck) =>
-      paycheck.clinicianId === settings.familyW2ClinicianId &&
-      paycheck.date >= priorMonth &&
-      paycheck.date <= monthEnd(priorMonth),
-  );
-  const familyNetMonthly = familyPaychecks.length
-    ? familyPaychecks.reduce((sum, paycheck) => sum + paycheck.netAmount, 0)
-    : null;
   const history = selected.map((c) =>
     summarizeSessions(
       context.sessions.filter((s) => s.clinicianId === c.id),
@@ -1054,7 +1045,8 @@ export function forecast(
     let revenue = 0,
       clinicianPay = 0,
       employerBurden = 0,
-      ownerClinicalPay = 0;
+      ownerClinicalPay = 0,
+      familyGrossPay = 0;
     const clinicianValues: Record<string, Values> = {};
     for (const c of people) {
       const count = allocation.assigned.get(c.instance) ?? 0;
@@ -1109,6 +1101,8 @@ export function forecast(
       employerBurden += burden;
       if (String(c.classification).toLowerCase() === "owner")
         ownerClinicalPay += pay;
+      if (c.id === settings.familyW2ClinicianId && c.instance === String(c.id))
+        familyGrossPay += pay;
       clinicianValues[c.instance] = calculateCustomKpis(
         workspace,
         {
@@ -1291,9 +1285,7 @@ export function forecast(
         ) ?? 0)
       : distributions;
     const familyTakeHome = settings.familyW2ClinicianId !== null
-      ? familyNetMonthly === null
-        ? null
-        : familyNetMonthly + familyDistribution
+      ? estimateW2NetPay(familyGrossPay, settings.estimatedIncomeTaxPct).net + familyDistribution
       : ownerPayroll +
         (setting.includeOwnerClinical ? ownerClinicalPay : 0) +
         familyDistribution;
@@ -1394,7 +1386,7 @@ export function forecast(
       profit:
         "Earned revenue + other income - clinician pay - employer burden - staff cost - overhead - marketing - fees - owner payroll/burden.",
       familyTakeHome:
-        "Owner payroll + included owner clinical pay + distributions marked for family. This tracks payments from the practice, not outside household income or personal expenses; payroll is before personal withholding.",
+        "Selected W2 clinician gross pay less estimated employee Social Security, Medicare and income tax, plus family distributions. Employer payroll costs are already in practice profit. This is an estimate, not a paycheck record.",
       cash: "Opening available cash + cumulative cash collections/income - cash expenses - tax/reserve allocations - distributions. Reserves are ring-fenced, not available operating cash.",
       utilization:
         "Completed sessions / available clinician sessions. Capacity accounts for working weeks and hire ramp.",

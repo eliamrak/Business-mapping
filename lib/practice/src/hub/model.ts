@@ -588,6 +588,7 @@ export const settingsSchema = z.object({
   ownerPayrollBurdenPct: percent.default(0),
   familyW2ClinicianId: z.number().int().positive().nullable().default(null),
   householdWithholdingPct: percent.default(0),
+  estimatedIncomeTaxPct: percent.default(15),
   includeOwnerClinical: z.boolean().default(true),
   otherHouseholdIncome: money.default(0),
   householdBenefitsCost: money.default(0),

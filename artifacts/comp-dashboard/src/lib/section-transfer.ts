@@ -40,6 +40,7 @@ const moneySettings = [
   "ownerPayrollBurdenPct",
   "familyW2ClinicianId",
   "householdWithholdingPct",
+  "estimatedIncomeTaxPct",
   "includeOwnerClinical",
   "otherHouseholdIncome",
   "householdBenefitsCost",

@@ -40,7 +40,7 @@ const context = (sessions: Context["sessions"]): Context => ({
 const close = (actual: number | null, expected: number) =>
   assert.ok(actual !== null && Math.abs(actual - expected) < 0.01, `${actual} != ${expected}`);
 
-test("W2 owner salary is a cost while net deposits appear only in family take-home", () => {
+test("W2 salary estimates net family pay without using recorded deposits", () => {
   const workspace = setup();
   workspace.familyPaychecks.push(familyPaycheckSchema.parse({
     id: randomUUID(), clinicianId: 1, date: "2026-01-09", netAmount: 2000,
@@ -52,8 +52,11 @@ test("W2 owner salary is a cost while net deposits appear only in family take-ho
   close(flow.familyEmployerBurden, flow.familyGrossPay * 0.1);
   close(flow.profit, 1600 - flow.familyGrossPay - flow.familyEmployerBurden - flow.processing);
   assert.equal(flow.distribution, 0);
-  assert.equal(flow.netPayDeposited, 2000);
-  assert.equal(flow.familyTakeHome, 2000);
+  close(flow.estimatedEmployeePayrollTax, flow.familyGrossPay * 0.0765);
+  close(flow.estimatedIncomeTax, flow.familyGrossPay * 0.15);
+  close(flow.estimatedNetPay, flow.familyGrossPay * (1 - 0.0765 - 0.15));
+  close(flow.familyTakeHome, flow.estimatedNetPay!);
+  assert.notEqual(flow.familyTakeHome, 2000);
 });
 
 test("cross-month biweekly records are estimated by days and future periods are excluded", () => {
@@ -71,12 +74,14 @@ test("cross-month biweekly records are estimated by days and future periods are 
   assert.equal(february.through, "2026-02-10");
 });
 
-test("missing session data remains unknown and old workspaces gain an empty paycheck log", () => {
+test("missing session data remains unknown and old workspaces gain the tax estimate", () => {
   const workspace = setup();
   const old = structuredClone(workspace) as Record<string, unknown>;
   delete old.familyPaychecks;
+  delete (old.settings as Record<string, unknown>).estimatedIncomeTaxPct;
   const restored = workspaceSchema.parse(old);
   assert.deepEqual(restored.familyPaychecks, []);
+  assert.equal(restored.settings.estimatedIncomeTaxPct, 15);
   const flow = monthFlow(restored, context([]), "2026-01-01", "2026-01-15");
   assert.equal(flow.revenue, null);
   assert.equal(flow.profit, null);
@@ -91,7 +96,7 @@ test("the forecast uses expected average revenue without changing fixed W2 salar
   const original = forecast(listed, context([]))[0].values;
   close(modeled.revenue, (original.revenue ?? 0) * 80 / 150);
   close(modeled.clinicianPay, original.clinicianPay ?? 0);
-  assert.equal(modeled.familyTakeHome, null);
+  close(modeled.familyTakeHome, 120000 / 12 * (1 - 0.0765 - 0.15));
 });
 
 test("named savings funds are allocations after profit, not business costs", () => {
@@ -110,7 +115,19 @@ test("named savings funds are allocations after profit, not business costs", () 
   close(flow.allocations.find((item) => item.name === "Furniture fund")?.amount ?? null, 240);
   close(flow.distribution, 400);
   close(flow.retained, 640);
-  close(flow.familyTakeHome, 2400);
+  close(flow.familyTakeHome, 400);
+});
+
+test("income-tax assumption changes net pay, not business profit", () => {
+  const workspace = setup();
+  const data = context([record("2026-01-01", "2026-01-14", 20)]);
+  const original = monthFlow(workspace, data, "2026-01-01", "2026-01-15");
+  workspace.settings.estimatedIncomeTaxPct = 20;
+  const adjusted = monthFlow(workspace, data, "2026-01-01", "2026-01-15");
+  close(adjusted.profit, original.profit!);
+  close(adjusted.familyTakeHome, original.familyTakeHome! - original.familyGrossPay * 0.05);
+  const modeled = forecast(workspace, context([]))[0].values;
+  close(modeled.familyTakeHome, 120000 / 12 * (1 - 0.0765 - 0.20));
 });
 
 test("month-to-date processing uses the existing successful-payment assumption", () => {

@@ -1,6 +1,7 @@
 import { daysInclusive } from "../index.ts";
 import { calculateClinicianMetrics, calculateStaffMemberCost } from "../compensation.ts";
 import { forecast, budgetAmount, monthEnd, type Context } from "./engine.ts";
+import { estimateW2NetPay } from "./family-pay.ts";
 import type { Workspace } from "./model.ts";
 
 export type MonthFlow = {
@@ -26,7 +27,9 @@ export type MonthFlow = {
   allocations: { id: string; name: string; kind: string; amount: number }[];
   retained: number | null;
   distribution: number | null;
-  netPayDeposited: number | null;
+  estimatedEmployeePayrollTax: number;
+  estimatedIncomeTax: number;
+  estimatedNetPay: number | null;
   familyTakeHome: number | null;
 };
 
@@ -56,12 +59,6 @@ export function monthFlow(
   }, null);
   const through = dataThrough;
   const familyId = workspace.settings.familyW2ClinicianId;
-  const paychecks = workspace.familyPaychecks.filter(
-    (paycheck) => paycheck.clinicianId === familyId &&
-      paycheck.date >= start && paycheck.date <= cutoff,
-  );
-  const netPayDeposited = familyId === null || !paychecks.length ? null :
-    paychecks.reduce((sum, paycheck) => sum + paycheck.netAmount, 0);
   const empty = {
     start,
     through,
@@ -85,7 +82,9 @@ export function monthFlow(
     allocations: [],
     retained: null,
     distribution: null,
-    netPayDeposited,
+    estimatedEmployeePayrollTax: 0,
+    estimatedIncomeTax: 0,
+    estimatedNetPay: familyId === null ? null : 0,
     familyTakeHome: null,
   } satisfies MonthFlow;
   if (!through) return empty;
@@ -214,6 +213,7 @@ export function monthFlow(
     .filter((bucket) => bucket.kind === "distribution")
     .reduce((sum, bucket) => sum + bucket.amount, 0);
   const retained = profit - allocations.reduce((sum, bucket) => sum + bucket.amount, 0);
+  const netPay = estimateW2NetPay(familyGrossPay, workspace.settings.estimatedIncomeTaxPct);
   return {
     ...empty,
     sessions,
@@ -235,7 +235,9 @@ export function monthFlow(
     allocations,
     retained,
     distribution,
-    netPayDeposited,
-    familyTakeHome: netPayDeposited === null ? null : netPayDeposited + distribution,
+    estimatedEmployeePayrollTax: netPay.employeePayrollTax,
+    estimatedIncomeTax: netPay.incomeTax,
+    estimatedNetPay: familyId === null ? null : netPay.net,
+    familyTakeHome: familyId === null ? null : netPay.net + distribution,
   };
 }
