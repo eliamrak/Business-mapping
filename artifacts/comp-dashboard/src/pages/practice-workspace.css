@@ -1286,6 +1286,59 @@
 .pw-lead-flow {
   padding: 28px 0 38px;
 }
+.pw-lead-flow-view {
+  display: inline-flex;
+  gap: 4px;
+  margin-bottom: 24px;
+  padding: 4px;
+  border-radius: 6px;
+  background: #edf2ee;
+}
+.pw-lead-flow-view button {
+  min-height: 36px;
+  padding: 6px 14px;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: #53695b;
+  font: inherit;
+  cursor: pointer;
+}
+.pw-lead-flow-view button.active {
+  background: #fff;
+  color: #28583f;
+  box-shadow: 0 1px 3px #213c271c;
+}
+.pw-lead-flow-view button:disabled,
+.pw-bulk-lead-month:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+.pw-bulk-leads .pw-bulk-table-wrap {
+  max-height: none;
+}
+.pw-bulk-leads .pw-bulk-table {
+  min-width: 560px;
+}
+.pw-bulk-leads .pw-bulk-table td {
+  min-width: 110px;
+}
+.pw-bulk-lead-month {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: #28583f;
+  font: inherit;
+  font-weight: 600;
+  text-align: left;
+  text-decoration: underline;
+  text-decoration-color: transparent;
+  cursor: pointer;
+}
+.pw-bulk-lead-month:hover,
+.pw-bulk-lead-month:focus-visible {
+  text-decoration-color: currentColor;
+}
 .pw-lead-flow-top,
 .pw-lead-flow-section-head,
 .pw-lead-flow-result,

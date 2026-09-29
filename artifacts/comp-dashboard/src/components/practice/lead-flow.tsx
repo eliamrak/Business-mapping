@@ -1,6 +1,8 @@
 import { useState } from "react";
 import { MoreHorizontal, Plus, Save, Trash2 } from "lucide-react";
 import type { Context, Workspace } from "@workspace/practice/hub";
+import BulkLeadEntry from "./bulk-lead-entry";
+import type { LeadBulkChange } from "@/lib/bulk-lead-flow";
 
 type Funnel = Workspace["funnels"][number];
 type CountKey = "leads" | "attended" | "clients";
@@ -57,6 +59,7 @@ export default function LeadFlow({
   pending,
   canSave,
   onSaveEntry,
+  onSaveBulk,
   onCompleteMonth,
   onPatch,
   onRemove,
@@ -71,6 +74,7 @@ export default function LeadFlow({
   pending: boolean;
   canSave: boolean;
   onSaveEntry: (month: string, entry: Entry, replacePracticeId?: string) => Promise<void>;
+  onSaveBulk: (changes: LeadBulkChange[]) => Promise<void>;
   onCompleteMonth: (periodId: string) => Promise<void>;
   onPatch: (id: string, patch: Partial<Funnel>) => void;
   onRemove: (id: string) => void;
@@ -80,6 +84,9 @@ export default function LeadFlow({
   onAddCorrection: (periodId: string) => void;
 }) {
   const [month, setMonth] = useState(() => new Date().toLocaleDateString("en-CA").slice(0, 7));
+  const [year, setYear] = useState(() => new Date().getFullYear());
+  const [view, setView] = useState<"year" | "month">("year");
+  const [bulkDirty, setBulkDirty] = useState(false);
   const [entryMode, setEntryMode] = useState<"practice" | "source">("practice");
   const [replacePractice, setReplacePractice] = useState(false);
   const [draftSource, setDraftSource] = useState("");
@@ -177,6 +184,16 @@ export default function LeadFlow({
   </div>;
 
   return <section className="pw-lead-flow" aria-label="Lead flow">
+    <div className="pw-lead-flow-view" role="group" aria-label="Lead flow view">
+      <button type="button" className={view === "year" ? "active" : ""} aria-pressed={view === "year"}
+        onClick={() => setView("year")}>Year totals</button>
+      <button type="button" className={view === "month" ? "active" : ""} aria-pressed={view === "month"}
+        disabled={bulkDirty} title={bulkDirty ? "Save or discard changed months first" : undefined}
+        onClick={() => setView("month")}>Month details</button>
+    </div>
+    {view === "year" ? <BulkLeadEntry workspace={workspace} readOnly={readOnly} pending={pending}
+      year={year} onYearChange={setYear} onDirtyChange={setBulkDirty} onSave={onSaveBulk}
+      onOpenMonth={(next) => { setMonth(next); setView("month"); }} /> : <>
     <div className="pw-lead-flow-top">
       <label className="pw-lead-flow-month">Month
         <input aria-label="Lead flow month" type="month" value={month}
@@ -333,6 +350,7 @@ export default function LeadFlow({
           </tr>)}</tbody>
         </table></div>
       </div>}
+    </>}
     </>}
   </section>;
 }

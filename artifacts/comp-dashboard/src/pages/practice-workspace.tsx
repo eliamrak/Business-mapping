@@ -96,6 +96,7 @@ import { type ViewProps, fmt, monthLabel } from "@/components/hub/views";
 import WorkspaceSessions from "@/components/practice/workspace-sessions";
 import WorkspaceCalculations from "@/components/practice/workspace-calculations";
 import LeadFlow from "@/components/practice/lead-flow";
+import { applyBulkLeads, planBulkLeads, type LeadBulkChange } from "@/lib/bulk-lead-flow";
 import MoneyFlowToday from "@/components/practice/money-flow-today";
 import WeeklyBlocks from "@/components/practice/weekly-blocks";
 import SandboxView from "@/components/sandbox-view";
@@ -989,6 +990,19 @@ export default function PracticeWorkspace() {
     setStagedWorkspace(null);
     setStagedLabels({});
     setReviewStaged(false);
+  }
+  async function saveBulkLeadEntries(changes: LeadBulkChange[]) {
+    if (!workspace) throw new Error("Practice data is still loading.");
+    if (stagedWorkspace) throw new Error("Save or discard pending edits before saving monthly totals.");
+    const overrides = Object.fromEntries(changes.flatMap((change) =>
+      (["leads", "attended", "clients"] as const).map((field) =>
+        [`${change.month}:${field}`, change[field] === null ? "" : String(change[field])],
+      ),
+    ));
+    const checked = planBulkLeads(workspace, overrides);
+    if (checked.issues.length || checked.changes.length !== changes.length)
+      throw new Error(checked.issues[0]?.message ?? "The monthly totals changed. Review the grid and try again.");
+    await persist(applyBulkLeads(workspace, checked.changes), "Recorded monthly lead flow");
   }
   async function completeLeadMonth(periodId: string) {
     if (!workspace) return;
@@ -3224,6 +3238,7 @@ export default function PracticeWorkspace() {
                       pending={!!stagedWorkspace}
                       canSave={!!stagedValidation?.success && !!stagedDifferences.length && !saving}
                       onSaveEntry={saveLeadEntry}
+                      onSaveBulk={saveBulkLeadEntries}
                       onCompleteMonth={completeLeadMonth}
                       onPatch={stageFunnelPatch}
                       onRemove={stageFunnelRemove}
