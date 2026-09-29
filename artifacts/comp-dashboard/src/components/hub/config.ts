@@ -275,7 +275,9 @@ export const fields: Record<Collection, Field[]> = {
   ],
   funnels: [
     ref("periodId", "Reporting period", "periods"),
-    ref("campaignId", "Campaign", "campaigns"),
+    ref("campaignId", "Campaign", "campaigns", true),
+    { key: "sourceName", label: "Source when not a campaign", optional: true },
+    ref("clinicianId", "Consulting clinician", "legacyClinicians", true),
     n("spend", "Actual spend ($)", { optional: true }),
     n("leads", "Leads", { optional: true, step: "1" }),
     n("scheduled", "Consultations scheduled", { optional: true, step: "1" }),
@@ -491,7 +493,9 @@ export function newRecord(
     campaigns: { source: "", method: "cpl", monthlySpend: 0 },
     funnels: {
       periodId: first("periods"),
-      campaignId: first("campaigns"),
+      campaignId: first("campaigns") || null,
+      sourceName: "",
+      clinicianId: null,
       spend: null,
       leads: null,
       scheduled: null,

@@ -26,6 +26,8 @@ export default function Entry() {
   const [mode, setMode] = useState("sessions"),
     [period, setPeriod] = useState(""),
     [target, setTarget] = useState(""),
+    [leadClinician, setLeadClinician] = useState(""),
+    [sourceName, setSourceName] = useState(""),
     [draft, setDraft] = useState<Record<string, string>>({}),
     [error, setError] = useState(""),
     [message, setMessage] = useState(""),
@@ -36,10 +38,6 @@ export default function Entry() {
     revision: number | null;
   } | null>(null);
   const draftId = useRef(crypto.randomUUID());
-  const dirty = Object.keys(draft).length > 0;
-  useUnsaved(dirty);
-  const mayDiscard = () =>
-    !dirty || window.confirm("Discard unsaved entry changes?");
   const sessions = useQuery({
     queryKey: ["entry-sessions", query.data?.teamId],
     queryFn: () =>
@@ -55,9 +53,17 @@ export default function Entry() {
               s.start === selected?.start &&
               s.end === selected?.end,
           )
-        : query.data?.funnels.find(
-            (f) => f.campaignId === target && f.periodId === period,
+        : query.data?.funnels.find((f) =>
+            f.campaignId === (target === "other" ? null : target) &&
+            f.periodId === period &&
+            f.clinicianId === (leadClinician ? Number(leadClinician) : null) &&
+            (target !== "other" || f.sourceName.toLowerCase() === (sourceName.trim() || "Other").toLowerCase()),
           );
+  const dirty = Object.keys(draft).length > 0 ||
+    (mode === "leads" && target === "other" &&
+      sourceName.trim() !== (saved && "sourceName" in saved ? saved.sourceName : ""));
+  useUnsaved(dirty);
+  const mayDiscard = () => !dirty || window.confirm("Discard unsaved entry changes?");
   const fields =
     mode === "sessions"
       ? [
@@ -84,6 +90,8 @@ export default function Entry() {
     setDraft({});
     setMessage("");
     setError("");
+    setSourceName("");
+    setLeadClinician("");
     pending.current = null;
     draftId.current = crypto.randomUUID();
   };
@@ -110,7 +118,9 @@ export default function Entry() {
           : funnelSchema.parse({
               ...saved,
               id: saved?.id ?? draftId.current,
-              campaignId: target,
+              campaignId: target === "other" ? null : target,
+              sourceName: target === "other" ? sourceName.trim() || "Other" : "",
+              clinicianId: leadClinician ? Number(leadClinician) : null,
               periodId: period,
               attributedRevenue: null,
               ...values,
@@ -197,7 +207,7 @@ export default function Entry() {
                 setTarget("");
               }}
             >
-              {m === "sessions" ? "Sessions" : "Lead generation"}
+              {m === "sessions" ? "Sessions" : "Lead flow"}
             </button>
           ))}
         </div>
@@ -230,7 +240,7 @@ export default function Entry() {
                 </select>
               </label>
               <label className="pr-field">
-                {mode === "sessions" ? "Clinician" : "Campaign"}
+                {mode === "sessions" ? "Clinician" : "Lead source"}
                 <select
                   required
                   value={target}
@@ -241,6 +251,7 @@ export default function Entry() {
                   }}
                 >
                   <option value="">Select...</option>
+                  {mode === "leads" && <option value="other">Other / referrals</option>}
                   {(mode === "sessions"
                     ? query.data.clinicians.map((c) => ({
                         id: String(c.id),
@@ -254,6 +265,25 @@ export default function Entry() {
                   ))}
                 </select>
               </label>
+              {mode === "leads" && target === "other" && (
+                <label className="pr-field">Source name
+                  <input value={sourceName} maxLength={120} onChange={(event) => setSourceName(event.target.value)} />
+                </label>
+              )}
+              {mode === "leads" && (
+                <label className="pr-field">Consulting clinician
+                  <select value={leadClinician} onChange={(event) => {
+                    if (!mayDiscard()) return;
+                    setDraft({});
+                    setLeadClinician(event.target.value);
+                  }}>
+                    <option value="">Unassigned total</option>
+                    {query.data.clinicians.map((person) => (
+                      <option key={person.id} value={person.id}>{person.label}</option>
+                    ))}
+                  </select>
+                </label>
+              )}
               {fields.map(([key, label]) => (
                 <label className="pr-field" key={key}>
                   {label}

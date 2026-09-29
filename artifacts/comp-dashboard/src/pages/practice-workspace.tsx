@@ -43,6 +43,8 @@ import {
   categorySchema,
   roomSchema,
   campaignSchema,
+  funnelSchema,
+  periodSchema,
   clinicianSettingSchema,
   allocationSchema,
   type Workspace,
@@ -93,6 +95,7 @@ import Updates from "@/components/hub/updates";
 import { type ViewProps, fmt, monthLabel } from "@/components/hub/views";
 import WorkspaceSessions from "@/components/practice/workspace-sessions";
 import WorkspaceCalculations from "@/components/practice/workspace-calculations";
+import LeadFlow from "@/components/practice/lead-flow";
 import MoneyFlowToday from "@/components/practice/money-flow-today";
 import WeeklyBlocks from "@/components/practice/weekly-blocks";
 import SandboxView from "@/components/sandbox-view";
@@ -909,6 +912,71 @@ export default function PracticeWorkspace() {
     });
     setStagedLabels((prior) => ({ ...prior, settings: label }));
     setReviewStaged(false);
+  }
+  function stageFunnelPatch(id: string, patch: Partial<Workspace["funnels"][number]>) {
+    if (!workspace) return;
+    setStagedWorkspace((prior) => {
+      const current = prior ?? workspace;
+      return {
+        ...current,
+        funnels: current.funnels.map((row) => row.id === id ? { ...row, ...patch } : row),
+      };
+    });
+    setStagedLabels((prior) => ({ ...prior, ["funnels:" + id]: "Lead flow result" }));
+    setReviewStaged(false);
+  }
+  function stageFunnelAdd(periodId: string, campaignId: string | null, sourceName: string, clinicianId: number | null) {
+    if (!workspace) return;
+    const row = funnelSchema.parse({
+      id: crypto.randomUUID(),
+      sourceAttachmentId: null,
+      periodId,
+      campaignId,
+      sourceName,
+      clinicianId,
+      spend: null,
+      leads: null,
+      scheduled: null,
+      attended: null,
+      clients: null,
+      firstSessions: null,
+      notes: "",
+    });
+    setStagedWorkspace((prior) => {
+      const current = prior ?? workspace;
+      return { ...current, funnels: [...current.funnels, row] };
+    });
+    setStagedLabels((prior) => ({ ...prior, ["funnels:" + row.id]: "New lead flow result" }));
+    setReviewStaged(false);
+  }
+  function stageFunnelRemove(id: string) {
+    if (!workspace) return;
+    setStagedWorkspace((prior) => {
+      const current = prior ?? workspace;
+      return { ...current, funnels: current.funnels.filter((row) => row.id !== id) };
+    });
+    setStagedLabels((prior) => ({ ...prior, ["funnels:" + id]: "Removed lead flow result" }));
+    setReviewStaged(false);
+  }
+  function stageLeadMonth(month: string) {
+    if (!workspace) return null;
+    const start = `${month}-01`;
+    const end = new Date(Date.UTC(Number(month.slice(0, 4)), Number(month.slice(5)), 0))
+      .toISOString().slice(0, 10);
+    const record = periodSchema.parse({
+      id: crypto.randomUUID(),
+      name: new Intl.DateTimeFormat("en-US", { month: "long", year: "numeric", timeZone: "UTC" })
+        .format(new Date(`${start}T12:00:00Z`)),
+      start,
+      end,
+    });
+    setStagedWorkspace((prior) => {
+      const current = prior ?? workspace;
+      return { ...current, periods: [...current.periods, record] };
+    });
+    setStagedLabels((prior) => ({ ...prior, ["periods:" + record.id]: "New lead flow month" }));
+    setReviewStaged(false);
+    return record.id;
   }
   function stageFund(
     name: string,
@@ -2746,16 +2814,18 @@ export default function PracticeWorkspace() {
                 <>
                   {heading(
                     "Marketing",
-                    "Ad spend drives lead estimates. Service costs complete the marketing total.",
-                    <button
-                      className="pw-button"
-                      onClick={() => stageNew("campaigns")}
-                    >
-                      <Plus />
-                      Add campaign
-                    </button>,
+                    marketingTab === "campaigns"
+                      ? "Ad spend drives lead estimates. Service costs complete the marketing total."
+                      : "Record where clients came from and who handled their consults.",
+                    marketingTab === "campaigns" ? <button
+                        className="pw-button"
+                        onClick={() => stageNew("campaigns")}
+                      >
+                        <Plus />
+                        Add campaign
+                      </button> : undefined,
                   )}
-                  <div
+                  {marketingTab === "campaigns" && <div
                     className="pw-marketing-breakdown"
                     aria-label="Estimated marketing costs"
                   >
@@ -2776,7 +2846,7 @@ export default function PracticeWorkspace() {
                       <span>Total marketing cost</span>
                       <strong>{money(months[0]?.values.marketing)}</strong>
                     </div>
-                  </div>
+                  </div>}
                   <div
                     className="pw-segmented"
                     role="tablist"
@@ -2791,7 +2861,7 @@ export default function PracticeWorkspace() {
                       >
                         {t === "campaigns"
                           ? "Campaigns & estimates"
-                          : "Recorded results"}
+                          : "Lead flow"}
                       </button>
                     ))}
                   </div>
@@ -3122,73 +3192,26 @@ export default function PracticeWorkspace() {
                       </div>
                     </div>
                   ) : (
-                    <>
-                      {sandbox ? (
-                        <p className="pw-notice">
-                          Recorded results stay in Today. Campaign estimates can
-                          be adjusted above.
-                        </p>
-                      ) : (
-                        <div className="pw-secondary-links">
-                          {add("funnels", "Record results")}
-                          {detailButton("periods", "Reporting periods")}
-                        </div>
-                      )}
-                      <div className="pw-table-scroll">
-                        <table className="pw-table">
-                          <thead>
-                            <tr>
-                              <th>Period</th>
-                              <th>Source</th>
-                              <th>Leads</th>
-                              <th>Consults</th>
-                              <th>Clients</th>
-                              <th>Close rate</th>
-                              <th />
-                            </tr>
-                          </thead>
-                          <tbody>
-                            {workspace.funnels.map((f) => (
-                              <tr key={f.id}>
-                                <th>
-                                  {workspace.periods.find(
-                                    (p) => p.id === f.periodId,
-                                  )?.name ?? "Period"}
-                                </th>
-                                <td>
-                                  {
-                                    workspace.campaigns.find(
-                                      (c) => c.id === f.campaignId,
-                                    )?.name
-                                  }
-                                </td>
-                                <td>{fmt(f.leads)}</td>
-                                <td>{fmt(f.attended)}</td>
-                                <td>{fmt(f.clients)}</td>
-                                <td>
-                                  {f.attended && f.clients != null
-                                    ? fmt(
-                                        (f.clients / f.attended) * 100,
-                                        "percent",
-                                      )
-                                    : "--"}
-                                </td>
-                                <td>
-                                  {!sandbox && (
-                                    <EditButton
-                                      label="Edit recorded results"
-                                      onClick={() => edit("funnels", f)}
-                                    />
-                                  )}
-                                </td>
-                              </tr>
-                            ))}
-                          </tbody>
-                        </table>
-                      </div>
-                    </>
+                    <LeadFlow
+                      workspace={workingWorkspace}
+                      context={context}
+                      readOnly={sandbox}
+                      pending={!!stagedWorkspace}
+                      canSave={!!stagedValidation?.success && !!stagedDifferences.length && !saving}
+                      onAdd={stageFunnelAdd}
+                      onAddMonth={stageLeadMonth}
+                      onPatch={stageFunnelPatch}
+                      onRemove={stageFunnelRemove}
+                      onSave={() => void commitStaged()}
+                      onOpenPeriods={() => setDetail("periods")}
+                      onEditDetails={(row) => edit("funnels", row)}
+                      onAddCorrection={(periodId) => edit("funnels", {
+                        ...newRecord("funnels", workspace, today),
+                        periodId,
+                      })}
+                    />
                   )}
-                  {!active(workspace.campaigns).length && (
+                  {marketingTab === "campaigns" && !active(workspace.campaigns).length && (
                     <div className="pw-empty">
                       <ChartNoAxesCombined />
                       <h3>No lead sources set up yet</h3>

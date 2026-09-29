@@ -17,6 +17,7 @@ export function referencedClinicianIds(workspace: Workspace): Set<number> {
   workspace.familyPaychecks.forEach((paycheck) => add(paycheck.clinicianId));
   workspace.terms.forEach((c) => add(c.clinicianId));
   workspace.budgets.forEach((b) => add(b.clinicianId));
+  workspace.funnels.forEach((f) => add(f.clinicianId));
   workspace.hiring.forEach((h) => add(h.templateClinicianId));
   workspace.events.forEach(event);
   workspace.proposals.forEach((p) => p.changes.forEach(event));

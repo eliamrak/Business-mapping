@@ -187,7 +187,9 @@ export const campaignSchema = z.object({
 export const funnelSchema = z.object({
   sourceAttachmentId: optionalId,
   id,
-  campaignId: id,
+  campaignId: optionalId,
+  sourceName: z.string().trim().max(120).default(""),
+  clinicianId: z.number().int().positive().nullable().default(null),
   periodId: id,
   spend: money.nullable(),
   leads: count.nullable(),
@@ -759,13 +761,18 @@ export const workspaceSchema = z
         !exists(data.periods, f.periodId)
       )
         issue(["funnels", i], "Choose an existing campaign and period.");
-      if (
-        data.funnels.some(
-          (x, j) =>
-            j < i && x.campaignId === f.campaignId && x.periodId === f.periodId,
-        )
-      )
-        issue(["funnels", i], "Only one funnel entry per campaign and period.");
+      const sourceKey = (row: typeof f) =>
+        row.campaignId ?? `other:${row.sourceName.trim().toLowerCase() || "other"}`;
+      const sameSource = (row: typeof f) =>
+        row.periodId === f.periodId && sourceKey(row) === sourceKey(f);
+      if (data.funnels.some((x, j) =>
+        j < i && sameSource(x) && x.clinicianId === f.clinicianId,
+      ))
+        issue(["funnels", i], "Only one result per source, clinician, and period.");
+      if (data.funnels.some((x, j) =>
+        j < i && sameSource(x) && (x.clinicianId === null) !== (f.clinicianId === null),
+      ))
+        issue(["funnels", i], "Use clinician rows or one unassigned total for this source and period, not both.");
       if (
         f.scheduled !== null &&
         f.attended !== null &&

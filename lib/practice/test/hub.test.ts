@@ -64,6 +64,34 @@ test("shared forecast reconciles revenue, compensation, burden and profit", () =
   close(v.employerBurden, (v.clinicianPay ?? 0) * 0.1);
   close(v.profit, (v.revenue ?? 0) * 0.34);
 });
+test("lead flow supports clinician rows and organic sources without duplicate totals", () => {
+  const w = setup();
+  const campaign = campaignSchema.parse({
+    id: id(), name: "Google Ads", source: "Google", start,
+    method: "cpl", monthlySpend: 100,
+  });
+  const period = periodSchema.parse({
+    id: id(), name: "January", start, end: "2026-01-31", status: "finalized",
+    revenue: 0, expensesComplete: true, funnelComplete: true,
+  });
+  w.campaigns.push(campaign);
+  w.periods.push(period);
+  const result = (campaignId: string | null, clinicianId: number | null, sourceName = "") => funnelSchema.parse({
+    id: id(), campaignId, clinicianId, sourceName, periodId: period.id,
+    spend: 0, leads: 10, scheduled: 5, attended: 4, clients: 2, firstSessions: 2,
+  });
+  w.funnels.push(result(campaign.id, 1), result(campaign.id, 2), result(null, 1, "Referrals"));
+  const parsed = workspaceSchema.safeParse(w);
+  assert.ok(parsed.success, parsed.error?.issues.map((issue) => issue.message).join("; "));
+  const values = observed(w, context, start, "2026-01-31").values;
+  assert.equal(values.leads, 30);
+  assert.equal(values.clients, 6);
+  w.funnels.push(result(campaign.id, null));
+  assert.equal(workspaceSchema.safeParse(w).success, false);
+  w.funnels.pop();
+  w.funnels.push(result(campaign.id, 1));
+  assert.equal(workspaceSchema.safeParse(w).success, false);
+});
 test("recurring budgets normalize calendar days and effective dates", () => {
   const c = categorySchema.parse({ id: id(), name: "Rent", kind: "expense" });
   const b = budgetSchema.parse({
