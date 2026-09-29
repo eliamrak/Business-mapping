@@ -1,7 +1,8 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { emptyWorkspace, type Context } from "@workspace/practice/hub";
+import { emptyWorkspace, forecast, type Context } from "@workspace/practice/hub";
 import { buildPracticeProjection } from "./practice-projection.ts";
+import { firstHiringReviewMonth } from "./session-overview.ts";
 
 const clinician = (id: number, sessionRate: number) => ({
   id,
@@ -58,6 +59,29 @@ const record = (completed: number) => ({
   inPerson: null,
   telehealth: null,
   sourceAttachmentId: null,
+});
+
+test("existing-caseload attrition changes the modeled hiring review month", () => {
+  const { workspace, context } = setup();
+  context.clinicians = [context.clinicians[0]];
+  Object.assign(workspace.settings, {
+    forecastStart: "2026-10-01",
+    baselineMode: "manual",
+    baselineWeeklySessions: 8,
+    organicClientsPerMonth: 3,
+    sessionsPerClientMonth: 4,
+    retentionMonths: 6,
+    attendancePct: 100,
+    defaultInPersonPct: 0,
+    horizonMonths: 24,
+  });
+  workspace.settings.baselineRetentionPct = 100;
+  const noAttrition = firstHiringReviewMonth(forecast(workspace, context), [1], 80);
+  workspace.settings.baselineRetentionPct = 90;
+  const higherAttrition = firstHiringReviewMonth(forecast(workspace, context), [1], 80);
+  assert.ok(noAttrition);
+  assert.ok(higherAttrition);
+  assert.ok(higherAttrition > noAttrition);
 });
 
 test("plan uses desired sessions while actual forecast uses recorded clinician mix", () => {

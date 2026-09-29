@@ -6,6 +6,7 @@ import {
   ArrowUpRight,
   ChevronLeft,
   ChevronRight,
+  Flag,
   PencilLine,
   RotateCcw,
   Save,
@@ -20,9 +21,10 @@ import {
   type SessionRecord,
   type SessionWrite,
 } from "@workspace/practice";
-import type { Context } from "@workspace/practice/hub";
+import type { Context, ForecastMonth, Workspace } from "@workspace/practice/hub";
 import { saveSessionRecord } from "@/lib/session-api";
-import { summarizeSessionOverview } from "@/lib/session-overview";
+import { estimatePracticeAttrition } from "@/lib/session-attrition";
+import { firstHiringReviewMonth, summarizeHiringReadiness, summarizeSessionOverview } from "@/lib/session-overview";
 import SessionImportDialog from "./session-import-dialog";
 import BulkSessionEntry from "./bulk-session-entry";
 
@@ -51,6 +53,10 @@ const shortDate = (date: string) =>
     day: "numeric",
     year: "2-digit",
   });
+const forecastMonthLabel = (date: string) =>
+  new Date(date + "T12:00:00Z").toLocaleDateString("en-US", {
+    month: "long", year: "numeric", timeZone: "UTC",
+  });
 const average = (values: number[]) =>
   values.length
     ? values.reduce((sum, item) => sum + item, 0) / values.length
@@ -66,12 +72,24 @@ export default function WorkspaceSessions({
   sandbox,
   onSaved,
   onEditingChange,
+  onPlanHire,
+  forecastMonths,
+  retentionPct,
+  onRetentionChange,
+  workspace,
+  onSessionsPerClientChange,
 }: {
   context: Context;
   teamId: number | null;
   sandbox: boolean;
   onSaved: () => Promise<void>;
   onEditingChange: (editing: boolean) => void;
+  onPlanHire: () => void;
+  forecastMonths: ForecastMonth[];
+  retentionPct: number;
+  onRetentionChange: (retentionPct: number) => void;
+  workspace: Workspace;
+  onSessionsPerClientChange: (value: number) => void;
 }) {
   const people = context.clinicians.filter(
     (clinician) => (clinician.goalId ?? null) === teamId,
@@ -114,6 +132,10 @@ export default function WorkspaceSessions({
   const entryRef = useRef<HTMLDivElement>(null);
   const [bulkState, setBulkState] = useState({ dirty: false, busy: false });
   const [historyRange, setHistoryRange] = useState("4periods");
+  const [hireThreshold, setHireThreshold] = useState(80);
+  const [attritionDraft, setAttritionDraft] = useState<string | null>(null);
+  const [visitFrequencyDraft, setVisitFrequencyDraft] = useState<string | null>(null);
+  const [excludedFromHire, setExcludedFromHire] = useState<Set<number>>(new Set());
   const [customRange, setCustomRange] = useState({
     start: shift(today, -179),
     end: today,
@@ -284,6 +306,41 @@ export default function WorkspaceSessions({
   const completedPeriods = periods.filter((period) => period.end <= today);
   const currentFour = completedPeriods.slice(0, 4);
   const previousFour = completedPeriods.slice(4, 8);
+  const hiring = summarizeHiringReadiness(
+    people.filter((person) => !excludedFromHire.has(person.id)).map((person) => ({
+      id: person.id,
+      goalWeekly: person.sessionsPerWeek,
+      records: currentFour.flatMap((period) =>
+        period.records.filter((record) => record.clinicianId === person.id),
+      ),
+    })),
+    hireThreshold,
+    4,
+    !!currentFour[0] && daysInclusive(currentFour[0].end, today) > 28,
+  );
+  const projectedReview = firstHiringReviewMonth(
+    forecastMonths,
+    hiring.assessed.map((person) => person.id),
+    hireThreshold,
+  );
+  const projectedMonthsAway = projectedReview
+    ? (Number(projectedReview.slice(0, 4)) - Number(today.slice(0, 4))) * 12 +
+      Number(projectedReview.slice(5, 7)) - Number(today.slice(5, 7))
+    : null;
+  const attritionInput = attritionDraft ?? String(Math.round((100 - retentionPct) * 10) / 10);
+  const attritionNumber = Number(attritionInput);
+  const canUpdateAttrition = attritionInput.trim() !== "" &&
+    Number.isFinite(attritionNumber) && attritionNumber >= 0 && attritionNumber <= 100 &&
+    Math.abs(attritionNumber - (100 - retentionPct)) > 0.001;
+  const inferredAttrition = useMemo(
+    () => estimatePracticeAttrition(context, workspace, teamId, today),
+    [context, workspace, teamId, today],
+  );
+  const visitFrequencyInput = visitFrequencyDraft ?? String(workspace.settings.sessionsPerClientMonth);
+  const visitFrequency = Number(visitFrequencyInput);
+  const canUpdateFrequency = visitFrequencyInput.trim() !== "" &&
+    Number.isFinite(visitFrequency) && visitFrequency > 0 && visitFrequency <= 31 &&
+    Math.abs(visitFrequency - workspace.settings.sessionsPerClientMonth) > 0.001;
   const bounds = historyRange === "custom"
     ? customRange
     : historyRange === "all" || historyRange === "4periods"
@@ -450,7 +507,7 @@ export default function WorkspaceSessions({
                   <span>Sessions / week</span>
                   <div className="pw-session-capacity-values">
                     <div><strong>{display(averageWeekly)}</strong><small>avg completed</small></div>
-                    <div><strong>{display(openWeekly)}</strong><small>estimated room</small></div>
+                    <div><strong>{display(openWeekly)}</strong><small>to desired pace</small></div>
                   </div>
                   <div className="pw-session-fill-track" aria-hidden="true">
                     <span style={{ width: `${Math.min(Math.max(fullness ?? 0, 0), 100)}%` }} />
@@ -477,6 +534,108 @@ export default function WorkspaceSessions({
             );
           })}
         </div>
+      )}
+
+      {!sandbox && (
+        <section className="pw-hiring-pulse" aria-label="Hiring outlook">
+          <div className="pw-hiring-pulse-main">
+            <div>
+              <h3>Hiring outlook</h3>
+              <strong className="pw-hiring-pulse-result">
+                {hiring.status === "review_hire"
+                  ? "At review point now"
+                  : hiring.selectedCount === 0
+                    ? "No team selected"
+                    : projectedReview
+                      ? `Review around ${forecastMonthLabel(projectedReview)} (${projectedMonthsAway} months away)`
+                      : forecastMonths.length
+                        ? `Not within ${forecastMonths.length} forecast months`
+                        : "No forecast available"}
+              </strong>
+              <p>
+                {hiring.status === "no_selection"
+                  ? "Select clinicians with a desired weekly pace."
+                  : hiring.status === "needs_data"
+                    ? `${hiring.missing.length} of ${hiring.selectedCount} selected clinicians need 4 consecutive biweekly periods.`
+                    : hiring.status === "stale"
+                      ? `Last recorded period ended ${shortDate(currentFour[0]?.end ?? today)}. Update sessions before relying on this signal.`
+                    : hiring.status === "below_threshold"
+                      ? `${hiring.below.length} of ${hiring.selectedCount} selected clinicians are below ${hireThreshold}% of desired sessions; ${display(hiring.weeklyGap)} more sessions / week to reach it.`
+                      : `All ${hiring.selectedCount} selected clinicians are at or above ${hireThreshold}% of desired sessions. Review whether to hire.`}
+              </p>
+            </div>
+            <button className="pw-button" type="button" onClick={onPlanHire}
+              disabled={dirty || busy || bulkState.dirty || bulkState.busy || importOpen}
+              title={dirty || bulkState.dirty ? "Save session edits before opening Planning" : undefined}>
+              <Flag /> Try a hire in Planning
+            </button>
+          </div>
+          <details className="pw-hiring-pulse-settings">
+            <summary>Who counts toward this signal</summary>
+            <div className="pw-hiring-pulse-controls">
+              <label>Review at
+                <input aria-label="Hiring fullness threshold" type="number" min="1" max="100"
+                  value={hireThreshold}
+                  onChange={(event) => setHireThreshold(Math.min(100, Math.max(1, Number(event.target.value) || 1)))} />
+                % of desired sessions
+              </label>
+              <div className="pw-hiring-pulse-attrition">
+                <label>Existing caseload attrition / month
+                  <input aria-label="Existing caseload attrition per month" type="number" min="0" max="100" step="0.1"
+                    value={attritionInput}
+                    onChange={(event) => setAttritionDraft(event.target.value)} />
+                  %
+                </label>
+                <button className="pw-button" type="button" disabled={!canUpdateAttrition}
+                  onClick={() => {
+                    onRetentionChange(100 - attritionNumber);
+                    setAttritionDraft(null);
+                  }}>Update assumption</button>
+              </div>
+              <div className="pw-hiring-pulse-attrition">
+                <label>Assumed sessions / active client / month
+                  <input aria-label="Average monthly sessions per active client" type="number" min="0.1" max="31" step="0.1"
+                    value={visitFrequencyInput}
+                    onChange={(event) => setVisitFrequencyDraft(event.target.value)} />
+                </label>
+                <button className="pw-button" type="button" disabled={!canUpdateFrequency}
+                  onClick={() => {
+                    onSessionsPerClientChange(visitFrequency);
+                    setVisitFrequencyDraft(null);
+                  }}>Update assumption</button>
+              </div>
+              {inferredAttrition ? (
+                <div className="pw-hiring-pulse-inferred">
+                  <span>Implied attrition from sessions and recorded closes: <strong>{display(inferredAttrition.attritionPct, "%")} / month</strong> across {inferredAttrition.months} months, through {inferredAttrition.through}.</span>
+                  <button className="pw-button" type="button"
+                    disabled={Math.abs(inferredAttrition.attritionPct - (100 - retentionPct)) < 0.05}
+                    onClick={() => onRetentionChange(Math.round((100 - inferredAttrition.attritionPct) * 10) / 10)}>
+                    Use for forecast
+                  </button>
+                </div>
+              ) : <small>To infer attrition, record monthly closes from every source, mark lead-generation figures reviewed, and keep team session totals complete for four consecutive months.</small>}
+              <div className="pw-hiring-pulse-people">
+                {people.filter((person) => person.sessionsPerWeek > 0).map((person) => {
+                  const assessment = hiring.assessed.find((item) => item.id === person.id);
+                  const personalReview = firstHiringReviewMonth(forecastMonths, [person.id], hireThreshold);
+                  return <label key={person.id}>
+                    <input type="checkbox" checked={!excludedFromHire.has(person.id)}
+                      onChange={(event) => setExcludedFromHire((current) => {
+                        const next = new Set(current);
+                        if (event.target.checked) next.delete(person.id);
+                        else next.add(person.id);
+                        return next;
+                      })} />
+                    {person.label}
+                    {assessment && <small>{assessment.recordedPeriods}/4 periods{assessment.consecutive ? "" : "; check dates"}; {display(assessment.averageWeekly)} / {display(person.sessionsPerWeek)} weekly{personalReview
+                      ? `; projected ${forecastMonthLabel(personalReview)}` : ""}</small>}
+                  </label>;
+                })}
+              </div>
+              <small>Current {display(100 - retentionPct, "%")} attrition is a practice forecast assumption. The implied rate assumes new clients contribute about half a month's sessions when they start; it is not a measured exit count. Projection also uses current lead-generation and new-client retention assumptions. Check time off and actual availability before hiring.</small>
+            </div>
+          </details>
+        </section>
       )}
 
       {!sandbox && (

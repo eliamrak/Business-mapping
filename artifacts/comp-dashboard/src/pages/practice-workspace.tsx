@@ -2716,6 +2716,18 @@ export default function PracticeWorkspace() {
                   teamId={workspace.settings.teamId}
                   sandbox={sandbox}
                   onEditingChange={setSessionEditing}
+                  onPlanHire={startPlanning}
+                  forecastMonths={months}
+                  retentionPct={workingWorkspace.settings.baselineRetentionPct}
+                  workspace={workingWorkspace}
+                  onRetentionChange={(retentionPct) => stageSettings(
+                    { baselineRetentionPct: retentionPct },
+                    "Existing caseload attrition",
+                  )}
+                  onSessionsPerClientChange={(sessionsPerClientMonth) => stageSettings(
+                    { sessionsPerClientMonth },
+                    "Average sessions per client",
+                  )}
                   onSaved={async () => {
                     await contextQuery.refetch();
                     void cache.invalidateQueries({

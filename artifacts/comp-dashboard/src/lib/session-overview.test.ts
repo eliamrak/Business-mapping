@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import type { SessionRecord } from "@workspace/practice";
-import { summarizeSessionOverview } from "./session-overview.ts";
+import { firstHiringReviewMonth, summarizeHiringReadiness, summarizeSessionOverview } from "./session-overview.ts";
 
 const record = (start: string, end: string, completed: number): SessionRecord => ({
   id: 1, revision: 1, updatedAt: "2026-09-26T12:00:00Z",
@@ -54,4 +54,80 @@ test("sessions beyond goal do not report negative room", () => {
   assert.equal(overview.overGoalWeekly, 2);
   assert.equal(overview.fullness, 120);
   assert.equal(overview.trendWeekly, 0);
+});
+
+const fourPeriods = (completed: number) => [
+  record("2026-07-30", "2026-08-12", completed),
+  record("2026-08-13", "2026-08-26", completed),
+  record("2026-08-27", "2026-09-09", completed),
+  record("2026-09-10", "2026-09-23", completed),
+];
+
+test("hiring review requires four periods from every selected clinician", () => {
+  const result = summarizeHiringReadiness([
+    { id: 1, goalWeekly: 10, records: fourPeriods(18) },
+    { id: 2, goalWeekly: 10, records: fourPeriods(18).slice(1) },
+  ], 80);
+  assert.equal(result.status, "needs_data");
+  assert.deepEqual(result.missing.map((person) => person.id), [2]);
+});
+
+test("hiring gap uses each clinician's pace against the chosen threshold", () => {
+  const result = summarizeHiringReadiness([
+    { id: 1, goalWeekly: 10, records: fourPeriods(12) },
+    { id: 2, goalWeekly: 20, records: fourPeriods(32) },
+  ], 80);
+  assert.equal(result.status, "below_threshold");
+  assert.deepEqual(result.below.map((person) => person.id), [1]);
+  assert.equal(result.weeklyGap, 2);
+  assert.equal(summarizeHiringReadiness([
+    { id: 1, goalWeekly: 10, records: fourPeriods(16) },
+    { id: 2, goalWeekly: 20, records: fourPeriods(32) },
+  ], 80).status, "review_hire");
+});
+
+test("zero recorded sessions are below threshold, not missing data", () => {
+  const result = summarizeHiringReadiness([
+    { id: 1, goalWeekly: 10, records: fourPeriods(0) },
+  ], 80);
+  assert.equal(result.status, "below_threshold");
+  assert.equal(result.weeklyGap, 8);
+});
+
+test("stale totals do not trigger a hiring review", () => {
+  const result = summarizeHiringReadiness([
+    { id: 1, goalWeekly: 10, records: fourPeriods(18) },
+  ], 80, 4, true);
+  assert.equal(result.status, "stale");
+});
+
+test("gaps between periods do not trigger a hiring review", () => {
+  const records = fourPeriods(18);
+  records[1] = record("2026-08-14", "2026-08-27", 18);
+  const result = summarizeHiringReadiness([
+    { id: 1, goalWeekly: 10, records },
+  ], 80);
+  assert.equal(result.status, "needs_data");
+  assert.equal(result.missing[0].recordedPeriods, 4);
+  assert.equal(result.missing[0].consecutive, false);
+});
+
+test("hiring runway waits until all selected clinicians reach the threshold together", () => {
+  const months = [
+    { date: "2026-10-31", clinicians: { "1": { capacity: 40, utilization: 85 }, "2": { capacity: 60, utilization: 70 } } },
+    { date: "2026-11-30", clinicians: { "1": { capacity: 40, utilization: 78 }, "2": { capacity: 60, utilization: 83 } } },
+    { date: "2026-12-31", clinicians: { "1": { capacity: 40, utilization: 81 }, "2": { capacity: 60, utilization: 82 } } },
+  ];
+  assert.equal(firstHiringReviewMonth(months, [1, 2], 80), "2026-12-31");
+  assert.equal(firstHiringReviewMonth(months, [1], 80), "2026-10-31");
+  assert.equal(firstHiringReviewMonth(months, [], 80), null);
+});
+
+test("zero or missing modeled capacity cannot count as full", () => {
+  const months = [
+    { date: "2026-10-31", clinicians: { "1": { capacity: 0, utilization: 100 } } },
+    { date: "2026-11-30", clinicians: { "1": { capacity: 40, utilization: 80 } } },
+  ];
+  assert.equal(firstHiringReviewMonth(months, [1], 80), "2026-11-30");
+  assert.equal(firstHiringReviewMonth(months, [2], 80), null);
 });
