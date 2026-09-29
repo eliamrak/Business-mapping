@@ -92,6 +92,25 @@ test("lead flow supports clinician rows and organic sources without duplicate to
   w.funnels.push(result(campaign.id, 1));
   assert.equal(workspaceSchema.safeParse(w).success, false);
 });
+test("practice-wide lead totals cannot be mixed with source or clinician breakdowns", () => {
+  const w = setup();
+  const period = periodSchema.parse({ id: id(), name: "January", start, end: "2026-01-31" });
+  w.periods.push(period);
+  const practiceTotal = funnelSchema.parse({
+    id: id(), scope: "practice", periodId: period.id, campaignId: null,
+    clinicianId: null, sourceName: "", spend: null, leads: 20,
+    scheduled: null, attended: 10, clients: 7, firstSessions: null,
+  });
+  w.funnels.push(practiceTotal);
+  assert.equal(workspaceSchema.safeParse(w).success, true);
+  w.funnels.push(funnelSchema.parse({
+    ...practiceTotal, id: id(), scope: "source", sourceName: "Google",
+  }));
+  assert.equal(workspaceSchema.safeParse(w).success, false);
+  w.funnels.pop();
+  w.funnels[0] = { ...practiceTotal, clinicianId: 1 };
+  assert.equal(workspaceSchema.safeParse(w).success, false);
+});
 test("recurring budgets normalize calendar days and effective dates", () => {
   const c = categorySchema.parse({ id: id(), name: "Rent", kind: "expense" });
   const b = budgetSchema.parse({

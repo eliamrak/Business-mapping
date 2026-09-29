@@ -187,6 +187,7 @@ export const campaignSchema = z.object({
 export const funnelSchema = z.object({
   sourceAttachmentId: optionalId,
   id,
+  scope: z.enum(["source", "practice"]).default("source"),
   campaignId: optionalId,
   sourceName: z.string().trim().max(120).default(""),
   clinicianId: z.number().int().positive().nullable().default(null),
@@ -761,6 +762,12 @@ export const workspaceSchema = z
         !exists(data.periods, f.periodId)
       )
         issue(["funnels", i], "Choose an existing campaign and period.");
+      if (f.scope === "practice") {
+        if (f.campaignId !== null || f.clinicianId !== null)
+          issue(["funnels", i], "A practice total cannot belong to one campaign or clinician.");
+        if (data.funnels.some((x, j) => j !== i && x.periodId === f.periodId))
+          issue(["funnels", i], "Use a practice total or a breakdown for this month, not both.");
+      }
       const sourceKey = (row: typeof f) =>
         row.campaignId ?? `other:${row.sourceName.trim().toLowerCase() || "other"}`;
       const sameSource = (row: typeof f) =>

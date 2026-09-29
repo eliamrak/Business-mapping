@@ -917,66 +917,91 @@ export default function PracticeWorkspace() {
     if (!workspace) return;
     setStagedWorkspace((prior) => {
       const current = prior ?? workspace;
+      const funnels = current.funnels.map((row) => row.id === id ? { ...row, ...patch } : row);
+      const changed = funnels.find((row) => row.id === id);
       return {
         ...current,
-        funnels: current.funnels.map((row) => row.id === id ? { ...row, ...patch } : row),
+        funnels,
+        periods: changed ? current.periods.map((period) => period.id === changed.periodId
+          ? { ...period, funnelComplete: changed.scope === "practice" &&
+              changed.leads !== null && changed.attended !== null && changed.clients !== null }
+          : period) : current.periods,
       };
     });
     setStagedLabels((prior) => ({ ...prior, ["funnels:" + id]: "Lead flow result" }));
-    setReviewStaged(false);
-  }
-  function stageFunnelAdd(periodId: string, campaignId: string | null, sourceName: string, clinicianId: number | null) {
-    if (!workspace) return;
-    const row = funnelSchema.parse({
-      id: crypto.randomUUID(),
-      sourceAttachmentId: null,
-      periodId,
-      campaignId,
-      sourceName,
-      clinicianId,
-      spend: null,
-      leads: null,
-      scheduled: null,
-      attended: null,
-      clients: null,
-      firstSessions: null,
-      notes: "",
-    });
-    setStagedWorkspace((prior) => {
-      const current = prior ?? workspace;
-      return { ...current, funnels: [...current.funnels, row] };
-    });
-    setStagedLabels((prior) => ({ ...prior, ["funnels:" + row.id]: "New lead flow result" }));
     setReviewStaged(false);
   }
   function stageFunnelRemove(id: string) {
     if (!workspace) return;
     setStagedWorkspace((prior) => {
       const current = prior ?? workspace;
-      return { ...current, funnels: current.funnels.filter((row) => row.id !== id) };
+      const removed = current.funnels.find((row) => row.id === id);
+      return {
+        ...current,
+        funnels: current.funnels.filter((row) => row.id !== id),
+        periods: removed ? current.periods.map((period) => period.id === removed.periodId
+          ? { ...period, funnelComplete: false }
+          : period) : current.periods,
+      };
     });
     setStagedLabels((prior) => ({ ...prior, ["funnels:" + id]: "Removed lead flow result" }));
     setReviewStaged(false);
   }
-  function stageLeadMonth(month: string) {
-    if (!workspace) return null;
+  async function saveLeadEntry(
+    month: string,
+    entry: Pick<Workspace["funnels"][number], "scope" | "campaignId" | "sourceName" | "clinicianId" | "leads" | "attended" | "clients">,
+    replacePracticeId?: string,
+  ) {
+    if (!workspace) throw new Error("Practice data is still loading.");
+    const current = stagedWorkspace ?? workspace;
     const start = `${month}-01`;
     const end = new Date(Date.UTC(Number(month.slice(0, 4)), Number(month.slice(5)), 0))
       .toISOString().slice(0, 10);
-    const record = periodSchema.parse({
+    const period = current.periods.find((item) => !item.archived && item.start === start && item.end === end) ??
+      periodSchema.parse({
+        id: crypto.randomUUID(),
+        name: new Intl.DateTimeFormat("en-US", { month: "long", year: "numeric", timeZone: "UTC" })
+          .format(new Date(`${start}T12:00:00Z`)),
+        start,
+        end,
+      });
+    const result = funnelSchema.parse({
       id: crypto.randomUUID(),
-      name: new Intl.DateTimeFormat("en-US", { month: "long", year: "numeric", timeZone: "UTC" })
-        .format(new Date(`${start}T12:00:00Z`)),
-      start,
-      end,
+      periodId: period.id,
+      ...entry,
+      spend: null,
+      scheduled: null,
+      firstSessions: null,
     });
-    setStagedWorkspace((prior) => {
-      const current = prior ?? workspace;
-      return { ...current, periods: [...current.periods, record] };
-    });
-    setStagedLabels((prior) => ({ ...prior, ["periods:" + record.id]: "New lead flow month" }));
+    const completed = entry.scope === "practice" &&
+      entry.leads !== null && entry.attended !== null && entry.clients !== null;
+    await persist({
+      ...current,
+      periods: current.periods.some((item) => item.id === period.id)
+        ? current.periods.map((item) => item.id === period.id
+            ? { ...item, funnelComplete: completed }
+            : item)
+        : [...current.periods, { ...period, funnelComplete: completed }],
+      funnels: [...current.funnels.filter((row) =>
+        row.id !== replacePracticeId || row.periodId !== period.id || row.scope !== "practice",
+      ), result],
+    }, "Recorded monthly lead flow");
+    setStagedWorkspace(null);
+    setStagedLabels({});
     setReviewStaged(false);
-    return record.id;
+  }
+  async function completeLeadMonth(periodId: string) {
+    if (!workspace) return;
+    const current = stagedWorkspace ?? workspace;
+    await persist({
+      ...current,
+      periods: current.periods.map((period) => period.id === periodId
+        ? { ...period, funnelComplete: true }
+        : period),
+    }, "Completed monthly lead flow");
+    setStagedWorkspace(null);
+    setStagedLabels({});
+    setReviewStaged(false);
   }
   function stageFund(
     name: string,
@@ -2816,7 +2841,7 @@ export default function PracticeWorkspace() {
                     "Marketing",
                     marketingTab === "campaigns"
                       ? "Ad spend drives lead estimates. Service costs complete the marketing total."
-                      : "Record where clients came from and who handled their consults.",
+                      : "Monthly leads, consults, and new clients.",
                     marketingTab === "campaigns" ? <button
                         className="pw-button"
                         onClick={() => stageNew("campaigns")}
@@ -3198,8 +3223,8 @@ export default function PracticeWorkspace() {
                       readOnly={sandbox}
                       pending={!!stagedWorkspace}
                       canSave={!!stagedValidation?.success && !!stagedDifferences.length && !saving}
-                      onAdd={stageFunnelAdd}
-                      onAddMonth={stageLeadMonth}
+                      onSaveEntry={saveLeadEntry}
+                      onCompleteMonth={completeLeadMonth}
                       onPatch={stageFunnelPatch}
                       onRemove={stageFunnelRemove}
                       onSave={() => void commitStaged()}
