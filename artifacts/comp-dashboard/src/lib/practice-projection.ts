@@ -51,14 +51,34 @@ export function buildPracticeProjection(
   const clinicians = context.clinicians.filter(
     (person) => (person.goalId ?? null) === workspace.settings.teamId,
   );
-  const recentStart = dayBefore(today, 55);
+  const completedBiweekly = [...new Map(context.sessions
+    .filter((record) =>
+      clinicians.some((person) => person.id === record.clinicianId) &&
+      record.end <= today && daysInclusive(record.start, record.end) === 14,
+    )
+    .map((record) => [`${record.start}|${record.end}`, { start: record.start, end: record.end }]))
+    .values()]
+    .sort((a, b) => b.end.localeCompare(a.end))
+    .slice(0, 4);
+  const exactFour = completedBiweekly.length === 4 &&
+    daysInclusive(completedBiweekly[0].end, today) <= 28 &&
+    completedBiweekly.every((period, index) =>
+      (index === 0 || dayBefore(completedBiweekly[index - 1].start, 1) === period.end) &&
+      clinicians.every((person) => context.sessions.some((record) =>
+        record.clinicianId === person.id &&
+        record.start === period.start && record.end === period.end,
+      )),
+    );
+  const recentStart = exactFour ? completedBiweekly[3].start : dayBefore(today, 55);
   const windowDays = daysInclusive(recentStart, today);
   const clinicianPace = clinicians.map((person) => {
     const recent = context.sessions.filter(
       (record) =>
         record.clinicianId === person.id &&
-        record.start >= recentStart &&
-        record.end <= today,
+        (exactFour
+          ? completedBiweekly.some((period) =>
+              record.start === period.start && record.end === period.end)
+          : record.start >= recentStart && record.end <= today),
     );
     const days = recent.reduce(
       (sum, record) => sum + daysInclusive(record.start, record.end),
@@ -66,11 +86,12 @@ export function buildPracticeProjection(
     );
     const completed = recent.reduce((sum, record) => sum + record.completed, 0);
     const recordedWeekly = days ? (completed * 7) / days : null;
-    const usedWeekly =
-      ((completed +
-        (person.sessionsPerWeek * Math.max(0, windowDays - days)) / 7) *
-        7) /
-      windowDays;
+    const usedWeekly = exactFour
+      ? recordedWeekly ?? person.sessionsPerWeek
+      : ((completed +
+          (person.sessionsPerWeek * Math.max(0, windowDays - days)) / 7) *
+          7) /
+        windowDays;
     return {
       id: person.id,
       name: person.label,

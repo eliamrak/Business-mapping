@@ -92,6 +92,7 @@ import Settings, { SettingsEditor } from "@/components/hub/settings";
 import Updates from "@/components/hub/updates";
 import { type ViewProps, fmt, monthLabel } from "@/components/hub/views";
 import WorkspaceSessions from "@/components/practice/workspace-sessions";
+import WorkspaceCalculations from "@/components/practice/workspace-calculations";
 import MoneyFlowToday from "@/components/practice/money-flow-today";
 import WeeklyBlocks from "@/components/practice/weekly-blocks";
 import SandboxView from "@/components/sandbox-view";
@@ -153,6 +154,7 @@ type PaceMetric = "sessions" | "revenue" | "profit";
 type Section =
   | "clinicians"
   | "sessions"
+  | "calculations"
   | "marketing"
   | "rooms"
   | "budgets"
@@ -163,6 +165,7 @@ type Section =
 const sections: { id: Section; label: string }[] = [
   { id: "clinicians", label: "Clinicians & pay" },
   { id: "sessions", label: "Sessions" },
+  { id: "calculations", label: "Calculations" },
   { id: "marketing", label: "Marketing" },
   { id: "rooms", label: "Rooms" },
   { id: "budgets", label: "Budgets" },
@@ -1984,6 +1987,7 @@ export default function PracticeWorkspace() {
                     <RotateCcw />
                   </button>
                   {section !== "summary" &&
+                    section !== "calculations" &&
                     section !== "settings" &&
                     section !== "documents" && (
                       <button
@@ -2032,6 +2036,7 @@ export default function PracticeWorkspace() {
             ) : mode === "practice" ? (
               <>
                 {section !== "summary" &&
+                  section !== "calculations" &&
                   section !== "settings" &&
                   section !== "documents" && (
                     <button
@@ -2717,23 +2722,24 @@ export default function PracticeWorkspace() {
                   sandbox={sandbox}
                   onEditingChange={setSessionEditing}
                   onPlanHire={startPlanning}
+                  onOpenCalculations={() => setSection("calculations")}
                   forecastMonths={months}
-                  retentionPct={workingWorkspace.settings.baselineRetentionPct}
-                  workspace={workingWorkspace}
-                  onRetentionChange={(retentionPct) => stageSettings(
-                    { baselineRetentionPct: retentionPct },
-                    "Existing caseload attrition",
-                  )}
-                  onSessionsPerClientChange={(sessionsPerClientMonth) => stageSettings(
-                    { sessionsPerClientMonth },
-                    "Average sessions per client",
-                  )}
                   onSaved={async () => {
                     await contextQuery.refetch();
                     void cache.invalidateQueries({
                       queryKey: ["session-records"],
                     });
                   }}
+                />
+              )}
+              {section === "calculations" && (
+                <WorkspaceCalculations
+                  workspace={workingWorkspace}
+                  context={context}
+                  onSetting={(key, value) => stageSettings(
+                    { [key]: value },
+                    "Session calculations",
+                  )}
                 />
               )}
               {section === "marketing" && (

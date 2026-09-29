@@ -28,7 +28,7 @@ export function inferMonthlyAttrition(
     const priorActive = prior.sessions / sessionsPerClientMonth;
     const currentActive = current.sessions / sessionsPerClientMonth;
     if (priorActive <= 0) return [];
-    return [{ priorActive, retainedActive: currentActive - current.newClients / 2 }];
+    return [{ priorActive, retainedActive: currentActive - current.newClients }];
   });
   const numerator = pairs.reduce(
     (sum, pair) => sum + pair.priorActive * pair.retainedActive, 0,

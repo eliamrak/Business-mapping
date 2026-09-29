@@ -8,7 +8,7 @@ const samples = ["2026-05", "2026-06", "2026-07", "2026-08"].map((month) => ({
 }));
 
 test("implied attrition fits sessions and actual new client starts", () => {
-  const result = inferMonthlyAttrition(samples, 4);
+  const result = inferMonthlyAttrition(samples, 2);
   assert.ok(result);
   assert.ok(Math.abs(result.attritionPct - 10) < 0.001);
   assert.equal(result.months, 4);
@@ -30,7 +30,7 @@ test("missing months and implausible retention do not invent an attrition rate",
 test("practice inference requires complete monthly closes and session coverage", () => {
   const workspace = emptyWorkspace("2026-09-01");
   workspace.settings.teamId = 7;
-  workspace.settings.sessionsPerClientMonth = 4;
+  workspace.settings.sessionsPerClientMonth = 2;
   const clinician = {
     id: 1, goalId: 7, sessionsPerWeek: 20,
   } as Context["clinicians"][number];

@@ -21,9 +21,8 @@ import {
   type SessionRecord,
   type SessionWrite,
 } from "@workspace/practice";
-import type { Context, ForecastMonth, Workspace } from "@workspace/practice/hub";
+import type { Context, ForecastMonth } from "@workspace/practice/hub";
 import { saveSessionRecord } from "@/lib/session-api";
-import { estimatePracticeAttrition } from "@/lib/session-attrition";
 import { firstHiringReviewMonth, summarizeHiringReadiness, summarizeSessionOverview } from "@/lib/session-overview";
 import SessionImportDialog from "./session-import-dialog";
 import BulkSessionEntry from "./bulk-session-entry";
@@ -73,11 +72,8 @@ export default function WorkspaceSessions({
   onSaved,
   onEditingChange,
   onPlanHire,
+  onOpenCalculations,
   forecastMonths,
-  retentionPct,
-  onRetentionChange,
-  workspace,
-  onSessionsPerClientChange,
 }: {
   context: Context;
   teamId: number | null;
@@ -85,11 +81,8 @@ export default function WorkspaceSessions({
   onSaved: () => Promise<void>;
   onEditingChange: (editing: boolean) => void;
   onPlanHire: () => void;
+  onOpenCalculations: () => void;
   forecastMonths: ForecastMonth[];
-  retentionPct: number;
-  onRetentionChange: (retentionPct: number) => void;
-  workspace: Workspace;
-  onSessionsPerClientChange: (value: number) => void;
 }) {
   const people = context.clinicians.filter(
     (clinician) => (clinician.goalId ?? null) === teamId,
@@ -133,8 +126,6 @@ export default function WorkspaceSessions({
   const [bulkState, setBulkState] = useState({ dirty: false, busy: false });
   const [historyRange, setHistoryRange] = useState("4periods");
   const [hireThreshold, setHireThreshold] = useState(80);
-  const [attritionDraft, setAttritionDraft] = useState<string | null>(null);
-  const [visitFrequencyDraft, setVisitFrequencyDraft] = useState<string | null>(null);
   const [excludedFromHire, setExcludedFromHire] = useState<Set<number>>(new Set());
   const [customRange, setCustomRange] = useState({
     start: shift(today, -179),
@@ -327,20 +318,6 @@ export default function WorkspaceSessions({
     ? (Number(projectedReview.slice(0, 4)) - Number(today.slice(0, 4))) * 12 +
       Number(projectedReview.slice(5, 7)) - Number(today.slice(5, 7))
     : null;
-  const attritionInput = attritionDraft ?? String(Math.round((100 - retentionPct) * 10) / 10);
-  const attritionNumber = Number(attritionInput);
-  const canUpdateAttrition = attritionInput.trim() !== "" &&
-    Number.isFinite(attritionNumber) && attritionNumber >= 0 && attritionNumber <= 100 &&
-    Math.abs(attritionNumber - (100 - retentionPct)) > 0.001;
-  const inferredAttrition = useMemo(
-    () => estimatePracticeAttrition(context, workspace, teamId, today),
-    [context, workspace, teamId, today],
-  );
-  const visitFrequencyInput = visitFrequencyDraft ?? String(workspace.settings.sessionsPerClientMonth);
-  const visitFrequency = Number(visitFrequencyInput);
-  const canUpdateFrequency = visitFrequencyInput.trim() !== "" &&
-    Number.isFinite(visitFrequency) && visitFrequency > 0 && visitFrequency <= 31 &&
-    Math.abs(visitFrequency - workspace.settings.sessionsPerClientMonth) > 0.001;
   const bounds = historyRange === "custom"
     ? customRange
     : historyRange === "all" || historyRange === "4periods"
@@ -564,11 +541,18 @@ export default function WorkspaceSessions({
                       : `All ${hiring.selectedCount} selected clinicians are at or above ${hireThreshold}% of desired sessions. Review whether to hire.`}
               </p>
             </div>
-            <button className="pw-button" type="button" onClick={onPlanHire}
-              disabled={dirty || busy || bulkState.dirty || bulkState.busy || importOpen}
-              title={dirty || bulkState.dirty ? "Save session edits before opening Planning" : undefined}>
-              <Flag /> Try a hire in Planning
-            </button>
+            <div className="pw-hiring-pulse-actions">
+              <button className="pw-button" type="button" onClick={onOpenCalculations}
+                disabled={dirty || busy || bulkState.dirty || bulkState.busy || importOpen}
+                title={dirty || bulkState.dirty ? "Save session edits before opening Calculations" : undefined}>
+                <SlidersHorizontal /> Calculations
+              </button>
+              <button className="pw-button" type="button" onClick={onPlanHire}
+                disabled={dirty || busy || bulkState.dirty || bulkState.busy || importOpen}
+                title={dirty || bulkState.dirty ? "Save session edits before opening Planning" : undefined}>
+                <Flag /> Try a hire in Planning
+              </button>
+            </div>
           </div>
           <details className="pw-hiring-pulse-settings">
             <summary>Who counts toward this signal</summary>
@@ -579,41 +563,6 @@ export default function WorkspaceSessions({
                   onChange={(event) => setHireThreshold(Math.min(100, Math.max(1, Number(event.target.value) || 1)))} />
                 % of desired sessions
               </label>
-              <div className="pw-hiring-pulse-attrition">
-                <label>Existing caseload attrition / month
-                  <input aria-label="Existing caseload attrition per month" type="number" min="0" max="100" step="0.1"
-                    value={attritionInput}
-                    onChange={(event) => setAttritionDraft(event.target.value)} />
-                  %
-                </label>
-                <button className="pw-button" type="button" disabled={!canUpdateAttrition}
-                  onClick={() => {
-                    onRetentionChange(100 - attritionNumber);
-                    setAttritionDraft(null);
-                  }}>Update assumption</button>
-              </div>
-              <div className="pw-hiring-pulse-attrition">
-                <label>Assumed sessions / active client / month
-                  <input aria-label="Average monthly sessions per active client" type="number" min="0.1" max="31" step="0.1"
-                    value={visitFrequencyInput}
-                    onChange={(event) => setVisitFrequencyDraft(event.target.value)} />
-                </label>
-                <button className="pw-button" type="button" disabled={!canUpdateFrequency}
-                  onClick={() => {
-                    onSessionsPerClientChange(visitFrequency);
-                    setVisitFrequencyDraft(null);
-                  }}>Update assumption</button>
-              </div>
-              {inferredAttrition ? (
-                <div className="pw-hiring-pulse-inferred">
-                  <span>Implied attrition from sessions and recorded closes: <strong>{display(inferredAttrition.attritionPct, "%")} / month</strong> across {inferredAttrition.months} months, through {inferredAttrition.through}.</span>
-                  <button className="pw-button" type="button"
-                    disabled={Math.abs(inferredAttrition.attritionPct - (100 - retentionPct)) < 0.05}
-                    onClick={() => onRetentionChange(Math.round((100 - inferredAttrition.attritionPct) * 10) / 10)}>
-                    Use for forecast
-                  </button>
-                </div>
-              ) : <small>To infer attrition, record monthly closes from every source, mark lead-generation figures reviewed, and keep team session totals complete for four consecutive months.</small>}
               <div className="pw-hiring-pulse-people">
                 {people.filter((person) => person.sessionsPerWeek > 0).map((person) => {
                   const assessment = hiring.assessed.find((item) => item.id === person.id);
@@ -632,7 +581,6 @@ export default function WorkspaceSessions({
                   </label>;
                 })}
               </div>
-              <small>Current {display(100 - retentionPct, "%")} attrition is a practice forecast assumption. The implied rate assumes new clients contribute about half a month's sessions when they start; it is not a measured exit count. Projection also uses current lead-generation and new-client retention assumptions. Check time off and actual availability before hiring.</small>
             </div>
           </details>
         </section>

@@ -175,6 +175,29 @@ test("a recorded zero is kept as zero; missing or stale records use desired sess
   assert.equal(workspace.settings.baselineMode, "historical");
 });
 
+test("complete four-period history sets forecast pace without filling trailing days at desired pace", () => {
+  const { workspace, context } = setup();
+  const periods = [
+    ["2026-07-30", "2026-08-12"],
+    ["2026-08-13", "2026-08-26"],
+    ["2026-08-27", "2026-09-09"],
+    ["2026-09-10", "2026-09-23"],
+  ];
+  context.sessions = periods.flatMap(([start, end], index) =>
+    [1, 2].map((clinicianId) => ({
+      ...record(clinicianId === 1 ? 8 : 16),
+      id: index * 2 + clinicianId,
+      clinicianId,
+      start,
+      end,
+    })),
+  );
+  const actual = buildPracticeProjection(workspace, context, "actual", "2026-09-28");
+  assert.equal(actual.clinicianPace[0].usedWeekly, 4);
+  assert.equal(actual.clinicianPace[1].usedWeekly, 8);
+  assert.equal(actual.projectedWeekly, 12);
+});
+
 test("an intentional custom plan pace remains available", () => {
   const { workspace, context } = setup();
   workspace.settings.baselineMode = "manual";
