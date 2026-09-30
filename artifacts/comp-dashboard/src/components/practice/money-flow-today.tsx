@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { ChevronDown, ChevronRight, Plus, Trash2 } from "lucide-react";
-import { additionalWithholdingPctFromNet, estimateW2NetPay, monthFlow, type Context, type Workspace } from "@workspace/practice/hub";
+import { additionalWithholdingPctFromNet, clinicianModelAt, clinicianTermsAt, estimateW2NetPay, monthFlow, type Context, type Workspace } from "@workspace/practice/hub";
 
 const currency = (value: number | null) => value === null
   ? "--"
@@ -130,19 +130,24 @@ export default function MoneyFlowToday({
     !campaign.archived && !campaign.planningOnly && campaign.start <= latestDepositDate &&
     (!campaign.end || campaign.end >= month),
   );
-  const profileFor = (person: Person) => workspace.clinicians
-    .filter((profile) => profile.clinicianId === person.id && profile.status === "active" &&
-      profile.start <= latestDepositDate && (!profile.end || profile.end >= month))
-    .sort((a, b) => b.start.localeCompare(a.start))[0];
+  const profileFor = (person: Person) =>
+    clinicianModelAt(workspace, person.id, latestDepositDate);
+  const listedRateFor = (person: Person) =>
+    clinicianTermsAt(workspace, person.id, latestDepositDate).sessionRate ??
+    person.sessionRate;
   const payee = context.clinicians.find((person) => person.id === workspace.settings.familyW2ClinicianId);
   const payAsOf = flow.through ?? latestDepositDate;
-  const payeeProfile = payee ? workspace.clinicians
-    .filter((profile) => profile.clinicianId === payee.id && profile.status === "active" &&
-      profile.start <= payAsOf && (!profile.end || profile.end >= payAsOf))
-    .sort((a, b) => b.start.localeCompare(a.start))[0] : undefined;
-  const futurePayeeProfile = payee && flow.through ? workspace.clinicians.some((profile) =>
-    profile.clinicianId === payee.id && profile.status === "active" &&
-    profile.start > payAsOf && profile.start <= latestDepositDate) : false;
+  const payeeProfile = payee
+    ? clinicianModelAt(workspace, payee.id, payAsOf) ?? undefined
+    : undefined;
+  const futurePayeeProfile = payee && flow.through
+    ? workspace.terms.some((term) =>
+        term.clinicianId === payee.id &&
+        term.effectiveDate > payAsOf &&
+        term.effectiveDate <= latestDepositDate &&
+        (term.payMode !== null || term.payAmount !== null),
+      )
+    : false;
   const annualFamilySalary = payeeProfile?.payMode === "salary" ? payeeProfile.payAmount : 0;
   const estimatedNetCheck = Math.round(estimateW2NetPay(annualFamilySalary / 24, workspace.settings.estimatedIncomeTaxPct).net * 100) / 100;
   const currentAllocationRows = workspace.allocations.filter((row) => !row.archived && row.start <= latestDepositDate && (!row.end || row.end >= month));
@@ -205,10 +210,12 @@ export default function MoneyFlowToday({
       <div className="pw-flow-row"><span>Estimated session revenue <small>{flow.sessions === null ? "No completed sessions yet" : `${flow.sessions.toFixed(1)} completed sessions, using average rates where entered; otherwise listed fees`}</small></span><strong>{currency(flow.revenue)}</strong></div>
       <Sources label="Rates behind session revenue">
         {people.map((person) => <SourceRow key={person.id} label={person.label}>
-          <InlineNumber label={`${person.label} average earned per completed session`} value={profileFor(person)?.expectedSessionRevenue ?? person.sessionRate}
+          <InlineNumber label={`${person.label} average earned per completed session`} value={profileFor(person)?.expectedSessionRevenue ?? listedRateFor(person)}
             prefix="$" onCommit={(rate) => onAverageRate(person, rate, month)} />
-          {profileFor(person)?.expectedSessionRevenue !== null && profileFor(person)?.expectedSessionRevenue !== undefined &&
-            <button type="button" className="pw-flow-source-link" onClick={() => onAverageRate(person, null, month)}>Use listed fee</button>}
+          {profileFor(person)?.expectedSessionRevenue !== null &&
+            profileFor(person)?.expectedSessionRevenue !== undefined &&
+            profileFor(person)?.expectedSessionRevenue !== listedRateFor(person) &&
+            <button type="button" className="pw-flow-source-link" onClick={() => onAverageRate(person, listedRateFor(person), month)}>Use listed fee</button>}
         </SourceRow>)}
         <button type="button" className="pw-flow-source-link" onClick={() => onNavigate("sessions")}>Edit recorded sessions <ChevronRight size={14} /></button>
       </Sources>

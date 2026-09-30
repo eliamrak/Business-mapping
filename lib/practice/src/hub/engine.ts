@@ -699,17 +699,33 @@ export function forecast(
             c.op?.payMode ??
             "existing_split";
           const listedRate = datedValue(c.sessionRate, rates, date, date);
-          const expectedRate = c.op?.expectedSessionRevenue;
+          const expectedTermRate = [...terms]
+            .reverse()
+            .find(
+              (term) =>
+                term.effectiveDate <= date &&
+                term.expectedSessionRevenue !== null,
+            )?.expectedSessionRevenue ?? undefined;
+          const expectedRate = expectedTermRate ?? c.op?.expectedSessionRevenue;
+          const paidHoursPerWeek = [...terms]
+            .reverse()
+            .find(
+              (term) =>
+                term.effectiveDate <= date && term.paidHoursPerWeek !== null,
+            )?.paidHoursPerWeek ?? c.op?.paidHoursPerWeek ?? 0;
           return {
             date,
             mode,
             amount: datedValue(c.op?.payAmount ?? 0, payChanges, date, date),
+            paidHoursPerWeek,
             rate:
-              expectedRate == null
-                ? listedRate
-                : c.sessionRate > 0
-                  ? (listedRate * expectedRate) / c.sessionRate
-                  : expectedRate,
+              expectedTermRate !== undefined
+                ? expectedTermRate
+                : expectedRate == null
+                  ? listedRate
+                  : c.sessionRate > 0
+                    ? (listedRate * expectedRate) / c.sessionRate
+                    : expectedRate,
             split: datedValue(c.preCapClinicianSplit, splits, date, date),
             capacity:
               (availableHours > 0
@@ -1080,7 +1096,7 @@ export function forecast(
           day.mode === "salary"
             ? day.amount / 12 / days
             : day.mode === "hourly"
-              ? ((day.amount * (c.op?.paidHoursPerWeek ?? 0)) / 7) *
+              ? ((day.amount * day.paidHoursPerWeek) / 7) *
                 (c.weeksWorkedPerYear / 52.1786)
               : day.mode === "per_session"
                 ? day.amount * dayCount

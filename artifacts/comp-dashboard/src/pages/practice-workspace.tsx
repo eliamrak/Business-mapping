@@ -46,6 +46,7 @@ import {
   funnelSchema,
   periodSchema,
   clinicianSettingSchema,
+  termSchema,
   allocationSchema,
   type Workspace,
   type Context,
@@ -891,6 +892,7 @@ export default function PracticeWorkspace() {
     | "campaigns"
     | "rooms"
     | "clinicians"
+    | "terms"
     | "allocations";
   function stageRecord(
     collection: InlineCollection,
@@ -1174,39 +1176,50 @@ export default function PracticeWorkspace() {
       setReviewStaged(false);
     }
   }
-  function stageClinicianAverageRate(person: Clinician, rate: number | null) {
-    if (!workingWorkspace) return;
-    const profile = workingWorkspace.clinicians.find(
-      (row) => row.clinicianId === person.id && row.status !== "archived",
-    );
-    if (profile) {
-      stageRecord(
-        "clinicians",
-        profile.id,
-        { expectedSessionRevenue: rate },
-        person.label + " expected average session revenue",
+  function stageClinicianAverageRate(
+    person: Clinician,
+    rate: number | null,
+    start?: string,
+  ) {
+    if (!start) {
+      const profile = workingWorkspace.clinicians.find(
+        (row) => row.clinicianId === person.id && row.status !== "archived",
       );
+      if (profile) {
+        stageRecord(
+          "clinicians",
+          profile.id,
+          { expectedSessionRevenue: rate },
+          person.label + " expected average session revenue",
+        );
+        return;
+      }
+      const record = clinicianSettingSchema.parse({
+        id: crypto.randomUUID(),
+        clinicianId: person.id,
+        start: context?.sessions
+          .filter((item) => item.clinicianId === person.id)
+          .map((item) => item.start)
+          .sort()[0] ?? today,
+        desiredWeeklySessions: person.sessionsPerWeek,
+        expectedSessionRevenue: rate,
+      });
+      setStagedWorkspace({
+        ...workingWorkspace,
+        clinicians: [...workingWorkspace.clinicians, record],
+      });
+      setStagedLabels((prior) => ({
+        ...prior,
+        ["clinicians:" + record.id]: person.label + " expected average session revenue",
+      }));
+      setReviewStaged(false);
       return;
     }
-    const record = clinicianSettingSchema.parse({
-      id: crypto.randomUUID(),
-      clinicianId: person.id,
-      start: context?.sessions
-        .filter((item) => item.clinicianId === person.id)
-        .map((item) => item.start)
-        .sort()[0] ?? today,
-      desiredWeeklySessions: person.sessionsPerWeek,
-      expectedSessionRevenue: rate,
-    });
-    setStagedWorkspace({
-      ...workingWorkspace,
-      clinicians: [...workingWorkspace.clinicians, record],
-    });
-    setStagedLabels((prior) => ({
-      ...prior,
-      ["clinicians:" + record.id]: person.label + " expected average session revenue",
-    }));
-    setReviewStaged(false);
+    stageClinicianModel(
+      person,
+      { expectedSessionRevenue: rate ?? person.sessionRate },
+      start,
+    );
   }
   function stageClinicianModel(
     person: Clinician,
@@ -1214,34 +1227,37 @@ export default function PracticeWorkspace() {
     start: string,
   ) {
     if (!workingWorkspace) return;
-    const profiles = workingWorkspace.clinicians.filter(
-      (row) => row.clinicianId === person.id && row.status === "active",
+    const termPatch = {
+      ...(patch.payMode !== undefined ? { payMode: patch.payMode } : {}),
+      ...(patch.payAmount !== undefined ? { payAmount: patch.payAmount } : {}),
+      ...(patch.paidHoursPerWeek !== undefined
+        ? { paidHoursPerWeek: patch.paidHoursPerWeek }
+        : {}),
+      ...(patch.expectedSessionRevenue !== undefined
+        ? { expectedSessionRevenue: patch.expectedSessionRevenue }
+        : {}),
+    };
+    const existing = workingWorkspace.terms.find(
+      (row) => row.clinicianId === person.id && row.effectiveDate === start,
     );
-    const activeProfile = profiles
-      .filter((row) => row.start <= start && (!row.end || row.end >= start))
-      .sort((a, b) => b.start.localeCompare(a.start))[0];
-    if (activeProfile?.start === start) {
-      stageRecord("clinicians", activeProfile.id, patch, person.label + " money flow inputs");
+    if (existing) {
+      stageRecord("terms", existing.id, termPatch, person.label + " dated money flow inputs");
       return;
     }
-    const nextProfile = profiles.filter((row) => row.start > start).sort((a, b) => a.start.localeCompare(b.start))[0];
-    const dayBefore = (date: string) =>
-      new Date(new Date(date + "T12:00:00Z").getTime() - 86_400_000).toISOString().slice(0, 10);
-    const end = activeProfile?.end ?? (nextProfile ? dayBefore(nextProfile.start) : null);
-    const record = clinicianSettingSchema.parse({
-      ...activeProfile,
+    const record = termSchema.parse({
       id: crypto.randomUUID(),
       clinicianId: person.id,
-      start,
-      end,
-      desiredWeeklySessions: activeProfile?.desiredWeeklySessions ?? person.sessionsPerWeek,
-      ...patch,
+      effectiveDate: start,
+      ...termPatch,
     });
-    setStagedWorkspace({ ...workingWorkspace, clinicians: [
-      ...workingWorkspace.clinicians.map((row) => row.id === activeProfile?.id ? { ...row, end: dayBefore(start) } : row),
-      record,
-    ] });
-    setStagedLabels((prior) => ({ ...prior, ["clinicians:" + record.id]: person.label + " money flow inputs" }));
+    setStagedWorkspace({
+      ...workingWorkspace,
+      terms: [...workingWorkspace.terms, record],
+    });
+    setStagedLabels((prior) => ({
+      ...prior,
+      ["terms:" + record.id]: person.label + " dated money flow inputs",
+    }));
     setReviewStaged(false);
   }
   async function commitStaged() {

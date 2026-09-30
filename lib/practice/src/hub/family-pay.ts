@@ -15,6 +15,7 @@ export function additionalWithholdingPctFromNet(grossPerCheck: number, netPerChe
 }
 
 export function semiMonthlyChecksThrough(monthStart: string, through: string, effectiveStart: string) {
+  // EMC's configured owner payroll schedule is the 15th and 30th; February uses its last day.
   const year = Number(monthStart.slice(0, 4));
   const month = Number(monthStart.slice(5, 7));
   const lastDay = new Date(Date.UTC(year, month, 0)).getUTCDate();

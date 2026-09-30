@@ -142,6 +142,8 @@ export const termSchema = z.object({
     .nullable()
     .default(null),
   payAmount: money.nullable().default(null),
+  paidHoursPerWeek: z.number().min(0).max(100).nullable().default(null),
+  expectedSessionRevenue: money.nullable().default(null),
   notes: note,
 });
 

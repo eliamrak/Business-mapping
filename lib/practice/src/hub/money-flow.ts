@@ -2,6 +2,7 @@ import { daysInclusive } from "../index.ts";
 import { calculateClinicianMetrics, calculateStaffMemberCost } from "../compensation.ts";
 import { forecast, budgetAmount, monthEnd, type Context } from "./engine.ts";
 import { estimateW2NetPay, semiMonthlyChecksThrough } from "./family-pay.ts";
+import { clinicianModelAt, clinicianTermsAt } from "./clinician-terms.ts";
 import type { Workspace } from "./model.ts";
 
 export type MonthFlow = {
@@ -92,18 +93,24 @@ export function monthFlow(
   const elapsed = daysInclusive(start, through);
   const fraction = elapsed / daysInclusive(start, end);
   let splitPeriods = false;
-  const sessionsByClinician = new Map<number, number>();
+  const datesIn = (from: string, to: string) =>
+    Array.from({ length: daysInclusive(from, to) }, (_, index) =>
+      new Date(Date.parse(from + "T12:00:00Z") + index * 86_400_000)
+        .toISOString()
+        .slice(0, 10),
+    );
+  const dailySessionsByClinician = new Map<number, Map<string, number>>();
   for (const record of records) {
     const overlapStart = record.start > start ? record.start : start;
     const overlapEnd = record.end < through ? record.end : through;
     if (overlapStart > overlapEnd) continue;
-    const share = daysInclusive(overlapStart, overlapEnd) /
-      daysInclusive(record.start, record.end);
-    if (share < 1) splitPeriods = true;
-    sessionsByClinician.set(
-      record.clinicianId,
-      (sessionsByClinician.get(record.clinicianId) ?? 0) + record.completed * share,
-    );
+    const daily = record.completed / daysInclusive(record.start, record.end);
+    if (overlapStart !== record.start || overlapEnd !== record.end)
+      splitPeriods = true;
+    const clinicianDays = dailySessionsByClinician.get(record.clinicianId) ?? new Map<string, number>();
+    for (const date of datesIn(overlapStart, overlapEnd))
+      clinicianDays.set(date, (clinicianDays.get(date) ?? 0) + daily);
+    dailySessionsByClinician.set(record.clinicianId, clinicianDays);
   }
   const incompleteClinicians = people
     .filter((person) =>
@@ -120,36 +127,59 @@ export function monthFlow(
   let familyGrossPay = 0;
   let familyEmployerBurden = 0;
   for (const person of people) {
-    const currentProfile = workspace.clinicians
-      .filter((entry) => entry.clinicianId === person.id && entry.status !== "archived" &&
-        entry.start <= through && (!entry.end || entry.end >= start))
-      .sort((a, b) => b.start.localeCompare(a.start))[0];
-    if (currentProfile?.status === "planned") continue;
-    const activeProfile = currentProfile;
-    const count = sessionsByClinician.get(person.id) ?? 0;
-    const rate = activeProfile?.expectedSessionRevenue ?? person.sessionRate;
-    const earned = count * rate * workspace.settings.collectionPct / 100;
-    sessions += count;
-    revenue += earned;
-    const mode = activeProfile?.payMode ?? "existing_split";
-    let pay: number;
-    if (mode === "salary") pay = person.id === familyId
-      ? (activeProfile?.payAmount ?? 0) / 24 * semiMonthlyChecksThrough(start, through, activeProfile?.start ?? start)
-      : (activeProfile?.payAmount ?? 0) / 12 * fraction;
-    else if (mode === "hourly")
-      pay = (activeProfile?.payAmount ?? 0) * (activeProfile?.paidHoursPerWeek ?? 0) *
-        (elapsed / 7) * person.weeksWorkedPerYear / 52.1786;
-    else if (mode === "per_session") pay = (activeProfile?.payAmount ?? 0) * count;
-    else
-      pay = calculateClinicianMetrics({
+    const baseProfile = workspace.clinicians.find(
+      (entry) => entry.clinicianId === person.id && entry.status !== "archived",
+    );
+    if (baseProfile?.status === "planned") continue;
+    let pay = 0;
+    let personSessions = 0;
+    let personRevenue = 0;
+    let capEarned = baseProfile?.openingCapContribution ?? 0;
+    for (const date of datesIn(start, through)) {
+      const activeProfile = clinicianModelAt(workspace, person.id, date);
+      if (baseProfile && !activeProfile) continue;
+      if (activeProfile?.status === "planned") continue;
+      const term = clinicianTermsAt(workspace, person.id, date);
+      const count = dailySessionsByClinician.get(person.id)?.get(date) ?? 0;
+      const rate = activeProfile?.expectedSessionRevenue ?? term.sessionRate ?? person.sessionRate;
+      const earned = count * rate * workspace.settings.collectionPct / 100;
+      const mode = activeProfile?.payMode ?? "existing_split";
+      const amount = activeProfile?.payAmount ?? 0;
+      const split = term.clinicianSplit ?? person.preCapClinicianSplit;
+      const remaining = Math.max(0, person.capAmount - capEarned);
+      const afterCap = person.capEnabled && person.capAmount > 0 && remaining === 0;
+      const calculated = calculateClinicianMetrics({
         ...person,
         sessionRate: rate,
         sessionsPerWeek: count,
         weeksWorkedPerYear: 1,
+        capEnabled: person.capEnabled && !afterCap,
+        capAmount: remaining,
+        preCapClinicianSplit: afterCap ? person.postCapClinicianSplit : split,
+        preCapPracticeSplit: afterCap ? person.postCapPracticeSplit : 100 - split,
         nonClinicalHoursPerWeek:
-          (person.nonClinicalHoursPerWeek ?? 0) * elapsed / 7 *
-          person.weeksWorkedPerYear / 52.1786,
-      }).clinicianCompensation;
+          ((person.nonClinicalHoursPerWeek ?? 0) / 7) *
+          (person.weeksWorkedPerYear / 52.1786),
+      });
+      if (mode === "existing_split") {
+        capEarned +=
+          calculated.preCapSessions * rate * (100 - split) / 100;
+        pay += calculated.clinicianCompensation;
+      } else if (mode === "salary") {
+        pay += person.id === familyId
+          ? amount / 24 * semiMonthlyChecksThrough(start, date, date)
+          : amount / 12 / daysInclusive(start, end);
+      } else if (mode === "hourly") {
+        pay += amount * (activeProfile?.paidHoursPerWeek ?? 0) / 7 *
+          person.weeksWorkedPerYear / 52.1786;
+      } else {
+        pay += amount * count;
+      }
+      personSessions += count;
+      personRevenue += earned;
+    }
+    sessions += personSessions;
+    revenue += personRevenue;
     clinicianPay += pay;
     const burden = String(person.classification).toLowerCase() === "w2"
       ? pay * (

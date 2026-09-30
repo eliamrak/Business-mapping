@@ -204,6 +204,13 @@ export const fields: Record<Collection, Field[]> = {
     n("payAmount", "Annual salary, hourly rate or session pay ($)", {
       optional: true,
     }),
+    n("paidHoursPerWeek", "Paid hours / week", {
+      optional: true,
+      max: 100,
+    }),
+    n("expectedSessionRevenue", "Expected average revenue per completed session ($)", {
+      optional: true,
+    }),
     notes,
   ],
   campaigns: [

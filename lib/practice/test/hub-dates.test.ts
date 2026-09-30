@@ -373,6 +373,18 @@ test("mid-month pay mode changes use each day's terms", () => {
     forecast(w, context)[0].values.clinicianPay,
     (20 / 7) * (15 * 60 + 16 * 80),
   );
+  w.terms[0].payMode = "hourly";
+  w.terms[0].paidHoursPerWeek = 14;
+  w.terms[0].sessionRate = 150;
+  w.terms[0].expectedSessionRevenue = 200;
+  close(
+    forecast(w, context)[0].values.clinicianPay,
+    (20 / 7) * 15 * 60 + ((80 * 14) / 7) * 16,
+  );
+  close(
+    forecast(w, context)[0].values.revenue,
+    (20 / 7) * (15 * 100 + 16 * 200),
+  );
 });
 test("weekly room blocks follow calendar weekdays including new-room events", () => {
   const w = setup();

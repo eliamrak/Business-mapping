@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import {
   emptyWorkspace, workspaceSchema, clinicianSettingSchema,
-  familyPaycheckSchema, allocationSchema, monthFlow, forecast,
+  familyPaycheckSchema, allocationSchema, termSchema, monthFlow, forecast,
   additionalWithholdingPctFromNet, semiMonthlyChecksThrough, type Context,
 } from "../src/hub/index.ts";
 
@@ -152,10 +152,9 @@ test("planned clinicians remain outside Today's operating totals", () => {
 
 test("month-to-date pay uses the clinician setup active in the selected month", () => {
   const workspace = setup();
-  workspace.clinicians[0].end = "2026-01-31";
-  workspace.clinicians.push(clinicianSettingSchema.parse({
-    id: randomUUID(), clinicianId: 1, start: "2026-02-01",
-    desiredWeeklySessions: 20, payMode: "salary", payAmount: 60000,
+  workspace.terms.push(termSchema.parse({
+    id: randomUUID(), clinicianId: 1, effectiveDate: "2026-02-01",
+    payMode: "salary", payAmount: 60000,
   }));
   const data = context([
     record("2026-01-01", "2026-01-15", 20),
@@ -165,6 +164,54 @@ test("month-to-date pay uses the clinician setup active in the selected month", 
   const february = monthFlow(workspace, data, "2026-02-01", "2026-02-15");
   close(january.familyGrossPay, 120000 / 24);
   close(february.familyGrossPay, 60000 / 24);
+});
+
+test("dated terms change revenue and salary on their effective day", () => {
+  const workspace = setup();
+  workspace.terms.push(termSchema.parse({
+    id: randomUUID(), clinicianId: 1, effectiveDate: "2026-01-16",
+    payMode: "salary", payAmount: 60000, expectedSessionRevenue: 100,
+  }));
+  const flow = monthFlow(
+    workspace,
+    context([record("2026-01-01", "2026-01-30", 30)]),
+    "2026-01-01",
+    "2026-01-30",
+  );
+  close(flow.revenue, 15 * 80 + 15 * 100);
+  close(flow.familyGrossPay, 120000 / 24 + 60000 / 24);
+});
+
+test("dated pay changes reload without creating a second operating profile", () => {
+  const workspace = setup();
+  workspace.terms.push(termSchema.parse({
+    id: randomUUID(), clinicianId: 1, effectiveDate: "2026-02-01",
+    payMode: "per_session", payAmount: 85,
+  }));
+  const restored = workspaceSchema.parse(JSON.parse(JSON.stringify(workspace)));
+  assert.equal(restored.clinicians.length, 1);
+  assert.equal(restored.terms.length, 1);
+  const duplicate = structuredClone(workspace);
+  duplicate.clinicians.push(clinicianSettingSchema.parse({
+    id: randomUUID(), clinicianId: 1, start: "2026-02-01",
+    desiredWeeklySessions: 20,
+  }));
+  assert.equal(workspaceSchema.safeParse(duplicate).success, false);
+});
+
+test("dated hourly terms carry their own paid-hours assumption", () => {
+  const workspace = setup();
+  workspace.terms.push(termSchema.parse({
+    id: randomUUID(), clinicianId: 1, effectiveDate: "2026-01-16",
+    payMode: "hourly", payAmount: 100, paidHoursPerWeek: 14,
+  }));
+  const flow = monthFlow(
+    workspace,
+    context([record("2026-01-01", "2026-01-30", 30)]),
+    "2026-01-01",
+    "2026-01-30",
+  );
+  close(flow.familyGrossPay, 120000 / 24 + 100 * 14 / 7 * 15);
 });
 
 test("a known net paycheck calibrates withholding and two scheduled checks", () => {
