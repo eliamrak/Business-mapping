@@ -191,3 +191,10 @@ test("a known net paycheck calibrates withholding and two scheduled checks", () 
   close(full.estimatedNetPay, 5482.84);
   close(forecast(workspace, context([]))[0].values.familyTakeHome, 5482.84);
 });
+
+test("semi-monthly pay uses the 30th instead of waiting for a 31st", () => {
+  assert.equal(semiMonthlyChecksThrough("2026-01-01", "2026-01-29", "2026-01-01"), 1);
+  assert.equal(semiMonthlyChecksThrough("2026-01-01", "2026-01-30", "2026-01-01"), 2);
+  assert.equal(semiMonthlyChecksThrough("2026-01-01", "2026-01-31", "2026-01-01"), 2);
+  assert.equal(semiMonthlyChecksThrough("2026-02-01", "2026-02-28", "2026-02-01"), 2);
+});

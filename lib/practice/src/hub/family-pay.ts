@@ -15,8 +15,10 @@ export function additionalWithholdingPctFromNet(grossPerCheck: number, netPerChe
 }
 
 export function semiMonthlyChecksThrough(monthStart: string, through: string, effectiveStart: string) {
-  const monthEnd = new Date(Date.UTC(Number(monthStart.slice(0, 4)), Number(monthStart.slice(5, 7)), 0))
-    .toISOString().slice(0, 10);
-  return [monthStart.slice(0, 7) + "-15", monthEnd]
+  const year = Number(monthStart.slice(0, 4));
+  const month = Number(monthStart.slice(5, 7));
+  const lastDay = new Date(Date.UTC(year, month, 0)).getUTCDate();
+  const secondPayday = `${monthStart.slice(0, 7)}-${String(Math.min(30, lastDay)).padStart(2, "0")}`;
+  return [monthStart.slice(0, 7) + "-15", secondPayday]
     .filter((date) => date >= effectiveStart && date <= through).length;
 }

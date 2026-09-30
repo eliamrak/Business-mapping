@@ -2268,20 +2268,22 @@ export default function PracticeWorkspace() {
                   {planningEdit ? goalName || "New scenario" : "Sandbox only"}
                 </span>
                 <label>
-                  Starting
+                  Starting month
                   <input
-                    type="date"
+                    type="month"
                     aria-label={
-                      planningEdit ? "Scenario start" : "Sandbox start"
+                      planningEdit
+                        ? "Scenario starting month"
+                        : "Sandbox starting month"
                     }
-                    value={workspace.settings.forecastStart}
+                    value={workspace.settings.forecastStart.slice(0, 7)}
                     onChange={(e) => {
                       if (e.target.value)
                         void saveWorkspace({
                           ...workspace,
                           settings: {
                             ...workspace.settings,
-                            forecastStart: e.target.value,
+                            forecastStart: e.target.value + "-01",
                           },
                         }).catch((e) => setError(errorText(e)));
                     }}
