@@ -162,7 +162,7 @@ test("month-to-date pay uses the clinician setup active in the selected month", 
   ]);
   const january = monthFlow(workspace, data, "2026-01-01", "2026-02-15");
   const february = monthFlow(workspace, data, "2026-02-01", "2026-02-15");
-  close(january.familyGrossPay, 120000 / 24);
+  close(january.familyGrossPay, 120000 / 12);
   close(february.familyGrossPay, 60000 / 24);
 });
 
@@ -223,7 +223,7 @@ test("a known net paycheck calibrates withholding and two scheduled checks", () 
   close(additionalPct, 19.245466666666662);
   assert.equal(semiMonthlyChecksThrough("2026-02-01", "2026-02-27", "2026-02-01"), 1);
   assert.equal(semiMonthlyChecksThrough("2026-02-01", "2026-02-28", "2026-02-01"), 2);
-  const beforeFirst = monthFlow(workspace, context([record("2026-09-01", "2026-09-14", 20)]), "2026-09-01", "2026-09-28");
+  const beforeFirst = monthFlow(workspace, context([record("2026-09-01", "2026-09-14", 20)]), "2026-09-01", "2026-09-14");
   close(beforeFirst.familyGrossPay, 0);
   const first = monthFlow(workspace, context([record("2026-09-01", "2026-09-23", 20)]), "2026-09-01", "2026-09-28");
   close(first.familyGrossPay, 3750);
@@ -237,6 +237,61 @@ test("a known net paycheck calibrates withholding and two scheduled checks", () 
   close(full.familyGrossPay, 7500);
   close(full.estimatedNetPay, 5482.84);
   close(forecast(workspace, context([]))[0].values.familyTakeHome, 5482.84);
+});
+
+test("1099 salary follows the Thursday biweekly calendar anchored back to January 2026", () => {
+  const workspace = setup();
+  const contractor = { ...wife, classification: "1099" };
+  const janFirst = monthFlow(
+    workspace,
+    { clinicians: [contractor], staff: [], sessions: [record("2026-01-01", "2026-01-01", 1)] },
+    "2026-01-01",
+    "2026-01-01",
+  );
+  close(janFirst.clinicianPay, 0);
+  const oneCheck = monthFlow(
+    workspace,
+    { clinicians: [contractor], staff: [], sessions: [record("2026-01-01", "2026-01-28", 20)] },
+    "2026-01-01",
+    "2026-01-28",
+  );
+  close(oneCheck.clinicianPay, 120000 / 26);
+  const twoChecks = monthFlow(
+    workspace,
+    { clinicians: [contractor], staff: [], sessions: [record("2026-01-01", "2026-01-29", 20)] },
+    "2026-01-01",
+    "2026-01-29",
+  );
+  close(twoChecks.clinicianPay, (120000 / 26) * 2);
+});
+
+test("1099 per-session pay lands on the next anchored Thursday paycheck", () => {
+  const workspace = setup();
+  workspace.clinicians[0].payMode = "per_session";
+  workspace.clinicians[0].payAmount = 100;
+  const contractor = { ...wife, classification: "1099" };
+  const beforePayday = monthFlow(
+    workspace,
+    { clinicians: [contractor], staff: [], sessions: [record("2026-09-10", "2026-09-23", 14)] },
+    "2026-09-01",
+    "2026-09-23",
+  );
+  close(beforePayday.clinicianPay, 0);
+  const septemberPayday = monthFlow(
+    workspace,
+    { clinicians: [contractor], staff: [], sessions: [record("2026-09-10", "2026-09-23", 14)] },
+    "2026-09-01",
+    "2026-09-24",
+  );
+  close(septemberPayday.clinicianPay, 1400);
+  const octoberPayday = monthFlow(
+    workspace,
+    { clinicians: [contractor], staff: [], sessions: [record("2026-09-24", "2026-10-07", 14)] },
+    "2026-10-01",
+    "2026-10-08",
+  );
+  close(octoberPayday.sessions, 7);
+  close(octoberPayday.clinicianPay, 1400);
 });
 
 test("semi-monthly pay uses the 30th instead of waiting for a 31st", () => {

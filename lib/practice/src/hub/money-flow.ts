@@ -1,7 +1,13 @@
 import { daysInclusive } from "../index.ts";
 import { calculateClinicianMetrics, calculateStaffMemberCost } from "../compensation.ts";
 import { forecast, budgetAmount, monthEnd, type Context } from "./engine.ts";
-import { estimateW2NetPay, semiMonthlyChecksThrough } from "./family-pay.ts";
+import {
+  estimateW2NetPay,
+  payrollPayDatesThrough,
+  payrollPeriodForPayDate,
+  payrollScheduleForClassification,
+  semiMonthlyChecksThrough,
+} from "./family-pay.ts";
 import { clinicianModelAt, clinicianTermsAt } from "./clinician-terms.ts";
 import type { Workspace } from "./model.ts";
 
@@ -99,6 +105,12 @@ export function monthFlow(
         .toISOString()
         .slice(0, 10),
     );
+  const sessionsForDate = (clinicianId: number, date: string) =>
+    records.reduce((sum, record) =>
+      record.clinicianId === clinicianId && record.start <= date && record.end >= date
+        ? sum + record.completed / daysInclusive(record.start, record.end)
+        : sum,
+    0);
   const dailySessionsByClinician = new Map<number, Map<string, number>>();
   for (const record of records) {
     const overlapStart = record.start > start ? record.start : start;
@@ -108,7 +120,7 @@ export function monthFlow(
     if (overlapStart !== record.start || overlapEnd !== record.end)
       splitPeriods = true;
     const clinicianDays = dailySessionsByClinician.get(record.clinicianId) ?? new Map<string, number>();
-    for (const date of datesIn(overlapStart, overlapEnd))
+    for (const date of datesIn(record.start, overlapEnd))
       clinicianDays.set(date, (clinicianDays.get(date) ?? 0) + daily);
     dailySessionsByClinician.set(record.clinicianId, clinicianDays);
   }
@@ -135,14 +147,14 @@ export function monthFlow(
     let personSessions = 0;
     let personRevenue = 0;
     let capEarned = baseProfile?.openingCapContribution ?? 0;
-    for (const date of datesIn(start, through)) {
+    const schedule = payrollScheduleForClassification(person.classification);
+    const activeStart = baseProfile?.start ?? start;
+    const dayPay = (date: string, count: number) => {
       const activeProfile = clinicianModelAt(workspace, person.id, date);
-      if (baseProfile && !activeProfile) continue;
-      if (activeProfile?.status === "planned") continue;
+      if (baseProfile && !activeProfile) return 0;
+      if (activeProfile?.status === "planned") return 0;
       const term = clinicianTermsAt(workspace, person.id, date);
-      const count = dailySessionsByClinician.get(person.id)?.get(date) ?? 0;
       const rate = activeProfile?.expectedSessionRevenue ?? term.sessionRate ?? person.sessionRate;
-      const earned = count * rate * workspace.settings.collectionPct / 100;
       const mode = activeProfile?.payMode ?? "existing_split";
       const amount = activeProfile?.payAmount ?? 0;
       const split = term.clinicianSplit ?? person.preCapClinicianSplit;
@@ -164,19 +176,54 @@ export function monthFlow(
       if (mode === "existing_split") {
         capEarned +=
           calculated.preCapSessions * rate * (100 - split) / 100;
-        pay += calculated.clinicianCompensation;
-      } else if (mode === "salary") {
+        return calculated.clinicianCompensation;
+      }
+      if (mode === "hourly")
+        return amount * (activeProfile?.paidHoursPerWeek ?? 0) / 7 *
+          person.weeksWorkedPerYear / 52.1786;
+      if (mode === "per_session") return amount * count;
+      return amount / 12 / daysInclusive(start, end);
+    };
+    for (const date of datesIn(start, through)) {
+      const activeProfile = clinicianModelAt(workspace, person.id, date);
+      if (baseProfile && !activeProfile) continue;
+      if (activeProfile?.status === "planned") continue;
+      const term = clinicianTermsAt(workspace, person.id, date);
+      const count = dailySessionsByClinician.get(person.id)?.get(date) ?? 0;
+      const rate = activeProfile?.expectedSessionRevenue ?? term.sessionRate ?? person.sessionRate;
+      const earned = count * rate * workspace.settings.collectionPct / 100;
+      const mode = activeProfile?.payMode ?? "existing_split";
+      const amount = activeProfile?.payAmount ?? 0;
+      const split = term.clinicianSplit ?? person.preCapClinicianSplit;
+      if (!schedule && mode === "salary") {
         pay += person.id === familyId
           ? amount / 24 * semiMonthlyChecksThrough(start, date, date)
           : amount / 12 / daysInclusive(start, end);
-      } else if (mode === "hourly") {
-        pay += amount * (activeProfile?.paidHoursPerWeek ?? 0) / 7 *
-          person.weeksWorkedPerYear / 52.1786;
-      } else {
-        pay += amount * count;
-      }
+      } else if (!schedule) pay += dayPay(date, count);
       personSessions += count;
       personRevenue += earned;
+    }
+    if (schedule) {
+      const dates = payrollPayDatesThrough(schedule, start, cutoff, activeStart);
+      for (const payDate of dates) {
+        const period = payrollPeriodForPayDate(schedule, payDate);
+        const salaryProfile = clinicianModelAt(workspace, person.id, payDate);
+        const modeAtPayDate = salaryProfile?.payMode ?? "existing_split";
+        const profileDate = schedule === "biweekly_thursday" && modeAtPayDate !== "salary" ? period.end : payDate;
+        const activeProfile = clinicianModelAt(workspace, person.id, profileDate);
+        if (baseProfile && !activeProfile) continue;
+        if (activeProfile?.status === "planned") continue;
+        const payStart = period.start > activeStart ? period.start : activeStart;
+        if (payStart > period.end) continue;
+        const mode = activeProfile?.payMode ?? "existing_split";
+        const amount = activeProfile?.payAmount ?? 0;
+        if (mode === "salary") {
+          pay += schedule === "semi_monthly" ? amount / 24 : amount / 26;
+          continue;
+        }
+        for (const date of datesIn(payStart, period.end))
+          pay += dayPay(date, sessionsForDate(person.id, date));
+      }
     }
     sessions += personSessions;
     revenue += personRevenue;
