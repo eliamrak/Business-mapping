@@ -2763,7 +2763,7 @@
 .pw-operating-grid span,
 .pw-operating-details dt {
   color: #5f7065;
-  font-size: 11px;
+  font-size: 12px;
 }
 .pw-operating-grid strong {
   color: #21362a;
@@ -2850,7 +2850,7 @@
 }
 .pw-fill-horizon select {
   width: min(100%, 190px);
-  min-height: 38px;
+  min-height: 44px;
   color: #263c30;
   background: #fff;
   border: 1px solid #cbd8ce;

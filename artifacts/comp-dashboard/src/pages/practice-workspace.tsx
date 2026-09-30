@@ -5086,21 +5086,29 @@ export default function PracticeWorkspace() {
                               : fmt(operatingPlan.leadsNeeded)}
                           </strong>
                           <small>
-                            Per month: replace attrition and fill open caseload
-                            over {fillHorizonMonths} months at{" "}
-                            {percent(operatingPlan.leadToClientRate)} lead-to-client.
+                            {operatingPlan.leadToClientRate === null
+                              ? "Add leads and booked clients in Marketing to estimate this."
+                              : operatingPlan.leadToClientRate === 0
+                                ? "No booked clients from recent leads; review conversion in Marketing."
+                                : `Replace attrition and fill open caseload over ${fillHorizonMonths} months at ${percent(operatingPlan.leadToClientRate)} lead-to-client.`}
                           </small>
                         </div>
                       </div>
                       <div className="pw-goal-gap" role="status">
-                        <span>Gap to monthly profit goal</span>
+                        <span>{operatingPlan.targetProfit > 0
+                          ? "Gap to monthly profit goal"
+                          : "Gap to break even"}</span>
                         <strong>{money(operatingPlan.profitGap)}</strong>
                         <small>
-                          Target {money(operatingPlan.targetProfit)};{" "}
+                          {operatingPlan.targetProfit > 0
+                            ? `Target ${money(operatingPlan.targetProfit)}`
+                            : "Break-even target $0"};{" "}
                           {operatingPlan.profitGap === null
                             ? "profit estimate is incomplete"
                             : operatingPlan.profitGap === 0
-                              ? "goal met in this estimate"
+                              ? operatingPlan.targetProfit > 0
+                                ? "goal met in this estimate"
+                                : "at or above break even in this estimate"
                               : operatingPlan.sessionsToCloseGap === null
                                 ? "session contribution is not available"
                                 : `about ${operatingPlan.sessionsToCloseGap} additional sessions / month at the current mix`}
@@ -5151,6 +5159,7 @@ export default function PracticeWorkspace() {
                               : operatingPlan.leadRateSource === "campaign"
                                 ? "campaign estimates"
                                 : "not available"}.
+                            {` Monthly attrition assumption: ${fmt(operatingPlan.monthlyAttritionPct)}%.`}
                           </p>
                           <dl>
                             <div>

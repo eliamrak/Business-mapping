@@ -61,6 +61,7 @@ test("operating plan connects selected-period sessions, money, and monthly lead 
 
   assert.ok((summary.weeklySessions ?? 0) > 16);
   assert.equal(summary.sessionsPerClientMonth, 4);
+  assert.ok(Math.abs(summary.monthlyAttritionPct - 10) < 1e-9);
   assert.equal(summary.activeClients, summary.sessions! / 4);
   assert.ok(Math.abs((summary.leadToClientRate ?? 0) - 0.2) < 1e-9);
   assert.ok(summary.leadsNeeded !== null && summary.leadsNeeded > 0);

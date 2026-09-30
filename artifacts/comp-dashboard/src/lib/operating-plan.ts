@@ -18,6 +18,7 @@ export type OperatingPlanSummary = {
   sessionsToCloseGap: number | null;
   activeClients: number | null;
   sessionsPerClientMonth: number;
+  monthlyAttritionPct: number;
   leadToClientRate: number | null;
   replacementClients: number | null;
   fillClients: number | null;
@@ -220,6 +221,7 @@ export function summarizeOperatingPlan(
     sessionsToCloseGap,
     activeClients,
     sessionsPerClientMonth,
+    monthlyAttritionPct: attritionRate * 100,
     leadToClientRate,
     replacementClients,
     fillClients,
