@@ -65,6 +65,8 @@ export default function WorkspaceCalculations({
     settings.teamId,
     new Date().toLocaleDateString("en-CA"),
   );
+  const suggestedAttrition = Math.round((observed?.attritionPct ?? lifespanRate) * 10) / 10;
+  const suggestionInUse = Math.abs(attrition - suggestedAttrition) < 0.05;
 
   return (
     <section className="pw-calculations" aria-label="Session calculations">
@@ -102,12 +104,21 @@ export default function WorkspaceCalculations({
           max={100}
           onCommit={(value) => onSetting("baselineRetentionPct", 100 - value)}
         />
-        <p>A {settings.retentionMonths}-month average lifespan suggests about {lifespanRate.toFixed(1)}% monthly attrition. This is an estimate, not a measured exit count.</p>
-        {observed ? (
-          <p>From recorded sessions and closes: about {observed.attritionPct.toFixed(1)}% monthly across {observed.months} months, through {observed.through}.</p>
-        ) : (
-          <p>To estimate attrition from your data, record four consecutive months of complete team sessions and monthly client closes.</p>
-        )}
+        <div className="pw-calculation-suggestion">
+          <div>
+            <span>Suggested monthly attrition</span>
+            <strong>{suggestedAttrition.toFixed(1)}%</strong>
+            <small>{observed
+              ? `Inferred from sessions and new clients across ${observed.months} months, through ${observed.through}`
+              : `Based on your ${settings.retentionMonths}-month average client lifespan`}</small>
+          </div>
+          <button type="button" className="pw-button" disabled={suggestionInUse}
+            onClick={() => onSetting("baselineRetentionPct", 100 - suggestedAttrition)}>
+            {suggestionInUse ? "In use" : "Use suggestion"}
+          </button>
+        </div>
+        {!observed && <p>A session-based suggestion needs four consecutive months of complete team sessions and booked-client counts.</p>}
+        {observed && <p>This is a session-based estimate, not a measured exit count. It assumes each newly booked client contributes {settings.sessionsPerClientMonth} sessions in the booking month.</p>}
       </div>
     </section>
   );

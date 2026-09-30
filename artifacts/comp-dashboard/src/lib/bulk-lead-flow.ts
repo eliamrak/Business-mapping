@@ -1,7 +1,13 @@
 import { funnelSchema, periodSchema, type Workspace } from "@workspace/practice/hub";
 
-export type LeadCountKey = "leads" | "attended" | "clients";
-export type LeadBulkChange = { month: string; leads: number | null; attended: number | null; clients: number | null };
+export type LeadCountKey = "leads" | "scheduled" | "attended" | "clients";
+export type LeadBulkChange = {
+  month: string;
+  leads: number | null;
+  scheduled: number | null;
+  attended: number | null;
+  clients: number | null;
+};
 export type LeadBulkIssue = { month: string; message: string };
 
 export const leadMonth = (year: number, index: number) => `${year}-${String(index + 1).padStart(2, "0")}`;
@@ -39,7 +45,7 @@ export function planBulkLeads(workspace: Workspace, overrides: Record<string, st
     }
     const fields = {} as Record<LeadCountKey, number | null>;
     let invalid = false;
-    for (const field of ["leads", "attended", "clients"] as const) {
+    for (const field of ["leads", "scheduled", "attended", "clients"] as const) {
       const raw = overrides[leadCellKey(month, field)] ?? String(state.practice?.[field] ?? "");
       if (raw.trim() !== "" && (!/^\d+$/.test(raw.trim()) || Number(raw) > 10_000_000)) {
         issues.push({ month, message: `${month}: enter a whole number from 0 to 10,000,000, or leave a missing count blank.` });
@@ -68,18 +74,18 @@ export function applyBulkLeads(workspace: Workspace, changes: LeadBulkChange[]):
       });
       periods.push(period);
     }
-    const complete = change.leads !== null && change.attended !== null && change.clients !== null;
+    const complete = change.leads !== null && change.scheduled !== null && change.attended !== null && change.clients !== null;
     periods = periods.map((item) => item.id === period!.id ? { ...item, funnelComplete: complete } : item);
     const practice = funnels.find((row) => row.periodId === period!.id && row.scope === "practice");
     if (practice) {
       funnels = funnels.map((row) => row.id === practice.id ? {
-        ...row, leads: change.leads, attended: change.attended, clients: change.clients,
+        ...row, leads: change.leads, scheduled: change.scheduled, attended: change.attended, clients: change.clients,
       } : row);
     } else {
       funnels.push(funnelSchema.parse({
         id: crypto.randomUUID(), periodId: period.id, scope: "practice",
         campaignId: null, sourceName: "", clinicianId: null,
-        spend: null, scheduled: null, firstSessions: null,
+        spend: null, scheduled: change.scheduled, firstSessions: null,
         leads: change.leads, attended: change.attended, clients: change.clients,
       }));
     }

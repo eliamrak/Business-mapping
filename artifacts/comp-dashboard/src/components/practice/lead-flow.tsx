@@ -3,14 +3,16 @@ import { MoreHorizontal, Plus, Save, Trash2 } from "lucide-react";
 import type { Context, Workspace } from "@workspace/practice/hub";
 import BulkLeadEntry from "./bulk-lead-entry";
 import type { LeadBulkChange } from "@/lib/bulk-lead-flow";
+import { leadFlowRates } from "@/lib/lead-flow-rates";
 
 type Funnel = Workspace["funnels"][number];
-type CountKey = "leads" | "attended" | "clients";
+type CountKey = "leads" | "scheduled" | "attended" | "clients";
 type Entry = Pick<Funnel, "scope" | "campaignId" | "sourceName" | "clinicianId" | CountKey>;
 
 const countFields: { key: CountKey; label: string }[] = [
   { key: "leads", label: "Leads" },
-  { key: "attended", label: "Consults" },
+  { key: "scheduled", label: "Consults scheduled" },
+  { key: "attended", label: "Consults attended" },
   { key: "clients", label: "Clients booked" },
 ];
 const sourceKey = (row: Pick<Funnel, "campaignId" | "sourceName">) =>
@@ -20,10 +22,6 @@ const total = (rows: Funnel[], key: CountKey) =>
     ? rows.reduce((sum, row) => sum + (row[key] ?? 0), 0)
     : null;
 const shown = (value: number | null) => value === null ? "-" : value.toLocaleString();
-const rate = (clients: number | null, attended: number | null) =>
-  clients === null || attended === null || attended === 0
-    ? "-"
-    : `${Math.round(clients / attended * 100)}%`;
 const validCount = (value: string) => value === "" || (/^\d+$/.test(value) && Number(value) <= 10_000_000);
 
 function CountInput({ row, field, disabled, onPatch }: {
@@ -91,7 +89,7 @@ export default function LeadFlow({
   const [replacePractice, setReplacePractice] = useState(false);
   const [draftSource, setDraftSource] = useState("");
   const [draftClinician, setDraftClinician] = useState("");
-  const [draftCounts, setDraftCounts] = useState<Record<CountKey, string>>({ leads: "", attended: "", clients: "" });
+  const [draftCounts, setDraftCounts] = useState<Record<CountKey, string>>({ leads: "", scheduled: "", attended: "", clients: "" });
   const [entryError, setEntryError] = useState("");
   const [entrySaving, setEntrySaving] = useState(false);
   const start = `${month}-01`;
@@ -130,13 +128,29 @@ export default function LeadFlow({
   const canSaveEntry = canEnter && !entrySaving && allCountsValid && anyCount &&
     (mode === "practice" || (!!draftSource.trim() && !duplicate));
   const attributed = [...new Set(rows.map((row) => row.clinicianId)
-    .filter((id): id is number => id !== null))].map((id) => ({
-      id,
-      name: context.clinicians.find((person) => person.id === id)?.label ?? `Clinician ${id}`,
-      rows: rows.filter((row) => row.clinicianId === id),
-    }));
+    .filter((id): id is number => id !== null))].map((id) => {
+      const personRows = rows.filter((row) => row.clinicianId === id);
+      return {
+        id,
+        name: context.clinicians.find((person) => person.id === id)?.label ?? `Clinician ${id}`,
+        counts: {
+          leads: total(personRows, "leads"),
+          scheduled: total(personRows, "scheduled"),
+          attended: total(personRows, "attended"),
+          clients: total(personRows, "clients"),
+        },
+      };
+    });
+  const practiceRates = practiceRow ? leadFlowRates(practiceRow) : null;
+  const totals = {
+    leads: total(visibleRows, "leads"),
+    scheduled: total(visibleRows, "scheduled"),
+    attended: total(visibleRows, "attended"),
+    clients: total(visibleRows, "clients"),
+  };
+  const totalRates = leadFlowRates(totals);
   const monthReady = rows.length > 0 && rows.every((row) =>
-    row.leads !== null && row.attended !== null && row.clients !== null,
+    row.leads !== null && row.scheduled !== null && row.attended !== null && row.clients !== null,
   );
 
   async function saveEntry() {
@@ -148,10 +162,11 @@ export default function LeadFlow({
         scope: mode,
         ...(mode === "practice" ? { campaignId: null, sourceName: "", clinicianId: null } : candidate),
         leads: draftCounts.leads === "" ? null : Number(draftCounts.leads),
+        scheduled: draftCounts.scheduled === "" ? null : Number(draftCounts.scheduled),
         attended: draftCounts.attended === "" ? null : Number(draftCounts.attended),
         clients: draftCounts.clients === "" ? null : Number(draftCounts.clients),
       }, replacePractice ? practiceRow?.id : undefined);
-      setDraftCounts({ leads: "", attended: "", clients: "" });
+      setDraftCounts({ leads: "", scheduled: "", attended: "", clients: "" });
       setDraftSource("");
       setDraftClinician("");
       setReplacePractice(false);
@@ -201,7 +216,7 @@ export default function LeadFlow({
             setMonth(event.target.value);
             setEntryMode("practice");
             setReplacePractice(false);
-            setDraftCounts({ leads: "", attended: "", clients: "" });
+            setDraftCounts({ leads: "", scheduled: "", attended: "", clients: "" });
             setDraftSource("");
             setDraftClinician("");
             setEntryError("");
@@ -239,7 +254,10 @@ export default function LeadFlow({
             </label>)}
           </div>
           <div className="pw-lead-flow-result">
-            <span>Close rate <strong>{rate(practiceRow.clients, practiceRow.attended)}</strong></span>
+            <span title="Scheduled consults divided by leads">Schedule rate <strong>{practiceRates?.scheduledConsult}</strong></span>
+            <span title="Attended consults divided by scheduled consults">Show rate <strong>{practiceRates?.show}</strong></span>
+            <span title="Clients booked divided by attended consults">Consult close rate <strong>{practiceRates?.consultClose}</strong></span>
+            <span title="Clients booked divided by leads">Overall close rate <strong>{practiceRates?.overallClose}</strong></span>
             {!readOnly && <button className="pw-icon" type="button" title="More result details" aria-label="More result details"
               disabled={pending} onClick={() => onEditDetails(practiceRow)}><MoreHorizontal /></button>}
           </div>
@@ -258,9 +276,15 @@ export default function LeadFlow({
         {replacePractice && <p className="pw-lead-flow-note">Saving the first detailed row will replace this month's practice total.</p>}
         {rowConflict && <p className="pw-error" role="alert">These rows overlap. Give each source and clinician one row, or remove the unassigned total.</p>}
         {!!visibleRows.length && <div className="pw-table-scroll"><table className="pw-table pw-lead-flow-table">
-          <thead><tr><th>Source</th><th>Clinician</th><th>Leads</th><th>Consults</th><th>Booked</th><th>Close rate</th><th aria-label="Actions" /></tr></thead>
+          <thead><tr><th>Source</th><th>Clinician</th><th>Leads</th><th>Scheduled</th><th>Attended</th><th>Booked</th>
+            <th title="Scheduled consults divided by leads">Schedule rate</th>
+            <th title="Attended consults divided by scheduled consults">Show rate</th>
+            <th title="Clients booked divided by attended consults">Consult close rate</th>
+            <th title="Clients booked divided by leads">Overall close rate</th>
+            <th aria-label="Actions" /></tr></thead>
           <tbody>{visibleRows.map((row) => {
             const locked = readOnly || selected?.status === "finalized";
+            const rowRates = leadFlowRates(row);
             return <tr key={row.id}>
               <td><input aria-label="Lead source" list="pw-lead-sources" maxLength={120}
                 key={`${row.id}:source:${sourceLabel(row)}`} defaultValue={sourceLabel(row)} disabled={locked}
@@ -282,7 +306,10 @@ export default function LeadFlow({
                   <option value={row.clinicianId}>{context.clinicians.find((person) => person.id === row.clinicianId)?.label ?? `Clinician ${row.clinicianId}`}</option>}
               </select></td>
               {countFields.map(({ key }) => <td key={key}><CountInput row={row} field={key} disabled={locked} onPatch={onPatch} /></td>)}
-              <td>{rate(row.clients, row.attended)}</td>
+              <td>{rowRates.scheduledConsult}</td>
+              <td>{rowRates.show}</td>
+              <td>{rowRates.consultClose}</td>
+              <td>{rowRates.overallClose}</td>
               <td className="pw-lead-flow-row-actions">
                 {!readOnly && <button className="pw-icon" type="button" title="More result details" aria-label="More result details"
                   disabled={pending} onClick={() => onEditDetails(row)}><MoreHorizontal /></button>}
@@ -323,7 +350,7 @@ export default function LeadFlow({
       {!!visibleRows.length && <div className="pw-lead-flow-completion">
         {selected?.funnelComplete ? <span>Month complete</span> : mode === "source" && !readOnly && selected?.status !== "finalized" &&
           <button className="pw-button" type="button" disabled={!monthReady || entrySaving}
-            title={!monthReady ? "Enter leads, consults and booked clients in every row first" : undefined}
+            title={!monthReady ? "Enter leads, scheduled consults, attended consults, and booked clients in every row first" : undefined}
             onClick={() => void finishMonth()}>Finish this month</button>}
       </div>}
       {selected?.status === "finalized" && !readOnly && !practiceRow && <div className="pw-lead-flow-finalized">
@@ -333,21 +360,37 @@ export default function LeadFlow({
         </button>
       </div>}
       {!!visibleRows.length && mode === "source" && <div className="pw-lead-flow-totals" aria-label="Monthly lead flow totals">
-        <div><span>Total leads</span><strong>{shown(total(visibleRows, "leads"))}</strong></div>
-        <div><span>Consults</span><strong>{shown(total(visibleRows, "attended"))}</strong></div>
-        <div><span>Booked</span><strong>{shown(total(visibleRows, "clients"))}</strong></div>
-        <div><span>Close rate</span><strong>{rate(total(visibleRows, "clients"), total(visibleRows, "attended"))}</strong></div>
+        <div><span>Total leads</span><strong>{shown(totals.leads)}</strong></div>
+        <div><span>Scheduled consults</span><strong>{shown(totals.scheduled)}</strong></div>
+        <div><span>Attended consults</span><strong>{shown(totals.attended)}</strong></div>
+        <div><span>Booked</span><strong>{shown(totals.clients)}</strong></div>
+        <div><span title="Scheduled consults divided by leads">Schedule rate</span><strong>{totalRates.scheduledConsult}</strong></div>
+        <div><span title="Attended consults divided by scheduled consults">Show rate</span><strong>{totalRates.show}</strong></div>
+        <div><span title="Clients booked divided by attended consults">Consult close rate</span><strong>{totalRates.consultClose}</strong></div>
+        <div><span title="Clients booked divided by leads">Overall close rate</span><strong>{totalRates.overallClose}</strong></div>
       </div>}
       {attributed.length > 0 && <div className="pw-lead-flow-people">
-        <h4>Close rate by clinician</h4>
+        <h4>Consult performance by clinician</h4>
         <div className="pw-table-scroll"><table className="pw-table">
-          <thead><tr><th>Clinician</th><th>Consults</th><th>Booked</th><th>Close rate</th></tr></thead>
-          <tbody>{attributed.map(({ id, name, rows: personRows }) => <tr key={id}>
-            <th>{name}</th>
-            <td>{shown(total(personRows, "attended"))}</td>
-            <td>{shown(total(personRows, "clients"))}</td>
-            <td>{rate(total(personRows, "clients"), total(personRows, "attended"))}</td>
-          </tr>)}</tbody>
+          <thead><tr><th>Clinician</th><th>Leads</th><th>Scheduled</th><th>Attended</th><th>Booked</th>
+            <th title="Scheduled consults divided by leads">Schedule rate</th>
+            <th title="Attended consults divided by scheduled consults">Show rate</th>
+            <th title="Clients booked divided by attended consults">Consult close rate</th>
+            <th title="Clients booked divided by leads">Overall close rate</th></tr></thead>
+          <tbody>{attributed.map(({ id, name, counts }) => {
+            const rates = leadFlowRates(counts);
+            return <tr key={id}>
+              <th>{name}</th>
+              <td>{shown(counts.leads)}</td>
+              <td>{shown(counts.scheduled)}</td>
+              <td>{shown(counts.attended)}</td>
+              <td>{shown(counts.clients)}</td>
+              <td>{rates.scheduledConsult}</td>
+              <td>{rates.show}</td>
+              <td>{rates.consultClose}</td>
+              <td>{rates.overallClose}</td>
+            </tr>;
+          })}</tbody>
         </table></div>
       </div>}
     </>}

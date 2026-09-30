@@ -60,5 +60,7 @@ test("practice inference requires complete monthly closes and session coverage",
     clinicianId: 1, start: "2026-08-01", end: "2026-08-31", completed: 80,
   } as Context["sessions"][number]);
   workspace.periods[0].funnelComplete = false;
+  assert.ok(estimatePracticeAttrition(context, workspace, 7, "2026-09-28"));
+  workspace.funnels[0].clients = null;
   assert.equal(estimatePracticeAttrition(context, workspace, 7, "2026-09-28"), null);
 });

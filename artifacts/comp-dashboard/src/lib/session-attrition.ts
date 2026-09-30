@@ -60,8 +60,7 @@ export function estimatePracticeAttrition(
   for (const period of workspace.periods) {
     const month = period.start.slice(0, 7);
     if (period.archived || month >= completeThrough ||
-      period.start !== month + "-01" || period.end.slice(0, 7) !== month ||
-      !period.funnelComplete) continue;
+      period.start !== month + "-01" || period.end.slice(0, 7) !== month) continue;
     const [year, monthNumber] = month.split("-").map(Number);
     const monthDays = new Date(Date.UTC(year, monthNumber, 0)).getUTCDate();
     if (period.end !== `${month}-${String(monthDays).padStart(2, "0")}`) continue;
