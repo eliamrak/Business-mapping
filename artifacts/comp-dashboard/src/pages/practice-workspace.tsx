@@ -87,7 +87,7 @@ import {
   buildPracticeProjection,
   type PracticeView,
 } from "@/lib/practice-projection";
-import { summarizeOperatingPlan } from "@/lib/operating-plan";
+import { compareOperatingPlans, summarizeOperatingPlan } from "@/lib/operating-plan";
 import { newRecord } from "@/components/hub/config";
 import RecordEditor from "@/components/hub/record-editor";
 import RecordTable from "@/components/hub/record-table";
@@ -455,6 +455,8 @@ export default function PracticeWorkspace() {
   const [error, setError] = useState("");
   const [marketingTab, setMarketingTab] = useState("campaigns");
   const [moneyMonthIndex, setMoneyMonthIndex] = useState(0);
+  const [summaryMonthDate, setSummaryMonthDate] = useState("");
+  const [fillHorizonMonths, setFillHorizonMonths] = useState(6);
   const [stagedWorkspace, setStagedWorkspace] = useState<Workspace | null>(
     null,
   );
@@ -560,6 +562,7 @@ export default function PracticeWorkspace() {
       : buildPracticeProjection(next, context, practiceView, today).months;
   }, [stagedValidation, context, teams.data, sandbox, practiceView, today]);
   const months = stagedValidation?.success ? stagedMonths : savedMonths;
+  const summaryMonth = months.find((month) => month.date === summaryMonthDate) ?? months[0];
   const moneyFlowWorkspace = useMemo(
     () =>
       stagedValidation?.success && context
@@ -1932,9 +1935,17 @@ export default function PracticeWorkspace() {
   );
   const operatingPlan = summarizeOperatingPlan(
     workingWorkspace,
-    context,
-    months[0],
+    summaryMonth,
+    fillHorizonMonths,
+    today,
   );
+  const baselineOperatingPlan = base ? summarizeOperatingPlan(
+    base.workspace,
+    baselineMonths.find((month) => month.date === summaryMonth?.date),
+    fillHorizonMonths,
+    today,
+  ) : null;
+  const scenarioDelta = compareOperatingPlans(baselineOperatingPlan, operatingPlan);
   const table = (collection: Collection) => (
     <RecordTable
       collection={collection}
@@ -4935,12 +4946,26 @@ export default function PracticeWorkspace() {
                   {heading(
                     "Practice summary",
                     (mode === "practice" && practiceView === "actual"
-                      ? "Today / "
+                      ? "Forecast / "
                       : "Plan / ") +
                       monthLabel(
-                        months[0]?.date ?? workspace.settings.forecastStart,
+                        summaryMonth?.date ?? workspace.settings.forecastStart,
                       ),
                     <div className="pw-summary-controls">
+                      <label>
+                        Month
+                        <select
+                          aria-label="Summary month"
+                          value={summaryMonth?.date ?? ""}
+                          onChange={(event) => setSummaryMonthDate(event.target.value)}
+                        >
+                          {months.map((month) => (
+                            <option key={month.date} value={month.date}>
+                              {monthLabel(month.date)}
+                            </option>
+                          ))}
+                        </select>
+                      </label>
                       {(sandbox || practiceView === "plan") && (
                         <label>
                           Plan sessions
@@ -4992,14 +5017,14 @@ export default function PracticeWorkspace() {
                     {metrics.map((m) => (
                       <div key={m.key}>
                         <span>{m.label}</span>
-                        <strong>{money(months[0]?.values[m.key])}</strong>
+                        <strong>{money(summaryMonth?.values[m.key])}</strong>
                         {selectedGoal && (
                           <small>
                             Goal:{" "}
                             {comparableGoal
                               ? money(
                                   selectedMonths.find(
-                                    (row) => row.date === months[0]?.date,
+                                    (row) => row.date === summaryMonth?.date,
                                   )?.values[m.key],
                                 )
                               : "Different team"}
@@ -5041,63 +5066,103 @@ export default function PracticeWorkspace() {
                           </small>
                         </div>
                         <div>
-                          <span>Estimated session revenue</span>
-                          <strong>{money(operatingPlan.estimatedRevenue)}</strong>
-                          <small>
-                            Completed or projected sessions x expected revenue
-                            per session.
-                          </small>
-                        </div>
-                        <div>
                           <span>Clinician compensation</span>
                           <strong>{money(operatingPlan.clinicianCompensation)}</strong>
                           <small>Clinician pay plus employer burden.</small>
                         </div>
                         <div>
-                          <span>Operating expense</span>
+                          <span>Other operating costs</span>
                           <strong>{money(operatingPlan.operatingExpense)}</strong>
                           <small>
-                            Pay, overhead, marketing, staff, fees, and owner
-                            payroll assumptions.
+                            Staff, overhead, marketing, fees, and owner payroll;
+                            excludes clinician compensation above.
                           </small>
                         </div>
                         <div>
-                          <span>Profit gap</span>
-                          <strong>{money(operatingPlan.profitGap)}</strong>
-                          <small>
-                            Target {money(operatingPlan.targetProfit)};{" "}
-                            {operatingPlan.sessionsToCloseGap === null
-                              ? "needs contribution data"
-                              : `${operatingPlan.sessionsToCloseGap} more sessions closes it`}
-                          </small>
-                        </div>
-                        <div>
-                          <span>Lead need</span>
+                          <span>Leads needed / month</span>
                           <strong>
                             {operatingPlan.leadsNeeded === null
                               ? "--"
                               : fmt(operatingPlan.leadsNeeded)}
                           </strong>
                           <small>
-                            To replace attrition and fill open caseload at{" "}
+                            Per month: replace attrition and fill open caseload
+                            over {fillHorizonMonths} months at{" "}
                             {percent(operatingPlan.leadToClientRate)} lead-to-client.
                           </small>
                         </div>
                       </div>
+                      <div className="pw-goal-gap" role="status">
+                        <span>Gap to monthly profit goal</span>
+                        <strong>{money(operatingPlan.profitGap)}</strong>
+                        <small>
+                          Target {money(operatingPlan.targetProfit)};{" "}
+                          {operatingPlan.profitGap === null
+                            ? "profit estimate is incomplete"
+                            : operatingPlan.profitGap === 0
+                              ? "goal met in this estimate"
+                              : operatingPlan.sessionsToCloseGap === null
+                                ? "session contribution is not available"
+                                : `about ${operatingPlan.sessionsToCloseGap} additional sessions / month at the current mix`}
+                        </small>
+                      </div>
+                      {scenarioDelta && <div className="pw-scenario-delta">
+                        <span>Compared with starting point</span>
+                        <strong>
+                          Profit {scenarioDelta.profit === null ? "--" : `${scenarioDelta.profit >= 0 ? "+" : "-"}${money(Math.abs(scenarioDelta.profit))}`}
+                        </strong>
+                        <small>
+                          Revenue {scenarioDelta.revenue === null ? "--" : `${scenarioDelta.revenue >= 0 ? "+" : "-"}${money(Math.abs(scenarioDelta.revenue))}`}
+                          {scenarioDelta.addedCapacitySessions !== null && scenarioDelta.addedCapacitySessions > 0 &&
+                            `; ${fmt(scenarioDelta.addedCapacitySessions)} added session spaces / month`}
+                        </small>
+                      </div>}
+                      <details className="pw-operating-disclosure">
+                        <summary>See lead and cost math</summary>
                       <div className="pw-operating-details">
+                        {scenarioDelta && scenarioDelta.addedCapacitySessions !== null && scenarioDelta.addedCapacitySessions > 0 && (
+                          <section>
+                            <h4>Added capacity in this model</h4>
+                            <dl>
+                              <div><dt>New session spaces / month</dt><dd>{fmt(scenarioDelta.addedCapacitySessions)}</dd></div>
+                              <div><dt>Clients to fill them / month</dt><dd>{fmt(scenarioDelta.addedClientsPerMonth)}</dd></div>
+                              <div><dt>Added leads needed / month</dt><dd>{fmt(scenarioDelta.addedLeadsPerMonth)}</dd></div>
+                            </dl>
+                            <p>Additional leads are spread over {fillHorizonMonths} months at the selected conversion rate.</p>
+                          </section>
+                        )}
                         <section>
                           <h4>Lead path</h4>
+                          <label className="pw-fill-horizon">
+                            Fill open caseload over
+                            <select
+                              aria-label="Months to fill open caseload"
+                              value={fillHorizonMonths}
+                              onChange={(event) => setFillHorizonMonths(Number(event.target.value))}
+                            >
+                              {[3, 6, 12, 24].map((count) => (
+                                <option key={count} value={count}>{count} months</option>
+                              ))}
+                            </select>
+                          </label>
+                          <p>
+                            Lead conversion: {operatingPlan.leadRateSource === "recorded"
+                              ? "recent recorded results"
+                              : operatingPlan.leadRateSource === "campaign"
+                                ? "campaign estimates"
+                                : "not available"}.
+                          </p>
                           <dl>
                             <div>
-                              <dt>Replacement clients</dt>
+                              <dt>Replacement clients / month</dt>
                               <dd>{fmt(operatingPlan.replacementClients)}</dd>
                             </div>
                             <div>
-                              <dt>Clients to fill capacity</dt>
+                              <dt>Clients to fill capacity / month</dt>
                               <dd>{fmt(operatingPlan.fillClients)}</dd>
                             </div>
                             <div>
-                              <dt>Total clients needed</dt>
+                              <dt>Total clients needed / month</dt>
                               <dd>{fmt(operatingPlan.clientsNeeded)}</dd>
                             </div>
                             <div>
@@ -5111,7 +5176,31 @@ export default function PracticeWorkspace() {
                           </dl>
                         </section>
                         <section>
-                          <h4>Capacity language</h4>
+                          <h4>How the estimate connects</h4>
+                          <dl>
+                            <div>
+                              <dt>Session revenue</dt>
+                              <dd>{money(operatingPlan.estimatedRevenue)}</dd>
+                            </div>
+                            {operatingPlan.otherIncome !== null && Math.abs(operatingPlan.otherIncome) > 0.01 && (
+                              <div>
+                                <dt>Other business income</dt>
+                                <dd>{money(operatingPlan.otherIncome)}</dd>
+                              </div>
+                            )}
+                            <div>
+                              <dt>Clinician compensation</dt>
+                              <dd>-{money(operatingPlan.clinicianCompensation)}</dd>
+                            </div>
+                            <div>
+                              <dt>Other operating costs</dt>
+                              <dd>-{money(operatingPlan.operatingExpense)}</dd>
+                            </div>
+                            <div>
+                              <dt>Estimated profit</dt>
+                              <dd>{money(operatingPlan.estimatedProfit)}</dd>
+                            </div>
+                          </dl>
                           <p>
                             Active clients are estimated from monthly sessions
                             divided by {fmt(operatingPlan.sessionsPerClientMonth)}{" "}
@@ -5119,33 +5208,15 @@ export default function PracticeWorkspace() {
                             clinician workload, not client count.
                           </p>
                         </section>
-                        {operatingPlan.hire && (
-                          <section>
-                            <h4>Next hire model</h4>
-                            <dl>
-                              <div>
-                                <dt>{operatingPlan.hire.name}</dt>
-                                <dd>
-                                  {fmt(operatingPlan.hire.rampWeeklySessions)} / week
-                                  ramp toward {fmt(operatingPlan.hire.targetWeeklySessions)}
-                                </dd>
-                              </div>
-                              <div>
-                                <dt>Estimated revenue</dt>
-                                <dd>{money(operatingPlan.hire.estimatedRevenue)}</dd>
-                              </div>
-                              <div>
-                                <dt>Pay and added costs</dt>
-                                <dd>{money(operatingPlan.hire.payAndAddedCost)}</dd>
-                              </div>
-                              <div>
-                                <dt>Contribution</dt>
-                                <dd>{money(operatingPlan.hire.contribution)}</dd>
-                              </div>
-                            </dl>
-                          </section>
-                        )}
+                        {mode === "practice" && <section>
+                          <h4>Test a hire</h4>
+                          <p>Model a clinician and compare the resulting plan here.</p>
+                          <button type="button" className="pw-button" onClick={startPlanning}>
+                            Open Planning
+                          </button>
+                        </section>}
                       </div>
+                      </details>
                       {!!operatingPlan.warnings.length && (
                         <details className="pw-assumption-notes">
                           <summary>Missing assumptions to review</summary>
