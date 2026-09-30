@@ -5682,12 +5682,12 @@ export default function PracticeWorkspace() {
           </div>
         )}
         {planningEdit && !visibleTool && (
-          <aside className="pw-impact" aria-label="Scenario comparison">
+          <aside className="pw-impact" aria-label="Scenario endpoint comparison">
             <div className="pw-impact-heading">
               <span>
                 <ChartNoAxesCombined />
-                Scenario vs Today /{" "}
-                {endpoint ? monthLabel(endpoint.date) : "scenario"}
+                Scenario endpoint vs starting plan /{" "}
+                {endpoint ? monthLabel(endpoint.date) : "end of scenario"}
               </span>
               <button
                 className="pw-text-button"
@@ -5707,12 +5707,12 @@ export default function PracticeWorkspace() {
                     <span>{m.label} / month</span>
                     <div className="pw-impact-comparison">
                       <small>
-                        <span>Today</span>
+                        <span>Starting plan</span>
                         {money(before)}
                       </small>
                       <ArrowRight />
                       <strong>
-                        <span>Sandbox</span>
+                        <span>Current scenario</span>
                         {money(after)}
                       </strong>
                     </div>
