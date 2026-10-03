@@ -1,7 +1,13 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import type { SessionRecord } from "@workspace/practice";
-import { firstHiringReviewMonth, summarizeHiringReadiness, summarizeSessionOverview } from "./session-overview.ts";
+import {
+  lastCompleted1099ServicePeriod,
+  firstHiringReviewMonth,
+  summarizeHiringReadiness,
+  summarizeLast1099Period,
+  summarizeSessionOverview,
+} from "./session-overview.ts";
 
 const record = (start: string, end: string, completed: number): SessionRecord => ({
   id: 1, revision: 1, updatedAt: "2026-09-26T12:00:00Z",
@@ -54,6 +60,35 @@ test("sessions beyond goal do not report negative room", () => {
   assert.equal(overview.overGoalWeekly, 2);
   assert.equal(overview.fullness, 120);
   assert.equal(overview.trendWeekly, 0);
+});
+
+test("last 1099 period follows the anchored Thursday payroll calendar", () => {
+  assert.deepEqual(lastCompleted1099ServicePeriod("2026-10-02"), {
+    payDate: "2026-09-24",
+    start: "2026-09-10",
+    end: "2026-09-23",
+  });
+  assert.deepEqual(lastCompleted1099ServicePeriod("2026-10-07"), {
+    payDate: "2026-09-24",
+    start: "2026-09-10",
+    end: "2026-09-23",
+  });
+  assert.deepEqual(lastCompleted1099ServicePeriod("2026-10-08"), {
+    payDate: "2026-10-08",
+    start: "2026-09-24",
+    end: "2026-10-07",
+  });
+});
+
+test("last 1099 period distinguishes missing data from recorded zero", () => {
+  const missing = summarizeLast1099Period([], "2026-10-02");
+  assert.equal(missing?.completed, null);
+  assert.equal(missing?.recorded, false);
+  const zero = summarizeLast1099Period([
+    record("2026-09-10", "2026-09-23", 0),
+  ], "2026-10-02");
+  assert.equal(zero?.completed, 0);
+  assert.equal(zero?.recorded, true);
 });
 
 const fourPeriods = (completed: number) => [

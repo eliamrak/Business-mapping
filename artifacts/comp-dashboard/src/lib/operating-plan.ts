@@ -111,13 +111,17 @@ function recordedRates(workspace: Workspace, before: string, asOf: string) {
 function campaignRates(workspace: Workspace, month: ForecastMonth) {
   const channels = Object.entries(month.channels);
   if (!channels.length || channels.some(([, channel]) =>
-    channel.leads === null || channel.consultations === null)) return null;
+    channel.leads === null || channel.consultations === null || channel.clients === null)) return null;
+  if (channels.some(([id]) => {
+    const campaign = workspace.campaigns.find((item) => item.id === id);
+    return !campaign || campaign.attendancePct === null;
+  })) return null;
   const leads = channels.reduce((sum, [, channel]) => sum + (channel.leads ?? 0), 0);
   const scheduled = channels.reduce((sum, [, channel]) => sum + (channel.consultations ?? 0), 0);
-  const clients = channels.reduce((sum, [, channel]) => sum + channel.clients, 0);
+  const clients = channels.reduce((sum, [, channel]) => sum + (channel.clients ?? 0), 0);
   const attended = channels.reduce((sum, [id, channel]) => {
     const campaign = workspace.campaigns.find((item) => item.id === id);
-    return sum + (channel.consultations ?? 0) * (campaign?.attendancePct ?? 0) / 100;
+    return sum + (channel.consultations ?? 0) * campaign!.attendancePct! / 100;
   }, 0);
   return {
     leadToClient: validRate(ratio(clients, leads)),

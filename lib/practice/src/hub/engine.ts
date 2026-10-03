@@ -81,11 +81,12 @@ const monthIndex = (date: string, start: string) =>
   Number(date.slice(5, 7)) -
   Number(start.slice(5, 7));
 const active = (
-  record: { start: string; end: string | null; archived?: boolean },
+  record: { start: string | null; end: string | null; archived?: boolean },
   start: string,
   end: string,
 ) =>
   !record.archived &&
+  !!record.start &&
   record.start <= end &&
   (!record.end || record.end >= start);
 const activeDays = (
@@ -131,7 +132,7 @@ export function datedValue(
 export type FunnelEstimate = {
   leads: number | null;
   consultations: number | null;
-  clients: number;
+  clients: number | null;
   spend: number;
   warnings: string[];
   inferredLeads: boolean;
@@ -142,31 +143,43 @@ export function estimateCampaign(
   custom: Values = {},
   date = workspace.settings.forecastStart,
 ): FunnelEstimate {
+  const campaignName = c.name || "Campaign";
+  const campaignSpend = c.monthlySpend ?? 0;
+  const otherCost = c.otherMonthlyCost ?? 0;
   const conversion =
-    ((((c.consultationPct / 100) * c.attendancePct) / 100) * c.closePct) / 100;
+    c.consultationPct !== null && c.attendancePct !== null && c.closePct !== null
+      ? ((((c.consultationPct / 100) * c.attendancePct) / 100) * c.closePct) / 100
+      : null;
   let leads: number | null = null,
-    clients = 0;
+    clients: number | null = null;
   const warnings: string[] = [];
+  if (!c.method) warnings.push(`${campaignName}: choose an estimate method.`);
   if (c.method === "cpl") {
-    leads = ratio(c.monthlySpend, c.cpl);
-    clients = (leads ?? 0) * conversion;
+    leads = c.cpl === null ? null : ratio(campaignSpend, c.cpl);
+    clients = leads !== null && conversion !== null ? leads * conversion : null;
     if (leads === null)
-      warnings.push(`${c.name}: cost per lead must be positive.`);
+      warnings.push(`${campaignName}: cost per lead must be positive.`);
+    if (conversion === null)
+      warnings.push(`${campaignName}: conversion rates are incomplete.`);
   }
   if (c.method === "cac") {
-    clients = ratio(c.monthlySpend, c.cac) ?? 0;
-    leads = conversion > 0 ? clients / conversion : null;
-    if (!c.cac) warnings.push(`${c.name}: CAC must be positive.`);
+    clients = c.cac === null ? null : ratio(campaignSpend, c.cac);
+    leads = conversion !== null && conversion > 0 && clients !== null ? clients / conversion : null;
+    if (!c.cac) warnings.push(`${campaignName}: CAC must be positive.`);
+    if (conversion === null)
+      warnings.push(`${campaignName}: conversion rates are incomplete.`);
   }
   if (c.method === "clicks") {
     leads =
       c.cpm > 0
-        ? ((((c.monthlySpend / c.cpm) * 1000 * c.ctrPct) / 100) *
+        ? ((((campaignSpend / c.cpm) * 1000 * c.ctrPct) / 100) *
             c.clickToLeadPct) /
           100
         : null;
-    clients = (leads ?? 0) * conversion;
-    if (!c.cpm) warnings.push(`${c.name}: CPM must be positive.`);
+    clients = leads !== null && conversion !== null ? leads * conversion : null;
+    if (!c.cpm) warnings.push(`${campaignName}: CPM must be positive.`);
+    if (conversion === null)
+      warnings.push(`${campaignName}: conversion rates are incomplete.`);
   }
   if (c.method === "manual") {
     leads = c.manualLeads;
@@ -178,7 +191,7 @@ export function estimateCampaign(
       workspace,
       {
         ...custom,
-        spend: c.monthlySpend,
+        spend: campaignSpend,
         cpl: c.cpl,
         cac: c.cac,
         closePct: c.closePct,
@@ -186,9 +199,9 @@ export function estimateCampaign(
       date,
     );
     const value = kpi ? values[kpi.key] : null;
-    clients = value == null ? 0 : Math.max(0, value);
+    clients = value == null ? null : Math.max(0, value);
     if (value == null)
-      warnings.push(`${c.name}: custom client formula is unavailable.`);
+      warnings.push(`${campaignName}: custom client formula is unavailable.`);
   }
   if (c.method === "historical") {
     const periods = workspace.periods.filter(
@@ -208,23 +221,23 @@ export function estimateCampaign(
       records.some((r) => r.spend === null || r.clients === null)
     )
       warnings.push(
-        `${c.name}: historical yield needs finalized spend and client totals.`,
+        `${campaignName}: historical yield needs finalized spend and client totals.`,
       );
     else {
       clients =
-        (c.monthlySpend * records.reduce((n, r) => n + (r.clients ?? 0), 0)) /
+        (campaignSpend * records.reduce((n, r) => n + (r.clients ?? 0), 0)) /
         spend;
       leads = records.some((r) => r.leads === null)
         ? null
-        : (c.monthlySpend * records.reduce((n, r) => n + (r.leads ?? 0), 0)) /
+        : (campaignSpend * records.reduce((n, r) => n + (r.leads ?? 0), 0)) /
           spend;
     }
   }
   return {
     leads,
-    consultations: leads === null ? null : (leads * c.consultationPct) / 100,
-    clients: clients * (1 - c.overlapPct / 100),
-    spend: c.monthlySpend + c.otherMonthlyCost,
+    consultations: leads === null || c.consultationPct === null ? null : (leads * c.consultationPct) / 100,
+    clients: clients === null ? null : clients * (1 - c.overlapPct / 100),
+    spend: campaignSpend + otherCost,
     warnings,
     inferredLeads: c.method === "cac" && leads !== null,
   };
@@ -518,6 +531,15 @@ export function forecast(
         warnings: [],
         inferredLeads: false,
       };
+      if (!c.start) {
+        f.clients = null;
+        f.leads = null;
+        f.consultations = null;
+        f.warnings.push(`${c.name || "Campaign"}: forecast start is missing.`);
+        channels[c.id] = f;
+        warnings.push(...f.warnings);
+        continue;
+      }
       for (const date of datesIn(
         c.start > start ? c.start : start,
         c.end && c.end < end ? c.end : end,
@@ -544,15 +566,18 @@ export function forecast(
           if (e.field === "marketing.closePct") daily.closePct = e.value;
         }
         const estimate = estimateCampaign(daily, workspace, {}, date);
-        acquiredClients += (estimate.clients / days) * demandMultiplier;
+        if (estimate.clients !== null)
+          acquiredClients += (estimate.clients / days) * demandMultiplier;
         attended =
-          attended === null || estimate.consultations === null
+          attended === null || estimate.consultations === null || daily.attendancePct === null
             ? null
             : attended +
               ((estimate.consultations * daily.attendancePct) / 100 / days) *
                 demandMultiplier;
-        adSpend += daily.monthlySpend / days;
-        f.clients += (estimate.clients / days) * demandMultiplier;
+        adSpend += (daily.monthlySpend ?? 0) / days;
+        f.clients = f.clients === null || estimate.clients === null
+          ? null
+          : f.clients + (estimate.clients / days) * demandMultiplier;
         f.spend += estimate.spend / days;
         f.leads =
           f.leads === null || estimate.leads === null
@@ -577,7 +602,7 @@ export function forecast(
       const when = m + c.conversionDelayMonths;
       (futureClients[when] ??= []).push({
         start: when,
-        clients: f.clients,
+        clients: f.clients ?? 0,
         sessions: c.sessionsPerClientMonth,
         retention: c.retentionMonths,
       });
@@ -2006,7 +2031,9 @@ export function solveGoal(
   const campaign = workspace.campaigns.find((c) => !c.archived);
   const estimate = campaign ? estimateCampaign(campaign, workspace) : null;
   const clientYield =
-    estimate && estimate.spend > 0 ? estimate.clients / estimate.spend : 0;
+    estimate && estimate.spend > 0 && estimate.clients !== null
+      ? estimate.clients / estimate.spend
+      : 0;
   return {
     sessions: required,
     clinicians:
@@ -2025,6 +2052,7 @@ export function solveGoal(
     leads:
       clients !== null &&
       estimate &&
+      estimate.clients !== null &&
       estimate.clients > 0 &&
       estimate.leads !== null
         ? (clients * estimate.leads) / estimate.clients

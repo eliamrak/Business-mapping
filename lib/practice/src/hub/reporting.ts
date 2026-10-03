@@ -228,7 +228,7 @@ export function campaignEconomics(
             first.sessions
           : null;
   const estimate = estimateCampaign(c, w);
-  const cac = ratio(estimate.spend, estimate.clients);
+  const cac = estimate.clients === null ? null : ratio(estimate.spend, estimate.clients);
   const contribution =
     unitRevenue !== null && unitCost !== null ? unitRevenue - unitCost : null;
   const monthlyContribution =

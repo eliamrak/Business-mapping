@@ -166,6 +166,35 @@ test("CPL and CAC methods converge with compatible funnel rates", () => {
     null,
   );
 });
+test("campaign estimates stay unavailable when optional form inputs are blank", () => {
+  const w = setup(),
+    c = campaignSchema.parse({ id: id() });
+  assert.equal(c.name, "");
+  assert.equal(c.source, "");
+  assert.equal(c.start, null);
+  assert.equal(c.method, null);
+  assert.equal(c.monthlySpend, null);
+  const blank = estimateCampaign(c, w);
+  assert.equal(blank.leads, null);
+  assert.equal(blank.consultations, null);
+  assert.equal(blank.clients, null);
+  assert.equal(blank.spend, 0);
+  assert.ok(blank.warnings.some((warning) => warning.includes("choose an estimate method")));
+
+  const partial = estimateCampaign({
+    ...c,
+    method: "cpl",
+    monthlySpend: 850,
+    cpl: 50,
+    consultationPct: 80,
+    attendancePct: null,
+    closePct: 50,
+  }, w);
+  close(partial.leads, 17);
+  assert.equal(partial.clients, null);
+  assert.equal(partial.consultations, 13.6);
+  assert.ok(partial.warnings.some((warning) => warning.includes("conversion rates are incomplete")));
+});
 test("click funnel and explicit manual volume work without conflating CAC and CPL", () => {
   const w = setup(),
     c = campaignSchema.parse({

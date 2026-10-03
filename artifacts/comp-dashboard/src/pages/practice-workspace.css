@@ -1088,12 +1088,18 @@
 }
 .pw-session-capacity-values {
   display: flex;
+  align-items: flex-start;
+  flex-wrap: wrap;
   gap: 24px;
 }
 .pw-session-capacity-values > div {
   display: grid;
   gap: 1px;
   min-width: 78px;
+}
+.pw-session-capacity-values > .pw-session-biweekly {
+  min-width: 132px;
+  max-width: 190px;
 }
 .pw-session-capacity-values strong,
 .pw-session-overview-trend > strong {
@@ -1105,6 +1111,9 @@
 .pw-session-capacity-values small {
   color: #738279;
   font-size: 10px !important;
+}
+.pw-session-biweekly small {
+  max-width: 190px;
 }
 .pw-session-overview-trend > strong {
   display: flex;
@@ -3340,13 +3349,13 @@
     min-width: 0;
   }
   .pw-session-overview-row {
-    grid-template-columns: minmax(0, 1.7fr) minmax(100px, 0.8fr);
+    grid-template-columns: minmax(0, 1fr);
     align-items: start;
     gap: 14px 8px;
     padding: 16px 0;
   }
   .pw-session-overview-name {
-    grid-column: 1 / -1;
+    grid-column: auto;
   }
   .pw-session-capacity-values {
     gap: 12px;
@@ -3354,6 +3363,23 @@
   .pw-session-capacity-values strong,
   .pw-session-overview-trend > strong {
     font-size: 19px;
+  }
+  .pw-session-overview-trend {
+    justify-items: start;
+    text-align: left;
+  }
+  .pw-session-overview-trend small {
+    max-width: 100%;
+    overflow-wrap: anywhere;
+  }
+  .pw-session-capacity-values {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    width: 100%;
+  }
+  .pw-session-capacity-values > .pw-session-biweekly {
+    grid-column: 1 / -1;
+    max-width: 100%;
   }
   .pw-bulk-toolbar {
     gap: 12px;

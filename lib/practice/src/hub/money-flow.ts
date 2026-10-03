@@ -66,6 +66,31 @@ export function monthFlow(
   }, null);
   const through = dataThrough;
   const familyId = workspace.settings.familyW2ClinicianId;
+  const datesIn = (from: string, to: string) =>
+    Array.from({ length: daysInclusive(from, to) }, (_, index) =>
+      new Date(Date.parse(from + "T12:00:00Z") + index * 86_400_000)
+        .toISOString()
+        .slice(0, 10),
+    );
+  const scheduledStaffPay = (throughDate: string) =>
+    context.staff
+      .filter((member) => (member.goalId ?? null) === workspace.settings.teamId)
+      .reduce((sum, member) => {
+        const annualCost = calculateStaffMemberCost(member).totalAnnualCost;
+        const schedule = payrollScheduleForClassification(member.classification);
+        const payrollHistoryStart = "2026-01-01";
+        if (!schedule)
+          return sum + annualCost / 12 *
+            daysInclusive(start, throughDate) / daysInclusive(start, end);
+        return sum + payrollPayDatesThrough(schedule, start, throughDate, start)
+          .reduce((paySum, payDate) => {
+            const period = payrollPeriodForPayDate(schedule, payDate);
+            const payStart = period.start > payrollHistoryStart ? period.start : payrollHistoryStart;
+            if (payStart > period.end) return paySum;
+            return paySum + annualCost / (schedule === "semi_monthly" ? 24 : 26);
+          }, 0);
+      }, 0);
+  const staffPay = scheduledStaffPay(cutoff);
   const empty = {
     start,
     through,
@@ -79,7 +104,7 @@ export function monthFlow(
     employerBurden: 0,
     familyGrossPay: 0,
     familyEmployerBurden: 0,
-    staffPay: 0,
+    staffPay,
     overhead: 0,
     marketing: 0,
     processing: 0,
@@ -99,12 +124,6 @@ export function monthFlow(
   const elapsed = daysInclusive(start, through);
   const fraction = elapsed / daysInclusive(start, end);
   let splitPeriods = false;
-  const datesIn = (from: string, to: string) =>
-    Array.from({ length: daysInclusive(from, to) }, (_, index) =>
-      new Date(Date.parse(from + "T12:00:00Z") + index * 86_400_000)
-        .toISOString()
-        .slice(0, 10),
-    );
   const sessionsForDate = (clinicianId: number, date: string) =>
     records.reduce((sum, record) =>
       record.clinicianId === clinicianId && record.start <= date && record.end >= date
@@ -240,11 +259,6 @@ export function monthFlow(
       familyEmployerBurden += burden;
     }
   }
-  const staffPay = context.staff
-    .filter((member) => (member.goalId ?? null) === workspace.settings.teamId)
-    .reduce((sum, member) =>
-      sum + calculateStaffMemberCost(member).totalAnnualCost / 12 * fraction,
-    0);
   const forecastMonth = forecast(
     {
       ...workspace,

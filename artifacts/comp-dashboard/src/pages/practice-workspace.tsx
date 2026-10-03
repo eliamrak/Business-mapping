@@ -181,6 +181,10 @@ const sections: { id: Section; label: string }[] = [
 const money = (n: number | null | undefined) => fmt(n, "currency");
 const percent = (n: number | null | undefined) =>
   n === null || n === undefined ? "--" : `${Math.round(n * 100)}%`;
+const optionalNumber = (value: string) =>
+  value.trim() === "" ? null : Number(value);
+const displayName = (value: string | null | undefined, fallback: string) =>
+  value?.trim() || fallback;
 const changeValue = (value: unknown) =>
   value === null || value === undefined || value === ""
     ? "Not set"
@@ -350,15 +354,15 @@ function DraftField({
   step,
 }: {
   label: string;
-  value: string | number;
+  value: string | number | null | undefined;
   onChange: (value: string) => void;
   type?: "text" | "number" | "date";
   min?: number;
   max?: number;
   step?: number;
 }) {
-  const [text, setText] = useState(String(value));
-  useEffect(() => setText(String(value)), [value]);
+  const [text, setText] = useState(value == null ? "" : String(value));
+  useEffect(() => setText(value == null ? "" : String(value)), [value]);
   return (
     <label className="pw-draft-field">
       <span>{label}</span>
@@ -373,17 +377,17 @@ function DraftField({
         onBlur={() => {
           if (
             type === "number" &&
-            (!text.trim() ||
-              !Number.isFinite(Number(text)) ||
+            (text.trim() &&
+              (!Number.isFinite(Number(text)) ||
               Number(text) < (min ?? 0) ||
-              Number(text) > (max ?? Infinity))
+              Number(text) > (max ?? Infinity)))
           )
-            setText(String(value));
-          else if (text !== String(value)) onChange(text);
+            setText(value == null ? "" : String(value));
+          else if (text !== (value == null ? "" : String(value))) onChange(text);
         }}
         onKeyDown={(event) => {
           if (event.key === "Enter") event.currentTarget.blur();
-          if (event.key === "Escape") setText(String(value));
+          if (event.key === "Escape") setText(value == null ? "" : String(value));
         }}
       />
     </label>
@@ -1094,9 +1098,9 @@ export default function PracticeWorkspace() {
     } else if (collection === "campaigns") {
       record = campaignSchema.parse({
         ...newRecord("campaigns", current, today),
-        name: "New campaign",
-        source: "New source",
-        start,
+        name: "",
+        source: "",
+        start: null,
       });
     } else if (collection === "rooms") {
       record = roomSchema.parse({
@@ -2953,7 +2957,7 @@ export default function PracticeWorkspace() {
                       {active(workingWorkspace.campaigns).map((c) => (
                         <section className="pw-edit-item" key={c.id}>
                           <div className="pw-edit-item-heading">
-                            <h3>{c.name}</h3>
+                            <h3>{displayName(c.name, "Untitled campaign")}</h3>
                             <span>
                               Estimated clients:{" "}
                               {fmt(months[0]?.channels[c.id]?.clients)}
@@ -2968,7 +2972,7 @@ export default function PracticeWorkspace() {
                                   "campaigns",
                                   c.id,
                                   { name: value },
-                                  c.name + " name",
+                                  displayName(c.name, "Campaign") + " name",
                                 )
                               }
                             />
@@ -2980,23 +2984,24 @@ export default function PracticeWorkspace() {
                                   "campaigns",
                                   c.id,
                                   { source: value },
-                                  c.name + " source",
+                                  displayName(c.name, "Campaign") + " source",
                                 )
                               }
                             />
                             <label className="pw-draft-field">
                               <span>Estimate clients using</span>
                               <select
-                                value={c.method}
+                                value={c.method ?? ""}
                                 onChange={(event) =>
                                   stageRecord(
                                     "campaigns",
                                     c.id,
-                                    { method: event.target.value },
-                                    c.name + " estimate method",
+                                    { method: event.target.value || null },
+                                    displayName(c.name, "Campaign") + " estimate method",
                                   )
                                 }
                               >
+                                <option value="">Choose method</option>
                                 {[
                                   ["cpl", "Cost per lead"],
                                   ["cac", "Cost per client"],
@@ -3019,8 +3024,8 @@ export default function PracticeWorkspace() {
                                 stageRecord(
                                   "campaigns",
                                   c.id,
-                                  { monthlySpend: Number(value) },
-                                  c.name + " ad spend",
+                                  { monthlySpend: optionalNumber(value) },
+                                  displayName(c.name, "Campaign") + " ad spend",
                                 )
                               }
                             />
@@ -3032,8 +3037,8 @@ export default function PracticeWorkspace() {
                                 stageRecord(
                                   "campaigns",
                                   c.id,
-                                  { otherMonthlyCost: Number(value) },
-                                  c.name + " support cost",
+                                  { otherMonthlyCost: optionalNumber(value) },
+                                  displayName(c.name, "Campaign") + " support cost",
                                 )
                               }
                             />
@@ -3046,8 +3051,8 @@ export default function PracticeWorkspace() {
                                   stageRecord(
                                     "campaigns",
                                     c.id,
-                                    { cpl: Number(value) },
-                                    c.name + " cost per lead",
+                                    { cpl: optionalNumber(value) },
+                                    displayName(c.name, "Campaign") + " cost per lead",
                                   )
                                 }
                               />
@@ -3061,8 +3066,8 @@ export default function PracticeWorkspace() {
                                   stageRecord(
                                     "campaigns",
                                     c.id,
-                                    { cac: Number(value) },
-                                    c.name + " cost per client",
+                                    { cac: optionalNumber(value) },
+                                    displayName(c.name, "Campaign") + " cost per client",
                                   )
                                 }
                               />
@@ -3076,8 +3081,8 @@ export default function PracticeWorkspace() {
                                 stageRecord(
                                   "campaigns",
                                   c.id,
-                                  { consultationPct: Number(value) },
-                                  c.name + " consultation rate",
+                                  { consultationPct: optionalNumber(value) },
+                                  displayName(c.name, "Campaign") + " consultation rate",
                                 )
                               }
                             />
@@ -3090,8 +3095,8 @@ export default function PracticeWorkspace() {
                                 stageRecord(
                                   "campaigns",
                                   c.id,
-                                  { attendancePct: Number(value) },
-                                  c.name + " attendance rate",
+                                  { attendancePct: optionalNumber(value) },
+                                  displayName(c.name, "Campaign") + " attendance rate",
                                 )
                               }
                             />
@@ -3104,8 +3109,8 @@ export default function PracticeWorkspace() {
                                 stageRecord(
                                   "campaigns",
                                   c.id,
-                                  { closePct: Number(value) },
-                                  c.name + " close rate",
+                                  { closePct: optionalNumber(value) },
+                                  displayName(c.name, "Campaign") + " close rate",
                                 )
                               }
                             />
@@ -3117,8 +3122,8 @@ export default function PracticeWorkspace() {
                                 stageRecord(
                                   "campaigns",
                                   c.id,
-                                  { start: value },
-                                  c.name + " start date",
+                                  { start: value || null },
+                                  displayName(c.name, "Campaign") + " start date",
                                 )
                               }
                             />
@@ -3138,7 +3143,7 @@ export default function PracticeWorkspace() {
                                   "campaigns",
                                   c.id,
                                   { archived: true },
-                                  "Archived " + c.name,
+                                  "Archived " + displayName(c.name, "campaign"),
                                 )
                               }
                             >

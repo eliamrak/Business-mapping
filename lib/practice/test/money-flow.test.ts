@@ -38,6 +38,20 @@ const setup = () => {
 const context = (sessions: Context["sessions"]): Context => ({
   clinicians: [wife], staff: [], sessions,
 });
+const staff = (classification = "w2", goalId: number | null = null) => ({
+  id: 1,
+  label: "Support",
+  goalId,
+  annualSalary: 48000,
+  hourlyRate: null,
+  hoursPerWeek: null,
+  weeksPerYear: 52,
+  classification,
+  w2EmployerFicaPct: 7.65,
+  futaSutaPct: 1,
+  workersCompPct: 0.5,
+  otherEmployerBurdenPct: 0.85,
+});
 const close = (actual: number | null, expected: number) =>
   assert.ok(actual !== null && Math.abs(actual - expected) < 0.01, `${actual} != ${expected}`);
 
@@ -87,6 +101,81 @@ test("missing session data remains unknown and old workspaces gain the tax estim
   assert.equal(flow.revenue, null);
   assert.equal(flow.profit, null);
   assert.equal(flow.familyTakeHome, null);
+});
+
+test("support staff pay follows pay dates even when session data is missing", () => {
+  const workspace = setup();
+  const flow = monthFlow(
+    workspace,
+    { clinicians: [wife], staff: [staff()], sessions: [] },
+    "2026-01-01",
+    "2026-01-15",
+  );
+  close(flow.staffPay, 48000 * 1.1 / 24);
+  assert.equal(flow.revenue, null);
+  assert.equal(flow.profit, null);
+});
+
+test("support staff pay respects the selected team filter", () => {
+  const workspace = setup();
+  workspace.settings.teamId = 7;
+  const flow = monthFlow(
+    workspace,
+    { clinicians: [wife], staff: [staff("w2", 8)], sessions: [] },
+    "2026-01-01",
+    "2026-01-30",
+  );
+  close(flow.staffPay, 0);
+});
+
+test("support staff W2 pay uses semi-monthly checks and hourly burden once", () => {
+  const workspace = setup();
+  const hourly = {
+    ...staff(),
+    annualSalary: null,
+    hourlyRate: 25,
+    hoursPerWeek: 40,
+  };
+  const first = monthFlow(
+    workspace,
+    { clinicians: [wife], staff: [hourly], sessions: [] },
+    "2026-01-01",
+    "2026-01-15",
+  );
+  close(first.staffPay, 25 * 40 * 52 * 1.1 / 24);
+  const second = monthFlow(
+    workspace,
+    { clinicians: [wife], staff: [hourly], sessions: [] },
+    "2026-01-01",
+    "2026-01-30",
+  );
+  close(second.staffPay, 25 * 40 * 52 * 1.1 / 12);
+});
+
+test("support staff 1099 pay follows biweekly Thursdays including three-check months", () => {
+  const workspace = setup();
+  const contractor = { ...staff("1099"), annualSalary: 52000 };
+  const beforeFirstCurrentYearPeriod = monthFlow(
+    workspace,
+    { clinicians: [wife], staff: [contractor], sessions: [] },
+    "2026-01-01",
+    "2026-01-01",
+  );
+  close(beforeFirstCurrentYearPeriod.staffPay, 0);
+  const december = monthFlow(
+    workspace,
+    { clinicians: [wife], staff: [contractor], sessions: [] },
+    "2026-12-01",
+    "2026-12-31",
+  );
+  close(december.staffPay, 52000 / 26 * 3);
+  const july = monthFlow(
+    workspace,
+    { clinicians: [wife], staff: [contractor], sessions: [] },
+    "2027-07-01",
+    "2027-07-31",
+  );
+  close(july.staffPay, 6000);
 });
 
 test("the forecast uses expected average revenue without changing fixed W2 salary", () => {

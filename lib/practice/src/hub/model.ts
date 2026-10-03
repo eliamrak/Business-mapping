@@ -157,17 +157,19 @@ export const campaignMethods = [
 ] as const;
 export const campaignSchema = z.object({
   ...named,
+  name: z.string().trim().max(160).default(""),
   planningOnly: z.boolean().default(false),
   ...dates,
-  source: label,
-  method: z.enum(campaignMethods),
-  monthlySpend: money,
-  otherMonthlyCost: money.default(0),
-  cpl: money.default(50),
-  cac: money.default(200),
-  consultationPct: percent.default(80),
-  attendancePct: percent.default(85),
-  closePct: percent.default(50),
+  start: dateSchema.nullable().default(null),
+  source: z.string().trim().max(160).default(""),
+  method: z.enum(campaignMethods).nullable().default(null),
+  monthlySpend: money.nullable().default(null),
+  otherMonthlyCost: money.nullable().default(null),
+  cpl: money.nullable().default(null),
+  cac: money.nullable().default(null),
+  consultationPct: percent.nullable().default(null),
+  attendancePct: percent.nullable().default(null),
+  closePct: percent.nullable().default(null),
   cpm: money.default(20),
   ctrPct: percent.default(2),
   clickToLeadPct: percent.default(10),
@@ -638,7 +640,7 @@ export const workspaceSchema = z
       rows.forEach((row, i) => {
         if (ids.has(row.id)) issue([key, i, "id"], "Duplicate record ID.");
         ids.add(row.id);
-        if ("start" in row && "end" in row && row.end && row.start > row.end)
+        if ("start" in row && "end" in row && row.start && row.end && row.start > row.end)
           issue([key, i, "end"], "End date must follow start date.");
       });
     }

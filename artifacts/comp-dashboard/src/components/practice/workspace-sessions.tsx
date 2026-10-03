@@ -23,7 +23,7 @@ import {
 } from "@workspace/practice";
 import type { Context, ForecastMonth } from "@workspace/practice/hub";
 import { saveSessionRecord } from "@/lib/session-api";
-import { firstHiringReviewMonth, summarizeHiringReadiness, summarizeSessionOverview } from "@/lib/session-overview";
+import { firstHiringReviewMonth, summarizeHiringReadiness, summarizeLast1099Period, summarizeSessionOverview } from "@/lib/session-overview";
 import SessionImportDialog from "./session-import-dialog";
 import BulkSessionEntry from "./bulk-session-entry";
 
@@ -473,6 +473,10 @@ export default function WorkspaceSessions({
         <div className="pw-session-overview" aria-label="Clinician session pace">
           {people.map((person, index) => {
             const { latest, averageWeekly, goalWeekly, openWeekly, overGoalWeekly, fullness, trendWeekly, count } = overviewFor(person.id);
+            const last1099 = summarizeLast1099Period(
+              records.filter((record) => record.clinicianId === person.id),
+              today,
+            );
             const trend = trendWeekly == null ? "empty" : trendWeekly > 0 ? "up" : trendWeekly < 0 ? "down" : "flat";
             return (
               <div className="pw-session-overview-row" key={person.id}>
@@ -485,6 +489,12 @@ export default function WorkspaceSessions({
                   <div className="pw-session-capacity-values">
                     <div><strong>{display(averageWeekly)}</strong><small>avg completed</small></div>
                     <div><strong>{display(openWeekly)}</strong><small>to desired pace</small></div>
+                    <div className="pw-session-biweekly">
+                      <strong>{last1099 ? display(last1099.completed) : "-"}</strong>
+                      <small>{last1099
+                        ? `Last 1099 period ${shortDate(last1099.start)}-${shortDate(last1099.end)}; payday ${shortDate(last1099.payDate)}${last1099.recorded ? "" : "; not recorded"}`
+                        : "No 1099 period yet"}</small>
+                    </div>
                   </div>
                   <div className="pw-session-fill-track" aria-hidden="true">
                     <span style={{ width: `${Math.min(Math.max(fullness ?? 0, 0), 100)}%` }} />

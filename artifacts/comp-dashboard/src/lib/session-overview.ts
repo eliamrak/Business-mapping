@@ -1,4 +1,5 @@
 import { daysInclusive, type SessionRecord } from "@workspace/practice";
+import { biweeklyThursdayPayDatesThrough, payrollPeriodForPayDate } from "@workspace/practice/hub";
 
 const weeklyPace = (records: SessionRecord[]) => {
   const recordedDays = records.reduce(
@@ -38,6 +39,23 @@ export function summarizeSessionOverview(
       ? Math.round((averageWeekly - previousAverageWeekly) * 10) / 10
       : null,
     count: records.length,
+  };
+}
+
+export function lastCompleted1099ServicePeriod(today: string) {
+  const payDate = biweeklyThursdayPayDatesThrough("2026-01-01", today, "2026-01-01").at(-1);
+  if (!payDate) return null;
+  return { payDate, ...payrollPeriodForPayDate("biweekly_thursday", payDate) };
+}
+
+export function summarizeLast1099Period(records: SessionRecord[], today: string) {
+  const period = lastCompleted1099ServicePeriod(today);
+  if (!period) return null;
+  const record = records.find((item) => item.start === period.start && item.end === period.end);
+  return {
+    ...period,
+    completed: record?.completed ?? null,
+    recorded: !!record,
   };
 }
 

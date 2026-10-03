@@ -127,7 +127,8 @@ export default function MoneyFlowToday({
   const marketingBudgets = activeBudgets.filter((budget) => budgetKind(budget) === "marketing");
   const incomeBudgets = activeBudgets.filter((budget) => budgetKind(budget) === "income");
   const campaigns = workspace.campaigns.filter((campaign) =>
-    !campaign.archived && !campaign.planningOnly && campaign.start <= latestDepositDate &&
+    !campaign.archived && !campaign.planningOnly && campaign.start !== null &&
+    campaign.start <= latestDepositDate &&
     (!campaign.end || campaign.end >= month),
   );
   const profileFor = (person: Person) =>
@@ -200,8 +201,8 @@ export default function MoneyFlowToday({
     </header>
     {changeError && <p className="pw-flow-warning" role="alert">{changeError}</p>}
 
-    {flow.through ? <p className="pw-flow-status">Estimated through {shortDate(flow.through)} from recorded sessions. Costs are estimated for the same span.</p>
-      : <div className="pw-flow-notice">No completed session period overlaps {label(month)}. Enter sessions to see an operating estimate. <button type="button" onClick={() => onNavigate("sessions")}>Open sessions <ChevronRight /></button></div>}
+    {flow.through ? <p className="pw-flow-status">Session revenue is estimated through {shortDate(flow.through)} from recorded sessions. Scheduled clinician and staff payroll runs through {shortDate(latestDepositDate)}; other costs follow the recorded-session span.</p>
+      : <div className="pw-flow-notice">No completed session period overlaps {label(month)}. Session revenue and profit are unavailable; support staff costs run through {shortDate(latestDepositDate)} where configured. <button type="button" onClick={() => onNavigate("sessions")}>Open sessions <ChevronRight /></button></div>}
     {flow.splitPeriods && <p className="pw-flow-note">A biweekly period crosses the month boundary. Its sessions are divided by calendar days for this estimate.</p>}
     {flow.incompleteClinicians.length > 0 && flow.through && <p className="pw-flow-note">No sessions recorded through {shortDate(flow.through)} for {flow.incompleteClinicians.join(", ")}. Profit may be understated.</p>}
 
@@ -282,11 +283,11 @@ export default function MoneyFlowToday({
       <div className="pw-flow-row"><span>Marketing</span><strong>-{currency(flow.marketing)}</strong></div>
       <Sources label="Marketing spend and services">
         {campaigns.map((campaign) => <SourceRow key={campaign.id} label={<InlineText label="Campaign name" value={campaign.name} onCommit={(name) => onCampaignPatch(campaign.id, { name })} />}>
-          <div className="pw-flow-mini-field"><small>Source</small><InlineText label={`${campaign.name} source`} value={campaign.source}
+          <div className="pw-flow-mini-field"><small>Source</small><InlineText label={`${campaign.name || "Campaign"} source`} value={campaign.source}
             onCommit={(source) => onCampaignPatch(campaign.id, { source })} /></div>
-          <div className="pw-flow-mini-field"><small>Ad spend / month</small><InlineNumber label={`${campaign.name} monthly ad spend`} value={campaign.monthlySpend} prefix="$"
+          <div className="pw-flow-mini-field"><small>Ad spend / month</small><InlineNumber label={`${campaign.name || "Campaign"} monthly ad spend`} value={campaign.monthlySpend ?? 0} prefix="$"
             onCommit={(monthlySpend) => onCampaignPatch(campaign.id, { monthlySpend })} /></div>
-          <div className="pw-flow-mini-field"><small>Other costs / month</small><InlineNumber label={`${campaign.name} other monthly cost`} value={campaign.otherMonthlyCost} prefix="$"
+          <div className="pw-flow-mini-field"><small>Other costs / month</small><InlineNumber label={`${campaign.name || "Campaign"} other monthly cost`} value={campaign.otherMonthlyCost ?? 0} prefix="$"
             onCommit={(otherMonthlyCost) => onCampaignPatch(campaign.id, { otherMonthlyCost })} /></div>
         </SourceRow>)}
         {marketingBudgets.map((budget) => <SourceRow key={budget.id} label={<InlineText label="Marketing cost name" value={budget.name} onCommit={(name) => onBudgetPatch(budget.id, { name })} />}>
