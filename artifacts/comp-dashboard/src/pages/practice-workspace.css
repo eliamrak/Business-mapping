@@ -3515,6 +3515,17 @@
   }
   .pw-section-heading .pw-actions > * {
     flex: 1;
+    min-width: 0;
+  }
+  .pw-session-tracker > .pw-section-heading .pw-actions {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .pw-session-tracker > .pw-section-heading .pw-button,
+  .pw-session-tracker > .pw-section-heading .pw-menu,
+  .pw-session-tracker > .pw-section-heading .pw-menu summary {
+    width: 100%;
+    min-width: 0;
   }
   .pw-section-heading select {
     max-width: 100%;
@@ -3744,6 +3755,12 @@
   font: inherit;
   font-weight: 650;
   padding: 0.15rem 0;
+}
+
+@media (max-width: 360px) {
+  .pw-session-tracker > .pw-section-heading .pw-actions {
+    grid-template-columns: minmax(0, 1fr) !important;
+  }
 }
 
 .pw-person-name:focus-visible {

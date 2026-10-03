@@ -487,14 +487,12 @@ export default function WorkspaceSessions({
                 <div className="pw-session-overview-stat pw-session-overview-capacity">
                   <span>Sessions / week</span>
                   <div className="pw-session-capacity-values">
-                    <div><strong>{display(averageWeekly)}</strong><small>avg completed</small></div>
-                    <div><strong>{display(openWeekly)}</strong><small>to desired pace</small></div>
                     <div className="pw-session-biweekly">
                       <strong>{last1099 ? display(last1099.completed) : "-"}</strong>
-                      <small>{last1099
-                        ? `Last 1099 period ${shortDate(last1099.start)}-${shortDate(last1099.end)}; payday ${shortDate(last1099.payDate)}${last1099.recorded ? "" : "; not recorded"}`
-                        : "No 1099 period yet"}</small>
+                      <small>{last1099?.recorded === false ? "Last two weeks; not recorded" : "Last two weeks"}</small>
                     </div>
+                    <div><strong>{display(averageWeekly)}</strong><small>avg completed</small></div>
+                    <div><strong>{display(openWeekly)}</strong><small>to desired pace</small></div>
                   </div>
                   <div className="pw-session-fill-track" aria-hidden="true">
                     <span style={{ width: `${Math.min(Math.max(fullness ?? 0, 0), 100)}%` }} />
