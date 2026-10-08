@@ -31,6 +31,7 @@ import {
   desiredSessionsForPeriod,
   desiredSessionsForRecordYear,
   sessionGoalYear,
+  sessionGoalUpdateForPeriod,
   type SessionGoalYear,
   weeklyGoalFromPeriodDesired,
 } from "@/lib/session-goals";
@@ -43,7 +44,11 @@ interface Props {
   theme: string;
   onClose: () => void;
   onSaved: (record: SessionRecord) => void;
-  onGoalChange: (clinician: Clinician, sessionsPerWeek: number) => Promise<void>;
+  onGoalChange: (
+    clinician: Clinician,
+    sessionsPerWeek: number,
+    year: number,
+  ) => Promise<void>;
   goals: SessionGoalYear[];
 }
 const fields = [
@@ -184,7 +189,12 @@ export default function SessionEditor({
       if (review.desired !== currentDesired)
         await onGoalChange(
           clinician,
-          weeklyGoalFromPeriodDesired(review.desired, review),
+          sessionGoalUpdateForPeriod(
+            clinician.id,
+            weeklyGoalFromPeriodDesired(review.desired, review),
+            review,
+          ).sessionsPerWeek,
+          sessionGoalYear(review),
         );
       const saved = await save.mutateAsync(request.current);
       queryClient.setQueryData<SessionRecord[]>(sessionKey(team), (old) => [

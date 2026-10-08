@@ -209,6 +209,30 @@ test("annual session goals persist independently from session history and clinic
   assert.equal((await call(`/clinicians/${clinician.id}`)).data.sessionsPerWeek, 20);
   assert.equal((await call(`/session-records?goalId=${goal.id}`)).data[0].desired, 70);
 });
+test("annual goal config alone does not block deleting an otherwise removable clinician", async () => {
+  const removable = (
+    await call("/clinicians", {
+      label: "Goal-only clinician",
+      goalId: goal.id,
+      sessionsPerWeek: 18,
+    })
+  ).data;
+  assert.equal(
+    (
+      await call(
+        "/session-goals",
+        { clinicianId: removable.id, year: 2026, sessionsPerWeek: 16 },
+        "PUT",
+      )
+    ).status,
+    200,
+  );
+
+  const deleted = await call(`/clinicians/${removable.id}`, null, "DELETE");
+  assert.equal(deleted.status, 204);
+  const goals = (await call(`/session-goals?goalId=${goal.id}`)).data;
+  assert.ok(!goals.some((item) => item.clinicianId === removable.id));
+});
 test("history is protected from clinician deletion", async () => {
   const result = await call(`/clinicians/${clinician.id}`, null, "DELETE");
   assert.equal(result.status, 409);

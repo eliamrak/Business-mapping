@@ -503,10 +503,11 @@ export default function Practice() {
   async function updateClinicianGoal(
     clinician: Clinician,
     sessionsPerWeek: number,
+    year: number,
   ) {
     await saveSessionGoal({
       clinicianId: clinician.id,
-      year: Number(range.end.slice(0, 4)),
+      year,
       sessionsPerWeek,
     });
     await sessionGoalsQuery.refetch();

@@ -16,7 +16,7 @@ export const sessionGoalYearsTable = pgTable(
     id: serial("id").primaryKey(),
     clinicianId: integer("clinician_id")
       .notNull()
-      .references(() => cliniciansTable.id, { onDelete: "restrict" }),
+      .references(() => cliniciansTable.id, { onDelete: "cascade" }),
     year: integer("goal_year").notNull(),
     sessionsPerWeek: numeric("sessions_per_week", {
       precision: 6,

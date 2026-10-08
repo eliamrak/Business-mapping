@@ -4,6 +4,7 @@ import type { SessionRecord } from "@workspace/practice";
 import {
   desiredSessionsForPeriod,
   desiredSessionsForRecordYear,
+  sessionGoalUpdateForPeriod,
   sessionGoalYear,
   summarizeSessionsWithAnnualGoals,
   weeklyGoalFromPeriodDesired,
@@ -109,5 +110,20 @@ test("period desired values persist as the matching weekly annual goal for futur
       end: "2026-05-06",
     }),
     15,
+  );
+});
+
+test("saving an edited historical record uses the edited period year, not the visible page year", () => {
+  const editedRecordPeriod = { start: "2025-12-18", end: "2025-12-31" };
+  const visiblePageRange = { start: "2026-01-01", end: "2026-01-14" };
+
+  assert.equal(sessionGoalYear(visiblePageRange), 2026);
+  assert.deepEqual(
+    sessionGoalUpdateForPeriod(
+      clinician.id,
+      weeklyGoalFromPeriodDesired(24, editedRecordPeriod),
+      editedRecordPeriod,
+    ),
+    { clinicianId: 1, year: 2025, sessionsPerWeek: 12 },
   );
 });

@@ -32,6 +32,16 @@ export function weeklyGoalFromPeriodDesired(
   return (desired * 7) / daysInclusive(period.start, period.end);
 }
 
+export const sessionGoalUpdateForPeriod = (
+  clinicianId: number,
+  sessionsPerWeek: number,
+  period: Range,
+) => ({
+  clinicianId,
+  year: sessionGoalYear(period),
+  sessionsPerWeek,
+});
+
 export const annualGoalFor = (
   clinicianId: number,
   year: number,

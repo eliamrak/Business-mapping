@@ -1,6 +1,6 @@
 CREATE TABLE IF NOT EXISTS session_goal_years (
   id serial PRIMARY KEY,
-  clinician_id integer NOT NULL REFERENCES clinicians(id) ON DELETE RESTRICT,
+  clinician_id integer NOT NULL REFERENCES clinicians(id) ON DELETE CASCADE,
   goal_year integer NOT NULL,
   sessions_per_week numeric(6,2) NOT NULL,
   updated_at timestamp with time zone NOT NULL DEFAULT now(),
