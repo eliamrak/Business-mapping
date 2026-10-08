@@ -8,6 +8,11 @@ type SessionGoalClinician = {
   id: number;
   sessionsPerWeek: number;
 };
+export type SessionGoalYear = {
+  clinicianId: number;
+  year: number;
+  sessionsPerWeek: number;
+};
 
 type Range = { start: string; end: string };
 
@@ -27,38 +32,53 @@ export function weeklyGoalFromPeriodDesired(
   return (desired * 7) / daysInclusive(period.start, period.end);
 }
 
-export function desiredSessionsForSelectedYear(
+export const annualGoalFor = (
+  clinicianId: number,
+  year: number,
+  goals: SessionGoalYear[],
+) =>
+  goals.find(
+    (goal) => goal.clinicianId === clinicianId && goal.year === year,
+  )?.sessionsPerWeek ?? null;
+
+export function desiredSessionsForRecordYear(
   record: SessionRecord,
-  clinician: SessionGoalClinician | undefined,
-  selectedYear: number,
+  _clinician: SessionGoalClinician | undefined,
+  goals: SessionGoalYear[],
 ) {
-  if (!clinician || Number(record.end.slice(0, 4)) !== selectedYear)
-    return record.desired;
-  return desiredSessionsForPeriod(clinician.sessionsPerWeek, record);
+  const sessionsPerWeek = annualGoalFor(
+    record.clinicianId,
+    sessionGoalYear(record),
+    goals,
+  );
+  if (sessionsPerWeek !== null)
+    return desiredSessionsForPeriod(sessionsPerWeek, record);
+  return record.desired;
 }
 
-export function withSelectedYearDesiredSessions(
+export function withAnnualDesiredSessions(
   records: SessionRecord[],
   clinicians: SessionGoalClinician[],
-  selectedYear: number,
+  goals: SessionGoalYear[],
 ) {
   return records.map((record) => {
-    const desired = desiredSessionsForSelectedYear(
+    const desired = desiredSessionsForRecordYear(
       record,
       clinicians.find((person) => person.id === record.clinicianId),
-      selectedYear,
+      goals,
     );
     return desired === record.desired ? record : { ...record, desired };
   });
 }
 
-export function summarizeSessionsForSelectedYear(
+export function summarizeSessionsWithAnnualGoals(
   records: SessionRecord[],
   range: Range,
   clinician: SessionGoalClinician,
+  goals: SessionGoalYear[],
 ) {
   return summarizeSessions(
-    withSelectedYearDesiredSessions(records, [clinician], sessionGoalYear(range)),
+    withAnnualDesiredSessions(records, [clinician], goals),
     range,
   );
 }

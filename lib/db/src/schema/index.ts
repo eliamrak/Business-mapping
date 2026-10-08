@@ -6,4 +6,5 @@ export * from "./scenarioClinicians";
 export * from "./staffMembers";
 export * from "./scenarioStaffMembers";
 export * from "./sessionRecords";
+export * from "./sessionGoalYears";
 export * from "./hub";

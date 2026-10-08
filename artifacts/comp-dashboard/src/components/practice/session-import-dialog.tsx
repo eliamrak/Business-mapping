@@ -3,6 +3,7 @@ import { Check, FileSpreadsheet, Upload } from "lucide-react";
 import { customFetch } from "@workspace/api-client-react";
 import type { Context } from "@workspace/practice/hub";
 import { saveSessionRecord } from "@/lib/session-api";
+import type { SessionGoalYear } from "@/lib/session-goals";
 import {
   inspectSessionSheet,
   planSessionImport,
@@ -26,11 +27,13 @@ export default function SessionImportDialog({
   teamId,
   onSaved,
   onClose,
+  goals = [],
 }: {
   context: Context;
   teamId: number | null;
   onSaved: () => Promise<void>;
   onClose: (message?: string) => void;
+  goals?: SessionGoalYear[];
 }) {
   const input = useRef<HTMLInputElement>(null);
   const [fileName, setFileName] = useState("");
@@ -75,9 +78,10 @@ export default function SessionImportDialog({
           goalSource,
           people,
           context.sessions,
+          goals,
         )
       : null,
-    [sheet, year, mappings, corrections, goalSource, context.sessions],
+    [sheet, year, mappings, corrections, goalSource, context.sessions, goals],
   );
   const periods = sheet?.periods.filter(
     (period) => Number((corrections[period.row]?.end ?? period.end).slice(0, 4)) === year,

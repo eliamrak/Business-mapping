@@ -179,6 +179,36 @@ test("team isolation and persistence leave compensation assumptions unchanged", 
   );
   assert.deepEqual((await call(`/clinicians/${clinician.id}`)).data, clinician);
 });
+test("annual session goals persist independently from session history and clinician defaults", async () => {
+  const goal2025 = await call(
+    "/session-goals",
+    { clinicianId: clinician.id, year: 2025, sessionsPerWeek: 12 },
+    "PUT",
+  );
+  const goal2026 = await call(
+    "/session-goals",
+    { clinicianId: clinician.id, year: 2026, sessionsPerWeek: 15 },
+    "PUT",
+  );
+  assert.equal(goal2025.status, 200);
+  assert.equal(goal2026.status, 200);
+  assert.equal(goal2025.data.sessionsPerWeek, 12);
+  assert.equal(goal2026.data.sessionsPerWeek, 15);
+
+  const goals = (await call(`/session-goals?goalId=${goal.id}`)).data;
+  assert.deepEqual(
+    goals
+      .filter((item) => item.clinicianId === clinician.id)
+      .map((item) => [item.year, item.sessionsPerWeek])
+      .sort(),
+    [
+      [2025, 12],
+      [2026, 15],
+    ],
+  );
+  assert.equal((await call(`/clinicians/${clinician.id}`)).data.sessionsPerWeek, 20);
+  assert.equal((await call(`/session-records?goalId=${goal.id}`)).data[0].desired, 70);
+});
 test("history is protected from clinician deletion", async () => {
   const result = await call(`/clinicians/${clinician.id}`, null, "DELETE");
   assert.equal(result.status, 409);

@@ -3,14 +3,19 @@ import assert from "node:assert/strict";
 import type { SessionRecord } from "@workspace/practice";
 import {
   desiredSessionsForPeriod,
-  desiredSessionsForSelectedYear,
+  desiredSessionsForRecordYear,
   sessionGoalYear,
-  summarizeSessionsForSelectedYear,
+  summarizeSessionsWithAnnualGoals,
   weeklyGoalFromPeriodDesired,
-  withSelectedYearDesiredSessions,
+  withAnnualDesiredSessions,
 } from "./session-goals.ts";
 
 const clinician = { id: 1, sessionsPerWeek: 7.5 };
+const goal = (year: number, sessionsPerWeek: number) => ({
+  clinicianId: 1,
+  year,
+  sessionsPerWeek,
+});
 const record = (
   start: string,
   end: string,
@@ -34,37 +39,42 @@ const record = (
   sourceAttachmentId: null,
 });
 
-test("changing a clinician goal re-bases all selected-year periods without mutating history", () => {
+test("changing a clinician goal re-bases all periods in that year without mutating history", () => {
   const records = [
     record("2026-01-01", "2026-01-14", 12, 22, 1),
     record("2026-02-12", "2026-02-25", 14, 32, 2),
   ];
-  const adjusted = withSelectedYearDesiredSessions(records, [clinician], 2026);
+  const adjusted = withAnnualDesiredSessions(records, [clinician], [goal(2026, 7.5)]);
 
   assert.deepEqual(adjusted.map((item) => item.desired), [15, 15]);
   assert.deepEqual(records.map((item) => item.desired), [22, 32]);
 });
 
-test("selected period navigation controls which calendar year uses the shared goal", () => {
+test("period navigation does not move one year's goal onto another year", () => {
   const priorYear = record("2025-12-18", "2025-12-31", 18, 24, 1);
   const currentYear = record("2026-01-01", "2026-01-14", 10, 30, 2);
+  const goals = [goal(2026, 7.5)];
 
   assert.equal(sessionGoalYear({ start: "2026-01-01", end: "2026-01-14" }), 2026);
-  assert.equal(desiredSessionsForSelectedYear(currentYear, clinician, 2026), 15);
-  assert.equal(desiredSessionsForSelectedYear(priorYear, clinician, 2026), 24);
-  assert.equal(desiredSessionsForSelectedYear(currentYear, clinician, 2025), 30);
+  assert.equal(desiredSessionsForRecordYear(currentYear, clinician, goals), 15);
+  assert.equal(desiredSessionsForRecordYear(priorYear, clinician, goals), 24);
+  assert.equal(
+    desiredSessionsForRecordYear(priorYear, clinician, [...goals, goal(2025, 6)]),
+    12,
+  );
 });
 
-test("year boundaries preserve unrelated years while current-year summaries compare against the current goal", () => {
+test("year boundaries preserve unrelated years while summaries compare against stored annual goals", () => {
   const records = [
     record("2025-12-18", "2025-12-31", 20, 24, 1),
     record("2026-01-01", "2026-01-14", 10, 30, 2),
     record("2026-01-15", "2026-01-28", 5, 44, 3),
   ];
-  const summary = summarizeSessionsForSelectedYear(
+  const summary = summarizeSessionsWithAnnualGoals(
     records,
     { start: "2026-01-01", end: "2026-01-28" },
     clinician,
+    [goal(2026, 7.5), goal(2025, 6)],
   );
 
   assert.equal(summary.completed, 15);
@@ -72,7 +82,22 @@ test("year boundaries preserve unrelated years while current-year summaries comp
   assert.equal(summary.utilization, 50);
 });
 
-test("period desired values persist as the matching weekly goal for future periods", () => {
+test("persisted annual goals survive reloads and stay independent by year", () => {
+  const goalsFromReload = [goal(2025, 6), goal(2026, 7.5)];
+  const records = [
+    record("2025-01-02", "2025-01-15", 10, 44, 1),
+    record("2026-01-01", "2026-01-14", 10, 44, 2),
+  ];
+
+  assert.deepEqual(
+    withAnnualDesiredSessions(records, [clinician], goalsFromReload).map(
+      (item) => item.desired,
+    ),
+    [12, 15],
+  );
+});
+
+test("period desired values persist as the matching weekly annual goal for future periods", () => {
   const period = { start: "2026-04-09", end: "2026-04-22" };
   const weekly = weeklyGoalFromPeriodDesired(15, period);
 

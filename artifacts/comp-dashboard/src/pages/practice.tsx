@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import {
-  customFetch,
   useListBusinessGoals,
   useListClinicians,
   type Clinician,
@@ -44,14 +43,16 @@ import {
 } from "@/components/ui/dialog";
 import SessionEditor from "@/components/practice/session-editor";
 import {
+  listSessionGoals,
   listSessionRecords,
+  saveSessionGoal,
+  sessionGoalKey,
   sessionHistory,
   sessionKey,
 } from "@/lib/session-api";
 import {
-  desiredSessionsForSelectedYear,
-  sessionGoalYear,
-  summarizeSessionsForSelectedYear,
+  desiredSessionsForRecordYear,
+  summarizeSessionsWithAnnualGoals,
 } from "@/lib/session-goals";
 import { calculateClinicianMetrics } from "@/lib/calculations";
 import "@/pages/practice.css";
@@ -416,6 +417,10 @@ export default function Practice() {
     queryKey: sessionKey(team),
     queryFn: ({ signal }) => listSessionRecords(team, signal),
   });
+  const sessionGoalsQuery = useQuery({
+    queryKey: sessionGoalKey(team),
+    queryFn: ({ signal }) => listSessionGoals(team, signal),
+  });
   const clinicians = useMemo(
     () =>
       (cliniciansQuery.data ?? []).filter((c) =>
@@ -429,17 +434,17 @@ export default function Practice() {
     () =>
       clinicians.map((clinician) => ({
         clinician,
-        summary: summarizeSessionsForSelectedYear(
+        summary: summarizeSessionsWithAnnualGoals(
           (sessionsQuery.data ?? []).filter(
             (r) => r.clinicianId === clinician.id,
           ),
           range,
           clinician,
+          sessionGoalsQuery.data ?? [],
         ),
       })),
-    [clinicians, sessionsQuery.data, range],
+    [clinicians, sessionsQuery.data, sessionGoalsQuery.data, range],
   );
-  const selectedYear = sessionGoalYear(range);
   const current = rows.find((row) => row.clinician.id === selected?.id);
   const selectedRecords = (sessionsQuery.data ?? [])
     .filter((row) => row.clinicianId === selected?.id)
@@ -468,9 +473,13 @@ export default function Practice() {
   const busy =
     goalsQuery.isPending ||
     cliniciansQuery.isPending ||
-    sessionsQuery.isPending;
+    sessionsQuery.isPending ||
+    sessionGoalsQuery.isPending;
   const failed =
-    goalsQuery.isError || cliniciansQuery.isError || sessionsQuery.isError;
+    goalsQuery.isError ||
+    cliniciansQuery.isError ||
+    sessionsQuery.isError ||
+    sessionGoalsQuery.isError;
   const compensationHref = `${import.meta.env.BASE_URL}?view=team`;
 
   useEffect(() => {
@@ -489,16 +498,18 @@ export default function Practice() {
     void goalsQuery.refetch();
     void cliniciansQuery.refetch();
     void sessionsQuery.refetch();
+    void sessionGoalsQuery.refetch();
   }
   async function updateClinicianGoal(
     clinician: Clinician,
     sessionsPerWeek: number,
   ) {
-    await customFetch("/api/clinicians/" + clinician.id, {
-      method: "PATCH",
-      body: JSON.stringify({ sessionsPerWeek }),
+    await saveSessionGoal({
+      clinicianId: clinician.id,
+      year: Number(range.end.slice(0, 4)),
+      sessionsPerWeek,
     });
-    await cliniciansQuery.refetch();
+    await sessionGoalsQuery.refetch();
   }
   function columnsPicker() {
     return (
@@ -1030,10 +1041,10 @@ export default function Practice() {
                                 {columns.desired && (
                                   <td>
                                     {number(
-                                      desiredSessionsForSelectedYear(
+                                      desiredSessionsForRecordYear(
                                         record,
                                         selected!,
-                                        selectedYear,
+                                        sessionGoalsQuery.data ?? [],
                                       ),
                                     )}
                                   </td>
@@ -1155,6 +1166,7 @@ export default function Practice() {
             setEditor(null);
           }}
           onGoalChange={updateClinicianGoal}
+          goals={sessionGoalsQuery.data ?? []}
         />
       )}
       {historyRecord && (

@@ -17,6 +17,7 @@ export const backupTables = [
   "hub_workspaces",
   "hub_attachments",
   "session_records",
+  "session_goal_years",
   "session_record_history",
   "hub_history",
 ] as const;

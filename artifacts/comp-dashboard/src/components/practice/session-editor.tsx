@@ -27,9 +27,11 @@ import {
 } from "@/components/ui/alert-dialog";
 import { saveSessionRecord, sessionKey } from "@/lib/session-api";
 import {
+  annualGoalFor,
   desiredSessionsForPeriod,
-  desiredSessionsForSelectedYear,
+  desiredSessionsForRecordYear,
   sessionGoalYear,
+  type SessionGoalYear,
   weeklyGoalFromPeriodDesired,
 } from "@/lib/session-goals";
 
@@ -42,6 +44,7 @@ interface Props {
   onClose: () => void;
   onSaved: (record: SessionRecord) => void;
   onGoalChange: (clinician: Clinician, sessionsPerWeek: number) => Promise<void>;
+  goals: SessionGoalYear[];
 }
 const fields = [
   ["completed", "Completed sessions", true],
@@ -62,6 +65,7 @@ export default function SessionEditor({
   onClose,
   onSaved,
   onGoalChange,
+  goals,
 }: Props) {
   const queryClient = useQueryClient();
   const [form, setForm] = useState(() => ({
@@ -70,13 +74,19 @@ export default function SessionEditor({
     completed: record ? String(record.completed) : "",
     desired: record
       ? String(
-          desiredSessionsForSelectedYear(
+          desiredSessionsForRecordYear(
             record,
             clinician,
-            sessionGoalYear(range),
+            goals,
           ),
         )
-      : String(desiredSessionsForPeriod(clinician.sessionsPerWeek, range)),
+      : String(
+          desiredSessionsForPeriod(
+            annualGoalFor(clinician.id, sessionGoalYear(range), goals) ??
+              clinician.sessionsPerWeek,
+            range,
+          ),
+        ),
     cancelled: record?.cancelled == null ? "" : String(record.cancelled),
     noShow: record?.noShow == null ? "" : String(record.noShow),
     scheduled: record?.scheduled == null ? "" : String(record.scheduled),
@@ -166,10 +176,11 @@ export default function SessionEditor({
     };
     setSaveError("");
     try {
-      const currentDesired = desiredSessionsForPeriod(clinician.sessionsPerWeek, {
-        start: review.start,
-        end: review.end,
-      });
+      const currentDesired = desiredSessionsForPeriod(
+        annualGoalFor(clinician.id, sessionGoalYear(review), goals) ??
+          clinician.sessionsPerWeek,
+        review,
+      );
       if (review.desired !== currentDesired)
         await onGoalChange(
           clinician,

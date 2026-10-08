@@ -6,7 +6,12 @@ import {
   type SessionRecord,
 } from "@workspace/practice";
 import type { Clinician } from "@workspace/practice/hub";
-import { desiredSessionsForPeriod } from "./session-goals.ts";
+import {
+  annualGoalFor,
+  desiredSessionsForPeriod,
+  sessionGoalYear,
+  type SessionGoalYear,
+} from "./session-goals.ts";
 
 export type ImportColumn = {
   index: number;
@@ -160,6 +165,7 @@ export function planSessionImport(
   goalSource: "sheet" | "practice",
   clinicians: Clinician[],
   existing: SessionRecord[],
+  goals: SessionGoalYear[] = [],
 ): ImportPlan {
   const errors: string[] = [];
   const entries: SessionInput[] = [];
@@ -207,7 +213,11 @@ export function planSessionImport(
       if (!person) continue;
       const desired = goalSource === "sheet" && column.sheetGoal !== null
         ? column.sheetGoal
-        : desiredSessionsForPeriod(person.sessionsPerWeek, { start, end });
+        : desiredSessionsForPeriod(
+            annualGoalFor(person.id, sessionGoalYear({ start, end }), goals) ??
+              person.sessionsPerWeek,
+            { start, end },
+          );
       const result = sessionInputSchema.safeParse({
         clinicianId: person.id,
         start,

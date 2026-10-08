@@ -4,6 +4,7 @@ import { ApiError } from "@workspace/api-client-react";
 import { dateSchema, type SessionRecord, type SessionWrite } from "@workspace/practice";
 import type { Clinician } from "@workspace/practice/hub";
 import { saveSessionRecordBounded } from "@/lib/session-api";
+import type { SessionGoalYear } from "@/lib/session-goals";
 import {
   MAX_BULK_PERIODS,
   buildBulkPeriods,
@@ -25,12 +26,14 @@ export default function BulkSessionEntry({
   initialRange,
   onSaved,
   onStateChange,
+  goals = [],
 }: {
   people: Clinician[];
   records: SessionRecord[];
   initialRange: BulkPeriod;
   onSaved: () => Promise<void>;
   onStateChange: (state: { dirty: boolean; busy: boolean }) => void;
+  goals?: SessionGoalYear[];
 }) {
   const [firstStart, setFirstStart] = useState(initialRange.start);
   const [firstEnd, setFirstEnd] = useState(
@@ -54,8 +57,8 @@ export default function BulkSessionEntry({
     }
   }, [firstStart, firstEnd, rowCount]);
   const plan = useMemo(
-    () => planBulkSessions(built.periods, people, overrides, records),
-    [built.periods, people, overrides, records],
+    () => planBulkSessions(built.periods, people, overrides, records, goals),
+    [built.periods, people, overrides, records, goals],
   );
   const dirty = Object.keys(overrides).length > 0;
   useEffect(() => onStateChange({ dirty, busy }), [dirty, busy, onStateChange]);

@@ -6,7 +6,12 @@ import {
   type SessionRecord,
   type SessionWrite,
 } from "@workspace/practice";
-import { desiredSessionsForPeriod } from "./session-goals.ts";
+import {
+  annualGoalFor,
+  desiredSessionsForPeriod,
+  sessionGoalYear,
+  type SessionGoalYear,
+} from "./session-goals.ts";
 
 export const MAX_BULK_PERIODS = 52;
 
@@ -67,6 +72,7 @@ export function planBulkSessions(
   clinicians: BulkClinician[],
   overrides: Record<string, string>,
   existing: SessionRecord[],
+  goals: SessionGoalYear[] = [],
 ): { entries: BulkEntry[]; issues: BulkIssue[] } {
   const entries: BulkEntry[] = [];
   const issues: BulkIssue[] = [];
@@ -96,7 +102,11 @@ export function planBulkSessions(
         clinicianId: person.id,
         ...period,
         completed,
-        desired: same?.desired ?? desiredSessionsForPeriod(person.sessionsPerWeek, period),
+        desired: same?.desired ?? desiredSessionsForPeriod(
+          annualGoalFor(person.id, sessionGoalYear(period), goals) ??
+            person.sessionsPerWeek,
+          period,
+        ),
         cancelled: same?.cancelled ?? null,
         noShow: same?.noShow ?? null,
         scheduled: same?.scheduled ?? null,

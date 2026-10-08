@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { ApiError } from "@workspace/api-client-react";
 import {
   ArrowDownRight,
@@ -22,10 +23,16 @@ import {
   type SessionWrite,
 } from "@workspace/practice";
 import type { Context, ForecastMonth } from "@workspace/practice/hub";
-import { saveSessionRecord } from "@/lib/session-api";
 import {
+  listSessionGoals,
+  saveSessionGoal,
+  saveSessionRecord,
+  sessionGoalKey,
+} from "@/lib/session-api";
+import {
+  annualGoalFor,
   desiredSessionsForPeriod,
-  desiredSessionsForSelectedYear,
+  desiredSessionsForRecordYear,
   sessionGoalYear,
   weeklyGoalFromPeriodDesired,
 } from "@/lib/session-goals";
@@ -80,7 +87,6 @@ export default function WorkspaceSessions({
   onPlanHire,
   onOpenCalculations,
   forecastMonths,
-  onPersonGoalChange,
 }: {
   context: Context;
   teamId: number | null;
@@ -90,11 +96,15 @@ export default function WorkspaceSessions({
   onPlanHire: () => void;
   onOpenCalculations: () => void;
   forecastMonths: ForecastMonth[];
-  onPersonGoalChange: (
-    person: Context["clinicians"][number],
-    sessionsPerWeek: number,
-  ) => Promise<void>;
 }) {
+  const queryClient = useQueryClient();
+  const team = teamId === null ? "unassigned" : String(teamId);
+  const sessionGoals = useQuery({
+    queryKey: sessionGoalKey(team),
+    queryFn: ({ signal }) => listSessionGoals(team, signal),
+    enabled: !sandbox,
+  });
+  const annualGoals = sessionGoals.data ?? [];
   const people = context.clinicians.filter(
     (clinician) => (clinician.goalId ?? null) === teamId,
   );
@@ -153,14 +163,18 @@ export default function WorkspaceSessions({
 
   const desiredFor = (personId: number, period = range) => {
     const person = people.find((item) => item.id === personId);
-    return desiredSessionsForPeriod(person?.sessionsPerWeek ?? 0, period);
+    const sessionsPerWeek = annualGoalFor(
+      personId,
+      sessionGoalYear(period),
+      annualGoals,
+    ) ?? person?.sessionsPerWeek ?? 0;
+    return desiredSessionsForPeriod(sessionsPerWeek, period);
   };
-  const selectedYear = sessionGoalYear(range);
   const comparisonDesiredFor = (record: SessionRecord) =>
-    desiredSessionsForSelectedYear(
+    desiredSessionsForRecordYear(
       record,
       people.find((person) => person.id === record.clinicianId),
-      selectedYear,
+      annualGoals,
     );
   const exactRecord = (personId: number) =>
     records.find(
@@ -173,7 +187,7 @@ export default function WorkspaceSessions({
     const record = exactRecord(personId);
     return {
       completed: value(record?.completed),
-      desired: String(record?.desired ?? desiredFor(personId)),
+      desired: String(record ? comparisonDesiredFor(record) : desiredFor(personId)),
       cancelled: value(record?.cancelled),
       noShow: value(record?.noShow),
       scheduled: value(record?.scheduled),
@@ -197,6 +211,7 @@ export default function WorkspaceSessions({
     range.end,
     context.sessions,
     context.clinicians,
+    sessionGoals.data,
   ]);
 
   const changed = (personId: number) => {
@@ -284,15 +299,17 @@ export default function WorkspaceSessions({
       for (const person of changedPeople) {
         const draft = drafts[person.id];
         if (draft && Number(draft.desired) !== desiredFor(person.id)) {
-          await onPersonGoalChange(
-            person,
-            weeklyGoalFromPeriodDesired(Number(draft.desired), range),
-          );
+          await saveSessionGoal({
+            clinicianId: person.id,
+            year: sessionGoalYear(range),
+            sessionsPerWeek: weeklyGoalFromPeriodDesired(Number(draft.desired), range),
+          });
         }
         const command = commandFor(person.id);
         if (command) await saveSessionRecord(command);
       }
       pending.current.clear();
+      await queryClient.invalidateQueries({ queryKey: sessionGoalKey(team) });
       await onSaved();
       setMessage(
         `Saved ${changedPeople.length} clinician${changedPeople.length === 1 ? "" : "s"}.`,
@@ -841,6 +858,7 @@ export default function WorkspaceSessions({
           initialRange={range}
           onSaved={onSaved}
           onStateChange={setBulkState}
+          goals={annualGoals}
         />
       )}
       </div>}
@@ -1023,6 +1041,7 @@ export default function WorkspaceSessions({
         <SessionImportDialog
           context={context}
           teamId={teamId}
+          goals={annualGoals}
           onSaved={onSaved}
           onClose={(note) => {
             setImportOpen(false);
