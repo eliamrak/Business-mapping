@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import {
+  customFetch,
   useListBusinessGoals,
   useListClinicians,
   type Clinician,
@@ -8,7 +9,6 @@ import {
 import {
   dateRangeSchema,
   daysInclusive,
-  summarizeSessions,
   type SessionRecord,
 } from "@workspace/practice";
 import {
@@ -48,6 +48,11 @@ import {
   sessionHistory,
   sessionKey,
 } from "@/lib/session-api";
+import {
+  desiredSessionsForSelectedYear,
+  sessionGoalYear,
+  summarizeSessionsForSelectedYear,
+} from "@/lib/session-goals";
 import { calculateClinicianMetrics } from "@/lib/calculations";
 import "@/pages/practice.css";
 
@@ -424,15 +429,17 @@ export default function Practice() {
     () =>
       clinicians.map((clinician) => ({
         clinician,
-        summary: summarizeSessions(
+        summary: summarizeSessionsForSelectedYear(
           (sessionsQuery.data ?? []).filter(
             (r) => r.clinicianId === clinician.id,
           ),
           range,
+          clinician,
         ),
       })),
     [clinicians, sessionsQuery.data, range],
   );
+  const selectedYear = sessionGoalYear(range);
   const current = rows.find((row) => row.clinician.id === selected?.id);
   const selectedRecords = (sessionsQuery.data ?? [])
     .filter((row) => row.clinicianId === selected?.id)
@@ -482,6 +489,16 @@ export default function Practice() {
     void goalsQuery.refetch();
     void cliniciansQuery.refetch();
     void sessionsQuery.refetch();
+  }
+  async function updateClinicianGoal(
+    clinician: Clinician,
+    sessionsPerWeek: number,
+  ) {
+    await customFetch("/api/clinicians/" + clinician.id, {
+      method: "PATCH",
+      body: JSON.stringify({ sessionsPerWeek }),
+    });
+    await cliniciansQuery.refetch();
   }
   function columnsPicker() {
     return (
@@ -1011,7 +1028,15 @@ export default function Practice() {
                                 </td>
                                 <td>{number(record.completed)}</td>
                                 {columns.desired && (
-                                  <td>{number(record.desired)}</td>
+                                  <td>
+                                    {number(
+                                      desiredSessionsForSelectedYear(
+                                        record,
+                                        selected!,
+                                        selectedYear,
+                                      ),
+                                    )}
+                                  </td>
                                 )}
                                 {columns.average && (
                                   <td>
@@ -1129,6 +1154,7 @@ export default function Practice() {
             );
             setEditor(null);
           }}
+          onGoalChange={updateClinicianGoal}
         />
       )}
       {historyRecord && (

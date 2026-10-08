@@ -26,6 +26,12 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { saveSessionRecord, sessionKey } from "@/lib/session-api";
+import {
+  desiredSessionsForPeriod,
+  desiredSessionsForSelectedYear,
+  sessionGoalYear,
+  weeklyGoalFromPeriodDesired,
+} from "@/lib/session-goals";
 
 interface Props {
   clinician: Clinician;
@@ -35,10 +41,11 @@ interface Props {
   theme: string;
   onClose: () => void;
   onSaved: (record: SessionRecord) => void;
+  onGoalChange: (clinician: Clinician, sessionsPerWeek: number) => Promise<void>;
 }
 const fields = [
   ["completed", "Completed sessions", true],
-  ["desired", "Desired sessions", true],
+  ["desired", "Desired sessions this period", true],
   ["cancelled", "Cancelled", false],
   ["noShow", "No-shows", false],
   ["scheduled", "Scheduled sessions", false],
@@ -54,13 +61,22 @@ export default function SessionEditor({
   theme,
   onClose,
   onSaved,
+  onGoalChange,
 }: Props) {
   const queryClient = useQueryClient();
   const [form, setForm] = useState(() => ({
     start: record?.start ?? range.start,
     end: record?.end ?? range.end,
     completed: record ? String(record.completed) : "",
-    desired: record ? String(record.desired) : "",
+    desired: record
+      ? String(
+          desiredSessionsForSelectedYear(
+            record,
+            clinician,
+            sessionGoalYear(range),
+          ),
+        )
+      : String(desiredSessionsForPeriod(clinician.sessionsPerWeek, range)),
     cancelled: record?.cancelled == null ? "" : String(record.cancelled),
     noShow: record?.noShow == null ? "" : String(record.noShow),
     scheduled: record?.scheduled == null ? "" : String(record.scheduled),
@@ -150,6 +166,15 @@ export default function SessionEditor({
     };
     setSaveError("");
     try {
+      const currentDesired = desiredSessionsForPeriod(clinician.sessionsPerWeek, {
+        start: review.start,
+        end: review.end,
+      });
+      if (review.desired !== currentDesired)
+        await onGoalChange(
+          clinician,
+          weeklyGoalFromPeriodDesired(review.desired, review),
+        );
       const saved = await save.mutateAsync(request.current);
       queryClient.setQueryData<SessionRecord[]>(sessionKey(team), (old) => [
         ...(old ?? []).filter((row) => row.id !== saved.id),

@@ -6,6 +6,7 @@ import {
   type SessionRecord,
   type SessionWrite,
 } from "@workspace/practice";
+import { desiredSessionsForPeriod } from "./session-goals.ts";
 
 export const MAX_BULK_PERIODS = 52;
 
@@ -95,7 +96,7 @@ export function planBulkSessions(
         clinicianId: person.id,
         ...period,
         completed,
-        desired: same?.desired ?? Math.round(person.sessionsPerWeek * 2),
+        desired: same?.desired ?? desiredSessionsForPeriod(person.sessionsPerWeek, period),
         cancelled: same?.cancelled ?? null,
         noShow: same?.noShow ?? null,
         scheduled: same?.scheduled ?? null,

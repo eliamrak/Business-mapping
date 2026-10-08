@@ -6,6 +6,7 @@ import {
   type SessionRecord,
 } from "@workspace/practice";
 import type { Clinician } from "@workspace/practice/hub";
+import { desiredSessionsForPeriod } from "./session-goals.ts";
 
 export type ImportColumn = {
   index: number;
@@ -206,7 +207,7 @@ export function planSessionImport(
       if (!person) continue;
       const desired = goalSource === "sheet" && column.sheetGoal !== null
         ? column.sheetGoal
-        : Math.round((person.sessionsPerWeek * daysInclusive(start, end)) / 7);
+        : desiredSessionsForPeriod(person.sessionsPerWeek, { start, end });
       const result = sessionInputSchema.safeParse({
         clinicianId: person.id,
         start,

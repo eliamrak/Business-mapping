@@ -2873,6 +2873,9 @@ export default function PracticeWorkspace() {
                   onPlanHire={startPlanning}
                   onOpenCalculations={() => setSection("calculations")}
                   forecastMonths={months}
+                  onPersonGoalChange={(person, sessionsPerWeek) =>
+                    patchPerson(person, { sessionsPerWeek })
+                  }
                   onSaved={async () => {
                     await contextQuery.refetch();
                     void cache.invalidateQueries({

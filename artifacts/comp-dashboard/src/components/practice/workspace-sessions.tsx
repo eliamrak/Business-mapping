@@ -23,6 +23,12 @@ import {
 } from "@workspace/practice";
 import type { Context, ForecastMonth } from "@workspace/practice/hub";
 import { saveSessionRecord } from "@/lib/session-api";
+import {
+  desiredSessionsForPeriod,
+  desiredSessionsForSelectedYear,
+  sessionGoalYear,
+  weeklyGoalFromPeriodDesired,
+} from "@/lib/session-goals";
 import { firstHiringReviewMonth, summarizeHiringReadiness, summarizeLast1099Period, summarizeSessionOverview } from "@/lib/session-overview";
 import SessionImportDialog from "./session-import-dialog";
 import BulkSessionEntry from "./bulk-session-entry";
@@ -74,6 +80,7 @@ export default function WorkspaceSessions({
   onPlanHire,
   onOpenCalculations,
   forecastMonths,
+  onPersonGoalChange,
 }: {
   context: Context;
   teamId: number | null;
@@ -83,6 +90,10 @@ export default function WorkspaceSessions({
   onPlanHire: () => void;
   onOpenCalculations: () => void;
   forecastMonths: ForecastMonth[];
+  onPersonGoalChange: (
+    person: Context["clinicians"][number],
+    sessionsPerWeek: number,
+  ) => Promise<void>;
 }) {
   const people = context.clinicians.filter(
     (clinician) => (clinician.goalId ?? null) === teamId,
@@ -140,13 +151,17 @@ export default function WorkspaceSessions({
   });
   const pending = useRef<Map<number, SessionWrite>>(new Map());
 
-  const desiredFor = (personId: number) => {
+  const desiredFor = (personId: number, period = range) => {
     const person = people.find((item) => item.id === personId);
-    return Math.round(
-      ((person?.sessionsPerWeek ?? 0) * daysInclusive(range.start, range.end)) /
-        7,
-    );
+    return desiredSessionsForPeriod(person?.sessionsPerWeek ?? 0, period);
   };
+  const selectedYear = sessionGoalYear(range);
+  const comparisonDesiredFor = (record: SessionRecord) =>
+    desiredSessionsForSelectedYear(
+      record,
+      people.find((person) => person.id === record.clinicianId),
+      selectedYear,
+    );
   const exactRecord = (personId: number) =>
     records.find(
       (record) =>
@@ -267,6 +282,13 @@ export default function WorkspaceSessions({
       if (!changedPeople.length) return;
       setBusy(true);
       for (const person of changedPeople) {
+        const draft = drafts[person.id];
+        if (draft && Number(draft.desired) !== desiredFor(person.id)) {
+          await onPersonGoalChange(
+            person,
+            weeklyGoalFromPeriodDesired(Number(draft.desired), range),
+          );
+        }
         const command = commandFor(person.id);
         if (command) await saveSessionRecord(command);
       }
@@ -369,7 +391,10 @@ export default function WorkspaceSessions({
       .filter((record): record is SessionRecord => !!record);
     const recent = entries.filter((record) => record.end >= shift(today, -60));
     const fullness = (items: SessionRecord[]) => {
-      const desired = items.reduce((sum, record) => sum + record.desired, 0);
+      const desired = items.reduce(
+        (sum, record) => sum + comparisonDesiredFor(record),
+        0,
+      );
       return desired
         ? (items.reduce((sum, record) => sum + record.completed, 0) / desired) *
             100
@@ -381,7 +406,7 @@ export default function WorkspaceSessions({
     );
     return {
       average: average(entries.map((record) => record.completed)),
-      desired: average(entries.map((record) => record.desired)),
+      desired: average(entries.map(comparisonDesiredFor)),
       weekly: recordedDays
         ? (entries.reduce((sum, record) => sum + record.completed, 0) /
             recordedDays) *
@@ -666,7 +691,7 @@ export default function WorkspaceSessions({
                 checked={adjustGoals}
                 onChange={(event) => setAdjustGoals(event.target.checked)}
               />
-              Adjust period goals
+              Adjust yearly goals
             </label>
           </div>
 
@@ -709,7 +734,7 @@ export default function WorkspaceSessions({
                   </label>
                   {adjustGoals && (
                     <label className="pw-session-goal-input">
-                      Desired
+                      Desired this period
                       <input
                         aria-label={`${person.label} desired sessions`}
                         type="number"
@@ -872,15 +897,16 @@ export default function WorkspaceSessions({
                 </th>
                 {people.map((person) => {
                   const record = recordFor(period, person.id);
-                  const fullness = record?.desired
-                    ? (record.completed / record.desired) * 100
+                  const desired = record ? comparisonDesiredFor(record) : 0;
+                  const fullness = desired
+                    ? (record!.completed / desired) * 100
                     : null;
                   return (
                     <td key={person.id}>
                       {record ? (
                         <div className="pw-session-history-value">
                           <strong>{record.completed}</strong>
-                          {columns.desired && <span>of {record.desired}</span>}
+                          {columns.desired && <span>of {desired}</span>}
                           {columns.fullness && fullness != null && (
                             <em
                               data-tone={
