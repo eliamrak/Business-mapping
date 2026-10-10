@@ -50,7 +50,8 @@ export function staffMemberAt(
     .sort(
       (a, b) =>
         a.effectiveDate.localeCompare(b.effectiveDate) ||
-        a.id.localeCompare(b.id),
+        Number(a.end === null) - Number(b.end === null) ||
+        (a.end ?? "").localeCompare(b.end ?? ""),
     );
   return terms.reduce<Staff>(
     (current, term) => ({
