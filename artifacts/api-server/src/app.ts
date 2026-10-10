@@ -2,6 +2,7 @@ import express, { type Express } from "express";
 import cors from "cors";
 import pinoHttp from "pino-http";
 import router from "./routes";
+import healthRouter from "./routes/health";
 import { logger } from "./lib/logger";
 import { seedIfEmpty } from "./seed";
 import { db } from "@workspace/db";
@@ -43,6 +44,8 @@ app.use(CLERK_PROXY_PATH, clerkProxyMiddleware());
 app.use(cors({origin: process.env.APP_ORIGIN || false, credentials:true}));
 app.use(express.json({limit:"15mb"}));
 app.use(express.urlencoded({ extended: true }));
+
+app.use("/api", healthRouter);
 
 app.use(
   clerkMiddleware((req) => ({

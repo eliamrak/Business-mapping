@@ -17,6 +17,15 @@ const goal = (year: number, sessionsPerWeek: number) => ({
   year,
   sessionsPerWeek,
 });
+const clinicianGoal = (
+  clinicianId: number,
+  year: number,
+  sessionsPerWeek: number,
+) => ({
+  clinicianId,
+  year,
+  sessionsPerWeek,
+});
 const record = (
   start: string,
   end: string,
@@ -96,6 +105,35 @@ test("persisted annual goals survive reloads and stay independent by year", () =
     ),
     [12, 15],
   );
+});
+
+test("reloaded annual goals update historical current and future periods for one clinician only", () => {
+  const otherClinician = { id: 2, sessionsPerWeek: 30 };
+  const records = [
+    record("2026-01-01", "2026-01-14", 10, 44, 1),
+    record("2026-06-04", "2026-06-17", 12, 44, 2),
+    record("2026-12-17", "2026-12-30", 14, 44, 3),
+    { ...record("2026-06-04", "2026-06-17", 22, 66, 4), clinicianId: 2 },
+  ];
+  const goalsFromReload = [
+    clinicianGoal(1, 2026, 15),
+    clinicianGoal(2, 2026, 9),
+  ];
+
+  assert.deepEqual(
+    withAnnualDesiredSessions(
+      records,
+      [clinician, otherClinician],
+      goalsFromReload,
+    ).map((item) => [item.clinicianId, item.desired]),
+    [
+      [1, 30],
+      [1, 30],
+      [1, 30],
+      [2, 18],
+    ],
+  );
+  assert.deepEqual(records.map((item) => item.desired), [44, 44, 44, 66]);
 });
 
 test("period desired values persist as the matching weekly annual goal for future periods", () => {

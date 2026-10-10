@@ -195,6 +195,31 @@ test("campaign estimates stay unavailable when optional form inputs are blank", 
   assert.equal(partial.consultations, 13.6);
   assert.ok(partial.warnings.some((warning) => warning.includes("conversion rates are incomplete")));
 });
+
+test("campaigns with spend but no start date are excluded with a forecast warning", () => {
+  const w = setup();
+  w.campaigns.push(
+    campaignSchema.parse({
+      id: id(),
+      name: "Undated ads",
+      source: "Search",
+      method: "cpl",
+      monthlySpend: 850,
+      cpl: 50,
+    }),
+  );
+  const month = forecast(w, context)[0];
+  close(month.values.marketing, 0);
+  assert.equal(month.channels[w.campaigns[0].id]?.spend, 0);
+  assert.ok(
+    month.warnings.some((warning) =>
+      warning.includes("Undated ads: forecast start is missing."),
+    ),
+  );
+
+  w.campaigns = [campaignSchema.parse({ id: id(), name: "Blank campaign" })];
+  assert.equal(forecast(w, context)[0].warnings.length, 0);
+});
 test("click funnel and explicit manual volume work without conflating CAC and CPL", () => {
   const w = setup(),
     c = campaignSchema.parse({

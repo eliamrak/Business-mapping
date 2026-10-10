@@ -131,6 +131,15 @@ export default function MoneyFlowToday({
     campaign.start <= latestDepositDate &&
     (!campaign.end || campaign.end >= month),
   );
+  const campaignsMissingStart = workspace.campaigns.filter((campaign) =>
+    !campaign.archived && !campaign.planningOnly && campaign.start === null &&
+    ((campaign.monthlySpend ?? 0) > 0 ||
+      (campaign.otherMonthlyCost ?? 0) > 0 ||
+      campaign.method !== null),
+  );
+  const overheadNote = workspace.settings.overheadMode === "baseline"
+    ? "Includes the remaining overhead estimate while your list is incomplete"
+    : "Uses entered expenses only because expenses are marked complete";
   const profileFor = (person: Person) =>
     clinicianModelAt(workspace, person.id, latestDepositDate);
   const listedRateFor = (person: Person) =>
@@ -258,7 +267,7 @@ export default function MoneyFlowToday({
             </>}
         </SourceRow>)}
       </Sources>}
-      <div className="pw-flow-row"><span>Operating expenses <small>Includes the remaining overhead estimate while your list is incomplete</small></span><strong>-{currency(flow.overhead)}</strong></div>
+      <div className="pw-flow-row"><span>Operating expenses <small>{overheadNote}</small></span><strong>-{currency(flow.overhead)}</strong></div>
       <Sources label="Operating expense sources">
         <div className="pw-flow-source-row"><span>Overhead basis</span><div className="pw-segmented" role="group" aria-label="Overhead basis">
           <button type="button" aria-pressed={workspace.settings.overheadMode === "baseline"} onClick={() => onOverheadMode("baseline")}>Keep estimate</button>
@@ -282,6 +291,9 @@ export default function MoneyFlowToday({
       </Sources>
       <div className="pw-flow-row"><span>Marketing</span><strong>-{currency(flow.marketing)}</strong></div>
       <Sources label="Marketing spend and services">
+        {campaignsMissingStart.map((campaign) => <p className="pw-flow-note" key={campaign.id}>
+          {campaign.name || "Campaign"} has monthly spend or assumptions but no start date, so it is not included yet.
+        </p>)}
         {campaigns.map((campaign) => <SourceRow key={campaign.id} label={<InlineText label="Campaign name" value={campaign.name} onCommit={(name) => onCampaignPatch(campaign.id, { name })} />}>
           <div className="pw-flow-mini-field"><small>Source</small><InlineText label={`${campaign.name || "Campaign"} source`} value={campaign.source}
             onCommit={(source) => onCampaignPatch(campaign.id, { source })} /></div>

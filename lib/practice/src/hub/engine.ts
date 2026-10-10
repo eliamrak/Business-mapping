@@ -514,9 +514,16 @@ export function forecast(
       marketing = 0,
       adSpend = 0;
     const channels: Record<string, FunnelEstimate> = {};
+    const needsCampaignStart = (c: Campaign) =>
+      !c.archived &&
+      !c.planningOnly &&
+      c.start === null &&
+      ((c.monthlySpend ?? 0) > 0 ||
+        (c.otherMonthlyCost ?? 0) > 0 ||
+        c.method !== null);
     for (const original of workspace.campaigns.filter(
       (c) =>
-        active(c, start, end) &&
+        (active(c, start, end) || needsCampaignStart(c)) &&
         (!c.planningOnly ||
           effective.some(
             (e) => e.targetId === c.id && e.field === "marketing.spend",
