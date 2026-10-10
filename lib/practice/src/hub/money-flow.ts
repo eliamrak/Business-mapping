@@ -91,6 +91,7 @@ export function monthFlow(
           }, 0);
       }, 0);
   const staffPay = scheduledStaffPay(cutoff);
+  const payrollHistoryStart = "2026-01-01";
   const empty = {
     start,
     through,
@@ -167,7 +168,7 @@ export function monthFlow(
     let personRevenue = 0;
     let capEarned = baseProfile?.openingCapContribution ?? 0;
     const schedule = payrollScheduleForClassification(person.classification);
-    const activeStart = baseProfile?.start ?? start;
+    const activeStart = baseProfile?.start ?? payrollHistoryStart;
     const dayPay = (date: string, count: number) => {
       const activeProfile = clinicianModelAt(workspace, person.id, date);
       if (baseProfile && !activeProfile) return 0;

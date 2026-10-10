@@ -383,6 +383,36 @@ test("1099 per-session pay lands on the next anchored Thursday paycheck", () => 
   close(octoberPayday.clinicianPay, 1400);
 });
 
+test("1099 per-session pay without an operating profile includes the full prior-month pay period", () => {
+  const workspace = setup();
+  workspace.clinicians = [];
+  const contractor = { ...wife, classification: "1099" };
+  const octoberPayday = monthFlow(
+    workspace,
+    { clinicians: [contractor], staff: [], sessions: [record("2026-09-24", "2026-10-07", 14)] },
+    "2026-10-01",
+    "2026-10-08",
+  );
+  close(octoberPayday.sessions, 7);
+  close(octoberPayday.clinicianPay, 14 * contractor.preCapClinicianSplit / 100 * contractor.sessionRate);
+});
+
+test("1099 per-session pay honors an explicit operating profile start date", () => {
+  const workspace = setup();
+  workspace.clinicians[0].start = "2026-10-01";
+  workspace.clinicians[0].payMode = "per_session";
+  workspace.clinicians[0].payAmount = 100;
+  const contractor = { ...wife, classification: "1099" };
+  const octoberPayday = monthFlow(
+    workspace,
+    { clinicians: [contractor], staff: [], sessions: [record("2026-09-24", "2026-10-07", 14)] },
+    "2026-10-01",
+    "2026-10-08",
+  );
+  close(octoberPayday.sessions, 7);
+  close(octoberPayday.clinicianPay, 700);
+});
+
 test("semi-monthly pay uses the 30th instead of waiting for a 31st", () => {
   assert.equal(semiMonthlyChecksThrough("2026-01-01", "2026-01-29", "2026-01-01"), 1);
   assert.equal(semiMonthlyChecksThrough("2026-01-01", "2026-01-30", "2026-01-01"), 2);
