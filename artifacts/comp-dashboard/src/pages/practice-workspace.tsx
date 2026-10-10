@@ -47,6 +47,7 @@ import {
   periodSchema,
   clinicianSettingSchema,
   termSchema,
+  staffTermSchema,
   allocationSchema,
   type Workspace,
   type Context,
@@ -1408,8 +1409,51 @@ export default function PracticeWorkspace() {
         "Updated desired session projection",
       );
   }
-  async function patchStaff(member: Context["staff"][number], patch: Partial<Context["staff"][number]>) {
+  async function patchStaff(
+    member: Context["staff"][number],
+    patch: Partial<Context["staff"][number]>,
+    options?: { year: number; effectiveDate: string | null },
+  ) {
     if (busy.current) throw new Error("A save is in progress. Please retry this change.");
+    if (workspace && options && member.id) {
+      const effectiveDate = options.effectiveDate ?? `${options.year}-01-01`;
+      const end = options.effectiveDate ? null : `${options.year}-12-31`;
+      const nextTerm = staffTermSchema.parse({
+        id: crypto.randomUUID(),
+        staffMemberId: member.id,
+        effectiveDate,
+        end,
+        annualSalary: patch.annualSalary ?? null,
+        hourlyRate: patch.hourlyRate ?? null,
+        hoursPerWeek: patch.hoursPerWeek ?? null,
+        weeksPerYear: patch.weeksPerYear ?? null,
+        notes: options.effectiveDate
+          ? "Date-specific staff pay change"
+          : `Default staff pay for ${options.year}`,
+      });
+      const nextWorkspace = {
+        ...workspace,
+        staffTerms: [
+          ...workspace.staffTerms.filter(
+            (term) =>
+              !(
+                term.staffMemberId === member.id &&
+                term.effectiveDate === effectiveDate &&
+                (term.end ?? null) === end
+              ),
+          ),
+          nextTerm,
+        ],
+      };
+      await persist(
+        nextWorkspace,
+        options.effectiveDate
+          ? "Recorded staff pay change date"
+          : `Updated ${options.year} staff pay estimate`,
+      );
+      setMessage("Saved to Today");
+      return;
+    }
     busy.current = true;
     setSaving(true);
     try {

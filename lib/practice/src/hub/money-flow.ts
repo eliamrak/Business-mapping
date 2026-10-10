@@ -1,6 +1,12 @@
 import { daysInclusive } from "../index.ts";
 import { calculateClinicianMetrics, calculateStaffMemberCost } from "../compensation.ts";
-import { forecast, budgetAmount, monthEnd, type Context } from "./engine.ts";
+import {
+  forecast,
+  budgetAmount,
+  monthEnd,
+  staffMemberAt,
+  type Context,
+} from "./engine.ts";
 import {
   estimateW2NetPay,
   payrollPayDatesThrough,
@@ -76,14 +82,18 @@ export function monthFlow(
     context.staff
       .filter((member) => (member.goalId ?? null) === workspace.settings.teamId)
       .reduce((sum, member) => {
-        const annualCost = calculateStaffMemberCost(member).totalAnnualCost;
         const schedule = payrollScheduleForClassification(member.classification);
         const payrollHistoryStart = "2026-01-01";
         if (!schedule)
-          return sum + annualCost / 12 *
+          return sum + calculateStaffMemberCost(
+            staffMemberAt(workspace, member, throughDate),
+          ).totalAnnualCost / 12 *
             daysInclusive(start, throughDate) / daysInclusive(start, end);
         return sum + payrollPayDatesThrough(schedule, start, throughDate, start)
           .reduce((paySum, payDate) => {
+            const annualCost = calculateStaffMemberCost(
+              staffMemberAt(workspace, member, payDate),
+            ).totalAnnualCost;
             const period = payrollPeriodForPayDate(schedule, payDate);
             const payStart = period.start > payrollHistoryStart ? period.start : payrollHistoryStart;
             if (payStart > period.end) return paySum;

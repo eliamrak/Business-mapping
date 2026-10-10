@@ -110,30 +110,9 @@ router.put("/session-goals", async (req, res) => {
     return res.status(400).json({ error: "Check the session goal." });
   const input = parsed.data;
   try {
-    if (res.locals.role === "data_entry") {
-      const [hub] = await db
-        .select()
-        .from(hubWorkspacesTable)
-        .where(eq(hubWorkspacesTable.id, 1));
-      const [clinician] = await db
-        .select({ id: cliniciansTable.id, goalId: cliniciansTable.goalId })
-        .from(cliniciansTable)
-        .where(eq(cliniciansTable.id, input.clinicianId));
-      if (!clinician)
-        throw new SessionGoalConflict(
-          "This clinician no longer exists. Refresh the team list.",
-          404,
-        );
-      if (
-        !hub ||
-        clinician.goalId !== workspaceSchema.parse(hub.data).settings.teamId
-      )
-        throw new SessionConflict(
-          "Data-entry access is limited to the active team.",
-          403,
-        );
-    }
-    const result = await saveSessionGoal(input);
+    const result = await saveSessionGoal(input, {
+      requireActiveTeam: res.locals.role === "data_entry",
+    });
     return res.json(result);
   } catch (error) {
     if (error instanceof SessionConflict || error instanceof SessionGoalConflict)

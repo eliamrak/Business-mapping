@@ -34,6 +34,30 @@ export type Context = {
   staff: Staff[];
   sessions: SessionRecord[];
 };
+export function staffMemberAt(
+  workspace: Workspace,
+  member: Staff,
+  date: string,
+): Staff {
+  if (!member.id) return member;
+  const term = [...workspace.staffTerms]
+    .filter(
+      (entry) =>
+        entry.staffMemberId === member.id &&
+        entry.effectiveDate <= date &&
+        (!entry.end || entry.end >= date),
+    )
+    .sort((a, b) => a.effectiveDate.localeCompare(b.effectiveDate))
+    .at(-1);
+  if (!term) return member;
+  return {
+    ...member,
+    annualSalary: term.annualSalary ?? member.annualSalary,
+    hourlyRate: term.hourlyRate ?? member.hourlyRate,
+    hoursPerWeek: term.hoursPerWeek ?? member.hoursPerWeek,
+    weeksPerYear: term.weeksPerYear ?? member.weeksPerYear,
+  };
+}
 export type Values = Record<string, number | null>;
 export type ForecastMonth = {
   date: string;
@@ -1245,7 +1269,10 @@ export function forecast(
       .reduce((n, e) => n + e.oneTimeCost, 0);
     overhead += oneTime;
     const staffCost = staff.reduce(
-      (n, s) => n + calculateStaffMemberCost(s).totalAnnualCost / 12,
+      (n, s) =>
+        n + calculateStaffMemberCost(staffMemberAt(workspace, s, start))
+          .totalAnnualCost /
+          12,
       0,
     );
     const ownerPayroll = setting.ownerPayrollMonthly + explicitOwner;

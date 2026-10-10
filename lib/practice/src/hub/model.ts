@@ -146,6 +146,17 @@ export const termSchema = z.object({
   expectedSessionRevenue: money.nullable().default(null),
   notes: note,
 });
+export const staffTermSchema = z.object({
+  id,
+  staffMemberId: z.number().int().positive(),
+  effectiveDate: dateSchema,
+  end: dateSchema.nullable().default(null),
+  annualSalary: money.nullable().default(null),
+  hourlyRate: money.nullable().default(null),
+  hoursPerWeek: z.number().min(0).max(168).nullable().default(null),
+  weeksPerYear: z.number().min(1).max(52.1786).nullable().default(null),
+  notes: note,
+});
 
 export const campaignMethods = [
   "cpl",
@@ -617,6 +628,7 @@ export const workspaceSchema = z
     rooms: z.array(roomSchema).max(5000),
     clinicians: z.array(clinicianSettingSchema).max(5000),
     terms: z.array(termSchema).max(10000),
+    staffTerms: z.array(staffTermSchema).max(10000).default(() => []),
     campaigns: z.array(campaignSchema).max(2000),
     funnels: z.array(funnelSchema).max(30000),
     transactions: z.array(transactionSchema).max(50000),
@@ -999,6 +1011,7 @@ export type PlanEvent = z.infer<typeof eventSchema>;
 export type Proposal = z.infer<typeof proposalSchema>;
 export type Rule = z.infer<typeof ruleSchema>;
 export type Period = z.infer<typeof periodSchema>;
+export type StaffTerm = z.infer<typeof staffTermSchema>;
 export type Collection = Exclude<keyof Workspace, "settings" | "familyPaychecks">;
 export const collections: Collection[] = [
   "categories",
@@ -1007,6 +1020,7 @@ export const collections: Collection[] = [
   "rooms",
   "clinicians",
   "terms",
+  "staffTerms",
   "campaigns",
   "funnels",
   "transactions",

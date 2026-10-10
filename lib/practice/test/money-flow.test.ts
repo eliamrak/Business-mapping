@@ -3,7 +3,8 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import {
   emptyWorkspace, workspaceSchema, clinicianSettingSchema,
-  familyPaycheckSchema, allocationSchema, termSchema, monthFlow, forecast,
+  familyPaycheckSchema, allocationSchema, termSchema, staffTermSchema,
+  periodSchema, monthFlow, forecast,
   additionalWithholdingPctFromNet, semiMonthlyChecksThrough, type Context,
 } from "../src/hub/index.ts";
 
@@ -150,6 +151,117 @@ test("support staff W2 pay uses semi-monthly checks and hourly burden once", () 
     "2026-01-30",
   );
   close(second.staffPay, 25 * 40 * 52 * 1.1 / 12);
+});
+
+test("default staff pay changes apply across one selected year only", () => {
+  const workspace = setup();
+  const hourly = {
+    ...staff(),
+    annualSalary: null,
+    hourlyRate: 18,
+    hoursPerWeek: 10,
+    weeksPerYear: 48,
+  };
+  workspace.staffTerms.push(staffTermSchema.parse({
+    id: randomUUID(),
+    staffMemberId: hourly.id,
+    effectiveDate: "2026-01-01",
+    end: "2026-12-31",
+    hourlyRate: 16,
+  }));
+  const january = monthFlow(
+    workspace,
+    { clinicians: [wife], staff: [hourly], sessions: [] },
+    "2026-01-01",
+    "2026-01-30",
+  );
+  const october = monthFlow(
+    workspace,
+    { clinicians: [wife], staff: [hourly], sessions: [] },
+    "2026-10-01",
+    "2026-10-30",
+  );
+  const nextYear = monthFlow(
+    workspace,
+    { clinicians: [wife], staff: [hourly], sessions: [] },
+    "2027-01-01",
+    "2027-01-30",
+  );
+  close(january.staffPay, 16 * 10 * 48 * 1.1 / 12);
+  close(october.staffPay, 16 * 10 * 48 * 1.1 / 12);
+  close(nextYear.staffPay, 18 * 10 * 48 * 1.1 / 12);
+});
+
+test("date-specific staff pay changes require an explicit boundary and isolate employees", () => {
+  const workspace = setup();
+  const hourly = {
+    ...staff(),
+    annualSalary: null,
+    hourlyRate: 18,
+    hoursPerWeek: 10,
+    weeksPerYear: 48,
+  };
+  const peer = {
+    ...hourly,
+    id: 2,
+    label: "Peer",
+  };
+  workspace.staffTerms.push(staffTermSchema.parse({
+    id: randomUUID(),
+    staffMemberId: hourly.id,
+    effectiveDate: "2026-10-01",
+    hourlyRate: 16,
+  }));
+  const september = monthFlow(
+    workspace,
+    { clinicians: [wife], staff: [hourly, peer], sessions: [] },
+    "2026-09-01",
+    "2026-09-30",
+  );
+  const october = monthFlow(
+    workspace,
+    { clinicians: [wife], staff: [hourly, peer], sessions: [] },
+    "2026-10-01",
+    "2026-10-30",
+  );
+  close(september.staffPay, (18 + 18) * 10 * 48 * 1.1 / 12);
+  close(october.staffPay, (16 + 18) * 10 * 48 * 1.1 / 12);
+});
+
+test("recorded staff payroll stays actual while modeled months recalculate", () => {
+  const workspace = setup();
+  workspace.periods.push(periodSchema.parse({
+    id: randomUUID(),
+    name: "January actuals",
+    start: "2026-01-01",
+    end: "2026-01-31",
+    status: "finalized",
+    revenue: 5000,
+    earnedRevenue: 5000,
+    clinicianPay: 1000,
+    employerBurden: 100,
+    staffPay: 1234,
+    ownerPay: 0,
+    expensesComplete: true,
+  }));
+  workspace.staffTerms.push(staffTermSchema.parse({
+    id: randomUUID(),
+    staffMemberId: 1,
+    effectiveDate: "2026-01-01",
+    end: "2026-12-31",
+    hourlyRate: 16,
+  }));
+  const hourly = {
+    ...staff(),
+    annualSalary: null,
+    hourlyRate: 18,
+    hoursPerWeek: 10,
+    weeksPerYear: 48,
+  };
+  const months = forecast(workspace, { clinicians: [wife], staff: [hourly], sessions: [] });
+  close(workspace.periods[0].staffPay, 1234);
+  close(months[0].values.staffCost, 16 * 10 * 48 * 1.1 / 12);
+  close(months[1].values.staffCost, 16 * 10 * 48 * 1.1 / 12);
 });
 
 test("support staff 1099 pay follows biweekly Thursdays including three-check months", () => {

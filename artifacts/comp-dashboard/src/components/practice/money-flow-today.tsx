@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { ChevronDown, ChevronRight, Plus, Trash2 } from "lucide-react";
-import { additionalWithholdingPctFromNet, clinicianModelAt, clinicianTermsAt, estimateW2NetPay, monthFlow, type Context, type Workspace } from "@workspace/practice/hub";
+import { additionalWithholdingPctFromNet, clinicianModelAt, clinicianTermsAt, estimateW2NetPay, monthFlow, staffMemberAt, type Context, type Workspace } from "@workspace/practice/hub";
 
 const currency = (value: number | null) => value === null
   ? "--"
@@ -10,6 +10,10 @@ const shortDate = (date: string) => new Intl.DateTimeFormat("en-US", { month: "s
 
 type Person = Context["clinicians"][number];
 type Staff = Context["staff"][number];
+type StaffPatchOptions = {
+  year: number;
+  effectiveDate: string | null;
+};
 type Profile = Workspace["clinicians"][number];
 type Budget = Workspace["budgets"][number];
 type Campaign = Workspace["campaigns"][number];
@@ -83,7 +87,7 @@ type Props = {
   onAverageRate: (person: Person, rate: number | null, start: string) => void;
   onClinicianModel: (person: Person, patch: Partial<Profile>, start: string) => void;
   onPersonPatch: (person: Person, patch: Partial<Person>) => Promise<void>;
-  onStaffPatch: (member: Staff, patch: Partial<Staff>) => Promise<void>;
+  onStaffPatch: (member: Staff, patch: Partial<Staff>, options?: StaffPatchOptions) => Promise<void>;
   onBudgetPatch: (id: string, patch: Partial<Budget>) => void;
   onAddExpense: (start: string) => void;
   onAddMarketingCost: (start: string) => void;
@@ -103,6 +107,7 @@ export default function MoneyFlowToday({
   const [fundKind, setFundKind] = useState<"tax" | "reserve" | "distribution" | "retained">("reserve");
   const [fundPercent, setFundPercent] = useState("");
   const [changeError, setChangeError] = useState("");
+  const [staffModes, setStaffModes] = useState<Record<number, { mode: "year" | "date"; date: string }>>({});
   const previous = new Date(today.slice(0, 7) + "-01T12:00:00Z");
   previous.setUTCMonth(previous.getUTCMonth() - 1);
   const month = view === "current" ? today.slice(0, 7) + "-01" : previous.toISOString().slice(0, 7) + "-01";
@@ -115,6 +120,14 @@ export default function MoneyFlowToday({
   const staff = context.staff.filter((member) =>
     (member.goalId ?? null) === workspace.settings.teamId,
   );
+  const staffChangeFor = (member: Staff): StaffPatchOptions => {
+    const id = member.id ?? 0;
+    const mode = staffModes[id]?.mode ?? "year";
+    const fallback = month > today ? month : today;
+    const date = staffModes[id]?.date || fallback;
+    const year = Number((mode === "date" ? date : month).slice(0, 4));
+    return { year, effectiveDate: mode === "date" ? date : null };
+  };
   const activeBudgets = workspace.budgets.filter((budget) =>
     !budget.archived && !budget.planningOnly && budget.start <= latestDepositDate &&
     (!budget.end || budget.end >= month),
@@ -257,15 +270,35 @@ export default function MoneyFlowToday({
       </Sources>
       <div className="pw-flow-row"><span>Support staff</span><strong>-{currency(flow.staffPay)}</strong></div>
       {staff.length > 0 && <Sources label="Support staff pay">
-        {staff.map((member) => <SourceRow key={member.id} label={member.label ?? `Staff ${member.id}`}>
-          {member.annualSalary !== null ? <InlineNumber label={`${member.label} annual salary`} value={member.annualSalary ?? 0} prefix="$"
-            onCommit={(annualSalary) => onStaffPatch(member, { annualSalary })} /> : <>
-              <InlineNumber label={`${member.label} hourly rate`} value={member.hourlyRate ?? 0} prefix="$"
-                onCommit={(hourlyRate) => onStaffPatch(member, { hourlyRate })} />
-              <InlineNumber label={`${member.label} hours per week`} value={member.hoursPerWeek ?? 0} suffix="hrs" max={168}
-                onCommit={(hoursPerWeek) => onStaffPatch(member, { hoursPerWeek })} />
-            </>}
-        </SourceRow>)}
+        {staff.map((member) => {
+          const effective = staffMemberAt(workspace, member, latestDepositDate);
+          const id = member.id ?? 0;
+          const mode = staffModes[id]?.mode ?? "year";
+          const date = staffModes[id]?.date || (month > today ? month : today);
+          const year = Number(month.slice(0, 4));
+          return <SourceRow key={member.id} label={member.label ?? `Staff ${member.id}`}>
+            {effective.annualSalary !== null ? <InlineNumber label={`${member.label} annual salary`} value={effective.annualSalary ?? 0} prefix="$"
+              onCommit={(annualSalary) => onStaffPatch(member, { annualSalary }, staffChangeFor(member))} /> : <>
+                <InlineNumber label={`${member.label} hourly rate`} value={effective.hourlyRate ?? 0} prefix="$"
+                  onCommit={(hourlyRate) => onStaffPatch(member, { hourlyRate }, staffChangeFor(member))} />
+                <InlineNumber label={`${member.label} hours per week`} value={effective.hoursPerWeek ?? 0} suffix="hrs" max={168}
+                  onCommit={(hoursPerWeek) => onStaffPatch(member, { hoursPerWeek }, staffChangeFor(member))} />
+              </>}
+            <select aria-label={`${member.label ?? "Staff"} rate timing`} value={mode}
+              onChange={(event) => setStaffModes((current) => ({
+                ...current,
+                [id]: { mode: event.target.value as "year" | "date", date },
+              }))}>
+              <option value="year">All {year}</option>
+              <option value="date">Starts on specific date</option>
+            </select>
+            {mode === "date" && <input className="pw-flow-date" type="date" aria-label={`${member.label ?? "Staff"} rate start date`} value={date}
+              onChange={(event) => setStaffModes((current) => ({
+                ...current,
+                [id]: { mode: "date", date: event.target.value },
+              }))} />}
+          </SourceRow>;
+        })}
       </Sources>}
       <div className="pw-flow-row"><span>Operating expenses <small>{overheadNote}</small></span><strong>-{currency(flow.overhead)}</strong></div>
       <Sources label="Operating expense sources">

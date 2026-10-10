@@ -2,15 +2,17 @@ import { eq, isNull } from "drizzle-orm";
 import {
   db,
   cliniciansTable,
+  hubWorkspacesTable,
   sessionGoalYearsTable,
 } from "@workspace/db";
+import { workspaceSchema } from "@workspace/practice/hub";
 
 export class SessionGoalConflict extends Error {
-  constructor(
-    message: string,
-    readonly status = 409,
-  ) {
+  readonly status: number;
+
+  constructor(message: string, status = 409) {
     super(message);
+    this.status = status;
   }
 }
 
@@ -18,6 +20,10 @@ export type SessionGoalInput = {
   clinicianId: number;
   year: number;
   sessionsPerWeek: number;
+};
+
+export type SessionGoalAccess = {
+  requireActiveTeam?: boolean;
 };
 
 export const toSessionGoal = (
@@ -47,10 +53,13 @@ export async function listSessionGoalsForGoal(goal: string | number | null) {
   return rows.map((row) => toSessionGoal(row.goal));
 }
 
-export async function saveSessionGoal(input: SessionGoalInput) {
+export async function saveSessionGoal(
+  input: SessionGoalInput,
+  access: SessionGoalAccess = {},
+) {
   return db.transaction(async (tx) => {
     const [clinician] = await tx
-      .select({ id: cliniciansTable.id })
+      .select({ id: cliniciansTable.id, goalId: cliniciansTable.goalId })
       .from(cliniciansTable)
       .where(eq(cliniciansTable.id, input.clinicianId));
     if (!clinician)
@@ -58,6 +67,20 @@ export async function saveSessionGoal(input: SessionGoalInput) {
         "This clinician no longer exists. Refresh the team list.",
         404,
       );
+    if (access.requireActiveTeam) {
+      const [hub] = await tx
+        .select()
+        .from(hubWorkspacesTable)
+        .where(eq(hubWorkspacesTable.id, 1));
+      if (
+        !hub ||
+        clinician.goalId !== workspaceSchema.parse(hub.data).settings.teamId
+      )
+        throw new SessionGoalConflict(
+          "Data-entry access is limited to the active team.",
+          403,
+        );
+    }
     const [saved] = await tx
       .insert(sessionGoalYearsTable)
       .values({
