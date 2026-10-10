@@ -227,11 +227,12 @@ export const fields: Record<Collection, Field[]> = {
   ],
   campaigns: [
     name,
-    { key: "source", label: "Lead source" },
+    { key: "source", label: "Lead source", optional: true },
     {
       key: "method",
       label: "Estimate new clients using",
       type: "select",
+      optional: true,
       options: [
         { value: "cpl", label: "Cost per lead + conversion rates" },
         { value: "cac", label: "Cost per acquired client" },
@@ -241,13 +242,13 @@ export const fields: Record<Collection, Field[]> = {
         { value: "custom", label: "Custom KPI formula" },
       ],
     },
-    n("monthlySpend", "Monthly ad spend ($)"),
+    n("monthlySpend", "Monthly ad spend ($)", { optional: true }),
     ...range,
-    n("cpl", "Cost per lead ($)"),
-    n("cac", "Cost per acquired client ($)"),
-    pct("consultationPct", "Lead to consultation (%)"),
-    pct("attendancePct", "Consultation attendance (%)"),
-    pct("closePct", "Attended consultation to client (%)"),
+    n("cpl", "Cost per lead ($)", { optional: true }),
+    n("cac", "Cost per acquired client ($)", { optional: true }),
+    { ...pct("consultationPct", "Lead to consultation (%)", true), optional: true },
+    { ...pct("attendancePct", "Consultation attendance (%)", true), optional: true },
+    { ...pct("closePct", "Attended consultation to client (%)", true), optional: true },
     n("sessionsPerClientMonth", "Sessions / client / month", { max: 31 }),
     n("retentionMonths", "Expected retention (months)", { min: 1, max: 120 }),
     {
@@ -511,7 +512,7 @@ export function newRecord(
     clinicians: { clinicianId: 0, desiredWeeklySessions: 25 },
     terms: { clinicianId: 0, effectiveDate: today },
     staffTerms: { staffMemberId: 0, effectiveDate: today },
-    campaigns: { source: "", method: "cpl", monthlySpend: 0 },
+    campaigns: { source: "", method: null, monthlySpend: 0 },
     funnels: {
       periodId: first("periods"),
       campaignId: first("campaigns") || null,

@@ -1418,15 +1418,27 @@ export default function PracticeWorkspace() {
     if (workspace && options && member.id) {
       const effectiveDate = options.effectiveDate ?? `${options.year}-01-01`;
       const end = options.effectiveDate ? null : `${options.year}-12-31`;
+      const existing = workspace.staffTerms.find(
+        (term) =>
+          term.staffMemberId === member.id &&
+          term.effectiveDate === effectiveDate &&
+          (term.end ?? null) === end,
+      );
+      const valueFor = <K extends "annualSalary" | "hourlyRate" | "hoursPerWeek" | "weeksPerYear">(
+        key: K,
+      ) =>
+        Object.prototype.hasOwnProperty.call(patch, key)
+          ? patch[key]
+          : existing?.[key] ?? null;
       const nextTerm = staffTermSchema.parse({
-        id: crypto.randomUUID(),
+        id: existing?.id ?? crypto.randomUUID(),
         staffMemberId: member.id,
         effectiveDate,
         end,
-        annualSalary: patch.annualSalary ?? null,
-        hourlyRate: patch.hourlyRate ?? null,
-        hoursPerWeek: patch.hoursPerWeek ?? null,
-        weeksPerYear: patch.weeksPerYear ?? null,
+        annualSalary: valueFor("annualSalary"),
+        hourlyRate: valueFor("hourlyRate"),
+        hoursPerWeek: valueFor("hoursPerWeek"),
+        weeksPerYear: valueFor("weeksPerYear"),
         notes: options.effectiveDate
           ? "Date-specific staff pay change"
           : `Default staff pay for ${options.year}`,

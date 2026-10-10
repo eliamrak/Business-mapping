@@ -40,23 +40,45 @@ export function staffMemberAt(
   date: string,
 ): Staff {
   if (!member.id) return member;
-  const term = [...workspace.staffTerms]
+  const terms = [...workspace.staffTerms]
     .filter(
       (entry) =>
         entry.staffMemberId === member.id &&
         entry.effectiveDate <= date &&
         (!entry.end || entry.end >= date),
     )
-    .sort((a, b) => a.effectiveDate.localeCompare(b.effectiveDate))
-    .at(-1);
-  if (!term) return member;
-  return {
-    ...member,
-    annualSalary: term.annualSalary ?? member.annualSalary,
-    hourlyRate: term.hourlyRate ?? member.hourlyRate,
-    hoursPerWeek: term.hoursPerWeek ?? member.hoursPerWeek,
-    weeksPerYear: term.weeksPerYear ?? member.weeksPerYear,
-  };
+    .sort(
+      (a, b) =>
+        a.effectiveDate.localeCompare(b.effectiveDate) ||
+        a.id.localeCompare(b.id),
+    );
+  return terms.reduce<Staff>(
+    (current, term) => ({
+      ...current,
+      annualSalary: term.annualSalary ?? current.annualSalary,
+      hourlyRate: term.hourlyRate ?? current.hourlyRate,
+      hoursPerWeek: term.hoursPerWeek ?? current.hoursPerWeek,
+      weeksPerYear: term.weeksPerYear ?? current.weeksPerYear,
+    }),
+    member,
+  );
+}
+export function staffCostForRange(
+  workspace: Workspace,
+  member: Staff,
+  start: string,
+  end: string,
+) {
+  const monthDays = daysInclusive(monthDate(start), monthEnd(start));
+  return datesIn(start, end).reduce(
+    (sum, date) =>
+      sum +
+      calculateStaffMemberCost(staffMemberAt(workspace, member, date))
+        .totalAnnualCost /
+        12 /
+        monthDays,
+    0,
+  );
 }
 export type Values = Record<string, number | null>;
 export type ForecastMonth = {
@@ -1269,10 +1291,7 @@ export function forecast(
       .reduce((n, e) => n + e.oneTimeCost, 0);
     overhead += oneTime;
     const staffCost = staff.reduce(
-      (n, s) =>
-        n + calculateStaffMemberCost(staffMemberAt(workspace, s, start))
-          .totalAnnualCost /
-          12,
+      (n, s) => n + staffCostForRange(workspace, s, start, end),
       0,
     );
     const ownerPayroll = setting.ownerPayrollMonthly + explicitOwner;

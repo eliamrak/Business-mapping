@@ -4,7 +4,7 @@ import { randomUUID } from "node:crypto";
 import {
   emptyWorkspace, workspaceSchema, clinicianSettingSchema,
   familyPaycheckSchema, allocationSchema, termSchema, staffTermSchema,
-  periodSchema, monthFlow, forecast,
+  periodSchema, monthFlow, forecast, staffMemberAt, staffCostForRange,
   additionalWithholdingPctFromNet, semiMonthlyChecksThrough, type Context,
 } from "../src/hub/index.ts";
 
@@ -104,7 +104,7 @@ test("missing session data remains unknown and old workspaces gain the tax estim
   assert.equal(flow.familyTakeHome, null);
 });
 
-test("support staff pay follows pay dates even when session data is missing", () => {
+test("support staff pay estimates elapsed month even when session data is missing", () => {
   const workspace = setup();
   const flow = monthFlow(
     workspace,
@@ -112,7 +112,7 @@ test("support staff pay follows pay dates even when session data is missing", ()
     "2026-01-01",
     "2026-01-15",
   );
-  close(flow.staffPay, 48000 * 1.1 / 24);
+  close(flow.staffPay, 48000 * 1.1 / 31 * 15 / 12);
   assert.equal(flow.revenue, null);
   assert.equal(flow.profit, null);
 });
@@ -129,7 +129,7 @@ test("support staff pay respects the selected team filter", () => {
   close(flow.staffPay, 0);
 });
 
-test("support staff W2 pay uses semi-monthly checks and hourly burden once", () => {
+test("support staff W2 pay prorates hourly burden once", () => {
   const workspace = setup();
   const hourly = {
     ...staff(),
@@ -143,12 +143,12 @@ test("support staff W2 pay uses semi-monthly checks and hourly burden once", () 
     "2026-01-01",
     "2026-01-15",
   );
-  close(first.staffPay, 25 * 40 * 52 * 1.1 / 24);
+  close(first.staffPay, 25 * 40 * 52 * 1.1 / 31 * 15 / 12);
   const second = monthFlow(
     workspace,
     { clinicians: [wife], staff: [hourly], sessions: [] },
     "2026-01-01",
-    "2026-01-30",
+    "2026-01-31",
   );
   close(second.staffPay, 25 * 40 * 52 * 1.1 / 12);
 });
@@ -173,23 +173,54 @@ test("default staff pay changes apply across one selected year only", () => {
     workspace,
     { clinicians: [wife], staff: [hourly], sessions: [] },
     "2026-01-01",
-    "2026-01-30",
+    "2026-01-31",
   );
   const october = monthFlow(
     workspace,
     { clinicians: [wife], staff: [hourly], sessions: [] },
     "2026-10-01",
-    "2026-10-30",
+    "2026-10-31",
   );
   const nextYear = monthFlow(
     workspace,
     { clinicians: [wife], staff: [hourly], sessions: [] },
     "2027-01-01",
-    "2027-01-30",
+    "2027-01-31",
   );
   close(january.staffPay, 16 * 10 * 48 * 1.1 / 12);
   close(october.staffPay, 16 * 10 * 48 * 1.1 / 12);
   close(nextYear.staffPay, 18 * 10 * 48 * 1.1 / 12);
+});
+
+test("staff pay terms reject backwards ranges and duplicate scopes", () => {
+  assert.equal(
+    staffTermSchema.safeParse({
+      id: randomUUID(),
+      staffMemberId: 1,
+      effectiveDate: "2026-10-01",
+      end: "2026-09-30",
+      hourlyRate: 16,
+    }).success,
+    false,
+  );
+  const workspace = setup();
+  workspace.staffTerms.push(
+    staffTermSchema.parse({
+      id: randomUUID(),
+      staffMemberId: 1,
+      effectiveDate: "2026-01-01",
+      end: "2026-12-31",
+      hourlyRate: 16,
+    }),
+    staffTermSchema.parse({
+      id: randomUUID(),
+      staffMemberId: 1,
+      effectiveDate: "2026-01-01",
+      end: "2026-12-31",
+      hoursPerWeek: 12,
+    }),
+  );
+  assert.equal(workspaceSchema.safeParse(workspace).success, false);
 });
 
 test("date-specific staff pay changes require an explicit boundary and isolate employees", () => {
@@ -222,10 +253,81 @@ test("date-specific staff pay changes require an explicit boundary and isolate e
     workspace,
     { clinicians: [wife], staff: [hourly, peer], sessions: [] },
     "2026-10-01",
-    "2026-10-30",
+    "2026-10-31",
   );
   close(september.staffPay, (18 + 18) * 10 * 48 * 1.1 / 12);
   close(october.staffPay, (16 + 18) * 10 * 48 * 1.1 / 12);
+});
+
+test("staff pay terms accumulate partial later changes", () => {
+  const workspace = setup();
+  const hourly = {
+    ...staff(),
+    annualSalary: null,
+    hourlyRate: 18,
+    hoursPerWeek: 10,
+    weeksPerYear: 48,
+  };
+  workspace.staffTerms.push(
+    staffTermSchema.parse({
+      id: randomUUID(),
+      staffMemberId: hourly.id,
+      effectiveDate: "2026-01-01",
+      end: "2026-12-31",
+      hourlyRate: 16,
+    }),
+    staffTermSchema.parse({
+      id: randomUUID(),
+      staffMemberId: hourly.id,
+      effectiveDate: "2026-10-01",
+      hoursPerWeek: 12,
+    }),
+  );
+  const effective = staffMemberAt(workspace, hourly, "2026-10-15");
+  assert.equal(effective.hourlyRate, 16);
+  assert.equal(effective.hoursPerWeek, 12);
+  close(
+    staffCostForRange(workspace, hourly, "2026-10-01", "2026-10-31"),
+    16 * 12 * 48 * 1.1 / 12,
+  );
+});
+
+test("staff pay terms prorate midmonth boundaries consistently", () => {
+  const workspace = setup();
+  const hourly = {
+    ...staff(),
+    annualSalary: null,
+    hourlyRate: 18,
+    hoursPerWeek: 10,
+    weeksPerYear: 48,
+  };
+  workspace.staffTerms.push(staffTermSchema.parse({
+    id: randomUUID(),
+    staffMemberId: hourly.id,
+    effectiveDate: "2026-10-16",
+    hourlyRate: 16,
+  }));
+  const expected =
+    (18 * 10 * 48 * 1.1 / 12 / 31 * 15) +
+    (16 * 10 * 48 * 1.1 / 12 / 31 * 16);
+  close(
+    staffCostForRange(workspace, hourly, "2026-10-01", "2026-10-31"),
+    expected,
+  );
+  close(
+    monthFlow(
+      workspace,
+      { clinicians: [wife], staff: [hourly], sessions: [] },
+      "2026-10-01",
+      "2026-10-31",
+    ).staffPay,
+    expected,
+  );
+  close(
+    forecast(workspace, { clinicians: [wife], staff: [hourly], sessions: [] })[9]
+      .values.staffCost,
+    expected,
+  );
 });
 
 test("recorded staff payroll stays actual while modeled months recalculate", () => {
@@ -264,7 +366,7 @@ test("recorded staff payroll stays actual while modeled months recalculate", () 
   close(months[1].values.staffCost, 16 * 10 * 48 * 1.1 / 12);
 });
 
-test("support staff 1099 pay follows biweekly Thursdays including three-check months", () => {
+test("support staff 1099 pay estimates by elapsed month", () => {
   const workspace = setup();
   const contractor = { ...staff("1099"), annualSalary: 52000 };
   const beforeFirstCurrentYearPeriod = monthFlow(
@@ -273,21 +375,21 @@ test("support staff 1099 pay follows biweekly Thursdays including three-check mo
     "2026-01-01",
     "2026-01-01",
   );
-  close(beforeFirstCurrentYearPeriod.staffPay, 0);
+  close(beforeFirstCurrentYearPeriod.staffPay, 52000 / 12 / 31);
   const december = monthFlow(
     workspace,
     { clinicians: [wife], staff: [contractor], sessions: [] },
     "2026-12-01",
     "2026-12-31",
   );
-  close(december.staffPay, 52000 / 26 * 3);
+  close(december.staffPay, 52000 / 12);
   const july = monthFlow(
     workspace,
     { clinicians: [wife], staff: [contractor], sessions: [] },
     "2027-07-01",
     "2027-07-31",
   );
-  close(july.staffPay, 6000);
+  close(july.staffPay, 52000 / 12);
 });
 
 test("the forecast uses expected average revenue without changing fixed W2 salary", () => {

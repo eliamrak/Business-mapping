@@ -1,10 +1,10 @@
 import { daysInclusive } from "../index.ts";
-import { calculateClinicianMetrics, calculateStaffMemberCost } from "../compensation.ts";
+import { calculateClinicianMetrics } from "../compensation.ts";
 import {
   forecast,
   budgetAmount,
   monthEnd,
-  staffMemberAt,
+  staffCostForRange,
   type Context,
 } from "./engine.ts";
 import {
@@ -81,25 +81,10 @@ export function monthFlow(
   const scheduledStaffPay = (throughDate: string) =>
     context.staff
       .filter((member) => (member.goalId ?? null) === workspace.settings.teamId)
-      .reduce((sum, member) => {
-        const schedule = payrollScheduleForClassification(member.classification);
-        const payrollHistoryStart = "2026-01-01";
-        if (!schedule)
-          return sum + calculateStaffMemberCost(
-            staffMemberAt(workspace, member, throughDate),
-          ).totalAnnualCost / 12 *
-            daysInclusive(start, throughDate) / daysInclusive(start, end);
-        return sum + payrollPayDatesThrough(schedule, start, throughDate, start)
-          .reduce((paySum, payDate) => {
-            const annualCost = calculateStaffMemberCost(
-              staffMemberAt(workspace, member, payDate),
-            ).totalAnnualCost;
-            const period = payrollPeriodForPayDate(schedule, payDate);
-            const payStart = period.start > payrollHistoryStart ? period.start : payrollHistoryStart;
-            if (payStart > period.end) return paySum;
-            return paySum + annualCost / (schedule === "semi_monthly" ? 24 : 26);
-          }, 0);
-      }, 0);
+      .reduce(
+        (sum, member) => sum + staffCostForRange(workspace, member, start, throughDate),
+        0,
+      );
   const staffPay = scheduledStaffPay(cutoff);
   const payrollHistoryStart = "2026-01-01";
   const empty = {

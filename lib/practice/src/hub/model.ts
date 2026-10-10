@@ -146,17 +146,26 @@ export const termSchema = z.object({
   expectedSessionRevenue: money.nullable().default(null),
   notes: note,
 });
-export const staffTermSchema = z.object({
-  id,
-  staffMemberId: z.number().int().positive(),
-  effectiveDate: dateSchema,
-  end: dateSchema.nullable().default(null),
-  annualSalary: money.nullable().default(null),
-  hourlyRate: money.nullable().default(null),
-  hoursPerWeek: z.number().min(0).max(168).nullable().default(null),
-  weeksPerYear: z.number().min(1).max(52.1786).nullable().default(null),
-  notes: note,
-});
+export const staffTermSchema = z
+  .object({
+    id,
+    staffMemberId: z.number().int().positive(),
+    effectiveDate: dateSchema,
+    end: dateSchema.nullable().default(null),
+    annualSalary: money.nullable().default(null),
+    hourlyRate: money.nullable().default(null),
+    hoursPerWeek: z.number().min(0).max(168).nullable().default(null),
+    weeksPerYear: z.number().min(1).max(52.1786).nullable().default(null),
+    notes: note,
+  })
+  .superRefine((term, ctx) => {
+    if (term.end && term.end < term.effectiveDate)
+      ctx.addIssue({
+        code: "custom",
+        path: ["end"],
+        message: "End date must follow the effective date.",
+      });
+  });
 
 export const campaignMethods = [
   "cpl",
@@ -674,6 +683,16 @@ export const workspaceSchema = z
         seen.add(parent);
         parent = data.categories.find((x) => x.id === parent)?.parentId ?? null;
       }
+    });
+    const staffTermKeys = new Set<string>();
+    data.staffTerms.forEach((term, i) => {
+      const key = `${term.staffMemberId}:${term.effectiveDate}:${term.end ?? ""}`;
+      if (staffTermKeys.has(key))
+        issue(
+          ["staffTerms", i, "effectiveDate"],
+          "Only one staff pay term can use the same employee, effective date and end date.",
+        );
+      staffTermKeys.add(key);
     });
     data.budgets.forEach((b, i) => {
       if (!exists(data.categories, b.categoryId))
