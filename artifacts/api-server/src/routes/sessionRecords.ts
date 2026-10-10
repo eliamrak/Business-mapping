@@ -3,7 +3,6 @@ import { and, desc, eq, gte, isNull, lte, sql } from "drizzle-orm";
 import {
   db,
   cliniciansTable,
-  sessionGoalYearsTable,
   sessionRecordsTable,
   sessionHistoryTable,
   hubWorkspacesTable,
@@ -14,6 +13,11 @@ import { workspaceSchema } from "@workspace/practice/hub";
 import Papa from "papaparse";
 import { logger } from "../lib/logger";
 import { spreadsheetPreview } from "../lib/spreadsheet-preview";
+import {
+  listSessionGoalsForGoal,
+  saveSessionGoal,
+  SessionGoalConflict,
+} from "../lib/session-goals";
 
 const router = Router();
 const positiveId = (value: unknown) =>
@@ -27,13 +31,6 @@ const toRecord = (
 ): SessionRecord => ({ ...row, updatedAt: row.updatedAt.toISOString() });
 const yearSchema = z.number().int().min(2000).max(2100);
 const sessionsPerWeekSchema = z.number().finite().min(0).max(100);
-const toGoal = (row: typeof sessionGoalYearsTable.$inferSelect) => ({
-  id: row.id,
-  clinicianId: row.clinicianId,
-  year: row.year,
-  sessionsPerWeek: Number(row.sessionsPerWeek),
-  updatedAt: row.updatedAt.toISOString(),
-});
 
 class SessionConflict extends Error {
   constructor(
@@ -97,20 +94,7 @@ router.get("/session-goals", async (req, res) => {
         .status(403)
         .json({ error: "This team is outside your data-entry access." });
   }
-  const rows = await db
-    .select({ goal: sessionGoalYearsTable })
-    .from(sessionGoalYearsTable)
-    .innerJoin(
-      cliniciansTable,
-      eq(sessionGoalYearsTable.clinicianId, cliniciansTable.id),
-    )
-    .where(
-      goal === "unassigned"
-        ? isNull(cliniciansTable.goalId)
-        : eq(cliniciansTable.goalId, Number(goal)),
-    )
-    .orderBy(sessionGoalYearsTable.year, sessionGoalYearsTable.clinicianId);
-  return res.json(rows.map((row) => toGoal(row.goal)));
+  return res.json(await listSessionGoalsForGoal(String(goal)));
 });
 
 router.put("/session-goals", async (req, res) => {
@@ -126,51 +110,33 @@ router.put("/session-goals", async (req, res) => {
     return res.status(400).json({ error: "Check the session goal." });
   const input = parsed.data;
   try {
-    const result = await db.transaction(async (tx) => {
-      const [clinician] = await tx
+    if (res.locals.role === "data_entry") {
+      const [hub] = await db
+        .select()
+        .from(hubWorkspacesTable)
+        .where(eq(hubWorkspacesTable.id, 1));
+      const [clinician] = await db
         .select({ id: cliniciansTable.id, goalId: cliniciansTable.goalId })
         .from(cliniciansTable)
         .where(eq(cliniciansTable.id, input.clinicianId));
       if (!clinician)
-        throw new SessionConflict(
+        throw new SessionGoalConflict(
           "This clinician no longer exists. Refresh the team list.",
           404,
         );
-      if (res.locals.role === "data_entry") {
-        const [hub] = await tx
-          .select()
-          .from(hubWorkspacesTable)
-          .where(eq(hubWorkspacesTable.id, 1));
-        if (
-          !hub ||
-          clinician.goalId !== workspaceSchema.parse(hub.data).settings.teamId
-        )
-          throw new SessionConflict(
-            "Data-entry access is limited to the active team.",
-            403,
-          );
-      }
-      const [saved] = await tx
-        .insert(sessionGoalYearsTable)
-        .values({
-          clinicianId: input.clinicianId,
-          year: input.year,
-          sessionsPerWeek: String(input.sessionsPerWeek),
-          updatedAt: new Date(),
-        })
-        .onConflictDoUpdate({
-          target: [sessionGoalYearsTable.clinicianId, sessionGoalYearsTable.year],
-          set: {
-            sessionsPerWeek: String(input.sessionsPerWeek),
-            updatedAt: new Date(),
-          },
-        })
-        .returning();
-      return toGoal(saved);
-    });
+      if (
+        !hub ||
+        clinician.goalId !== workspaceSchema.parse(hub.data).settings.teamId
+      )
+        throw new SessionConflict(
+          "Data-entry access is limited to the active team.",
+          403,
+        );
+    }
+    const result = await saveSessionGoal(input);
     return res.json(result);
   } catch (error) {
-    if (error instanceof SessionConflict)
+    if (error instanceof SessionConflict || error instanceof SessionGoalConflict)
       return res.status(error.status).json({ error: error.message });
     logger.error({ err: error }, "Failed to save session goal");
     return res.status(500).json({
