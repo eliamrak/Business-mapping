@@ -201,6 +201,57 @@ test("local backup restore validates and sanitizes exported shape", () => {
   assert.deepEqual(restored.billingCodeMinutes, { "90837": 53, "90834": 38 });
 });
 
+test("local backup restore rejects duplicate same-kind snapshots", () => {
+  const attendance = importAttendanceCsv(
+    attendanceCsv,
+    "2026-10-12T00:00:00Z",
+  ).snapshot;
+  const backup = exportLocalBackup([attendance, attendance], {});
+
+  assert.throws(() => importLocalBackup(backup), /duplicates snapshot/);
+});
+
+test("local backup restore rejects overlapping same-kind snapshots", () => {
+  const first =
+    importAttendanceCsv(`Client,Clinician,Date of service,Location,Status
+CID-alpha,Dr Lane,2026-10-01,Room A,show
+CID-beta,Dr Lane,2026-10-10,Room A,show`).snapshot;
+  const second =
+    importAttendanceCsv(`Client,Clinician,Date of service,Location,Status
+CID-gamma,Dr Lane,2026-10-10,Room B,show
+CID-delta,Dr Lane,2026-10-20,Room B,show`).snapshot;
+  const backup = exportLocalBackup([first, second], {});
+
+  assert.throws(() => importLocalBackup(backup), /overlaps snapshot/);
+});
+
+test("local backup restore accepts non-overlapping same-kind snapshots", () => {
+  const first =
+    importAttendanceCsv(`Client,Clinician,Date of service,Location,Status
+CID-alpha,Dr Lane,2026-10-01,Room A,show`).snapshot;
+  const second =
+    importAttendanceCsv(`Client,Clinician,Date of service,Location,Status
+CID-beta,Dr Lane,2026-10-20,Room B,show`).snapshot;
+  const backup = exportLocalBackup([first, second], {});
+  const restored = importLocalBackup(backup);
+
+  assert.deepEqual(restored.snapshots, [first, second]);
+});
+
+test("local backup restore allows attendance and billing coverage to coexist", () => {
+  const attendance =
+    importAttendanceCsv(`Client,Clinician,Date of service,Location,Status
+CID-alpha,Dr Lane,2026-10-01,Room A,show`).snapshot;
+  const billing =
+    importBillingCsv(`Date of Service,Client,Clinician,Total Fee,Billing Code
+2026-10-01,CID-alpha,Dr Lane,150,90837`).snapshot;
+  const backup = exportLocalBackup([attendance, billing], { "90837": 53 });
+  const restored = importLocalBackup(backup);
+
+  assert.deepEqual(restored.snapshots, [attendance, billing]);
+  assert.deepEqual(restored.billingCodeMinutes, { "90837": 53 });
+});
+
 test("local backup restore rejects invalid snapshots and billing-code minutes", () => {
   const attendance = importAttendanceCsv(
     attendanceCsv,

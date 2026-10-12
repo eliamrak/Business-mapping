@@ -739,6 +739,24 @@ function validateBackupBillingCodeMinutes(value: unknown): BillingCodeMinutes {
   return minutesByCode;
 }
 
+function validateBackupSnapshotCollection(snapshots: LocalSnapshot[]) {
+  for (let index = 0; index < snapshots.length; index++) {
+    const snapshot = snapshots[index];
+    for (let priorIndex = 0; priorIndex < index; priorIndex++) {
+      const prior = snapshots[priorIndex];
+      if (snapshot.kind !== prior.kind) continue;
+      if (snapshot.sourceHash === prior.sourceHash)
+        invalidBackup(
+          `snapshot ${index + 1} duplicates snapshot ${priorIndex + 1}`,
+        );
+      if (overlaps(snapshot, prior))
+        invalidBackup(
+          `snapshot ${index + 1} overlaps snapshot ${priorIndex + 1}`,
+        );
+    }
+  }
+}
+
 export function importLocalBackup(value: unknown) {
   if (!isRecord(value))
     throw new Error("Choose a local retention backup JSON file.");
@@ -748,8 +766,10 @@ export function importLocalBackup(value: unknown) {
   )
     throw new Error("This is not a local retention backup.");
   backupTimestamp(value, "exportedAt", "exportedAt");
+  const snapshots = value.snapshots.map(validateBackupSnapshot);
+  validateBackupSnapshotCollection(snapshots);
   return {
-    snapshots: value.snapshots.map(validateBackupSnapshot),
+    snapshots,
     billingCodeMinutes: validateBackupBillingCodeMinutes(
       value.billingCodeMinutes,
     ),
