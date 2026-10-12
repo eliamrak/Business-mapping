@@ -6,6 +6,13 @@ export type AttendanceStatus =
   | "no show"
   | "clinician cancelled";
 
+const attendanceStatuses: readonly AttendanceStatus[] = [
+  "show",
+  "cancelled",
+  "no show",
+  "clinician cancelled",
+];
+
 export type AttendanceRow = {
   clientId: string;
   clinician: string;
@@ -112,7 +119,8 @@ const requiredBillingHeaders = [
   "totalfee",
 ] as const;
 
-const headerKey = (value: string) => value.toLowerCase().replace(/[^a-z0-9]/g, "");
+const headerKey = (value: string) =>
+  value.toLowerCase().replace(/[^a-z0-9]/g, "");
 const clean = (value: string | undefined) => (value ?? "").trim();
 const rowHash = (parts: unknown[]) => stableHash(JSON.stringify(parts));
 
@@ -165,7 +173,8 @@ function cell(row: string[], map: Map<string, number>, key: string) {
 
 function requireHeaders(map: Map<string, number>, keys: readonly string[]) {
   const missing = keys.filter((key) => !map.has(key));
-  if (missing.length) throw new Error(`Missing required columns: ${missing.join(", ")}.`);
+  if (missing.length)
+    throw new Error(`Missing required columns: ${missing.join(", ")}.`);
 }
 
 export function parseServiceDate(value: string): string {
@@ -182,7 +191,8 @@ export function parseServiceDate(value: string): string {
           slash[2],
         ]
       : [];
-  if (!year || !month || !day) throw new Error(`Invalid service date: ${value}.`);
+  if (!year || !month || !day)
+    throw new Error(`Invalid service date: ${value}.`);
   const result = `${year}-${month.padStart(2, "0")}-${day.padStart(2, "0")}`;
   const date = new Date(`${result}T12:00:00Z`);
   if (
@@ -201,13 +211,24 @@ function parseMoney(value: string): number {
 }
 
 function parseStatus(value: string): AttendanceStatus {
-  const key = value.toLowerCase().replace(/[_-]/g, " ").replace(/\s+/g, " ").trim();
+  const key = value
+    .toLowerCase()
+    .replace(/[_-]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
   if (key === "show") return "show";
   if (key === "cancelled" || key === "canceled") return "cancelled";
   if (key === "no show" || key === "noshow") return "no show";
   if (key === "clinician cancelled" || key === "clinician canceled")
     return "clinician cancelled";
   throw new Error(`Unknown attendance status: ${value}.`);
+}
+
+function isAttendanceStatus(value: unknown): value is AttendanceStatus {
+  return (
+    typeof value === "string" &&
+    attendanceStatuses.includes(value as AttendanceStatus)
+  );
 }
 
 function coverage(rows: Array<{ serviceDate: string }>) {
@@ -224,7 +245,10 @@ export function importAttendanceCsv(
   const headers = headerMap(rows[0] ?? []);
   requireHeaders(headers, requiredAttendanceHeaders);
   const warnings: string[] = [];
-  if (!headers.has("location")) warnings.push("Location column is missing; room counts will use Unassigned.");
+  if (!headers.has("location"))
+    warnings.push(
+      "Location column is missing; room counts will use Unassigned.",
+    );
   const facts = rows.slice(1).map((row, index) => {
     const clientId = cell(row, headers, "client");
     const clinician = cell(row, headers, "clinician");
@@ -239,7 +263,15 @@ export function importAttendanceCsv(
       serviceDate,
       location,
       status,
-      sourceRowHash: rowHash(["attendance", clientId, clinician, serviceDate, location, status, index]),
+      sourceRowHash: rowHash([
+        "attendance",
+        clientId,
+        clinician,
+        serviceDate,
+        location,
+        status,
+        index,
+      ]),
     };
   });
   const { start, end } = coverage(facts);
@@ -279,7 +311,15 @@ export function importBillingCsv(
       serviceDate,
       totalFeeCharged,
       billingCode,
-      sourceRowHash: rowHash(["billing", clientId, clinician, serviceDate, totalFeeCharged, billingCode, index]),
+      sourceRowHash: rowHash([
+        "billing",
+        clientId,
+        clinician,
+        serviceDate,
+        totalFeeCharged,
+        billingCode,
+        index,
+      ]),
     };
   });
   const { start, end } = coverage(facts);
@@ -299,16 +339,24 @@ export function importBillingCsv(
 }
 
 const overlaps = (a: LocalSnapshot, b: LocalSnapshot) =>
-  a.kind === b.kind && a.coverageStart <= b.coverageEnd && b.coverageStart <= a.coverageEnd;
+  a.kind === b.kind &&
+  a.coverageStart <= b.coverageEnd &&
+  b.coverageStart <= a.coverageEnd;
 
 export function mergeSnapshot(
   snapshots: LocalSnapshot[],
   incoming: LocalSnapshot,
 ): SnapshotMergeResult {
-  if (snapshots.some((item) => item.kind === incoming.kind && item.sourceHash === incoming.sourceHash))
+  if (
+    snapshots.some(
+      (item) =>
+        item.kind === incoming.kind && item.sourceHash === incoming.sourceHash,
+    )
+  )
     return { status: "duplicate", snapshots };
   const overlapping = snapshots.filter((item) => overlaps(item, incoming));
-  if (overlapping.length) return { status: "overlap", snapshots, existing: overlapping, incoming };
+  if (overlapping.length)
+    return { status: "overlap", snapshots, existing: overlapping, incoming };
   return { status: "added", snapshots: [...snapshots, incoming] };
 }
 
@@ -319,9 +367,13 @@ export function replaceOverlappingSnapshots(
   return [...snapshots.filter((item) => !overlaps(item, incoming)), incoming];
 }
 
-function sortByName<T extends { clinician?: string; location?: string }>(items: T[]) {
+function sortByName<T extends { clinician?: string; location?: string }>(
+  items: T[],
+) {
   return [...items].sort((a, b) =>
-    (a.clinician ?? a.location ?? "").localeCompare(b.clinician ?? b.location ?? ""),
+    (a.clinician ?? a.location ?? "").localeCompare(
+      b.clinician ?? b.location ?? "",
+    ),
   );
 }
 
@@ -336,7 +388,9 @@ export function buildLocalRetentionMetrics(
   const billing = snapshots.flatMap((snapshot) =>
     snapshot.kind === "billing" ? snapshot.rows : [],
   );
-  const allDates = [...attendance, ...billing].map((row) => row.serviceDate).sort();
+  const allDates = [...attendance, ...billing]
+    .map((row) => row.serviceDate)
+    .sort();
   const coverageStart = allDates[0] ?? null;
   const coverageEnd = allDates[allDates.length - 1] ?? null;
   const billingByClinician = new Map<string, ClinicianBillingMetric>();
@@ -353,7 +407,8 @@ export function buildLocalRetentionMetrics(
     if (row.billingCode && billingCodeMinutes[row.billingCode] !== undefined) {
       metric.configuredMinuteRows++;
       metric.estimatedBillingHours =
-        (metric.estimatedBillingHours ?? 0) + billingCodeMinutes[row.billingCode] / 60;
+        (metric.estimatedBillingHours ?? 0) +
+        billingCodeMinutes[row.billingCode] / 60;
     }
     billingByClinician.set(row.clinician, metric);
   }
@@ -388,13 +443,17 @@ export function buildLocalRetentionMetrics(
     const metric = attendanceByClinician.get(clinician);
     if (!metric) continue;
     const sorted = dates.sort();
+    const firstShowDate = sorted[0];
     metric.uniqueActiveClients++;
-    if (sorted.length > 1) metric.retainedClients++;
+    if (sorted.some((date) => date > firstShowDate)) metric.retainedClients++;
     else {
       metric.firstObservedClients++;
-      const first = new Date(`${sorted[0]}T12:00:00Z`).getTime();
-      const end = coverageEnd ? new Date(`${coverageEnd}T12:00:00Z`).getTime() : first;
-      if ((end - first) / 86400000 < followUpDays) metric.immatureClientsExcluded++;
+      const first = new Date(`${firstShowDate}T12:00:00Z`).getTime();
+      const end = coverageEnd
+        ? new Date(`${coverageEnd}T12:00:00Z`).getTime()
+        : first;
+      if ((end - first) / 86400000 < followUpDays)
+        metric.immatureClientsExcluded++;
     }
   }
   const roomCounts = new Map<string, RoomMetric>();
@@ -424,31 +483,275 @@ export function buildLocalRetentionMetrics(
   };
 }
 
-export function exportLocalBackup(snapshots: LocalSnapshot[], billingCodeMinutes: BillingCodeMinutes) {
+export function exportLocalBackup(
+  snapshots: LocalSnapshot[],
+  billingCodeMinutes: BillingCodeMinutes,
+) {
   return {
     format: "emc-local-retention-v1" as const,
     exportedAt: new Date().toISOString(),
-    warning: "Contains local de-identified client IDs and row-level facts. Do not upload to the practice API.",
+    warning:
+      "Contains local de-identified client IDs and row-level facts. Do not upload to the practice API.",
     snapshots,
     billingCodeMinutes,
   };
 }
 
-export function importLocalBackup(value: unknown) {
-  if (!value || typeof value !== "object")
-    throw new Error("Choose a local retention backup JSON file.");
-  const data = value as {
-    format?: unknown;
-    snapshots?: unknown;
-    billingCodeMinutes?: unknown;
-  };
-  if (data.format !== "emc-local-retention-v1" || !Array.isArray(data.snapshots))
-    throw new Error("This is not a local retention backup.");
+const maxSafeFee = Number.MAX_SAFE_INTEGER;
+const maxBillingCodeMinutes = 24 * 60;
+
+function invalidBackup(reason: string): never {
+  throw new Error(`Invalid local retention backup: ${reason}.`);
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return !!value && typeof value === "object" && !Array.isArray(value);
+}
+
+function backupString(
+  record: Record<string, unknown>,
+  key: string,
+  label: string,
+) {
+  const value = record[key];
+  if (typeof value !== "string" || !value.trim())
+    invalidBackup(`${label} must be a non-empty string`);
+  return value;
+}
+
+function backupNullableString(
+  record: Record<string, unknown>,
+  key: string,
+  label: string,
+) {
+  const value = record[key];
+  if (value === null) return null;
+  if (typeof value === "string" && value.trim()) return value;
+  invalidBackup(`${label} must be null or a non-empty string`);
+}
+
+function backupServiceDate(
+  record: Record<string, unknown>,
+  key: string,
+  label: string,
+) {
+  const value = backupString(record, key, label);
+  try {
+    if (parseServiceDate(value) === value) return value;
+  } catch {
+    // Fall through to the backup-specific error below.
+  }
+  invalidBackup(`${label} must be a valid YYYY-MM-DD date`);
+}
+
+function backupTimestamp(
+  record: Record<string, unknown>,
+  key: string,
+  label: string,
+) {
+  const value = backupString(record, key, label);
+  if (!Number.isFinite(new Date(value).getTime()))
+    invalidBackup(`${label} must be a valid timestamp`);
+  return value;
+}
+
+function backupNumber(
+  record: Record<string, unknown>,
+  key: string,
+  label: string,
+  min: number,
+  max: number,
+) {
+  const value = record[key];
+  if (
+    typeof value !== "number" ||
+    !Number.isFinite(value) ||
+    value < min ||
+    value > max
+  )
+    invalidBackup(`${label} must be a number from ${min} to ${max}`);
+  return value;
+}
+
+function validateAttendanceBackupRow(
+  value: unknown,
+  index: number,
+): AttendanceRow {
+  if (!isRecord(value))
+    invalidBackup(`attendance row ${index + 1} must be an object`);
+  const status = value.status;
+  if (!isAttendanceStatus(status))
+    invalidBackup(`attendance row ${index + 1} has an invalid status`);
   return {
-    snapshots: data.snapshots as LocalSnapshot[],
-    billingCodeMinutes:
-      data.billingCodeMinutes && typeof data.billingCodeMinutes === "object"
-        ? (data.billingCodeMinutes as BillingCodeMinutes)
-        : {},
+    clientId: backupString(
+      value,
+      "clientId",
+      `attendance row ${index + 1} clientId`,
+    ),
+    clinician: backupString(
+      value,
+      "clinician",
+      `attendance row ${index + 1} clinician`,
+    ),
+    serviceDate: backupServiceDate(
+      value,
+      "serviceDate",
+      `attendance row ${index + 1} serviceDate`,
+    ),
+    location: backupNullableString(
+      value,
+      "location",
+      `attendance row ${index + 1} location`,
+    ),
+    status,
+    sourceRowHash: backupString(
+      value,
+      "sourceRowHash",
+      `attendance row ${index + 1} sourceRowHash`,
+    ),
+  };
+}
+
+function validateBillingBackupRow(value: unknown, index: number): BillingRow {
+  if (!isRecord(value))
+    invalidBackup(`billing row ${index + 1} must be an object`);
+  return {
+    clientId: backupString(
+      value,
+      "clientId",
+      `billing row ${index + 1} clientId`,
+    ),
+    clinician: backupString(
+      value,
+      "clinician",
+      `billing row ${index + 1} clinician`,
+    ),
+    serviceDate: backupServiceDate(
+      value,
+      "serviceDate",
+      `billing row ${index + 1} serviceDate`,
+    ),
+    totalFeeCharged: backupNumber(
+      value,
+      "totalFeeCharged",
+      `billing row ${index + 1} totalFeeCharged`,
+      0,
+      maxSafeFee,
+    ),
+    billingCode: backupNullableString(
+      value,
+      "billingCode",
+      `billing row ${index + 1} billingCode`,
+    ),
+    sourceRowHash: backupString(
+      value,
+      "sourceRowHash",
+      `billing row ${index + 1} sourceRowHash`,
+    ),
+  };
+}
+
+function validateSnapshotCoverage(
+  snapshot: LocalSnapshot,
+  snapshotIndex: number,
+) {
+  if (snapshot.coverageStart > snapshot.coverageEnd)
+    invalidBackup(`snapshot ${snapshotIndex + 1} coverage dates are reversed`);
+  const rowDates = snapshot.rows.map((row) => row.serviceDate).sort();
+  if (!rowDates.length)
+    invalidBackup(`snapshot ${snapshotIndex + 1} has no rows`);
+  if (
+    snapshot.coverageStart !== rowDates[0] ||
+    snapshot.coverageEnd !== rowDates[rowDates.length - 1]
+  )
+    invalidBackup(
+      `snapshot ${snapshotIndex + 1} coverage does not match its rows`,
+    );
+}
+
+function validateBackupSnapshot(value: unknown, index: number): LocalSnapshot {
+  if (!isRecord(value))
+    invalidBackup(`snapshot ${index + 1} must be an object`);
+  const kind = value.kind;
+  const base = {
+    id: backupString(value, "id", `snapshot ${index + 1} id`),
+    importedAt: backupTimestamp(
+      value,
+      "importedAt",
+      `snapshot ${index + 1} importedAt`,
+    ),
+    coverageStart: backupServiceDate(
+      value,
+      "coverageStart",
+      `snapshot ${index + 1} coverageStart`,
+    ),
+    coverageEnd: backupServiceDate(
+      value,
+      "coverageEnd",
+      `snapshot ${index + 1} coverageEnd`,
+    ),
+    sourceHash: backupString(
+      value,
+      "sourceHash",
+      `snapshot ${index + 1} sourceHash`,
+    ),
+  };
+  if (!Array.isArray(value.rows))
+    invalidBackup(`snapshot ${index + 1} rows must be an array`);
+  if (kind === "attendance") {
+    const snapshot: LocalSnapshot = {
+      ...base,
+      kind,
+      rows: value.rows.map(validateAttendanceBackupRow),
+    };
+    validateSnapshotCoverage(snapshot, index);
+    return snapshot;
+  }
+  if (kind === "billing") {
+    const snapshot: LocalSnapshot = {
+      ...base,
+      kind,
+      rows: value.rows.map(validateBillingBackupRow),
+    };
+    validateSnapshotCoverage(snapshot, index);
+    return snapshot;
+  }
+  invalidBackup(`snapshot ${index + 1} has an invalid kind`);
+}
+
+function validateBackupBillingCodeMinutes(value: unknown): BillingCodeMinutes {
+  if (value === undefined) return {};
+  if (!isRecord(value)) invalidBackup("billingCodeMinutes must be an object");
+  const minutesByCode: BillingCodeMinutes = {};
+  for (const [code, minutes] of Object.entries(value)) {
+    if (!code.trim()) invalidBackup("billing code keys must be non-empty");
+    if (
+      typeof minutes !== "number" ||
+      !Number.isFinite(minutes) ||
+      minutes <= 0 ||
+      minutes > maxBillingCodeMinutes
+    )
+      invalidBackup(
+        `billing-code minutes for ${code} must be from 1 to ${maxBillingCodeMinutes}`,
+      );
+    minutesByCode[code] = minutes;
+  }
+  return minutesByCode;
+}
+
+export function importLocalBackup(value: unknown) {
+  if (!isRecord(value))
+    throw new Error("Choose a local retention backup JSON file.");
+  if (
+    value.format !== "emc-local-retention-v1" ||
+    !Array.isArray(value.snapshots)
+  )
+    throw new Error("This is not a local retention backup.");
+  backupTimestamp(value, "exportedAt", "exportedAt");
+  return {
+    snapshots: value.snapshots.map(validateBackupSnapshot),
+    billingCodeMinutes: validateBackupBillingCodeMinutes(
+      value.billingCodeMinutes,
+    ),
   };
 }
