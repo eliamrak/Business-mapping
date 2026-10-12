@@ -3839,3 +3839,155 @@
   align-self: center;
   width: 1rem;
 }
+
+.pw-local-retention {
+  display: grid;
+  gap: 1rem;
+}
+.pw-local-retention-hero {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 1rem;
+  border-bottom: 1px solid #d8e1da;
+  padding-bottom: 1rem;
+}
+.pw-local-retention-hero h2 {
+  margin: 0.1rem 0 0.35rem;
+}
+.pw-local-retention-hero p {
+  max-width: 60rem;
+  margin: 0;
+  color: #586c61;
+}
+.pw-local-retention-hero svg {
+  width: 2rem;
+  height: 2rem;
+  color: #35664e;
+}
+.pw-privacy-strip,
+.pw-retention-summary {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.75rem;
+}
+.pw-privacy-strip span,
+.pw-retention-summary > div {
+  border: 1px solid #d8e1da;
+  border-radius: 6px;
+  background: #f7faf8;
+  padding: 0.75rem;
+  color: #374e40;
+}
+.pw-retention-summary span {
+  display: block;
+  color: #586c61;
+  font-size: 0.85rem;
+}
+.pw-retention-summary strong {
+  display: block;
+  margin-top: 0.25rem;
+  color: #26392e;
+}
+.pw-local-import-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 1rem;
+}
+.pw-local-import-grid section,
+.pw-billing-codes,
+.pw-overlap-review,
+.pw-local-tables section {
+  border: 1px solid #d8e1da;
+  border-radius: 6px;
+  background: white;
+  padding: 1rem;
+}
+.pw-local-import-grid svg {
+  width: 1.25rem;
+  color: #35664e;
+}
+.pw-local-import-grid h3,
+.pw-billing-codes h3,
+.pw-local-tables h3 {
+  margin: 0.25rem 0;
+}
+.pw-local-import-grid p,
+.pw-billing-codes p,
+.pw-overlap-review p {
+  margin: 0 0 0.75rem;
+  color: #586c61;
+}
+.pw-local-import-grid input,
+.pw-code-entry input,
+.pw-backup-actions input {
+  width: 100%;
+  min-height: 2.4rem;
+  border: 1px solid #c8d6ce;
+  border-radius: 4px;
+  background: white;
+  color: #26392e;
+  padding: 0.45rem 0.6rem;
+}
+.pw-backup-actions,
+.pw-code-entry,
+.pw-code-list,
+.pw-overlap-review {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.75rem;
+}
+.pw-overlap-review {
+  justify-content: space-between;
+  background: #fffaf0;
+  border-color: #ead7a4;
+}
+.pw-overlap-review > div:first-child {
+  min-width: min(100%, 32rem);
+  flex: 1;
+}
+.pw-billing-codes {
+  display: grid;
+  gap: 0.75rem;
+}
+.pw-code-entry {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(7rem, 10rem) auto;
+}
+.pw-chip {
+  border: 1px solid #c8d6ce;
+  border-radius: 999px;
+  background: #f7faf8;
+  color: #26392e;
+  padding: 0.35rem 0.65rem;
+}
+.pw-local-tables {
+  display: grid;
+  gap: 1rem;
+}
+.pw-local-tables table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.9rem;
+}
+.pw-local-tables th,
+.pw-local-tables td {
+  border-bottom: 1px solid #e1e8e2;
+  padding: 0.55rem;
+  text-align: left;
+  vertical-align: top;
+}
+.pw-local-tables th {
+  color: #586c61;
+  font-weight: 700;
+}
+
+@media (max-width: 900px) {
+  .pw-privacy-strip,
+  .pw-retention-summary,
+  .pw-local-import-grid,
+  .pw-code-entry {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}

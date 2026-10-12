@@ -98,6 +98,7 @@ import Updates from "@/components/hub/updates";
 import { type ViewProps, fmt, monthLabel } from "@/components/hub/views";
 import WorkspaceSessions from "@/components/practice/workspace-sessions";
 import WorkspaceCalculations from "@/components/practice/workspace-calculations";
+import LocalRetentionWorkspace from "@/components/practice/local-retention-workspace";
 import LeadFlow from "@/components/practice/lead-flow";
 import { applyBulkLeads, planBulkLeads, type LeadBulkChange } from "@/lib/bulk-lead-flow";
 import MoneyFlowToday from "@/components/practice/money-flow-today";
@@ -161,6 +162,7 @@ type PaceMetric = "sessions" | "revenue" | "profit";
 type Section =
   | "clinicians"
   | "sessions"
+  | "retention"
   | "calculations"
   | "marketing"
   | "rooms"
@@ -172,6 +174,7 @@ type Section =
 const sections: { id: Section; label: string }[] = [
   { id: "clinicians", label: "Clinicians & pay" },
   { id: "sessions", label: "Sessions" },
+  { id: "retention", label: "Retention" },
   { id: "calculations", label: "Calculations" },
   { id: "marketing", label: "Marketing" },
   { id: "rooms", label: "Rooms" },
@@ -179,6 +182,16 @@ const sections: { id: Section; label: string }[] = [
   { id: "money", label: "Money flow" },
   { id: "summary", label: "Summary" },
 ];
+const transferableSections = new Set<Section>([
+  "clinicians",
+  "sessions",
+  "marketing",
+  "rooms",
+  "budgets",
+  "money",
+]);
+const isTransferSection = (value: Section): value is TransferSection =>
+  transferableSections.has(value);
 const money = (n: number | null | undefined) => fmt(n, "currency");
 const percent = (n: number | null | undefined) =>
   n === null || n === undefined ? "--" : `${Math.round(n * 100)}%`;
@@ -2189,10 +2202,7 @@ export default function PracticeWorkspace() {
                   >
                     <RotateCcw />
                   </button>
-                  {section !== "summary" &&
-                    section !== "calculations" &&
-                    section !== "settings" &&
-                    section !== "documents" && (
+                  {isTransferSection(section) && (
                       <button
                         className="pw-button"
                         onClick={() => {
@@ -2238,10 +2248,7 @@ export default function PracticeWorkspace() {
               )
             ) : mode === "practice" ? (
               <>
-                {section !== "summary" &&
-                  section !== "calculations" &&
-                  section !== "settings" &&
-                  section !== "documents" && (
+                {isTransferSection(section) && (
                     <button
                       className="pw-button"
                       onClick={() => {
@@ -2937,6 +2944,7 @@ export default function PracticeWorkspace() {
                   }}
                 />
               )}
+              {section === "retention" && <LocalRetentionWorkspace />}
               {section === "calculations" && (
                 <WorkspaceCalculations
                   workspace={workingWorkspace}
