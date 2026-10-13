@@ -112,8 +112,11 @@ export default function MoneyFlowToday({
   previous.setUTCMonth(previous.getUTCMonth() - 1);
   const month = view === "current" ? today.slice(0, 7) + "-01" : previous.toISOString().slice(0, 7) + "-01";
   const end = new Date(Date.UTC(Number(month.slice(0, 4)), Number(month.slice(5, 7)), 0)).toISOString().slice(0, 10);
-  const latestDepositDate = end < today ? end : today;
-  const flow = useMemo(() => monthFlow(workspace, context, month, today), [workspace, context, month, today]);
+  const flow = useMemo(() => monthFlow(workspace, context, month, today, { fullMonthProjection: true }), [workspace, context, month, today]);
+  const flowHorizonDate = flow.through ?? end;
+  const paceBasis = flow.paceLookbackStart
+    ? `${flow.paceSource} since ${shortDate(flow.paceLookbackStart)}`
+    : flow.paceSource;
   const people = context.clinicians.filter((person) =>
     (person.goalId ?? null) === workspace.settings.teamId,
   );
@@ -129,7 +132,7 @@ export default function MoneyFlowToday({
     return { year, effectiveDate: mode === "date" ? date : null };
   };
   const activeBudgets = workspace.budgets.filter((budget) =>
-    !budget.archived && !budget.planningOnly && budget.start <= latestDepositDate &&
+    !budget.archived && !budget.planningOnly && budget.start <= flowHorizonDate &&
     (!budget.end || budget.end >= month),
   );
   const budgetKind = (budget: Budget) =>
@@ -141,7 +144,7 @@ export default function MoneyFlowToday({
   const incomeBudgets = activeBudgets.filter((budget) => budgetKind(budget) === "income");
   const campaigns = workspace.campaigns.filter((campaign) =>
     !campaign.archived && !campaign.planningOnly && campaign.start !== null &&
-    campaign.start <= latestDepositDate &&
+    campaign.start <= flowHorizonDate &&
     (!campaign.end || campaign.end >= month),
   );
   const campaignsMissingStart = workspace.campaigns.filter((campaign) =>
@@ -154,12 +157,12 @@ export default function MoneyFlowToday({
     ? "Includes the remaining overhead estimate while your list is incomplete"
     : "Uses entered expenses only because expenses are marked complete";
   const profileFor = (person: Person) =>
-    clinicianModelAt(workspace, person.id, latestDepositDate);
+    clinicianModelAt(workspace, person.id, flowHorizonDate);
   const listedRateFor = (person: Person) =>
-    clinicianTermsAt(workspace, person.id, latestDepositDate).sessionRate ??
+    clinicianTermsAt(workspace, person.id, flowHorizonDate).sessionRate ??
     person.sessionRate;
   const payee = context.clinicians.find((person) => person.id === workspace.settings.familyW2ClinicianId);
-  const payAsOf = flow.through ?? latestDepositDate;
+  const payAsOf = flowHorizonDate;
   const payeeProfile = payee
     ? clinicianModelAt(workspace, payee.id, payAsOf) ?? undefined
     : undefined;
@@ -167,13 +170,13 @@ export default function MoneyFlowToday({
     ? workspace.terms.some((term) =>
         term.clinicianId === payee.id &&
         term.effectiveDate > payAsOf &&
-        term.effectiveDate <= latestDepositDate &&
+        term.effectiveDate <= end &&
         (term.payMode !== null || term.payAmount !== null),
       )
     : false;
   const annualFamilySalary = payeeProfile?.payMode === "salary" ? payeeProfile.payAmount : 0;
   const estimatedNetCheck = Math.round(estimateW2NetPay(annualFamilySalary / 24, workspace.settings.estimatedIncomeTaxPct).net * 100) / 100;
-  const currentAllocationRows = workspace.allocations.filter((row) => !row.archived && row.start <= latestDepositDate && (!row.end || row.end >= month));
+  const currentAllocationRows = workspace.allocations.filter((row) => !row.archived && row.start <= flowHorizonDate && (!row.end || row.end >= month));
   const defaultFunds = [
     { id: "tax", name: "Tax fund", key: "taxPct" as const, percent: workspace.settings.taxPct },
     { id: "reserve", name: "Business reserves", key: "reservePct" as const, percent: workspace.settings.reservePct },
@@ -215,7 +218,7 @@ export default function MoneyFlowToday({
 
   return <div className="pw-today-flow">
     <header className="pw-today-flow-header">
-      <div><h2>Money flow</h2><p>Where {label(month)} stands so far</p></div>
+      <div><h2>Money flow projection</h2><p>Projected full-month business flow for {label(month)}</p></div>
       <div className="pw-segmented" role="group" aria-label="Money flow period">
         <button type="button" aria-pressed={view === "current"} onClick={() => setView("current")}>This month</button>
         <button type="button" aria-pressed={view === "previous"} onClick={() => setView("previous")}>Last month</button>
@@ -223,14 +226,16 @@ export default function MoneyFlowToday({
     </header>
     {changeError && <p className="pw-flow-warning" role="alert">{changeError}</p>}
 
-    {flow.through ? <p className="pw-flow-status">Session revenue is estimated through {shortDate(flow.through)} from recorded sessions. Scheduled clinician and staff payroll runs through {shortDate(latestDepositDate)}; other costs follow the recorded-session span.</p>
-      : <div className="pw-flow-notice">No completed session period overlaps {label(month)}. Session revenue and profit are unavailable; support staff costs run through {shortDate(latestDepositDate)} where configured. <button type="button" onClick={() => onNavigate("sessions")}>Open sessions <ChevronRight /></button></div>}
+    {flow.through ? <p className="pw-flow-status">Projection runs through {shortDate(flow.through)}. {flow.sessionDataThrough
+      ? <>Recorded completed sessions are used through {shortDate(flow.sessionDataThrough)}; remaining days use {paceBasis}.</>
+      : <>No recorded session period overlaps {label(month)} yet; sessions use {paceBasis}.</>} Payroll, expenses, and marketing use the same full-month horizon. Revenue and profit are model estimates, not reconciled cash.</p>
+      : <div className="pw-flow-notice">No completed session period overlaps {label(month)}. Session revenue and profit are unavailable; support staff costs run through {shortDate(flowHorizonDate)} where configured. <button type="button" onClick={() => onNavigate("sessions")}>Open sessions <ChevronRight /></button></div>}
     {flow.splitPeriods && <p className="pw-flow-note">A biweekly period crosses the month boundary. Its sessions are divided by calendar days for this estimate.</p>}
     {flow.incompleteClinicians.length > 0 && flow.through && <p className="pw-flow-note">No sessions recorded through {shortDate(flow.through)} for {flow.incompleteClinicians.join(", ")}. Profit may be understated.</p>}
 
     <div className="pw-flow-statement">
       <div className="pw-flow-group-title">Income</div>
-      <div className="pw-flow-row"><span>Estimated session revenue <small>{flow.sessions === null ? "No completed sessions yet" : `${flow.sessions.toFixed(1)} completed sessions, using average rates where entered; otherwise listed fees`}</small></span><strong>{currency(flow.revenue)}</strong></div>
+      <div className="pw-flow-row"><span>Projected session revenue <small>{flow.sessions === null ? "No completed sessions yet" : `${flow.sessions.toFixed(1)} projected completed sessions, using average rates where entered; otherwise listed fees`}</small></span><strong>{currency(flow.revenue)}</strong></div>
       <Sources label="Rates behind session revenue">
         {people.map((person) => <SourceRow key={person.id} label={person.label}>
           <InlineNumber label={`${person.label} average earned per completed session`} value={profileFor(person)?.expectedSessionRevenue ?? listedRateFor(person)}
@@ -271,7 +276,7 @@ export default function MoneyFlowToday({
       <div className="pw-flow-row"><span>Support staff</span><strong>-{currency(flow.staffPay)}</strong></div>
       {staff.length > 0 && <Sources label="Support staff pay">
         {staff.map((member) => {
-          const effective = staffMemberAt(workspace, member, latestDepositDate);
+          const effective = staffMemberAt(workspace, member, flowHorizonDate);
           const id = member.id ?? 0;
           const mode = staffModes[id]?.mode ?? "year";
           const date = staffModes[id]?.date || (month > today ? month : today);
@@ -357,7 +362,7 @@ export default function MoneyFlowToday({
       <div className="pw-flow-row pw-flow-legacy"><span>Separate owner payroll <small>Monthly gross payroll not already included in clinician or staff pay</small></span>
         <div className="pw-flow-value-edit"><InlineNumber label="Separate owner payroll per month" value={workspace.settings.ownerPayrollMonthly} prefix="$"
           onCommit={(value) => onSettingNumber("ownerPayrollMonthly", value)} /><strong>-{currency(flow.legacyOwnerPayroll)}</strong></div></div>
-      <div className="pw-flow-row pw-flow-profit"><span>Estimated business profit <small>After gross payroll and all operating costs; before moving money to funds</small></span><strong>{currency(flow.profit)}</strong></div>
+      <div className="pw-flow-row pw-flow-profit"><span>Projected business profit <small>Model estimate after gross payroll and operating costs; not a bank reconciliation</small></span><strong>{currency(flow.profit)}</strong></div>
     </div>
 
     <section className="pw-flow-funds">
@@ -432,8 +437,8 @@ export default function MoneyFlowToday({
       <div className="pw-flow-row pw-flow-takehome"><span>Family take-home <small>{!payee
         ? "Select a W2 clinician to estimate net pay"
         : flow.familyTakeHome === null
-          ? "Add recorded sessions to estimate the distribution and total"
-          : "Estimated net W2 pay plus your distribution"}</small></span>
+          ? "Projection needs session pace to estimate the distribution and total"
+          : "Projected net W2 pay plus your distribution"}</small></span>
         <strong className={flow.familyTakeHome === null ? "pw-flow-missing" : undefined}>{flow.familyTakeHome === null
           ? payee ? "Waiting for sessions" : "Select W2 pay"
           : currency(flow.familyTakeHome)}</strong></div>

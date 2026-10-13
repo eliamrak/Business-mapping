@@ -104,6 +104,107 @@ test("missing session data remains unknown and old workspaces gain the tax estim
   assert.equal(flow.familyTakeHome, null);
 });
 
+test("full-month projection uses recorded sessions through data date and paces the rest", () => {
+  const workspace = setup();
+  const flow = monthFlow(
+    workspace,
+    context([record("2026-10-01", "2026-10-07", 14)]),
+    "2026-10-01",
+    "2026-10-13",
+    { fullMonthProjection: true },
+  );
+  assert.equal(flow.basisLabel, "Projection");
+  assert.equal(flow.through, "2026-10-31");
+  assert.equal(flow.sessionDataThrough, "2026-10-07");
+  assert.equal(flow.paceSource, "recent 56-day average blended with desired weekly pace for missing days");
+  assert.equal(flow.paceLookbackStart, "2026-08-19");
+  close(flow.sessions, 80);
+  close(flow.revenue, 6400);
+  close(flow.familyGrossPay, 120000 / 12);
+});
+
+test("full-month projection backfills later actuals without double counting", () => {
+  const workspace = setup();
+  const flow = monthFlow(
+    workspace,
+    context([record("2026-10-01", "2026-10-14", 28)]),
+    "2026-10-01",
+    "2026-10-15",
+    { fullMonthProjection: true },
+  );
+  const usedWeekly = 18.5;
+  const expectedSessions = 28 + usedWeekly / 7 * 17;
+  close(flow.sessions, expectedSessions);
+  close(flow.revenue, expectedSessions * 80);
+  assert.equal(flow.sessionDataThrough, "2026-10-14");
+});
+
+test("full-month projection clips cross-month records to service dates in the selected month", () => {
+  const workspace = setup();
+  const flow = monthFlow(
+    workspace,
+    context([record("2026-09-24", "2026-10-07", 14)]),
+    "2026-10-01",
+    "2026-10-08",
+    { fullMonthProjection: true },
+  );
+  const usedWeekly = 16.75;
+  const expectedSessions = 7 + usedWeekly / 7 * 24;
+  assert.equal(flow.splitPeriods, true);
+  assert.equal(flow.sessionDataThrough, "2026-10-07");
+  close(flow.sessions, expectedSessions);
+  close(flow.revenue, expectedSessions * 80);
+});
+
+test("full-month projection can fall back to desired weekly pace with no session records", () => {
+  const workspace = setup();
+  const flow = monthFlow(
+    workspace,
+    context([]),
+    "2026-10-01",
+    "2026-10-13",
+    { fullMonthProjection: true },
+  );
+  const expectedSessions = 20 / 7 * 31;
+  assert.equal(flow.basisLabel, "Projection");
+  assert.equal(flow.through, "2026-10-31");
+  assert.equal(flow.sessionDataThrough, null);
+  assert.equal(flow.paceSource, "desired weekly pace fallback until session averages exist");
+  close(flow.sessions, expectedSessions);
+  close(flow.revenue, expectedSessions * 80);
+  close(flow.familyGrossPay, 120000 / 12);
+});
+
+test("month flow keeps month-to-date behavior unless projection is requested", () => {
+  const workspace = setup();
+  const flow = monthFlow(
+    workspace,
+    context([record("2026-10-01", "2026-10-07", 14)]),
+    "2026-10-01",
+    "2026-10-13",
+  );
+  assert.equal(flow.basisLabel, "Month to date");
+  assert.equal(flow.through, "2026-10-07");
+  assert.equal(flow.sessionDataThrough, "2026-10-07");
+  close(flow.sessions, 14);
+  close(flow.revenue, 1120);
+  close(flow.familyGrossPay, 0);
+});
+
+test("historical unclosed months remain projections when projection mode is requested", () => {
+  const workspace = setup();
+  const flow = monthFlow(
+    workspace,
+    context([record("2026-09-01", "2026-09-14", 28)]),
+    "2026-09-01",
+    "2026-10-13",
+    { fullMonthProjection: true },
+  );
+  assert.equal(flow.basisLabel, "Projection");
+  assert.equal(flow.through, "2026-09-30");
+  assert.equal(flow.sessionDataThrough, "2026-09-14");
+});
+
 test("support staff pay follows scheduled payroll even when session data is missing", () => {
   const workspace = setup();
   const flow = monthFlow(

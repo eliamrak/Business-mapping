@@ -21,6 +21,9 @@ export type MonthFlow = {
   start: string;
   through: string | null;
   sessionDataThrough: string | null;
+  basisLabel: "Month to date" | "Projection";
+  paceSource: string;
+  paceLookbackStart: string | null;
   sessions: number | null;
   splitPeriods: boolean;
   incompleteClinicians: string[];
@@ -46,15 +49,27 @@ export type MonthFlow = {
   familyTakeHome: number | null;
 };
 
+export type MonthFlowOptions = {
+  fullMonthProjection?: boolean;
+};
+
+const dayBefore = (date: string, days: number) =>
+  new Date(Date.parse(date + "T12:00:00Z") - days * 86_400_000)
+    .toISOString()
+    .slice(0, 10);
+
 export function monthFlow(
   workspace: Workspace,
   context: Context,
   month: string,
   today: string,
+  options: MonthFlowOptions = {},
 ): MonthFlow {
   const start = month.slice(0, 7) + "-01";
   const end = monthEnd(start);
   const cutoff = end < today ? end : today;
+  const projection = options.fullMonthProjection ?? false;
+  const horizon = projection ? end : cutoff;
   const people = context.clinicians.filter(
     (person) => (person.goalId ?? null) === workspace.settings.teamId,
   );
@@ -70,7 +85,57 @@ export function monthFlow(
     const date = record.end < end ? record.end : end;
     return !latest || date > latest ? date : latest;
   }, null);
-  const through = dataThrough;
+  const through = projection ? horizon : dataThrough;
+  const completedBiweekly = [...new Map(context.sessions
+    .filter((record) =>
+      selectedIds.has(record.clinicianId) &&
+      record.end <= cutoff && daysInclusive(record.start, record.end) === 14,
+    )
+    .map((record) => [`${record.start}|${record.end}`, { start: record.start, end: record.end }]))
+    .values()]
+    .sort((a, b) => b.end.localeCompare(a.end))
+    .slice(0, 4);
+  const exactFour = completedBiweekly.length === 4 &&
+    daysInclusive(completedBiweekly[0].end, cutoff) <= 28 &&
+    completedBiweekly.every((period, index) =>
+      (index === 0 || dayBefore(completedBiweekly[index - 1].start, 1) === period.end) &&
+      people.every((person) => context.sessions.some((record) =>
+        record.clinicianId === person.id &&
+        record.start === period.start && record.end === period.end,
+      )),
+    );
+  const recentStart = exactFour ? completedBiweekly[3].start : dayBefore(cutoff, 55);
+  const windowDays = daysInclusive(recentStart, cutoff);
+  let anyRecordedPace = false;
+  const weeklyPaceByClinician = new Map<number, number>();
+  for (const person of people) {
+    const recent = context.sessions.filter(
+      (record) =>
+        record.clinicianId === person.id &&
+        record.end <= cutoff &&
+        (exactFour
+          ? completedBiweekly.some((period) =>
+              record.start === period.start && record.end === period.end,
+            )
+          : record.start >= recentStart),
+    );
+    const days = recent.reduce(
+      (sum, record) => sum + daysInclusive(record.start, record.end),
+      0,
+    );
+    const completed = recent.reduce((sum, record) => sum + record.completed, 0);
+    anyRecordedPace ||= days > 0;
+    const recordedWeekly = days ? completed * 7 / days : null;
+    const usedWeekly = exactFour
+      ? recordedWeekly ?? person.sessionsPerWeek
+      : ((completed + person.sessionsPerWeek * Math.max(0, windowDays - days) / 7) * 7) / windowDays;
+    weeklyPaceByClinician.set(person.id, usedWeekly);
+  }
+  const paceSource = exactFour
+    ? "last four complete biweekly session periods"
+    : anyRecordedPace
+      ? "recent 56-day average blended with desired weekly pace for missing days"
+      : "desired weekly pace fallback until session averages exist";
   const familyId = workspace.settings.familyW2ClinicianId;
   const datesIn = (from: string, to: string) =>
     Array.from({ length: daysInclusive(from, to) }, (_, index) =>
@@ -110,12 +175,15 @@ export function monthFlow(
             return paySum + amount;
           }, 0);
       }, 0);
-  const staffPay = scheduledStaffPay(cutoff);
+  const staffPay = scheduledStaffPay(horizon);
   const payrollHistoryStart = "2026-01-01";
   const empty = {
     start,
     through,
     sessionDataThrough: dataThrough,
+    basisLabel: projection ? "Projection" : "Month to date",
+    paceSource,
+    paceLookbackStart: projection ? recentStart : null,
     sessions: null,
     splitPeriods: false,
     incompleteClinicians: [],
@@ -145,12 +213,26 @@ export function monthFlow(
   const elapsed = daysInclusive(start, through);
   const fraction = elapsed / daysInclusive(start, end);
   let splitPeriods = false;
-  const sessionsForDate = (clinicianId: number, date: string) =>
+  const actualSessionsForDate = (clinicianId: number, date: string) =>
     records.reduce((sum, record) =>
       record.clinicianId === clinicianId && record.start <= date && record.end >= date
         ? sum + record.completed / daysInclusive(record.start, record.end)
         : sum,
     0);
+  const hasActualForDate = (clinicianId: number, date: string) =>
+    records.some(
+      (record) =>
+        record.clinicianId === clinicianId &&
+        record.start <= date &&
+        record.end >= date,
+    );
+  const sessionsForDate = (clinicianId: number, date: string) => {
+    const actual = actualSessionsForDate(clinicianId, date);
+    if (!projection) return actual;
+    if (hasActualForDate(clinicianId, date)) return actual;
+    if (date < start || date > end) return 0;
+    return (weeklyPaceByClinician.get(clinicianId) ?? 0) / 7;
+  };
   const dailySessionsByClinician = new Map<number, Map<string, number>>();
   for (const record of records) {
     const overlapStart = record.start > start ? record.start : start;
@@ -160,11 +242,21 @@ export function monthFlow(
     if (overlapStart !== record.start || overlapEnd !== record.end)
       splitPeriods = true;
     const clinicianDays = dailySessionsByClinician.get(record.clinicianId) ?? new Map<string, number>();
-    for (const date of datesIn(record.start, overlapEnd))
+    for (const date of datesIn(overlapStart, overlapEnd))
       clinicianDays.set(date, (clinicianDays.get(date) ?? 0) + daily);
     dailySessionsByClinician.set(record.clinicianId, clinicianDays);
   }
-  const incompleteClinicians = people
+  if (projection) {
+    for (const person of people) {
+      const clinicianDays = dailySessionsByClinician.get(person.id) ?? new Map<string, number>();
+      for (const date of datesIn(start, through)) {
+        if (clinicianDays.has(date)) continue;
+        clinicianDays.set(date, (weeklyPaceByClinician.get(person.id) ?? 0) / 7);
+      }
+      dailySessionsByClinician.set(person.id, clinicianDays);
+    }
+  }
+  const incompleteClinicians = projection ? [] : people
     .filter((person) =>
       !records.some(
         (record) =>
@@ -244,7 +336,7 @@ export function monthFlow(
       personRevenue += earned;
     }
     if (schedule) {
-      const dates = payrollPayDatesThrough(schedule, start, cutoff, activeStart);
+      const dates = payrollPayDatesThrough(schedule, start, horizon, activeStart);
       for (const payDate of dates) {
         const period = payrollPeriodForPayDate(schedule, payDate);
         const salaryProfile = clinicianModelAt(workspace, person.id, payDate);
