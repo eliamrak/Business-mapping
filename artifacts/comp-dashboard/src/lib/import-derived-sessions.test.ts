@@ -154,7 +154,7 @@ test("repeated snapshots do not duplicate derived sessions", () => {
   assert.equal(overlay.derivedSessions[0].completed, 1);
 });
 
-test("partial import overlap keeps manual actuals and flags the conflict", () => {
+test("partial import overlap uses exact imported facts and drops stale aggregate manual totals", () => {
   const overlay = buildImportedSessionOverlay(
     context([record(1, "2026-10-01", "2026-10-14", 12)]),
     [
@@ -180,11 +180,14 @@ test("partial import overlap keeps manual actuals and flags the conflict", () =>
     7,
   );
 
-  assert.equal(overlay.derivedSessions.length, 1);
-  assert.equal(overlay.derivedSessions[0].start, "2026-10-15");
-  assert.equal(overlay.diagnostic.manualOverlapCount, 1);
+  assert.equal(overlay.derivedSessions.length, 2);
+  assert.deepEqual(
+    overlay.derivedSessions.map((item) => item.start),
+    ["2026-10-07", "2026-10-15"],
+  );
   assert.equal(overlay.diagnostic.manualImportConflictCount, 1);
-  assert.equal(overlay.context.sessions.some((item) => item.id === 11), true);
+  assert.equal(overlay.diagnostic.manualImportOverrideCount, 12);
+  assert.equal(overlay.context.sessions.some((item) => item.id === 11), false);
 });
 
 test("complete imported attendance coverage replaces overlapping manual actuals in the overlay", () => {

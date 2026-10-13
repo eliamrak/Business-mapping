@@ -80,6 +80,7 @@ const display = (number: number | null, suffix = "") =>
 
 export default function WorkspaceSessions({
   context,
+  summaryContext,
   teamId,
   sandbox,
   onSaved,
@@ -89,6 +90,7 @@ export default function WorkspaceSessions({
   forecastMonths,
 }: {
   context: Context;
+  summaryContext?: Context;
   teamId: number | null;
   sandbox: boolean;
   onSaved: () => Promise<void>;
@@ -109,7 +111,10 @@ export default function WorkspaceSessions({
     (clinician) => (clinician.goalId ?? null) === teamId,
   );
   const personIds = new Set(people.map((person) => person.id));
-  const records = context.sessions.filter((record) =>
+  const manualRecords = context.sessions.filter((record) =>
+    personIds.has(record.clinicianId),
+  );
+  const records = (summaryContext ?? context).sessions.filter((record) =>
     personIds.has(record.clinicianId),
   );
   const periods = useMemo(() => {
@@ -177,7 +182,7 @@ export default function WorkspaceSessions({
       annualGoals,
     );
   const exactRecord = (personId: number) =>
-    records.find(
+    manualRecords.find(
       (record) =>
         record.clinicianId === personId &&
         record.start === range.start &&
@@ -210,6 +215,7 @@ export default function WorkspaceSessions({
     range.start,
     range.end,
     context.sessions,
+    summaryContext?.sessions,
     context.clinicians,
     sessionGoals.data,
   ]);
@@ -854,7 +860,7 @@ export default function WorkspaceSessions({
       {entryMode === "bulk" && (
         <BulkSessionEntry
           people={people}
-          records={records}
+          records={manualRecords}
           initialRange={range}
           onSaved={onSaved}
           onStateChange={setBulkState}

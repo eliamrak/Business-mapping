@@ -758,14 +758,14 @@ export default function PracticeWorkspace() {
     return gaps;
   }, [workspace, today]);
   const actualPaceSeries = useMemo<PacePoint[]>(() => {
-    if (!workspace || !context) return [];
+    if (!workspace || !modelContext) return [];
     if (paceMetric !== "sessions")
       return recordedFinancialPeriods.map((row) => ({
         date: row.date,
         value: row.values[paceMetric] ?? null,
       }));
     const selectedIds = new Set(
-      context.clinicians
+      modelContext.clinicians
         .filter((c) => (c.goalId ?? null) === workspace.settings.teamId)
         .map((c) => c.id),
     );
@@ -773,7 +773,7 @@ export default function PracticeWorkspace() {
       string,
       { date: string; days: number; value: number }
     >();
-    for (const record of context.sessions.filter((r) =>
+    for (const record of modelContext.sessions.filter((r) =>
       selectedIds.has(r.clinicianId),
     )) {
       const key = record.start + "|" + record.end;
@@ -791,7 +791,7 @@ export default function PracticeWorkspace() {
         date: period.date,
         value: (period.value / period.days) * 30.4375,
       }));
-  }, [workspace, context, paceMetric, recordedFinancialPeriods]);
+  }, [workspace, modelContext, paceMetric, recordedFinancialPeriods]);
   const goalPace = useMemo(
     () =>
       selectedGoal && comparableGoal
@@ -2964,7 +2964,9 @@ export default function PracticeWorkspace() {
                         {importedSessionOverlay.diagnostic.manualImportConflictCount === 1
                           ? ""
                           : "s"}{" "}
-                        need review and are not double-counted.
+                        replaced stale aggregate manual totals for covered
+                        dates; uncovered days remain unknown instead of being
+                        prorated.
                       </p>
                     )}
                   {importedSessionOverlay &&
@@ -2983,6 +2985,7 @@ export default function PracticeWorkspace() {
                   <WorkspaceSessions
                     key={mode + "-" + workspace.settings.teamId}
                     context={context}
+                    summaryContext={modelContext ?? context}
                     teamId={workspace.settings.teamId}
                     sandbox={sandbox}
                     onEditingChange={setSessionEditing}
@@ -5411,7 +5414,7 @@ export default function PracticeWorkspace() {
                       <p className="pw-notice">
                         Starting from{" "}
                         {resolved.goal?.name ?? "your compensation plan"}.
-                        {!context.sessions.some((record) =>
+                        {!(modelContext ?? context).sessions.some((record) =>
                           people.some(
                             (person) => person.id === record.clinicianId,
                           ),

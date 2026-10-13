@@ -43,6 +43,12 @@ const rangeFullyCovered = (
   end: string,
 ) => ranges.some((range) => range.start <= start && range.end >= end);
 
+const rangeCoveredAtAll = (
+  ranges: Array<{ start: string; end: string }>,
+  start: string,
+  end: string,
+) => ranges.some((range) => range.start <= end && range.end >= start);
+
 export function buildImportedSessionOverlay(
   context: Context,
   snapshots: LocalSnapshot[],
@@ -145,14 +151,18 @@ export function buildImportedSessionOverlay(
       const fullyCovered = overlappingManual.every((record) =>
         rangeFullyCovered(attendanceCoverage, record.start, record.end),
       );
-      if (fullyCovered) {
+      const coveredAtAll = overlappingManual.every((record) =>
+        rangeCoveredAtAll(attendanceCoverage, record.start, record.end),
+      );
+      if (coveredAtAll) {
         for (const record of overlappingManual) {
-          if (!replacedManualIds.has(record.id))
+          if (!replacedManualIds.has(record.id)) {
             manualImportOverrideCount += record.completed;
+            if (!fullyCovered) manualImportConflictCount += item.rows.length;
+          }
           replacedManualIds.add(record.id);
         }
       } else {
-        manualOverlapCount += item.rows.length;
         manualImportConflictCount += item.rows.length;
         continue;
       }
