@@ -29,10 +29,17 @@ export type Staff = StaffCostInput & {
   label?: string;
   goalId?: number | null;
 };
+export type ImportedBillingActual = {
+  clinicianId: number;
+  serviceDate: string;
+  totalFeeCharged: number;
+  sourceRowHash: string;
+};
 export type Context = {
   clinicians: Clinician[];
   staff: Staff[];
   sessions: SessionRecord[];
+  importedBillingActuals?: ImportedBillingActual[];
 };
 export function staffMemberAt(
   workspace: Workspace,
@@ -113,6 +120,23 @@ export const registeredMetrics = (
     .filter((k) => !k.archived)
     .map((k) => [k.key, k.name, k.unit, "Custom"] as const),
 ];
+
+const importedBillingByClinicianDate = (
+  context: Context,
+  selectedIds: Set<number>,
+) => {
+  const billed = new Map<number, Map<string, number>>();
+  for (const row of context.importedBillingActuals ?? []) {
+    if (!selectedIds.has(row.clinicianId)) continue;
+    const clinician = billed.get(row.clinicianId) ?? new Map<string, number>();
+    clinician.set(
+      row.serviceDate,
+      (clinician.get(row.serviceDate) ?? 0) + row.totalFeeCharged,
+    );
+    billed.set(row.clinicianId, clinician);
+  }
+  return billed;
+};
 export const ratio = (a: number, b: number) => (b > 0 ? a / b : null);
 export const monthDate = (date: string, offset = 0) => {
   const d = new Date(date.slice(0, 7) + "-01T12:00:00Z");
@@ -450,6 +474,10 @@ export function forecast(
     : [...workspace.events, ...proposed].filter((e) => e.enabled);
   const selected = context.clinicians.filter((c) =>
     settings.teamId === null ? c.goalId == null : c.goalId === settings.teamId,
+  );
+  const importedBilling = importedBillingByClinicianDate(
+    context,
+    new Set(selected.map((person) => person.id)),
   );
   const staff = context.staff.filter((c) =>
     settings.teamId === null ? c.goalId == null : c.goalId === settings.teamId,
@@ -1180,7 +1208,12 @@ export function forecast(
               : day.mode === "per_session"
                 ? day.amount * dayCount
                 : calculated.clinicianCompensation;
-        earned += (dayCount * day.rate * setting.collectionPct) / 100;
+        const importedFee =
+          c.instance === String(c.id)
+            ? importedBilling.get(c.id)?.get(day.date)
+            : undefined;
+        earned +=
+          importedFee ?? (dayCount * day.rate * setting.collectionPct) / 100;
       }
       const burden =
         String(c.classification).toLowerCase() === "w2"

@@ -89,6 +89,7 @@ import {
   buildPracticeProjection,
   type PracticeView,
 } from "@/lib/practice-projection";
+import { buildImportedSessionOverlay } from "@/lib/import-derived-sessions";
 import { compareOperatingPlans, summarizeOperatingPlan } from "@/lib/operating-plan";
 import { newRecord } from "@/components/hub/config";
 import RecordEditor from "@/components/hub/record-editor";
@@ -533,17 +534,29 @@ export default function PracticeWorkspace() {
   const workspace = resolved?.workspace;
   const workingWorkspace = stagedWorkspace ?? workspace!;
   const forecastWorkspace = resolved?.forecastWorkspace;
+  const importedSessionOverlay = useMemo(
+    () =>
+      !sandbox && context && workspace
+        ? buildImportedSessionOverlay(
+            context,
+            localRetentionState.snapshots,
+            workspace.settings.teamId,
+          )
+        : null,
+    [sandbox, context, workspace?.settings.teamId, localRetentionState.snapshots],
+  );
+  const modelContext = importedSessionOverlay?.context ?? context;
   const planProjection = useMemo(
     () =>
-      savedResolved && contextQuery.data
+      savedResolved && modelContext
         ? buildPracticeProjection(
             savedResolved.forecastWorkspace,
-            contextQuery.data,
+            modelContext,
             "plan",
             today,
           )
         : null,
-    [savedResolved, contextQuery.data, today],
+    [savedResolved, modelContext, today],
   );
   const viewProjection = useMemo(
     () =>
@@ -551,46 +564,46 @@ export default function PracticeWorkspace() {
         ? null
         : practiceView === "plan"
           ? planProjection
-          : forecastWorkspace && context
+          : forecastWorkspace && modelContext
             ? buildPracticeProjection(
                 forecastWorkspace,
-                context,
+                modelContext,
                 "actual",
                 today,
               )
             : null,
-    [sandbox, practiceView, planProjection, forecastWorkspace, context, today],
+    [sandbox, practiceView, planProjection, forecastWorkspace, modelContext, today],
   );
   const savedMonths = useMemo(
     () =>
-      sandbox && forecastWorkspace && context
-        ? forecast(forecastWorkspace, context)
+      sandbox && forecastWorkspace && modelContext
+        ? forecast(forecastWorkspace, modelContext)
         : (viewProjection?.months ?? []),
-    [sandbox, forecastWorkspace, context, viewProjection],
+    [sandbox, forecastWorkspace, modelContext, viewProjection],
   );
   const stagedValidation = useMemo(
     () => (stagedWorkspace ? workspaceSchema.safeParse(stagedWorkspace) : null),
     [stagedWorkspace],
   );
   const stagedMonths = useMemo(() => {
-    if (!stagedValidation?.success || !context) return [];
+    if (!stagedValidation?.success || !modelContext) return [];
     const next = resolveWorkspaceDefaults(
       stagedValidation.data,
-      context,
+      modelContext,
       teams.data,
     ).forecastWorkspace;
     return sandbox
-      ? forecast(next, context)
-      : buildPracticeProjection(next, context, practiceView, today).months;
-  }, [stagedValidation, context, teams.data, sandbox, practiceView, today]);
+      ? forecast(next, modelContext)
+      : buildPracticeProjection(next, modelContext, practiceView, today).months;
+  }, [stagedValidation, modelContext, teams.data, sandbox, practiceView, today]);
   const months = stagedValidation?.success ? stagedMonths : savedMonths;
   const summaryMonth = months.find((month) => month.date === summaryMonthDate) ?? months[0];
   const moneyFlowWorkspace = useMemo(
     () =>
-      stagedValidation?.success && context
-        ? resolveWorkspaceDefaults(stagedValidation.data, context, teams.data).forecastWorkspace
+      stagedValidation?.success && modelContext
+        ? resolveWorkspaceDefaults(stagedValidation.data, modelContext, teams.data).forecastWorkspace
         : forecastWorkspace,
-    [stagedValidation, context, teams.data, forecastWorkspace],
+    [stagedValidation, modelContext, teams.data, forecastWorkspace],
   );
   const baselineMonths = useMemo(
     () =>
@@ -690,19 +703,19 @@ export default function PracticeWorkspace() {
         : "manual";
   const recordedFinancialPeriods = useMemo(
     () =>
-      workspace && context
-        ? observedSeries(workspace, context).sort((a, b) =>
+      workspace && modelContext
+        ? observedSeries(workspace, modelContext).sort((a, b) =>
             b.date.localeCompare(a.date),
           )
         : [],
-    [workspace, context],
+    [workspace, modelContext],
   );
   const moneyYtd = useMemo(
     () =>
-      workspace && context
-        ? observed(workspace, context, today.slice(0, 4) + "-01-01", today)
+      workspace && modelContext
+        ? observed(workspace, modelContext, today.slice(0, 4) + "-01-01", today)
         : null,
-    [workspace, context, today],
+    [workspace, modelContext, today],
   );
   const finalizedYtdCount =
     workspace?.periods.filter(
@@ -2930,22 +2943,60 @@ export default function PracticeWorkspace() {
                 </>
               )}
               {section === "sessions" && (
-                <WorkspaceSessions
-                  key={mode + "-" + workspace.settings.teamId}
-                  context={context}
-                  teamId={workspace.settings.teamId}
-                  sandbox={sandbox}
-                  onEditingChange={setSessionEditing}
-                  onPlanHire={startPlanning}
-                  onOpenCalculations={() => setSection("calculations")}
-                  forecastMonths={months}
-                  onSaved={async () => {
-                    await contextQuery.refetch();
-                    void cache.invalidateQueries({
-                      queryKey: ["session-records"],
-                    });
-                  }}
-                />
+                <>
+                  {importedSessionOverlay &&
+                    importedSessionOverlay.derivedSessions.length > 0 && (
+                      <p className="pw-note">
+                        Saved imports are contributing{" "}
+                        {importedSessionOverlay.diagnostic.attendedRows.toLocaleString()}{" "}
+                        attended rows and{" "}
+                        {importedSessionOverlay.diagnostic.billedRows.toLocaleString()}{" "}
+                        billed rows to projections. Fully covered imported
+                        attendance replaces{" "}
+                        {importedSessionOverlay.diagnostic.manualImportOverrideCount.toLocaleString()}{" "}
+                        manual completed session
+                        {importedSessionOverlay.diagnostic.manualImportOverrideCount === 1
+                          ? ""
+                          : "s"}{" "}
+                        in this view;{" "}
+                        {importedSessionOverlay.diagnostic.manualImportConflictCount.toLocaleString()}{" "}
+                        partial-overlap imported row
+                        {importedSessionOverlay.diagnostic.manualImportConflictCount === 1
+                          ? ""
+                          : "s"}{" "}
+                        need review and are not double-counted.
+                      </p>
+                    )}
+                  {importedSessionOverlay &&
+                    (importedSessionOverlay.diagnostic.missingClinicianLabels.length > 0 ||
+                      importedSessionOverlay.diagnostic.ambiguousClinicianLabels.length > 0) && (
+                      <p className="pw-error" role="alert">
+                        Some imported attendance rows are excluded from
+                        projections because clinician labels do not map cleanly:{" "}
+                        {[
+                          ...importedSessionOverlay.diagnostic.missingClinicianLabels,
+                          ...importedSessionOverlay.diagnostic.ambiguousClinicianLabels,
+                        ].join(", ")}
+                        .
+                      </p>
+                    )}
+                  <WorkspaceSessions
+                    key={mode + "-" + workspace.settings.teamId}
+                    context={context}
+                    teamId={workspace.settings.teamId}
+                    sandbox={sandbox}
+                    onEditingChange={setSessionEditing}
+                    onPlanHire={startPlanning}
+                    onOpenCalculations={() => setSection("calculations")}
+                    forecastMonths={months}
+                    onSaved={async () => {
+                      await contextQuery.refetch();
+                      void cache.invalidateQueries({
+                        queryKey: ["session-records"],
+                      });
+                    }}
+                  />
+                </>
               )}
               {section === "retention" && (
                 <LocalRetentionWorkspace workspaceState={localRetentionState} />
@@ -2953,7 +3004,7 @@ export default function PracticeWorkspace() {
               {section === "calculations" && (
                 <WorkspaceCalculations
                   workspace={workingWorkspace}
-                  context={context}
+                  context={modelContext ?? context}
                   onSetting={(key, value) => stageSettings(
                     { [key]: value },
                     "Session calculations",
@@ -4189,7 +4240,7 @@ export default function PracticeWorkspace() {
                   workspace={stagedWorkspace && !stagedValidation?.success
                     ? workingWorkspace
                     : moneyFlowWorkspace ?? workingWorkspace}
-                  context={context}
+                  context={modelContext ?? context}
                   today={today}
                   onPayeeChange={(id) => stageSettings({
                     familyW2ClinicianId: id,

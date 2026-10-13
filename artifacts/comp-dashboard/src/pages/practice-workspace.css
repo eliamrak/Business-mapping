@@ -3889,6 +3889,12 @@
   margin-top: 0.25rem;
   color: #26392e;
 }
+.pw-retention-summary small {
+  display: block;
+  margin-top: 0.2rem;
+  color: #586c61;
+  font-size: 0.78rem;
+}
 .pw-local-import-grid {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));

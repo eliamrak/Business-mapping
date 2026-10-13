@@ -74,6 +74,16 @@ export function monthFlow(
     (person) => (person.goalId ?? null) === workspace.settings.teamId,
   );
   const selectedIds = new Set(people.map((person) => person.id));
+  const importedBilling = new Map<number, Map<string, number>>();
+  for (const row of context.importedBillingActuals ?? []) {
+    if (!selectedIds.has(row.clinicianId)) continue;
+    const clinician = importedBilling.get(row.clinicianId) ?? new Map<string, number>();
+    clinician.set(
+      row.serviceDate,
+      (clinician.get(row.serviceDate) ?? 0) + row.totalFeeCharged,
+    );
+    importedBilling.set(row.clinicianId, clinician);
+  }
   const records = context.sessions.filter(
     (record) =>
       selectedIds.has(record.clinicianId) &&
@@ -323,7 +333,9 @@ export function monthFlow(
       const term = clinicianTermsAt(workspace, person.id, date);
       const count = dailySessionsByClinician.get(person.id)?.get(date) ?? 0;
       const rate = activeProfile?.expectedSessionRevenue ?? term.sessionRate ?? person.sessionRate;
-      const earned = count * rate * workspace.settings.collectionPct / 100;
+      const earned =
+        importedBilling.get(person.id)?.get(date) ??
+        count * rate * workspace.settings.collectionPct / 100;
       const mode = activeProfile?.payMode ?? "existing_split";
       const amount = activeProfile?.payAmount ?? 0;
       const split = term.clinicianSplit ?? person.preCapClinicianSplit;

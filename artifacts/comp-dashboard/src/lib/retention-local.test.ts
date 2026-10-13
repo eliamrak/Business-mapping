@@ -111,6 +111,9 @@ test("retention workspace copy describes saved authenticated history", () => {
 
   assert.match(source, /Saved import history/);
   assert.match(source, /saved to authenticated practice storage/);
+  assert.match(source, /Billed fees/);
+  assert.match(source, /row\.status !== "attendance_only"/);
+  assert.match(source, /attendance-only rows stay in saved history and are hidden here/);
   assert.doesNotMatch(source, /Local-only package workspace/);
 });
 
@@ -170,6 +173,33 @@ CID-same,Dr Lane,2026-10-01,Room A,show`).snapshot;
   assert.equal(reconciliation.ambiguousAttendanceRows, 2);
   assert.equal(reconciliation.ambiguousBillingRows, 2);
   assert.equal(reconciliation.rows[0].status, "ambiguous");
+});
+
+test("unbilled ordinary cancellations are preserved without becoming matching review work", () => {
+  const attendance = importAttendanceCsv(
+    `Client,Clinician,Date of service,Location,Status
+CID-cancel,Dr Lane,2026-10-01,Room A,Cancelled
+CID-clinician,Dr Lane,2026-10-02,Room A,Clinician Cancelled`,
+  ).snapshot;
+  const reconciliation = buildLocalVisitReconciliation([attendance]);
+  const metrics = buildLocalRetentionMetrics([attendance], {});
+
+  assert.equal(reconciliation.attendanceOnlyRows, 2);
+  assert.deepEqual(
+    reconciliation.rows.map((row) => row.status),
+    ["attendance_only", "attendance_only"],
+  );
+  assert.deepEqual(metrics.attendanceByClinician[0], {
+    clinician: "Dr Lane",
+    shows: 0,
+    clientCancelled: 1,
+    noShows: 0,
+    clinicianCancelled: 1,
+    uniqueActiveClients: 0,
+    firstObservedClients: 0,
+    retainedClients: 0,
+    immatureClientsExcluded: 0,
+  });
 });
 
 test("single Practice package validates collections and imports atomically", () => {

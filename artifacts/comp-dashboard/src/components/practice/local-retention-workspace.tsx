@@ -20,6 +20,26 @@ import {
 const money = (value: number) =>
   value.toLocaleString("en-US", { style: "currency", currency: "USD" });
 const dateLabel = (value: string | null) => value ?? "--";
+const importedLabel = (value: string | null) =>
+  value ? value.slice(0, 10) : "not loaded";
+const sourceCoverage = (
+  snapshots: LocalSnapshot[],
+  kind: LocalSnapshot["kind"],
+) => {
+  const sourceSnapshots = snapshots.filter((snapshot) => snapshot.kind === kind);
+  const serviceDates = sourceSnapshots
+    .flatMap((snapshot) => snapshot.rows.map((row) => row.serviceDate))
+    .sort();
+  const importedAt = sourceSnapshots
+    .map((snapshot) => snapshot.importedAt)
+    .sort()
+    .at(-1);
+  return {
+    start: serviceDates[0] ?? null,
+    end: serviceDates.at(-1) ?? null,
+    importedAt: importedAt ?? null,
+  };
+};
 const localDownload = (value: unknown, name: string) => {
   const blob = new Blob([JSON.stringify(value, null, 2)], {
     type: "application/json",
@@ -196,6 +216,21 @@ export default function LocalRetentionWorkspace({
   );
   const reconciliation = useMemo(
     () => buildLocalVisitReconciliation(snapshots),
+    [snapshots],
+  );
+  const reconciliationReviewRows = useMemo(
+    () =>
+      reconciliation.rows.filter(
+        (row) => row.status !== "matched" && row.status !== "attendance_only",
+      ),
+    [reconciliation.rows],
+  );
+  const attendanceCoverage = useMemo(
+    () => sourceCoverage(snapshots, "attendance"),
+    [snapshots],
+  );
+  const billingCoverage = useMemo(
+    () => sourceCoverage(snapshots, "billing"),
     [snapshots],
   );
 
@@ -508,42 +543,65 @@ export default function LocalRetentionWorkspace({
       </section>
 
       <div className="pw-retention-summary">
-        <div>
-          <span>Coverage</span>
+        <div title="Dates present in converted attendance rows. This range does not imply that every date has an attendance record.">
+          <span>Attendance coverage</span>
           <strong>
-            {dateLabel(metrics.coverageStart)} to{" "}
-            {dateLabel(metrics.coverageEnd)}
+            {dateLabel(attendanceCoverage.start)} to{" "}
+            {dateLabel(attendanceCoverage.end)}
           </strong>
+          <small>Loaded {importedLabel(attendanceCoverage.importedAt)}</small>
         </div>
-        <div>
+        <div title="Dates present in converted billing rows. This range does not imply that every date has a billing record.">
+          <span>Billing coverage</span>
+          <strong>
+            {dateLabel(billingCoverage.start)} to{" "}
+            {dateLabel(billingCoverage.end)}
+          </strong>
+          <small>Loaded {importedLabel(billingCoverage.importedAt)}</small>
+        </div>
+        <div title="Converted attendance fact rows: shows, client cancellations, no-shows, and clinician cancellations. This is not the attended-session count.">
           <span>Attendance rows</span>
           <strong>{metrics.attendanceRows.toLocaleString()}</strong>
         </div>
-        <div>
+        <div title="Converted billing fact rows with charged fee amounts. These are charges, not collected payments.">
           <span>Billed rows</span>
           <strong>{metrics.billingRows.toLocaleString()}</strong>
         </div>
-        <div>
-          <span>Matched visits</span>
-          <strong>{reconciliation.matchedVisits.toLocaleString()}</strong>
-        </div>
-        <div>
-          <span>Incomplete facts</span>
+        <div title="Total charged fees from the converted billing source. This does not depend on visit matching and is not collected cash.">
+          <span>Billed fees</span>
           <strong>
-            {(
-              reconciliation.attendanceOnlyRows + reconciliation.billingOnlyRows
-            ).toLocaleString()}
+            {money(
+              metrics.billingByClinician.reduce(
+                (sum, row) => sum + row.totalFeesCharged,
+                0,
+              ),
+            )}
           </strong>
         </div>
-        <div>
-          <span>Review groups</span>
-          <strong>{reconciliation.ambiguousGroups.toLocaleString()}</strong>
+        <div title="Attendance rows with no same client, clinician, and date billing counterpart in saved converted history. This is a matching status, not proof that billing is missing.">
+          <span>Attendance without billing</span>
+          <strong>{reconciliation.attendanceOnlyRows.toLocaleString()}</strong>
+        </div>
+        <div title="Billing rows with no same client, clinician, and date attendance counterpart in saved converted history. This is a matching status, not proof that attendance is missing.">
+          <span>Billing without attendance</span>
+          <strong>{reconciliation.billingOnlyRows.toLocaleString()}</strong>
+        </div>
+        <div title="Same stable client ID, clinician, and service date has multiple rows to pair. Rows are kept and need matching review rather than being treated as duplicates.">
+          <span>Groups needing matching review</span>
+          <strong>
+            {reconciliation.ambiguousGroups.toLocaleString()}
+          </strong>
         </div>
       </div>
 
       <div className="pw-local-tables">
         <section>
-          <h3>Visit reconciliation</h3>
+          <h3>Matching review</h3>
+          <p className="pw-note">
+            Showing only rows that need billing-side review. Matched visits and
+            attendance-only rows stay in saved history and are hidden here for
+            now.
+          </p>
           <table>
             <thead>
               <tr>
@@ -553,11 +611,11 @@ export default function LocalRetentionWorkspace({
                 <th>Status</th>
                 <th>Attendance</th>
                 <th>Billing</th>
-                <th>Matched fees</th>
+                <th>Billed fee</th>
               </tr>
             </thead>
             <tbody>
-              {reconciliation.rows.slice(0, 50).map((row) => (
+              {reconciliationReviewRows.slice(0, 50).map((row) => (
                 <tr key={row.key}>
                   <td>{row.serviceDate}</td>
                   <td>{row.clinician}</td>
@@ -575,15 +633,16 @@ export default function LocalRetentionWorkspace({
                   <td>{row.billingRows.length}</td>
                   <td>
                     {row.totalFeeCharged === null
-                      ? "Incomplete"
+                      ? "Review"
                       : money(row.totalFeeCharged)}
                   </td>
                 </tr>
               ))}
-              {!reconciliation.rows.length && (
+              {!reconciliationReviewRows.length && (
                 <tr>
                   <td colSpan={7}>
-                    Matched, incomplete, and reviewable visits will appear here.
+                    Billing-only and ambiguous matching groups will appear here
+                    when review is needed.
                   </td>
                 </tr>
               )}
