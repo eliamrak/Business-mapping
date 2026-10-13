@@ -1,0 +1,27 @@
+{
+  "innerWidth": 900,
+  "docClientWidth": 900,
+  "docScrollWidth": 900,
+  "bodyScrollWidth": 884,
+  "wrappers": [
+    {
+      "index": 0,
+      "className": "",
+      "clientWidth": 654,
+      "scrollWidth": 1534
+    },
+    {
+      "index": 1,
+      "className": "",
+      "clientWidth": 654,
+      "scrollWidth": 1090
+    },
+    {
+      "index": 2,
+      "className": "pw-table-scroll",
+      "clientWidth": 656,
+      "scrollWidth": 1050
+    }
+  ],
+  "hasPageOverflow": false
+}

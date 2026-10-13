@@ -696,12 +696,12 @@ export default function LocalRetentionWorkspace({
             <tbody>
               {sameDayReview.slice(0, 50).map((group) => (
                 <tr key={group.key}>
-                  <td>{group.serviceDate}</td>
-                  <td>{group.clinician}</td>
-                  <td>{group.clientId}</td>
-                  <td>{group.locations.join(", ")}</td>
-                  <td>{group.rawShowRows}</td>
-                  <td>
+                  <td data-label="Date">{group.serviceDate}</td>
+                  <td data-label="Clinician">{group.clinician}</td>
+                  <td data-label="Client ID">{group.clientId}</td>
+                  <td data-label="Locations">{group.locations.join(", ")}</td>
+                  <td data-label="Show rows">{group.rawShowRows}</td>
+                  <td data-label="Count as visits">
                     <select
                       aria-label={`Confirmed visits for ${group.clientId} on ${group.serviceDate}`}
                       disabled={busy}
@@ -725,7 +725,7 @@ export default function LocalRetentionWorkspace({
                       ))}
                     </select>
                   </td>
-                  <td>
+                  <td data-label="Collapsed">
                     {group.collapsedRows}
                     {group.overrideApplied ? " (confirmed)" : ""}
                   </td>
@@ -764,10 +764,10 @@ export default function LocalRetentionWorkspace({
             <tbody>
               {reconciliationReviewRows.slice(0, 50).map((row) => (
                 <tr key={row.key}>
-                  <td>{row.serviceDate}</td>
-                  <td>{row.clinician}</td>
-                  <td>{row.clientId}</td>
-                  <td>
+                  <td data-label="Date">{row.serviceDate}</td>
+                  <td data-label="Clinician">{row.clinician}</td>
+                  <td data-label="Client ID">{row.clientId}</td>
+                  <td data-label="Status">
                     {row.status === "matched"
                       ? "Matched"
                       : row.status === "attendance_only"
@@ -776,9 +776,9 @@ export default function LocalRetentionWorkspace({
                           ? "Billing only"
                           : "Ambiguous same-day pairing"}
                   </td>
-                  <td>{row.attendanceRows.length}</td>
-                  <td>{row.billingRows.length}</td>
-                  <td>
+                  <td data-label="Attendance">{row.attendanceRows.length}</td>
+                  <td data-label="Billing">{row.billingRows.length}</td>
+                  <td data-label="Billed fee">
                     {row.totalFeeCharged === null
                       ? "Unknown"
                       : money(row.totalFeeCharged)}
@@ -814,19 +814,19 @@ export default function LocalRetentionWorkspace({
             <tbody>
               {metrics.attendanceByClinician.map((row) => (
                 <tr key={row.clinician}>
-                  <td>{row.clinician}</td>
-                  <td>{row.shows}</td>
-                  <td>{row.clientCancelled}</td>
-                  <td>{row.noShows}</td>
-                  <td>{row.clinicianCancelled}</td>
-                  <td>{row.uniqueActiveClients}</td>
-                  <td>
+                  <td data-label="Clinician">{row.clinician}</td>
+                  <td data-label="Derived shows">{row.shows}</td>
+                  <td data-label="Client cancel">{row.clientCancelled}</td>
+                  <td data-label="No-show">{row.noShows}</td>
+                  <td data-label="Clinician cancel">{row.clinicianCancelled}</td>
+                  <td data-label="Active clients">{row.uniqueActiveClients}</td>
+                  <td data-label="First observed">
                     {row.firstObservedClients}
                     {row.immatureClientsExcluded
                       ? ` (${row.immatureClientsExcluded} immature)`
                       : ""}
                   </td>
-                  <td>{row.retainedClients}</td>
+                  <td data-label="Retained">{row.retainedClients}</td>
                 </tr>
               ))}
               {!metrics.attendanceByClinician.length && (
@@ -854,11 +854,15 @@ export default function LocalRetentionWorkspace({
             <tbody>
               {metrics.billingByClinician.map((row) => (
                 <tr key={row.clinician}>
-                  <td>{row.clinician}</td>
-                  <td>{row.billedRows}</td>
-                  <td>{money(row.totalFeesCharged)}</td>
-                  <td>{row.configuredMinuteRows}</td>
-                  <td>
+                  <td data-label="Clinician">{row.clinician}</td>
+                  <td data-label="Billed rows">{row.billedRows}</td>
+                  <td data-label="Total fees charged">
+                    {money(row.totalFeesCharged)}
+                  </td>
+                  <td data-label="Configured rows">
+                    {row.configuredMinuteRows}
+                  </td>
+                  <td data-label="Estimated billing hours">
                     {row.estimatedBillingHours === null
                       ? "Unconfigured"
                       : row.estimatedBillingHours.toFixed(1)}
@@ -891,11 +895,13 @@ export default function LocalRetentionWorkspace({
             <tbody>
               {metrics.roomCounts.map((row) => (
                 <tr key={row.location}>
-                  <td>{row.location}</td>
-                  <td>{row.showRows}</td>
-                  <td>{row.clientCancelled}</td>
-                  <td>{row.noShows}</td>
-                  <td>{row.clinicianCancelled}</td>
+                  <td data-label="Attendance location">{row.location}</td>
+                  <td data-label="Derived shows">{row.showRows}</td>
+                  <td data-label="Client cancel">{row.clientCancelled}</td>
+                  <td data-label="No-show">{row.noShows}</td>
+                  <td data-label="Clinician cancel">
+                    {row.clinicianCancelled}
+                  </td>
                 </tr>
               ))}
               {!metrics.roomCounts.length && (

@@ -32,6 +32,9 @@
   color: var(--pr-text);
   background: var(--pr-bg);
   color-scheme: dark;
+  inline-size: 100%;
+  max-inline-size: 100vw;
+  overflow-x: hidden;
 }
 .practice-theme[data-appearance="light"] {
   --pr-bg: #fff;
@@ -62,6 +65,7 @@
 .practice-theme * {
   box-sizing: border-box;
   letter-spacing: 0;
+  min-width: 0;
 }
 .practice-theme h1,
 .practice-theme h2,
@@ -121,8 +125,11 @@
 }
 .practice-app {
   min-height: 100vh;
+  width: 100%;
+  max-width: 100vw;
   display: grid;
   grid-template-columns: 73px 248px minmax(0, 1fr);
+  overflow-x: hidden;
 }
 .pr-rail {
   display: flex;
@@ -277,6 +284,8 @@
 }
 .pr-main {
   min-width: 0;
+  max-width: 100%;
+  overflow-x: clip;
 }
 .pr-top {
   min-height: 79px;
@@ -306,6 +315,7 @@
   flex-wrap: wrap;
 }
 .pr-content {
+  width: 100%;
   max-width: 1480px;
   margin: 0 auto;
   padding: 28px 30px 0;
@@ -474,10 +484,14 @@
 .pr-table-wrap {
   position: relative;
   width: 100%;
+  max-width: 100%;
   overflow-x: auto;
+  overscroll-behavior-inline: contain;
+  -webkit-overflow-scrolling: touch;
 }
 .practice-theme table {
   width: 100%;
+  min-width: max-content;
   border-collapse: collapse;
   font-size: 13px;
   white-space: nowrap;
