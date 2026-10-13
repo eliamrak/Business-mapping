@@ -355,7 +355,7 @@ export default function LocalRetentionWorkspace({
     >
       <div className="pw-local-retention-hero">
         <div>
-          <p className="pw-eyebrow">Local-only package workspace</p>
+          <p className="pw-eyebrow">Saved import history</p>
           <h2>Retention and billed sessions</h2>
           <p>
             Import the converter package prepared with permanent random client

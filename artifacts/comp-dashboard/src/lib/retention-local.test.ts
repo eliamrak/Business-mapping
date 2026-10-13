@@ -100,6 +100,20 @@ test("local imports keep billing and attendance as separate fact tables", () => 
   );
 });
 
+test("retention workspace copy describes saved authenticated history", () => {
+  const source = readFileSync(
+    new URL(
+      "../components/practice/local-retention-workspace.tsx",
+      import.meta.url,
+    ),
+    "utf8",
+  );
+
+  assert.match(source, /Saved import history/);
+  assert.match(source, /saved to authenticated practice storage/);
+  assert.doesNotMatch(source, /Local-only package workspace/);
+});
+
 test("visit reconciliation matches only unambiguous accumulated counterparts", () => {
   const attendance =
     importAttendanceCsv(`Client,Clinician,Date of service,Location,Status
