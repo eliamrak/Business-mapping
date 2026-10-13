@@ -35,7 +35,6 @@ Attendance row allowed fields only:
 - `serviceDate`: valid `YYYY-MM-DD`
 - `location`: `null` or non-empty readable room/location label from the report
 - `status`: exactly one of `show`, `cancelled`, `no show`, `clinician cancelled`
-- `appointmentTime`: optional `null` or non-empty string when explicitly available
 - `billingCode`: optional `null` or non-empty string when explicitly available
 - `visitKind`: optional; exactly `consultation` only when explicitly evidenced by Phone billing code, title, or status
 
@@ -57,12 +56,11 @@ Billing row allowed fields only:
 - `serviceDate`: valid `YYYY-MM-DD`
 - `totalFeeCharged`: finite non-negative number
 - `billingCode`: `null` or non-empty string
-- `appointmentTime`: optional `null` or non-empty string when explicitly available
 - `visitKind`: optional; exactly `consultation` only when explicitly evidenced by Phone billing code, title, or status
 
 Billing rows are charged-fee facts only. They do not imply attendance and are not treated as cash collected.
 
-Raw appointment title text must not be serialized. Source titles can contain client names or sensitive notes. Converters may use titles locally to derive `visitKind`, then discard them before export. Appointment time is accepted only as optional source metadata and does not affect Practice treatment, consultation, retention, inactivity, or billing metrics.
+Raw appointment title text and appointment time must not be serialized. Source titles can contain client names or sensitive notes, and time is not needed for the Practice v1 treatment/consultation distinction. Converters may use those fields locally to derive `visitKind`, then discard them before export.
 
 ## Billing-Code Minutes
 
