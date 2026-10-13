@@ -208,6 +208,88 @@ CID-no-show,Dr Lane,2026-01-20,Room A,no show`,
   assert.equal(estimateLocalClientActivity([attendance]), null);
 });
 
+test("client activity estimate does not treat coverage gaps as complete months", () => {
+  const earlyMarch = importAttendanceCsv(
+    `Client,Clinician,Date of service,Location,Status
+CID-retained,Dr Lane,2026-03-01,Room A,show
+CID-early,Dr Lane,2026-03-10,Room A,show`,
+  ).snapshot;
+  const lateMarch = importAttendanceCsv(
+    `Client,Clinician,Date of service,Location,Status
+CID-retained,Dr Lane,2026-03-20,Room A,show
+CID-late,Dr Lane,2026-03-31,Room A,show`,
+  ).snapshot;
+  const estimate = estimateLocalClientActivity([earlyMarch, lateMarch])!;
+
+  assert.equal(estimate.latestCompleteMonth, null);
+  assert.equal(estimate.activeClientsInLatestCompleteMonth, null);
+  assert.equal(estimate.estimatedClientsLeavingPerMonth, null);
+});
+
+test("client activity estimate accepts adjacent and overlapping coverage intervals", () => {
+  const firstHalf = importAttendanceCsv(
+    `Client,Clinician,Date of service,Location,Status
+CID-retained-a,Dr Lane,2026-01-01,Room A,show
+CID-retained-a,Dr Lane,2026-01-15,Room A,show`,
+  ).snapshot;
+  const secondHalf = importAttendanceCsv(
+    `Client,Clinician,Date of service,Location,Status
+CID-retained-b,Dr Lane,2026-01-16,Room A,show
+CID-retained-b,Dr Lane,2026-01-31,Room A,show`,
+  ).snapshot;
+  const overlappingStart = importAttendanceCsv(
+    `Client,Clinician,Date of service,Location,Status
+CID-retained-c,Dr Moss,2026-02-01,Room B,show
+CID-retained-c,Dr Moss,2026-02-20,Room B,show`,
+  ).snapshot;
+  const overlappingEnd = importAttendanceCsv(
+    `Client,Clinician,Date of service,Location,Status
+CID-retained-d,Dr Moss,2026-02-15,Room B,show
+CID-retained-d,Dr Moss,2026-02-28,Room B,show`,
+  ).snapshot;
+
+  assert.equal(
+    estimateLocalClientActivity([firstHalf, secondHalf])!.latestCompleteMonth,
+    "2026-01",
+  );
+  assert.equal(
+    estimateLocalClientActivity([overlappingStart, overlappingEnd])!
+      .latestCompleteMonth,
+    "2026-02",
+  );
+});
+
+test("client activity estimate recognizes a fully covered leap February", () => {
+  const leapFebruary = importAttendanceCsv(
+    `Client,Clinician,Date of service,Location,Status
+CID-retained,Dr Lane,2028-02-01,Room A,show
+CID-retained,Dr Lane,2028-02-29,Room A,show`,
+  ).snapshot;
+
+  assert.equal(
+    estimateLocalClientActivity([leapFebruary])!.latestCompleteMonth,
+    "2028-02",
+  );
+});
+
+test("client activity monthly frequency uses covered days, not uncovered gaps", () => {
+  const january = importAttendanceCsv(
+    `Client,Clinician,Date of service,Location,Status
+CID-retained,Dr Lane,2026-01-01,Room A,show
+CID-january,Dr Lane,2026-01-31,Room A,show`,
+  ).snapshot;
+  const march = importAttendanceCsv(
+    `Client,Clinician,Date of service,Location,Status
+CID-retained,Dr Lane,2026-03-31,Room A,show
+CID-march,Dr Lane,2026-03-01,Room A,show`,
+  ).snapshot;
+  const estimate = estimateLocalClientActivity([january, march])!;
+
+  assert.ok(estimate.observedAttendedSessionsPerMonth > 0.9);
+  assert.ok(estimate.observedAttendedSessionsPerMonth < 1.1);
+  assert.equal(estimate.latestCompleteMonth, "2026-03");
+});
+
 test("visit reconciliation matches only unambiguous accumulated counterparts", () => {
   const attendance =
     importAttendanceCsv(`Client,Clinician,Date of service,Location,Status

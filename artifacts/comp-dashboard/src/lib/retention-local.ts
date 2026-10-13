@@ -747,12 +747,49 @@ function nextMonth(month: string) {
   return new Date(Date.UTC(year, number, 1)).toISOString().slice(0, 7);
 }
 
-function completeCoverageMonths(start: string, end: string) {
+type DateInterval = { start: string; end: string };
+
+function mergeIntervals(intervals: DateInterval[]) {
+  const ordered = [...intervals].sort(
+    (a, b) => a.start.localeCompare(b.start) || a.end.localeCompare(b.end),
+  );
+  const merged: DateInterval[] = [];
+  for (const interval of ordered) {
+    const current = merged.at(-1);
+    if (!current || addDays(current.end, 1) < interval.start) {
+      merged.push({ ...interval });
+    } else if (interval.end > current.end) {
+      current.end = interval.end;
+    }
+  }
+  return merged;
+}
+
+function intervalCoversRange(intervals: DateInterval[], start: string, end: string) {
+  return intervals.some((interval) => interval.start <= start && interval.end >= end);
+}
+
+function coveredDaysInRange(intervals: DateInterval[], start: string, end: string) {
+  return intervals.reduce((sum, interval) => {
+    const overlapStart = interval.start > start ? interval.start : start;
+    const overlapEnd = interval.end < end ? interval.end : end;
+    if (overlapStart > overlapEnd) return sum;
+    return sum + daysBetweenInclusive(overlapStart, overlapEnd);
+  }, 0);
+}
+
+function completeCoverageMonths(intervals: DateInterval[], start: string, end: string) {
   const months: string[] = [];
   let month = start.slice(0, 7);
   const last = end.slice(0, 7);
   while (month <= last) {
-    if (monthStart(month) >= start && monthEnd(month) <= end)
+    const startOfMonth = monthStart(month);
+    const endOfMonth = monthEnd(month);
+    if (
+      startOfMonth >= start &&
+      endOfMonth <= end &&
+      intervalCoversRange(intervals, startOfMonth, endOfMonth)
+    )
       months.push(month);
     month = nextMonth(month);
   }
@@ -772,13 +809,23 @@ export function estimateLocalClientActivity(
       a.clientId.localeCompare(b.clientId),
     );
   if (!shows.length) return null;
-  const coverageDates = snapshots
+  const attendanceSnapshots = snapshots.filter(
+    (snapshot): snapshot is Extract<LocalSnapshot, { kind: "attendance" }> =>
+      snapshot.kind === "attendance",
+  );
+  const coverageDates = attendanceSnapshots
     .filter((snapshot) => snapshot.kind === "attendance")
     .flatMap((snapshot) => [snapshot.coverageStart, snapshot.coverageEnd])
     .sort();
   const coverageStart = coverageDates[0];
   const coverageEnd = coverageDates.at(-1);
   if (!coverageStart || !coverageEnd) return null;
+  const coverageIntervals = mergeIntervals(
+    attendanceSnapshots.map((snapshot) => ({
+      start: snapshot.coverageStart,
+      end: snapshot.coverageEnd,
+    })),
+  );
   const pairShows = new Map<string, AttendanceRow[]>();
   for (const row of shows) {
     const key = `${normalizeClinician(row.clinician)}\u0000${row.clientId}`;
@@ -810,7 +857,10 @@ export function estimateLocalClientActivity(
   if (!retained.length) return null;
   const observedSessions = retained.reduce((sum, item) => sum + item.count, 0);
   const observedMonthEquivalents = retained.reduce((sum, item) => {
-    const days = Math.max(1, daysBetweenInclusive(item.first, item.last));
+    const days = Math.max(
+      1,
+      coveredDaysInRange(coverageIntervals, item.first, item.last),
+    );
     return sum + Math.max(1, days / averageDaysPerMonth);
   }, 0);
   const observedAttendedSessionsPerRetainedClient =
@@ -822,7 +872,11 @@ export function estimateLocalClientActivity(
     observedAttendedSessionsPerRetainedClient /
     observedAttendedSessionsPerMonth;
   if (!(estimatedMonths > 0)) return null;
-  const completeMonths = completeCoverageMonths(coverageStart, coverageEnd);
+  const completeMonths = completeCoverageMonths(
+    coverageIntervals,
+    coverageStart,
+    coverageEnd,
+  );
   const latestCompleteMonth = completeMonths.at(-1) ?? null;
   const activeClientsInLatestCompleteMonth = latestCompleteMonth
     ? new Set(
