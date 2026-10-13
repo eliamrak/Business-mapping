@@ -123,6 +123,11 @@ export default function WorkspaceCalculations({
   const suggestedRetentionMonths = undefined;
   const suggestedSessionCount =
     clientActivityEstimate?.observedAttendedSessionsPerRetainedClient;
+  const hasReturnFrequencyEstimate =
+    suggestedSessionCount !== null &&
+    suggestedSessionCount !== undefined &&
+    suggestedSessionsPerMonth !== null &&
+    suggestedSessionsPerMonth !== undefined;
   const averageClientLosses =
     clientActivityEstimate?.estimatedClientsLeavingPerMonth;
   const hasObservedInactivityEstimate =
@@ -161,8 +166,17 @@ export default function WorkspaceCalculations({
           </div>
           <div>
             <span>Observed visits per returning client-clinician</span>
-            <strong>{rounded(suggestedSessionCount ?? 0).toFixed(1)}</strong>
-            <small>Observed-to-date count, not a lifetime total.</small>
+            <strong>
+              {suggestedSessionCount === null ||
+              suggestedSessionCount === undefined
+                ? "--"
+                : rounded(suggestedSessionCount).toFixed(1)}
+            </strong>
+            <small>
+              {hasReturnFrequencyEstimate
+                ? "Observed-to-date count, not a lifetime total."
+                : "Needs a later-date return visit for the same clinician."}
+            </small>
           </div>
           <div>
             <span>Average client losses / month</span>
@@ -191,7 +205,8 @@ export default function WorkspaceCalculations({
           estimate={suggestedSessionsPerMonth}
           estimateLabel="Returning client-clinician attendance frequency"
           onUseEstimate={
-            suggestedSessionsPerMonth === undefined
+            suggestedSessionsPerMonth === undefined ||
+            suggestedSessionsPerMonth === null
               ? undefined
               : () =>
                   onSetting(
@@ -224,13 +239,19 @@ export default function WorkspaceCalculations({
           {rounded(settings.sessionsPerClientMonth * settings.retentionMonths)}{" "}
           attended visits over the forecast lifespan.
         </p>
-        {clientActivityEstimate ? (
+        {clientActivityEstimate && hasReturnFrequencyEstimate ? (
           <p>
             Visit-frequency estimate: clients who returned to the same clinician
             only; observed visit count is the average derived attended visits
             already imported for those client-clinician histories. Monthly
             frequency is derived attended visits divided by each history's
             observed month-equivalent span from first visit to last visit.
+          </p>
+        ) : clientActivityEstimate ? (
+          <p>
+            Visit-frequency estimates need clients who returned to the same
+            clinician. The monthly loss estimate can still use six-week
+            inactivity transitions from clients with one attended visit.
           </p>
         ) : (
           <p>
@@ -317,7 +338,9 @@ export default function WorkspaceCalculations({
             {clientActivityEstimate.leftCensoredClientPairs.toLocaleString()}{" "}
             may have started before imported history, and{" "}
             {clientActivityEstimate.immatureClientPairsExcluded.toLocaleString()}{" "}
-            first shows are inside the {14}-day maturity cutoff.
+            first shows are inside the{" "}
+            {clientActivityEstimate.returnMaturityDays}-day return-frequency
+            maturity cutoff.
           </p>
         )}
       </div>

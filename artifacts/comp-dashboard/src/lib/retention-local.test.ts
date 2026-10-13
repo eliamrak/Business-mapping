@@ -198,10 +198,10 @@ CID-active,Dr Moss,2026-03-12,Room B,show`,
   assert.equal(estimate.inactivityDays, 42);
   assert.deepEqual(estimate.eligibleInactivityMonths, ["2026-02", "2026-03"]);
   assert.equal(estimate.retainedClientPairs, 2);
-  assert.equal(estimate.matureNonRetainedClientPairs, 1);
-  assert.equal(estimate.immatureClientPairsExcluded, 2);
+  assert.equal(estimate.matureNonRetainedClientPairs, 2);
+  assert.equal(estimate.immatureClientPairsExcluded, 1);
   assert.equal(estimate.leftCensoredClientPairs, 0);
-  assert.equal(estimate.rightCensoredClientPairs, 3);
+  assert.equal(estimate.rightCensoredClientPairs, 1);
   assert.equal(estimate.inactiveClientTransitions, 2);
   assert.equal(estimate.activeClientMonthDenominator, 5);
   assert.equal(estimate.inactiveRelationshipTransitions, 2);
@@ -225,6 +225,32 @@ CID-no-show,Dr Lane,2026-01-20,Room A,no show`,
   ).snapshot;
 
   assert.equal(estimateLocalClientActivity([attendance]), null);
+});
+
+test("client inactivity estimate works without any return visits", () => {
+  const attendance = attendanceSnapshot(
+    `Client,Clinician,Date of service,Location,Status
+CID-one-a,Dr Lane,2026-01-01,Room A,show
+CID-one-b,Dr Moss,2026-01-15,Room B,show`,
+    "2025-12-01",
+    "2026-04-30",
+  );
+  const estimate = estimateLocalClientActivity([attendance])!;
+
+  assert.equal(estimate.retainedClientPairs, 0);
+  assert.equal(estimate.observedAttendedSessionsPerRetainedClient, null);
+  assert.equal(estimate.observedAttendedSessionsPerMonth, null);
+  assert.equal(estimate.estimatedMonths, null);
+  assert.deepEqual(estimate.eligibleInactivityMonths, [
+    "2026-02",
+    "2026-03",
+    "2026-04",
+  ]);
+  assert.equal(estimate.inactiveClientTransitions, 2);
+  assert.equal(estimate.activeClientMonthDenominator, 2);
+  assert.equal(estimate.averageInactiveClientTransitionsPerMonth, 2 / 3);
+  assert.equal(estimate.monthlyAttritionPct, 100);
+  assert.equal(estimate.estimatedClientsLeavingPerMonth, 2 / 3);
 });
 
 test("client inactivity estimate counts the 42-day boundary and reactivation", () => {

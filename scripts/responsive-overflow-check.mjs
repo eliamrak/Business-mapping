@@ -7,7 +7,10 @@ const chrome = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome";
 const outDir = mkdtempSync(join(tmpdir(), "practice-responsive-"));
 const css = [
   readFileSync("artifacts/comp-dashboard/src/pages/practice.css", "utf8"),
-  readFileSync("artifacts/comp-dashboard/src/pages/practice-workspace.css", "utf8"),
+  readFileSync(
+    "artifacts/comp-dashboard/src/pages/practice-workspace.css",
+    "utf8",
+  ),
 ].join("\n");
 
 const longClientId =
@@ -53,7 +56,7 @@ const html = `<!doctype html>
                       <td data-label="Date">2026-10-13</td>
                       <td data-label="Clinician">Synthetic Clinician With A Very Long Name</td>
                       <td data-label="Client ID">${longClientId}</td>
-                      <td data-label="Status">Review same-day rows</td>
+                      <td data-label="Status">Ambiguous same-day pairing</td>
                       <td data-label="Attendance">2</td>
                       <td data-label="Billing">1</td>
                       <td data-label="Billed fee">$240</td>
@@ -138,15 +141,21 @@ for (const [width, height] of viewports) {
     `--screenshot=${screenshotPath}`,
     `file://${htmlPath}`,
   ]);
-  const dom = execFileSync(chrome, [
-    "--headless=new",
-    "--disable-gpu",
-    `--window-size=${width},${height}`,
-    "--dump-dom",
-    "--virtual-time-budget=1000",
-    `file://${htmlPath}`,
-  ], { encoding: "utf8" });
-  const matches = [...dom.matchAll(new RegExp('<pre id="metrics">([^<]+)</pre>', 'g'))];
+  const dom = execFileSync(
+    chrome,
+    [
+      "--headless=new",
+      "--disable-gpu",
+      `--window-size=${width},${height}`,
+      "--dump-dom",
+      "--virtual-time-budget=1000",
+      `file://${htmlPath}`,
+    ],
+    { encoding: "utf8" },
+  );
+  const matches = [
+    ...dom.matchAll(new RegExp('<pre id="metrics">([^<]+)</pre>', "g")),
+  ];
   const match = matches.at(-1);
   if (!match) {
     throw new Error(`No metrics emitted for ${width}px viewport`);

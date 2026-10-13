@@ -101,6 +101,7 @@ export type LocalClientActivityEstimate = {
   coverageStart: string;
   coverageEnd: string;
   inactivityDays: number;
+  returnMaturityDays: number;
   eligibleInactivityMonths: string[];
   monthlyInactiveClientTransitions: Array<{
     month: string;
@@ -117,9 +118,9 @@ export type LocalClientActivityEstimate = {
   inactiveRelationshipTransitions: number;
   activeRelationshipMonthDenominator: number;
   averageInactiveClientTransitionsPerMonth: number | null;
-  observedAttendedSessionsPerRetainedClient: number;
-  observedAttendedSessionsPerMonth: number;
-  estimatedMonths: number;
+  observedAttendedSessionsPerRetainedClient: number | null;
+  observedAttendedSessionsPerMonth: number | null;
+  estimatedMonths: number | null;
   monthlyAttritionRate: number | null;
   monthlyAttritionPct: number | null;
   latestCompleteMonth: string | null;
@@ -1094,6 +1095,7 @@ export function estimateLocalClientActivity(
   snapshots: LocalSnapshot[],
   sameDayVisitOverrides: SameDayVisitOverrides = {},
   inactivityDays = 42,
+  returnMaturityDays = 14,
 ): LocalClientActivityEstimate | null {
   const shows = derivedShowVisits(snapshots, sameDayVisitOverrides).sort(
     (a, b) =>
@@ -1134,7 +1136,7 @@ export function estimateLocalClientActivity(
       row.serviceDate,
     ]);
   }
-  const maturityCutoff = addDays(coverageEnd, -inactivityDays);
+  const returnMaturityCutoff = addDays(coverageEnd, -returnMaturityDays);
   const retained: Array<{ first: string; last: string; count: number }> = [];
   let matureNonRetainedClientPairs = 0;
   let immatureClientPairsExcluded = 0;
@@ -1145,12 +1147,12 @@ export function estimateLocalClientActivity(
     const first = dates[0];
     const last = dates.at(-1)!;
     if (first === coverageStart) leftCensoredClientPairs++;
-    if (!hasCompleteLookForward(coverageIntervals, last, inactivityDays))
+    if (!hasCompleteLookForward(coverageIntervals, last, returnMaturityDays))
       rightCensoredClientPairs++;
     const hasLaterShow = dates.some((date) => date > first);
     if (hasLaterShow) {
       retained.push({ first, last, count: dates.length });
-    } else if (first > maturityCutoff) {
+    } else if (first > returnMaturityCutoff) {
       immatureClientPairsExcluded++;
     } else {
       matureNonRetainedClientPairs++;
@@ -1174,7 +1176,8 @@ export function estimateLocalClientActivity(
     eligibleInactivityMonths,
     inactivityDays,
   );
-  if (!retained.length) return null;
+  if (!retained.length && practiceInactivity.monthlyInactivityRate === null)
+    return null;
   const observedSessions = retained.reduce((sum, item) => sum + item.count, 0);
   const observedMonthEquivalents = retained.reduce((sum, item) => {
     const days = Math.max(
@@ -1183,15 +1186,21 @@ export function estimateLocalClientActivity(
     );
     return sum + Math.max(1, days / averageDaysPerMonth);
   }, 0);
-  const observedAttendedSessionsPerRetainedClient =
-    observedSessions / retained.length;
+  const observedAttendedSessionsPerRetainedClient = retained.length
+    ? observedSessions / retained.length
+    : null;
   const observedAttendedSessionsPerMonth =
-    observedSessions / observedMonthEquivalents;
-  if (!(observedAttendedSessionsPerMonth > 0)) return null;
+    retained.length && observedMonthEquivalents > 0
+      ? observedSessions / observedMonthEquivalents
+      : null;
   const estimatedMonths =
-    observedAttendedSessionsPerRetainedClient /
-    observedAttendedSessionsPerMonth;
-  if (!(estimatedMonths > 0)) return null;
+    observedAttendedSessionsPerRetainedClient !== null &&
+    observedAttendedSessionsPerMonth !== null &&
+    observedAttendedSessionsPerMonth > 0
+      ? observedAttendedSessionsPerRetainedClient /
+        observedAttendedSessionsPerMonth
+      : null;
+  if (estimatedMonths !== null && !(estimatedMonths > 0)) return null;
   const latestCompleteMonth = eligibleInactivityMonths.at(-1) ?? null;
   const activeClientsInLatestCompleteMonth = latestCompleteMonth
     ? (practiceInactivity.monthlyRows.find(
@@ -1203,6 +1212,7 @@ export function estimateLocalClientActivity(
     coverageStart,
     coverageEnd,
     inactivityDays,
+    returnMaturityDays,
     eligibleInactivityMonths,
     monthlyInactiveClientTransitions: practiceInactivity.monthlyRows,
     retainedClientPairs: retained.length,
