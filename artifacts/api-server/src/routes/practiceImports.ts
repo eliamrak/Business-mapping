@@ -132,9 +132,15 @@ const stableJson = (value: unknown): string => {
 const sha256 = (value: unknown) =>
   createHash("sha256").update(stableJson(value)).digest("hex");
 const rowHash = (parts: unknown[]) => sha256(parts).slice(0, 16);
+const configuredPracticeId = () =>
+  (
+    process.env.EMC_PRACTICE_ID?.trim() ||
+    process.env.EMC_OWNER_EMAIL?.trim() ||
+    "default-practice"
+  ).toLowerCase();
 const scope = (res: { locals: Record<string, unknown> }) => ({
-  practiceId: process.env.EMC_PRACTICE_ID?.trim() || "default-practice",
-  accountId: String(res.locals.actor ?? "unknown-account"),
+  practiceId: configuredPracticeId(),
+  accountId: configuredPracticeId(),
   actor: String(res.locals.actor ?? "unknown-actor"),
 });
 const coverage = (rows: Array<{ serviceDate: string }>) => {
@@ -348,11 +354,35 @@ router.post("/practice-imports/package", async (req, res) => {
     const replacedPackageIds = [
       ...new Set(overlapping.map((row) => row.packageImportId)),
     ];
-    if (replacedPackageIds.length)
-      await tx
-        .update(practiceImportPackagesTable)
-        .set({ active: 0 })
-        .where(inArray(practiceImportPackagesTable.id, replacedPackageIds));
+    if (replacedPackageIds.length) {
+      const retainedPackageRows = await tx
+        .select({
+          packageImportId: practiceImportSnapshotsTable.packageImportId,
+        })
+        .from(practiceImportSnapshotsTable)
+        .where(
+          and(
+            inArray(
+              practiceImportSnapshotsTable.packageImportId,
+              replacedPackageIds,
+            ),
+            eq(practiceImportSnapshotsTable.active, 1),
+          ),
+        );
+      const retainedPackageIds = new Set(
+        retainedPackageRows.map((row) => row.packageImportId),
+      );
+      const fullyReplacedPackageIds = replacedPackageIds.filter(
+        (id) => !retainedPackageIds.has(id),
+      );
+      if (fullyReplacedPackageIds.length)
+        await tx
+          .update(practiceImportPackagesTable)
+          .set({ active: 0 })
+          .where(
+            inArray(practiceImportPackagesTable.id, fullyReplacedPackageIds),
+          );
+    }
     await tx.insert(practiceImportPackagesTable).values({
       id: packageImportId,
       practiceId,
