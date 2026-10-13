@@ -583,8 +583,16 @@ export default function PracticeWorkspace() {
       estimateLocalClientActivity(
         localRetentionState.snapshots,
         localRetentionState.sameDayVisitOverrides,
+        56,
+        56,
+        28,
+        today,
       ),
-    [localRetentionState.snapshots, localRetentionState.sameDayVisitOverrides],
+    [
+      localRetentionState.snapshots,
+      localRetentionState.sameDayVisitOverrides,
+      today,
+    ],
   );
   const modelContext = importedSessionOverlay?.context ?? context;
   const planProjection = useMemo(
@@ -3246,6 +3254,7 @@ export default function PracticeWorkspace() {
                 <>
                   <LocalRetentionWorkspace
                     workspaceState={localRetentionState}
+                    today={today}
                   />
                   <div id="retention-calculations">
                     <WorkspaceCalculations

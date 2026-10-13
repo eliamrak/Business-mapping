@@ -213,8 +213,10 @@ async function saveStoredSameDayVisitOverrides(
 
 export default function LocalRetentionWorkspace({
   workspaceState,
+  today = new Date().toLocaleDateString("en-CA"),
 }: {
   workspaceState?: LocalRetentionWorkspaceState;
+  today?: string;
 }) {
   const ownedState = useLocalRetentionWorkspaceState();
   const {
@@ -242,8 +244,10 @@ export default function LocalRetentionWorkspace({
         snapshots,
         billingCodeMinutes,
         sameDayVisitOverrides,
+        28,
+        today,
       ),
-    [snapshots, billingCodeMinutes, sameDayVisitOverrides],
+    [snapshots, billingCodeMinutes, sameDayVisitOverrides, today],
   );
   const sameDayReview = useMemo(
     () => buildSameDayShowReview(snapshots, sameDayVisitOverrides),

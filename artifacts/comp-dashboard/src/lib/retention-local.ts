@@ -1084,6 +1084,15 @@ function mergeIntervals(intervals: DateInterval[]) {
   return merged;
 }
 
+function clipIntervals(intervals: DateInterval[], end: string) {
+  return intervals
+    .map((interval) => ({
+      start: interval.start,
+      end: interval.end < end ? interval.end : end,
+    }))
+    .filter((interval) => interval.start <= interval.end);
+}
+
 function intervalCoversRange(
   intervals: DateInterval[],
   start: string,
@@ -1290,31 +1299,36 @@ export function estimateLocalClientActivity(
   inactivityDays = 56,
   returnMaturityDays = 56,
   initialRetentionGapDays = 28,
+  asOfDate = "9999-12-31",
 ): LocalClientActivityEstimate | null {
-  const shows = derivedShowVisits(snapshots, sameDayVisitOverrides).sort(
-    (a, b) =>
-      a.serviceDate.localeCompare(b.serviceDate) ||
-      a.clinician.localeCompare(b.clinician) ||
-      a.clientId.localeCompare(b.clientId),
-  );
+  const shows = derivedShowVisits(snapshots, sameDayVisitOverrides)
+    .filter((row) => row.serviceDate <= asOfDate)
+    .sort(
+      (a, b) =>
+        a.serviceDate.localeCompare(b.serviceDate) ||
+        a.clinician.localeCompare(b.clinician) ||
+        a.clientId.localeCompare(b.clientId),
+    );
   if (!shows.length) return null;
   const attendanceSnapshots = snapshots.filter(
     (snapshot): snapshot is Extract<LocalSnapshot, { kind: "attendance" }> =>
       snapshot.kind === "attendance",
   );
-  const coverageDates = attendanceSnapshots
-    .filter((snapshot) => snapshot.kind === "attendance")
-    .flatMap((snapshot) => [snapshot.coverageStart, snapshot.coverageEnd])
+  const coverageIntervals = mergeIntervals(
+    clipIntervals(
+      attendanceSnapshots.map((snapshot) => ({
+        start: snapshot.coverageStart,
+        end: snapshot.coverageEnd,
+      })),
+      asOfDate,
+    ),
+  );
+  const coverageDates = coverageIntervals
+    .flatMap((interval) => [interval.start, interval.end])
     .sort();
   const coverageStart = coverageDates[0];
   const coverageEnd = coverageDates.at(-1);
   if (!coverageStart || !coverageEnd) return null;
-  const coverageIntervals = mergeIntervals(
-    attendanceSnapshots.map((snapshot) => ({
-      start: snapshot.coverageStart,
-      end: snapshot.coverageEnd,
-    })),
-  );
   const pairShows = new Map<string, AttendanceRow[]>();
   const practiceShowDates = new Map<string, string[]>();
   const relationshipShowDates = new Map<string, string[]>();
@@ -1471,24 +1485,37 @@ export function buildLocalRetentionMetrics(
   snapshots: LocalSnapshot[],
   billingCodeMinutes: BillingCodeMinutes = {},
   sameDayVisitOverrides: SameDayVisitOverrides = {},
-  followUpDays = 14,
+  followUpDays = 28,
+  asOfDate = "9999-12-31",
 ): LocalRetentionMetrics {
   const attendance = snapshots.flatMap((snapshot) =>
-    snapshot.kind === "attendance" ? snapshot.rows : [],
+    snapshot.kind === "attendance"
+      ? snapshot.rows.filter((row) => row.serviceDate <= asOfDate)
+      : [],
   );
-  const treatmentAttendance = treatmentAttendanceRows(snapshots);
-  const derivedShows = derivedShowVisits(snapshots, sameDayVisitOverrides);
+  const treatmentAttendance = treatmentAttendanceRows(snapshots).filter(
+    (row) => row.serviceDate <= asOfDate,
+  );
+  const derivedShows = derivedShowVisits(
+    snapshots,
+    sameDayVisitOverrides,
+  ).filter((row) => row.serviceDate <= asOfDate);
   const rawShowRows = attendance.filter((row) => row.status === "show").length;
   const treatmentShowRows = treatmentAttendance.filter(
     (row) => row.status === "show",
   ).length;
   const excludedConsultationShowRows = rawShowRows - treatmentShowRows;
   const billing = snapshots.flatMap((snapshot) =>
-    snapshot.kind === "billing" ? snapshot.rows : [],
+    snapshot.kind === "billing"
+      ? snapshot.rows.filter((row) => row.serviceDate <= asOfDate)
+      : [],
   );
-  const treatmentBilling = treatmentBillingRows(snapshots);
+  const treatmentBilling = treatmentBillingRows(snapshots).filter(
+    (row) => row.serviceDate <= asOfDate,
+  );
   const allDates = [...attendance, ...billing]
     .map((row) => row.serviceDate)
+    .filter((date) => date <= asOfDate)
     .sort();
   const coverageStart = allDates[0] ?? null;
   const coverageEnd = allDates[allDates.length - 1] ?? null;
@@ -1542,21 +1569,40 @@ export function buildLocalRetentionMetrics(
       row.serviceDate,
     ]);
   }
+  const coverageIntervals = mergeIntervals(
+    clipIntervals(
+      snapshots
+        .filter(
+          (
+            snapshot,
+          ): snapshot is Extract<LocalSnapshot, { kind: "attendance" }> =>
+            snapshot.kind === "attendance",
+        )
+        .map((snapshot) => ({
+          start: snapshot.coverageStart,
+          end: snapshot.coverageEnd,
+        })),
+      asOfDate,
+    ),
+  );
   for (const [key, dates] of showDatesByClinicianClient) {
     const clinician = key.split("\u0000")[0];
     const metric = attendanceByClinician.get(clinician);
     if (!metric) continue;
-    const sorted = dates.sort();
+    const sorted = [...new Set(dates)].sort();
     const firstShowDate = sorted[0];
     metric.uniqueActiveClients++;
-    if (new Set(sorted).size >= 3) metric.retainedClients++;
+    const { initialEpisode } = initialRetentionEpisode(sorted, followUpDays);
+    if (initialEpisode.length >= 3) metric.retainedClients++;
     else {
       metric.firstObservedClients++;
-      const first = new Date(`${firstShowDate}T12:00:00Z`).getTime();
-      const end = coverageEnd
-        ? new Date(`${coverageEnd}T12:00:00Z`).getTime()
-        : first;
-      if ((end - first) / 86400000 < followUpDays)
+      if (
+        !hasCompleteLookForward(
+          coverageIntervals,
+          initialEpisode.at(-1) ?? firstShowDate,
+          followUpDays,
+        )
+      )
         metric.immatureClientsExcluded++;
     }
   }

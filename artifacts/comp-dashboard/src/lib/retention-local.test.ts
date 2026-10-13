@@ -132,7 +132,7 @@ test("local imports keep billing and attendance as separate fact tables", () => 
       uniqueActiveClients: 1,
       firstObservedClients: 1,
       retainedClients: 0,
-      immatureClientsExcluded: 0,
+      immatureClientsExcluded: 1,
     },
   );
   assert.deepEqual(
@@ -285,6 +285,67 @@ CID-phone,Dr Lane,2026-01-31,Room A,show`,
   assert.equal(estimate.immatureClientPairsExcluded, 0);
   assert.equal(estimate.initialRetentionDenominator, 1);
   assert.equal(estimate.initialNonRetainedLaterReturnPairs, 1);
+});
+
+test("client activity estimate ignores future visits and coverage for retention", () => {
+  const attendance = attendanceSnapshot(
+    `Client,Clinician,Date of service,Location,Status
+CID-future,Dr Lane,2026-01-01,Room A,show
+CID-future,Dr Lane,2026-01-15,Room A,show
+CID-future,Dr Lane,2026-02-01,Room A,show`,
+    "2026-01-01",
+    "2026-02-28",
+  );
+  const pending = estimateLocalClientActivity(
+    [attendance],
+    {},
+    56,
+    56,
+    28,
+    "2026-01-20",
+  )!;
+  const mature = estimateLocalClientActivity(
+    [attendance],
+    {},
+    56,
+    56,
+    28,
+    "2026-02-28",
+  )!;
+
+  assert.equal(pending.retainedClientPairs, 0);
+  assert.equal(pending.matureNonRetainedClientPairs, 0);
+  assert.equal(pending.immatureClientPairsExcluded, 1);
+  assert.equal(pending.initialRetentionDenominator, 0);
+  assert.equal(mature.retainedClientPairs, 1);
+  assert.equal(mature.initialRetentionDenominator, 1);
+});
+
+test("clinician retention summary uses the 28-day initial retention gap", () => {
+  const attendance = attendanceSnapshot(
+    `Client,Clinician,Date of service,Location,Status
+CID-fast,Dr Lane,2026-01-01,Room A,show
+CID-fast,Dr Lane,2026-01-15,Room A,show
+CID-fast,Dr Lane,2026-01-29,Room A,show
+CID-slow,Dr Lane,2026-01-01,Room A,show
+CID-slow,Dr Lane,2026-01-15,Room A,show
+CID-slow,Dr Lane,2026-03-01,Room A,show`,
+    "2026-01-01",
+    "2026-03-31",
+  );
+  const metrics = buildLocalRetentionMetrics([attendance], {}, {}, 28);
+
+  assert.deepEqual(metrics.attendanceByClinician[0], {
+    clinician: "Dr Lane",
+    shows: 6,
+    clientCancelled: 0,
+    noShows: 0,
+    clinicianCancelled: 0,
+    uniqueActiveClients: 2,
+    firstObservedClients: 1,
+    retainedClients: 1,
+    immatureClientsExcluded: 0,
+  });
 });
 
 test("client activity estimate separates immature starts from estimates", () => {
@@ -1316,7 +1377,7 @@ CID-same,Dr Lane,2026-10-01,Room A,show`).snapshot;
   assert.equal(lane?.uniqueActiveClients, 1);
   assert.equal(lane?.retainedClients, 0);
   assert.equal(lane?.firstObservedClients, 1);
-  assert.equal(lane?.immatureClientsExcluded, 0);
+  assert.equal(lane?.immatureClientsExcluded, 1);
 });
 
 test("same-day review preserves mixed statuses and clinician boundaries", () => {
