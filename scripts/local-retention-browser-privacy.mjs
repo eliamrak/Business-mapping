@@ -290,7 +290,7 @@ try {
 
   const [download] = await Promise.all([
     page.waitForEvent("download"),
-    page.getByRole("button", { name: /Download backup/ }).click(),
+    page.getByRole("button", { name: /Download .*backup/ }).click(),
   ]);
   const downloadedPath = await download.path();
   assert.ok(downloadedPath, "Expected Playwright download path.");

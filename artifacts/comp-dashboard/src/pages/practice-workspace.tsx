@@ -98,7 +98,9 @@ import Updates from "@/components/hub/updates";
 import { type ViewProps, fmt, monthLabel } from "@/components/hub/views";
 import WorkspaceSessions from "@/components/practice/workspace-sessions";
 import WorkspaceCalculations from "@/components/practice/workspace-calculations";
-import LocalRetentionWorkspace from "@/components/practice/local-retention-workspace";
+import LocalRetentionWorkspace, {
+  useLocalRetentionWorkspaceState,
+} from "@/components/practice/local-retention-workspace";
 import LeadFlow from "@/components/practice/lead-flow";
 import { applyBulkLeads, planBulkLeads, type LeadBulkChange } from "@/lib/bulk-lead-flow";
 import MoneyFlowToday from "@/components/practice/money-flow-today";
@@ -441,6 +443,7 @@ export default function PracticeWorkspace() {
   const [exportOpen, setExportOpen] = useState(false);
   const [practiceView] = useState<PracticeView>("actual");
   const [section, setSection] = useState<Section>("clinicians");
+  const localRetentionState = useLocalRetentionWorkspaceState();
   const [draft, setDraft] = useState<PracticeCopy | null>(null);
   const [draftMode, setDraftMode] = useState<"goals" | "sandbox" | null>(null);
   const [base, setBase] = useState<PracticeCopy | null>(null);
@@ -2944,7 +2947,9 @@ export default function PracticeWorkspace() {
                   }}
                 />
               )}
-              {section === "retention" && <LocalRetentionWorkspace />}
+              {section === "retention" && (
+                <LocalRetentionWorkspace workspaceState={localRetentionState} />
+              )}
               {section === "calculations" && (
                 <WorkspaceCalculations
                   workspace={workingWorkspace}

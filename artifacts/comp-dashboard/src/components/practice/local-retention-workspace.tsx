@@ -1,4 +1,10 @@
-import { useMemo, useRef, useState } from "react";
+import {
+  type Dispatch,
+  type SetStateAction,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { Download, FileSpreadsheet, ShieldCheck, Upload } from "lucide-react";
 import {
   buildLocalRetentionMetrics,
@@ -28,23 +34,85 @@ const localDownload = (value: unknown, name: string) => {
   setTimeout(() => URL.revokeObjectURL(url), 1000);
 };
 
+type CodeDraft = { code: string; minutes: string };
+
+type PendingLocalSnapshot = {
+  incoming: LocalSnapshot;
+  existing: LocalSnapshot[];
+};
+
+export type LocalRetentionWorkspaceState = {
+  snapshots: LocalSnapshot[];
+  setSnapshots: Dispatch<SetStateAction<LocalSnapshot[]>>;
+  billingCodeMinutes: BillingCodeMinutes;
+  setBillingCodeMinutes: Dispatch<SetStateAction<BillingCodeMinutes>>;
+  codeDraft: CodeDraft;
+  setCodeDraft: Dispatch<SetStateAction<CodeDraft>>;
+  status: string;
+  setStatus: Dispatch<SetStateAction<string>>;
+  error: string;
+  setError: Dispatch<SetStateAction<string>>;
+  busy: boolean;
+  setBusy: Dispatch<SetStateAction<boolean>>;
+  pending: PendingLocalSnapshot | null;
+  setPending: Dispatch<SetStateAction<PendingLocalSnapshot | null>>;
+};
+
+export function useLocalRetentionWorkspaceState(): LocalRetentionWorkspaceState {
+  const [snapshots, setSnapshots] = useState<LocalSnapshot[]>([]);
+  const [billingCodeMinutes, setBillingCodeMinutes] = useState<BillingCodeMinutes>({});
+  const [codeDraft, setCodeDraft] = useState<CodeDraft>({ code: "", minutes: "" });
+  const [status, setStatus] = useState("No files imported yet.");
+  const [error, setError] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [pending, setPending] = useState<PendingLocalSnapshot | null>(null);
+
+  return {
+    snapshots,
+    setSnapshots,
+    billingCodeMinutes,
+    setBillingCodeMinutes,
+    codeDraft,
+    setCodeDraft,
+    status,
+    setStatus,
+    error,
+    setError,
+    busy,
+    setBusy,
+    pending,
+    setPending,
+  };
+}
+
 async function readText(file: File) {
   if (!/\.(csv|json)$/i.test(file.name) || !file.size || file.size > 10 * 1024 * 1024)
     throw new Error("Choose a CSV or local backup JSON file up to 10 MB.");
   return await file.text();
 }
 
-export default function LocalRetentionWorkspace() {
-  const [snapshots, setSnapshots] = useState<LocalSnapshot[]>([]);
-  const [billingCodeMinutes, setBillingCodeMinutes] = useState<BillingCodeMinutes>({});
-  const [codeDraft, setCodeDraft] = useState({ code: "", minutes: "" });
-  const [status, setStatus] = useState("No files imported yet.");
-  const [error, setError] = useState("");
-  const [busy, setBusy] = useState(false);
-  const [pending, setPending] = useState<{
-    incoming: LocalSnapshot;
-    existing: LocalSnapshot[];
-  } | null>(null);
+export default function LocalRetentionWorkspace({
+  workspaceState,
+}: {
+  workspaceState?: LocalRetentionWorkspaceState;
+}) {
+  const ownedState = useLocalRetentionWorkspaceState();
+  const {
+    snapshots,
+    setSnapshots,
+    billingCodeMinutes,
+    setBillingCodeMinutes,
+    codeDraft,
+    setCodeDraft,
+    status,
+    setStatus,
+    error,
+    setError,
+    busy,
+    setBusy,
+    pending,
+    setPending,
+  } = workspaceState ?? ownedState;
   const attendanceInput = useRef<HTMLInputElement>(null);
   const billingInput = useRef<HTMLInputElement>(null);
   const backupInput = useRef<HTMLInputElement>(null);
@@ -112,7 +180,7 @@ export default function LocalRetentionWorkspace() {
       exportLocalBackup(snapshots, billingCodeMinutes),
       "emc-local-retention-backup.json",
     );
-    setStatus("Downloaded a local backup. It contains de-identified row-level facts and should stay off the practice API.");
+    setStatus("Downloaded an unencrypted local JSON backup. It contains row-level local facts and should stay off the practice API.");
   }
 
   async function importBackup(file: File | undefined) {
@@ -140,8 +208,9 @@ export default function LocalRetentionWorkspace() {
           <p className="pw-eyebrow">Local-only CSV workspace</p>
           <h2>Retention and billed sessions</h2>
           <p>
-            Import already de-identified CSVs that use permanent random client IDs.
-            Rows stay in this browser session unless you explicitly download a local backup.
+            Import CSVs prepared with permanent random client IDs and no direct client names.
+            Rows stay in this browser page while you move between workspace tabs.
+            Reloading or closing the page clears them unless you explicitly download a local backup.
           </p>
         </div>
         <ShieldCheck aria-hidden="true" />
@@ -180,12 +249,12 @@ export default function LocalRetentionWorkspace() {
         </section>
         <section>
           <Upload aria-hidden="true" />
-          <h3>Protected local backup</h3>
-          <p>Use only when you want row-level local facts restored later.</p>
+          <h3>Local plaintext backup</h3>
+          <p>Exports unencrypted JSON with row-level local facts. Store it only in an approved secure location.</p>
           <div className="pw-backup-actions">
             <button className="pw-button" disabled={busy || !snapshots.length} onClick={exportBackup}>
               <Download />
-              Download backup
+              Download local JSON backup
             </button>
             <input
               ref={backupInput}
