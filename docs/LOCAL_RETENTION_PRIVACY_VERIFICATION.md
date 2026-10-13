@@ -8,7 +8,68 @@ Branch: `local-retention-csv-workspace`
 This verifies the local-only retention CSV workspace with synthetic data only.
 No real client data, production credentials, or business records were used.
 
-## Isolated Harness Evidence
+## Real Browser Component Harness Evidence
+
+The real browser harness is:
+
+```sh
+# One-time isolated dependency install outside the repo.
+mkdir -p /tmp/local-retention-browser-harness
+cd /tmp/local-retention-browser-harness
+npm init -y
+PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1 npm install playwright --no-save
+
+# From the repository root.
+PLAYWRIGHT_PACKAGE_DIR=/tmp/local-retention-browser-harness \
+  node scripts/local-retention-browser-privacy.mjs
+```
+
+The harness starts a local Vite server for
+`artifacts/comp-dashboard/test-harness/local-retention-browser-harness.html`,
+which renders the actual React `LocalRetentionWorkspace` component. It launches
+Playwright against a local browser executable, exercises real browser file input
+selection and blob download behavior, and captures browser network requests
+during the CSV import/export/restore operations.
+
+Latest run:
+
+```json
+{
+  "status": "passed",
+  "url": "http://127.0.0.1:4397/test-harness/local-retention-browser-harness.html",
+  "browserExecutablePath": "/Users/eliam/Library/Caches/ms-playwright/chromium_headless_shell-1234/chrome-headless-shell-mac-arm64/chrome-headless-shell",
+  "operationRequests": [],
+  "browserSinkEvents": [],
+  "stableSummary": "Coverage2026-10-01 to 2026-10-15Attendance rows3Billed rows2",
+  "downloadedBackupBytes": 1993
+}
+```
+
+This is isolated component-harness evidence. It does not boot the full
+authenticated dashboard shell; auth is bypassed by rendering the local-only
+component directly. That is intentional for this privacy check because the
+component does not require auth and no business records should be touched.
+
+Assertions:
+
+- Synthetic attendance and billing CSVs are imported through actual browser file
+  inputs.
+- Backup export is captured through actual browser download handling.
+- Backup restore is exercised through the actual backup file input.
+- Invalid duplicate and overlapping backup restores throw in the browser flow
+  before replacing the existing component state.
+- Browser network requests captured after page load and during the operations
+  are exactly `[]`.
+- Instrumented browser sinks (`fetch`, `XMLHttpRequest`, `navigator.sendBeacon`,
+  `WebSocket`, `EventSource`, `localStorage`, `sessionStorage`, `indexedDB`) are
+  exactly `[]`.
+- `localStorage.length` and `sessionStorage.length` remain `0`.
+- Synthetic row tokens such as `CID-browser-alpha`, `Dr Browser`, room labels,
+  and billing codes do not appear in captured request or sink payloads.
+- Backup export JSON contains the synthetic rows by design, but stays in the
+  browser download path.
+
+## Node Sink-Trap Harness Evidence
 
 The reproducible harness is:
 
@@ -16,7 +77,7 @@ The reproducible harness is:
 node --test artifacts/comp-dashboard/src/lib/retention-local.privacy.test.ts
 ```
 
-It installs browser-style traps for:
+It installs Node-level browser-style traps for:
 
 - `fetch`
 - `XMLHttpRequest`
@@ -27,9 +88,9 @@ It installs browser-style traps for:
 - `sessionStorage`
 - `indexedDB`
 
-It then exercises synthetic attendance CSV import, synthetic billing CSV import,
-backup export, backup restore, invalid duplicate backup restore rejection, and
-invalid overlapping backup restore rejection.
+It then exercises the same parser/backup functions with synthetic attendance and
+billing data. This is useful supporting coverage for sink behavior and failed
+restore state preservation, but it is not browser evidence.
 
 Assertions:
 
@@ -52,11 +113,9 @@ rg -n "fetch\\(|customFetch|localStorage|sessionStorage|navigator.sendBeacon|XML
   artifacts/comp-dashboard/src/lib/retention-local.ts
 ```
 
-The full live dashboard file-picker flow was not browser-driven in this pass
-because this checkout does not include Playwright, Puppeteer, JSDOM, Happy DOM,
-or Testing Library, and the Codex browser runtime tool was not available to this
-task. The evidence above is therefore isolated harness evidence plus static
-full-app inspection, not a live full-app browser trace.
+The full authenticated dashboard shell was not driven in this pass. The real
+browser evidence is from the isolated component harness described above, plus
+static full-app inspection of the component/library used by the shell.
 
 ## Deployment Readiness Notes
 
