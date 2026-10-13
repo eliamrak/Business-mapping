@@ -22,6 +22,7 @@ import {
   mergeLocalPackage,
   replaceOverlappingPackageSnapshots,
   replaceOverlappingSnapshots,
+  localDerivedVisitDetail,
   sameDayVisitKey,
 } from "./retention-local.ts";
 
@@ -115,6 +116,11 @@ test("local imports keep billing and attendance as separate fact tables", () => 
   assert.equal(metrics.rawShowRows, 4);
   assert.equal(metrics.derivedShowVisits, 3);
   assert.equal(metrics.collapsedDuplicateShowRows, 1);
+  assert.equal(metrics.excludedConsultationShowRows, 0);
+  assert.equal(
+    localDerivedVisitDetail(metrics),
+    "1 treatment duplicate show row collapsed",
+  );
   assert.deepEqual(
     metrics.attendanceByClinician.find((row) => row.clinician === "Dr Lane"),
     {
@@ -1118,6 +1124,12 @@ CID-treatment,Dr Lane,2026-10-30,Room A,show`).snapshot;
   assert.equal(metrics.billingRows, 4);
   assert.equal(metrics.rawShowRows, 4);
   assert.equal(metrics.derivedShowVisits, 3);
+  assert.equal(metrics.collapsedDuplicateShowRows, 0);
+  assert.equal(metrics.excludedConsultationShowRows, 1);
+  assert.equal(
+    localDerivedVisitDetail(metrics),
+    "1 consultation show row excluded",
+  );
   assert.equal(attendanceMetric.shows, 3);
   assert.equal(attendanceMetric.retainedClients, 1);
   assert.equal(billingMetric.billedRows, 3);
@@ -1129,6 +1141,28 @@ CID-treatment,Dr Lane,2026-10-30,Room A,show`).snapshot;
     reconciliation.rows.find((row) => row.clientId === "CID-phone")
       ?.reviewReason,
     null,
+  );
+});
+
+test("derived visit explanation separates consultations from duplicate shows", () => {
+  const attendance =
+    importAttendanceCsv(`Client,Clinician,Date of service,Location,Status
+CID-phone,Dr Lane,2026-10-01,Room A,show
+CID-treatment,Dr Lane,2026-10-02,Room A,show
+CID-treatment,Dr Lane,2026-10-02,Room A,show`).snapshot;
+  const billing =
+    importBillingCsv(`Date of Service,Client,Clinician,Total Fee,Billing Code
+2026-10-01,CID-phone,Dr Lane,0,Phone
+2026-10-02,CID-treatment,Dr Lane,150,90837`).snapshot;
+  const metrics = buildLocalRetentionMetrics([attendance, billing]);
+
+  assert.equal(metrics.rawShowRows, 3);
+  assert.equal(metrics.derivedShowVisits, 1);
+  assert.equal(metrics.collapsedDuplicateShowRows, 1);
+  assert.equal(metrics.excludedConsultationShowRows, 1);
+  assert.equal(
+    localDerivedVisitDetail(metrics),
+    "1 treatment duplicate show row collapsed; 1 consultation show row excluded",
   );
 });
 
@@ -1152,6 +1186,12 @@ CID-mixed,Dr Lane,2026-10-02,Room A,show`).snapshot;
 
   assert.equal(metrics.rawShowRows, 4);
   assert.equal(metrics.derivedShowVisits, 1);
+  assert.equal(metrics.collapsedDuplicateShowRows, 0);
+  assert.equal(metrics.excludedConsultationShowRows, 3);
+  assert.equal(
+    localDerivedVisitDetail(metrics),
+    "3 consultation show rows excluded",
+  );
   assert.equal(metrics.attendanceByClinician[0].shows, 1);
   assert.equal(reconciliation.matchedVisits, 1);
   assert.equal(

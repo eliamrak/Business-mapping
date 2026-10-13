@@ -96,6 +96,7 @@ export type LocalRetentionMetrics = {
   rawShowRows: number;
   derivedShowVisits: number;
   collapsedDuplicateShowRows: number;
+  excludedConsultationShowRows: number;
   billingByClinician: ClinicianBillingMetric[];
   attendanceByClinician: ClinicianAttendanceMetric[];
   roomCounts: RoomMetric[];
@@ -1448,6 +1449,10 @@ export function buildLocalRetentionMetrics(
   const treatmentAttendance = treatmentAttendanceRows(snapshots);
   const derivedShows = derivedShowVisits(snapshots, sameDayVisitOverrides);
   const rawShowRows = attendance.filter((row) => row.status === "show").length;
+  const treatmentShowRows = treatmentAttendance.filter(
+    (row) => row.status === "show",
+  ).length;
+  const excludedConsultationShowRows = rawShowRows - treatmentShowRows;
   const billing = snapshots.flatMap((snapshot) =>
     snapshot.kind === "billing" ? snapshot.rows : [],
   );
@@ -1565,11 +1570,34 @@ export function buildLocalRetentionMetrics(
     billingRows: billing.length,
     rawShowRows,
     derivedShowVisits: derivedShows.length,
-    collapsedDuplicateShowRows: rawShowRows - derivedShows.length,
+    collapsedDuplicateShowRows: treatmentShowRows - derivedShows.length,
+    excludedConsultationShowRows,
     billingByClinician: sortByName([...billingByClinician.values()]),
     attendanceByClinician: sortByName([...attendanceByClinician.values()]),
     roomCounts: sortByName([...roomCounts.values()]),
   };
+}
+
+export function localDerivedVisitDetail(metrics: {
+  collapsedDuplicateShowRows: number;
+  excludedConsultationShowRows: number;
+}) {
+  const parts: string[] = [];
+  if (metrics.collapsedDuplicateShowRows > 0) {
+    parts.push(
+      `${metrics.collapsedDuplicateShowRows.toLocaleString()} treatment duplicate show ${
+        metrics.collapsedDuplicateShowRows === 1 ? "row" : "rows"
+      } collapsed`,
+    );
+  }
+  if (metrics.excludedConsultationShowRows > 0) {
+    parts.push(
+      `${metrics.excludedConsultationShowRows.toLocaleString()} consultation show ${
+        metrics.excludedConsultationShowRows === 1 ? "row" : "rows"
+      } excluded`,
+    );
+  }
+  return parts.length ? parts.join("; ") : "No duplicate treatment show rows";
 }
 
 export function mergeImportedLocationRooms<

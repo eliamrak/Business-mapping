@@ -14,6 +14,7 @@ import {
   buildLocalVisitReconciliation,
   exportLocalBackup,
   importLocalPackage,
+  localDerivedVisitDetail,
   type BillingCodeMinutes,
   type LocalSnapshot,
   type SameDayVisitOverrides,
@@ -635,14 +636,10 @@ export default function LocalRetentionWorkspace({
           <span>Attendance rows</span>
           <strong>{metrics.attendanceRows.toLocaleString()}</strong>
         </div>
-        <div title="Derived attended visits after same-day duplicate show rows are collapsed unless a confirmed extra visit is marked below.">
+        <div title="Derived attended treatment visits after consultation rows are excluded and same-day treatment duplicate show rows are collapsed unless a confirmed extra visit is marked below.">
           <span>Derived attended visits</span>
           <strong>{metrics.derivedShowVisits.toLocaleString()}</strong>
-          <small>
-            {metrics.collapsedDuplicateShowRows.toLocaleString()} duplicate show{" "}
-            {metrics.collapsedDuplicateShowRows === 1 ? "row" : "rows"}{" "}
-            collapsed
-          </small>
+          <small>{localDerivedVisitDetail(metrics)}</small>
         </div>
         <div title="Converted billing fact rows with charged fee amounts. These are charges, not collected payments.">
           <span>Billed rows</span>
@@ -818,7 +815,9 @@ export default function LocalRetentionWorkspace({
                   <td data-label="Derived shows">{row.shows}</td>
                   <td data-label="Client cancel">{row.clientCancelled}</td>
                   <td data-label="No-show">{row.noShows}</td>
-                  <td data-label="Clinician cancel">{row.clinicianCancelled}</td>
+                  <td data-label="Clinician cancel">
+                    {row.clinicianCancelled}
+                  </td>
                   <td data-label="Active clients">{row.uniqueActiveClients}</td>
                   <td data-label="First observed">
                     {row.firstObservedClients}
