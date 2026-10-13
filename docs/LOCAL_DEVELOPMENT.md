@@ -158,6 +158,8 @@ Additive SQL migrations:
 2. 002_business_hub.sql: workspace/history/attachments/users/auth sessions.
 3. 003_session_detail.sql: attendance/types/actor.
 4. 004_session_sources.sql: session source attachment links.
+5. 005_session_goal_years.sql: annual session goal overrides.
+6. 006_local_retention_imports.sql: principal-scoped converted retention package history, billing-code minutes and import audit events.
 
 Review target schema first. Existing compensation values are not rewritten.
 Retain new tables/columns on application rollback; dropping them loses data.
@@ -177,7 +179,9 @@ local fixtures or replace production with the development database.
 Updates > Reports & recovery downloads all application business tables,
 including original compensation/scenario records, sessions, source documents
 and audit history. Authentication accounts, credentials and sessions are
-excluded. Recovery previews counts and requires an explicit confirmation,
+excluded. Converted retention report history has its own scoped local JSON
+backup from the Retention tab so one principal's import history is not exported
+through another principal's business backup. Recovery previews counts and requires an explicit confirmation,
 an empty target app and a short-lived owner-bound token. It is atomic, checks
 the schema, and cannot overwrite an occupied database. The browser import
 limit is 14 MB. The simpler hub JSON export remains a partial export.

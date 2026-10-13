@@ -1,10 +1,12 @@
 import {
   type Dispatch,
   type SetStateAction,
+  useEffect,
   useMemo,
   useRef,
   useState,
 } from "react";
+import { ApiError } from "@workspace/api-client-react";
 import { Download, FileSpreadsheet, ShieldCheck, Upload } from "lucide-react";
 import {
   buildLocalRetentionMetrics,
@@ -40,10 +42,52 @@ type CodeDraft = { code: string; minutes: string };
 
 type PendingLocalSnapshot = {
   incoming: LocalSnapshot[];
-  existing: LocalSnapshot[];
+  existing: Array<{
+    id: string;
+    kind: LocalFactKind;
+    coverageStart: string;
+    coverageEnd: string;
+  }>;
   billingCodeMinutes: BillingCodeMinutes;
   packageId: string;
   warnings: string[];
+  serverPackage?: unknown;
+};
+
+type HistoryStore = {
+  load: () => Promise<{
+    snapshots: LocalSnapshot[];
+    billingCodeMinutes: BillingCodeMinutes;
+  }>;
+  importPackage: (
+    packageData: unknown,
+    replaceOverlaps?: boolean,
+  ) => Promise<{
+    snapshots: LocalSnapshot[];
+    billingCodeMinutes: BillingCodeMinutes;
+    status: "added" | "duplicate" | "replaced";
+    warnings: string[];
+  }>;
+  saveBillingCodeMinutes: (billingCodeMinutes: BillingCodeMinutes) => Promise<{
+    snapshots: LocalSnapshot[];
+    billingCodeMinutes: BillingCodeMinutes;
+  }>;
+  restoreBackup: (backup: unknown) => Promise<{
+    snapshots: LocalSnapshot[];
+    billingCodeMinutes: BillingCodeMinutes;
+    status: "restored";
+  }>;
+};
+
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  !!value && typeof value === "object" && !Array.isArray(value);
+
+const errorMessage = (cause: unknown, fallback: string) => {
+  if (cause instanceof ApiError && isRecord(cause.data)) {
+    const message = cause.data.error;
+    if (typeof message === "string") return message;
+  }
+  return cause instanceof Error ? cause.message : fallback;
 };
 
 export type LocalRetentionWorkspaceState = {
@@ -107,8 +151,10 @@ async function readText(file: File) {
 }
 
 export default function LocalRetentionWorkspace({
+  historyStore,
   workspaceState,
 }: {
+  historyStore?: HistoryStore;
   workspaceState?: LocalRetentionWorkspaceState;
 }) {
   const ownedState = useLocalRetentionWorkspaceState();
@@ -136,6 +182,47 @@ export default function LocalRetentionWorkspace({
     () => buildLocalRetentionMetrics(snapshots, billingCodeMinutes),
     [snapshots, billingCodeMinutes],
   );
+
+  useEffect(() => {
+    if (!historyStore) return;
+    let active = true;
+    setBusy(true);
+    setStatus("Loading saved converted report history...");
+    historyStore
+      .load()
+      .then((history) => {
+        if (!active) return;
+        setSnapshots(history.snapshots);
+        setBillingCodeMinutes(history.billingCodeMinutes);
+        setStatus(
+          history.snapshots.length
+            ? `Loaded ${history.snapshots.length} saved converted report snapshots.`
+            : "No converted reports saved yet.",
+        );
+      })
+      .catch((cause) => {
+        if (!active) return;
+        setError(
+          cause instanceof Error
+            ? cause.message
+            : "Saved converted report history could not be loaded.",
+        );
+        setStatus("No converted reports loaded.");
+      })
+      .finally(() => {
+        if (active) setBusy(false);
+      });
+    return () => {
+      active = false;
+    };
+  }, [
+    historyStore,
+    setBillingCodeMinutes,
+    setBusy,
+    setError,
+    setSnapshots,
+    setStatus,
+  ]);
 
   async function importCsv(kind: LocalFactKind, file: File | undefined) {
     if (!file) return;
@@ -165,7 +252,9 @@ export default function LocalRetentionWorkspace({
       } else {
         setSnapshots(merged.snapshots);
         setStatus(
-          `Loaded ${result.snapshot.rows.length} ${kind} rows for ${result.snapshot.coverageStart} to ${result.snapshot.coverageEnd}.`,
+          historyStore
+            ? `Loaded ${result.snapshot.rows.length} ${kind} rows for this page only. Use a complete package to save durable converted history.`
+            : `Loaded ${result.snapshot.rows.length} ${kind} rows for ${result.snapshot.coverageStart} to ${result.snapshot.coverageEnd}.`,
         );
       }
       if (result.warnings.length) setError(result.warnings.join(" "));
@@ -187,8 +276,27 @@ export default function LocalRetentionWorkspace({
     setBusy(true);
     setError("");
     setPending(null);
+    let packageData: unknown;
+    let parsed: ReturnType<typeof importLocalPackage> | null = null;
     try {
-      const parsed = importLocalPackage(JSON.parse(await readText(file)));
+      packageData = JSON.parse(await readText(file));
+      parsed = importLocalPackage(packageData);
+      if (historyStore) {
+        const saved = await historyStore.importPackage(packageData);
+        setSnapshots(saved.snapshots);
+        setBillingCodeMinutes(saved.billingCodeMinutes);
+        if (saved.status === "duplicate") {
+          setStatus(
+            `Package ${parsed.packageId} is already saved. Nothing was added.`,
+          );
+        } else {
+          setStatus(
+            `Saved package ${parsed.packageId}: ${parsed.snapshots[0].rows.length} attendance rows and ${parsed.snapshots[1].rows.length} billing rows.`,
+          );
+        }
+        if (saved.warnings.length) setError(saved.warnings.join(" "));
+        return;
+      }
       const merged = mergeLocalPackage(snapshots, billingCodeMinutes, parsed);
       if (merged.status === "duplicate") {
         setStatus(
@@ -218,19 +326,74 @@ export default function LocalRetentionWorkspace({
         if (merged.warnings.length) setError(merged.warnings.join(" "));
       }
     } catch (cause) {
-      setError(
-        cause instanceof Error
-          ? cause.message
-          : "The package could not be read.",
-      );
+      if (
+        historyStore &&
+        parsed &&
+        packageData !== undefined &&
+        cause instanceof ApiError &&
+        isRecord(cause.data)
+      ) {
+        if (
+          cause.data.status === "overlap" &&
+          Array.isArray(cause.data.existing)
+        ) {
+          setPending({
+            incoming: parsed.snapshots,
+            existing: cause.data.existing as PendingLocalSnapshot["existing"],
+            billingCodeMinutes: parsed.billingCodeMinutes,
+            packageId: parsed.packageId,
+            warnings: Array.isArray(cause.data.warnings)
+              ? cause.data.warnings.filter(
+                  (warning): warning is string => typeof warning === "string",
+                )
+              : [],
+            serverPackage: packageData,
+          });
+          setStatus(
+            "This package overlaps saved converted report history. Review before replacing overlapping saved snapshots.",
+          );
+          setError(
+            errorMessage(cause, "Saved retention history was not changed."),
+          );
+          return;
+        }
+        if (cause.data.status === "blocked") {
+          setStatus("Saved retention history was not changed.");
+          setError(errorMessage(cause, "The package could not be saved."));
+          return;
+        }
+      }
+      setError(errorMessage(cause, "The package could not be read."));
     } finally {
       setBusy(false);
       if (packageInput.current) packageInput.current.value = "";
     }
   }
 
-  function replacePending() {
+  async function replacePending() {
     if (!pending) return;
+    if (historyStore && pending.serverPackage !== undefined) {
+      setBusy(true);
+      try {
+        const saved = await historyStore.importPackage(
+          pending.serverPackage,
+          true,
+        );
+        setSnapshots(saved.snapshots);
+        setBillingCodeMinutes(saved.billingCodeMinutes);
+        setStatus(
+          `Replaced overlapping saved snapshots with package ${pending.packageId}.`,
+        );
+        const warnings = [...pending.warnings, ...saved.warnings];
+        setError(warnings.length ? warnings.join(" ") : "");
+        setPending(null);
+      } catch (cause) {
+        setError(errorMessage(cause, "The package could not be saved."));
+      } finally {
+        setBusy(false);
+      }
+      return;
+    }
     const replaced = replaceOverlappingPackageSnapshots(
       snapshots,
       billingCodeMinutes,
@@ -252,14 +415,33 @@ export default function LocalRetentionWorkspace({
     setPending(null);
   }
 
-  function addBillingCodeMinutes() {
+  async function addBillingCodeMinutes() {
     const code = codeDraft.code.trim();
     const minutes = Number(codeDraft.minutes);
     if (!code || !Number.isFinite(minutes) || minutes <= 0) {
       setError("Enter a billing code and positive default minutes.");
       return;
     }
-    setBillingCodeMinutes((current) => ({ ...current, [code]: minutes }));
+    const next = { ...billingCodeMinutes, [code]: minutes };
+    if (historyStore) {
+      setBusy(true);
+      try {
+        const saved = await historyStore.saveBillingCodeMinutes(next);
+        setSnapshots(saved.snapshots);
+        setBillingCodeMinutes(saved.billingCodeMinutes);
+        setCodeDraft({ code: "", minutes: "" });
+        setStatus("Saved billing-code minutes with converted report history.");
+        setError("");
+      } catch (cause) {
+        setError(
+          errorMessage(cause, "Billing-code minutes could not be saved."),
+        );
+      } finally {
+        setBusy(false);
+      }
+      return;
+    }
+    setBillingCodeMinutes(next);
     setCodeDraft({ code: "", minutes: "" });
     setError("");
   }
@@ -280,18 +462,19 @@ export default function LocalRetentionWorkspace({
     setError("");
     setPending(null);
     try {
-      const parsed = importLocalBackup(JSON.parse(await readText(file)));
+      const backup = JSON.parse(await readText(file));
+      const parsed = historyStore
+        ? await historyStore.restoreBackup(backup)
+        : importLocalBackup(backup);
       setSnapshots(parsed.snapshots);
       setBillingCodeMinutes(parsed.billingCodeMinutes);
       setStatus(
-        `Restored ${parsed.snapshots.length} local snapshots from backup.`,
+        historyStore
+          ? `Restored ${parsed.snapshots.length} saved converted report snapshots from backup.`
+          : `Restored ${parsed.snapshots.length} local snapshots from backup.`,
       );
     } catch (cause) {
-      setError(
-        cause instanceof Error
-          ? cause.message
-          : "The backup could not be read.",
-      );
+      setError(errorMessage(cause, "The backup could not be read."));
     } finally {
       setBusy(false);
       if (backupInput.current) backupInput.current.value = "";
@@ -305,20 +488,37 @@ export default function LocalRetentionWorkspace({
     >
       <div className="pw-local-retention-hero">
         <div>
-          <p className="pw-eyebrow">Local-only package workspace</p>
-          <h2>Retention and billed sessions</h2>
-          <p>
-            Import the converter package prepared with permanent random client
-            IDs and no direct client names. Rows stay in this browser page while
-            you move between workspace tabs. Reloading or closing the page
-            clears them unless you explicitly download a local backup.
+          <p className="pw-eyebrow">
+            {historyStore
+              ? "Saved converted report history"
+              : "Local-only package workspace"}
           </p>
+          <h2>Retention and billed sessions</h2>
+          {historyStore ? (
+            <p>
+              Import the converter package prepared with permanent random client
+              IDs and no direct client names. Converted report facts are saved
+              in the authenticated Practice app so retention, sessions, and
+              charged-fee history remain available after reload and sign-in.
+            </p>
+          ) : (
+            <p>
+              Import the converter package prepared with permanent random client
+              IDs and no direct client names. Rows stay in this browser page
+              while you move between workspace tabs. Reloading or closing the
+              page clears them unless you explicitly download a local backup.
+            </p>
+          )}
         </div>
         <ShieldCheck aria-hidden="true" />
       </div>
 
       <div className="pw-privacy-strip">
-        <span>Raw rows are not sent to the API.</span>
+        <span>
+          {historyStore
+            ? "Raw names and converter mapping stay off the server."
+            : "Raw rows are not sent to the API."}
+        </span>
         <span>Manual session records are unchanged.</span>
         <span>Billing is charged fees, not collected payments.</span>
       </div>
@@ -374,8 +574,8 @@ export default function LocalRetentionWorkspace({
           <Upload aria-hidden="true" />
           <h3>Local plaintext backup</h3>
           <p>
-            Exports unencrypted JSON with row-level local facts. Store it only
-            in an approved secure location.
+            Exports unencrypted JSON with row-level converted facts. Store it
+            only in an approved secure location.
           </p>
           <div className="pw-backup-actions">
             <button
@@ -413,7 +613,10 @@ export default function LocalRetentionWorkspace({
             <button className="pw-button" onClick={keepExisting}>
               Keep existing
             </button>
-            <button className="pw-button pw-primary" onClick={replacePending}>
+            <button
+              className="pw-button pw-primary"
+              onClick={() => void replacePending()}
+            >
               Replace overlapping data
             </button>
           </div>
@@ -460,7 +663,10 @@ export default function LocalRetentionWorkspace({
               }))
             }
           />
-          <button className="pw-button" onClick={addBillingCodeMinutes}>
+          <button
+            className="pw-button"
+            onClick={() => void addBillingCodeMinutes()}
+          >
             Add
           </button>
         </div>

@@ -54,6 +54,9 @@ try {
     files.push("003_session_detail.sql");
   if (!has("session_records", "source_attachment_id"))
     files.push("004_session_sources.sql");
+  if (!has("session_goal_years")) files.push("005_session_goal_years.sql");
+  if (!has("local_retention_snapshots") || !has("local_retention_settings"))
+    files.push("006_local_retention_imports.sql");
   console.log(
     JSON.stringify(
       { mode: apply ? "apply" : "inspection only", pending: files },

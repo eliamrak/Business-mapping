@@ -6,6 +6,7 @@ import cliniciansRouter from "./clinicians";
 import scenariosRouter from "./scenarios";
 import staffRouter from "./staff";
 import sessionRecordsRouter from "./sessionRecords";
+import localRetentionRouter from "./localRetention";
 import hubRouter from "./hub";
 import backupRouter from "./backup";
 
@@ -18,6 +19,7 @@ router.use(cliniciansRouter);
 router.use(scenariosRouter);
 router.use(staffRouter);
 router.use(sessionRecordsRouter);
+router.use(localRetentionRouter);
 router.use(hubRouter);
 router.use(backupRouter);
 

@@ -11,8 +11,8 @@ import {
   text,
 } from "drizzle-orm/pg-core";
 import { sql } from "drizzle-orm";
-import { cliniciansTable } from "./clinicians";
-import { hubAttachmentsTable } from "./hub";
+import { cliniciansTable } from "./clinicians.ts";
+import { hubAttachmentsTable } from "./hub.ts";
 
 export const sessionRecordsTable = pgTable(
   "session_records",

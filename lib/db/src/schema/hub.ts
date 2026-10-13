@@ -3,11 +3,14 @@ import {
   serial,
   text,
   integer,
+  date,
   timestamp,
   jsonb,
   uuid,
   uniqueIndex,
+  check,
 } from "drizzle-orm/pg-core";
+import { sql } from "drizzle-orm";
 
 export const hubWorkspacesTable = pgTable("hub_workspaces", {
   id: integer("id").primaryKey(),
@@ -70,3 +73,80 @@ export const hubAuthSessionsTable = pgTable("hub_auth_sessions", {
   userId: text("user_id").notNull(),
   expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
 });
+
+export const localRetentionSnapshotsTable = pgTable(
+  "local_retention_snapshots",
+  {
+    id: serial("id").primaryKey(),
+    practiceId: text("practice_id").notNull(),
+    snapshotId: text("snapshot_id").notNull(),
+    kind: text("kind").notNull(),
+    packageId: text("package_id"),
+    packageExportedAt: timestamp("package_exported_at", {
+      withTimezone: true,
+    }),
+    importedAt: timestamp("imported_at", { withTimezone: true }).notNull(),
+    coverageStart: date("coverage_start").notNull(),
+    coverageEnd: date("coverage_end").notNull(),
+    sourceHash: text("source_hash").notNull(),
+    rowCount: integer("row_count").notNull(),
+    rows: jsonb("rows").notNull(),
+    actor: text("actor").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    uniqueIndex("local_retention_practice_snapshot").on(
+      table.practiceId,
+      table.snapshotId,
+    ),
+    uniqueIndex("local_retention_kind_source_hash").on(
+      table.practiceId,
+      table.kind,
+      table.sourceHash,
+    ),
+    uniqueIndex("local_retention_package_kind").on(
+      table.practiceId,
+      table.packageId,
+      table.kind,
+    ),
+    check(
+      "local_retention_snapshot_kind",
+      sql`${table.kind} IN ('attendance', 'billing')`,
+    ),
+    check(
+      "local_retention_snapshot_dates",
+      sql`${table.coverageEnd} >= ${table.coverageStart}`,
+    ),
+    check("local_retention_snapshot_rows", sql`${table.rowCount} > 0`),
+  ],
+);
+
+export const localRetentionSettingsTable = pgTable("local_retention_settings", {
+  id: serial("id").primaryKey(),
+  practiceId: text("practice_id").notNull().unique(),
+  billingCodeMinutes: jsonb("billing_code_minutes")
+    .notNull()
+    .default(sql`'{}'::jsonb`),
+  actor: text("actor").notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+});
+
+export const localRetentionImportEventsTable = pgTable(
+  "local_retention_import_events",
+  {
+    id: serial("id").primaryKey(),
+    practiceId: text("practice_id").notNull(),
+    actor: text("actor").notNull(),
+    action: text("action").notNull(),
+    packageId: text("package_id"),
+    command: jsonb("command").notNull(),
+    snapshot: jsonb("snapshot").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+);

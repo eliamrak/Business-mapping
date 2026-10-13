@@ -1,5 +1,6 @@
 import { z } from "zod/v4";
 export { z } from "zod/v4";
+export * from "./retention.ts";
 
 const DAY = 86_400_000;
 

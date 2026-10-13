@@ -8,7 +8,7 @@ import {
   check,
 } from "drizzle-orm/pg-core";
 import { sql } from "drizzle-orm";
-import { cliniciansTable } from "./clinicians";
+import { cliniciansTable } from "./clinicians.ts";
 
 export const sessionGoalYearsTable = pgTable(
   "session_goal_years",
