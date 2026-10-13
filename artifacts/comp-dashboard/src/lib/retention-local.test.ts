@@ -9,6 +9,7 @@ import {
   importBillingCsv,
   importLocalBackup,
   importLocalPackage,
+  mergeImportedLocationRooms,
   mergeSnapshot,
   mergeLocalPackage,
   replaceOverlappingPackageSnapshots,
@@ -401,6 +402,99 @@ CID-alias,Dr Alias,2026-10-01,Room A,show`).snapshot;
   assert.equal(attendance.rows[0].serviceDate, "2026-10-01");
   assert.equal(billing.rows[0].clientId, "CID-alias");
   assert.equal(billing.rows[0].serviceDate, "2026-10-01");
+});
+
+test("imported attendance locations can backfill reviewable rooms idempotently", () => {
+  const attendance =
+    importAttendanceCsv(`Client,Clinician,Date of service,Location,Status
+CID-alpha,Dr Lane,2026-10-01,  Room A  ,show
+CID-beta,Dr Lane,2026-10-02,room   a,no show
+CID-gamma,Dr Moss,2026-10-03,Telehealth,show
+CID-delta,Dr Moss,2026-10-04,,show`).snapshot;
+  const workspace = {
+    settings: { forecastStart: "2026-10-01" },
+    rooms: [
+      {
+        id: "manual-room",
+        name: "Room B",
+        archived: false,
+        notes: "Keep my settings",
+        planningOnly: false,
+        start: "2026-09-01",
+        end: null,
+        sourceAttachmentId: null,
+        locationId: null,
+        weeklyHours: 32,
+        sessionMinutes: 45,
+        usablePct: 75,
+        telehealthUsesRoom: true,
+        usage: "dedicated" as const,
+        dedicatedClinicianId: 12,
+        assignments: [],
+        skippedWeeks: [],
+        blocks: [],
+      },
+    ],
+  };
+  let nextId = 0;
+  const first = mergeImportedLocationRooms(
+    workspace,
+    [attendance],
+    () => `new-room-${++nextId}`,
+  );
+  assert.deepEqual(
+    first.addedRooms.map((room) => room.name),
+    ["Room A", "Telehealth"],
+  );
+  assert.equal(first.addedRooms[0].weeklyHours, 0);
+  assert.equal(first.addedRooms[0].telehealthUsesRoom, false);
+  assert.match(first.addedRooms[1].notes, /physical room, telehealth label/);
+  assert.deepEqual(first.workspace.rooms[0], workspace.rooms[0]);
+
+  const second = mergeImportedLocationRooms(first.workspace, [attendance], () => {
+    throw new Error("no additional IDs should be needed");
+  });
+  assert.equal(second.addedRooms.length, 0);
+  assert.equal(second.workspace.rooms.length, 3);
+});
+
+test("imported attendance locations preserve existing room names case-insensitively", () => {
+  const attendance =
+    importAttendanceCsv(`Client,Clinician,Date of service,Location,Status
+CID-alpha,Dr Lane,2026-10-01, room   a ,show
+CID-beta,Dr Lane,2026-10-02,Room C,show`).snapshot;
+  const workspace = {
+    settings: { forecastStart: "2026-10-01" },
+    rooms: [
+      {
+        id: "manual-room-a",
+        name: "Room A",
+        archived: false,
+        notes: "Manual settings stay put",
+        planningOnly: false,
+        start: "2026-09-01",
+        end: null,
+        sourceAttachmentId: null,
+        locationId: null,
+        weeklyHours: 40,
+        sessionMinutes: 60,
+        usablePct: 85,
+        telehealthUsesRoom: false,
+        usage: "shared" as const,
+        dedicatedClinicianId: null,
+        assignments: [],
+        skippedWeeks: [],
+        blocks: [],
+      },
+    ],
+  };
+
+  const result = mergeImportedLocationRooms(workspace, [attendance], () => "room-c");
+  assert.deepEqual(
+    result.addedRooms.map((room) => room.name),
+    ["Room C"],
+  );
+  assert.deepEqual(result.workspace.rooms[0], workspace.rooms[0]);
 });
 
 test("Practice package preserves same-day legitimate session volume", () => {

@@ -408,6 +408,7 @@ export default function LocalRetentionWorkspace({
         </span>
         <span>Manual session records are unchanged.</span>
         <span>Billing is charged fees, not collected payments.</span>
+        <span>Room use is recorded Location counts, not exact occupancy hours.</span>
       </div>
 
       <div className="pw-local-import-grid">
@@ -730,11 +731,11 @@ export default function LocalRetentionWorkspace({
           </table>
         </section>
         <section>
-          <h3>Room session counts</h3>
+          <h3>Recorded room use</h3>
           <table>
             <thead>
               <tr>
-                <th>Location</th>
+                <th>Attendance location</th>
                 <th>Shows</th>
                 <th>Client cancel</th>
                 <th>No-show</th>
@@ -753,7 +754,7 @@ export default function LocalRetentionWorkspace({
               ))}
               {!metrics.roomCounts.length && (
                 <tr>
-                  <td colSpan={5}>Attendance locations will appear here.</td>
+                  <td colSpan={5}>Imported attendance locations will appear here.</td>
                 </tr>
               )}
             </tbody>

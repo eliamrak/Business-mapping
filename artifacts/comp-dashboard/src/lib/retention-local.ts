@@ -75,6 +75,8 @@ export type ClinicianAttendanceMetric = {
 
 export type RoomMetric = {
   location: string;
+  source: "attendance_location";
+  measure: "recorded_session_counts";
   showRows: number;
   clientCancelled: number;
   noShows: number;
@@ -131,6 +133,39 @@ export type LocalPackageImport = {
   snapshots: LocalSnapshot[];
   billingCodeMinutes: BillingCodeMinutes;
   warnings: string[];
+};
+
+export type ImportedRoomRecord = {
+  id: string;
+  name: string;
+  archived?: boolean;
+  notes: string;
+  planningOnly: boolean;
+  start: string;
+  end: string | null;
+  sourceAttachmentId: string | null;
+  locationId: string | null;
+  weeklyHours: number;
+  sessionMinutes: number;
+  usablePct: number;
+  telehealthUsesRoom: boolean;
+  usage: "shared" | "dedicated";
+  dedicatedClinicianId: number | null;
+  assignments: Array<{
+    clinicianId: number;
+    day: number;
+    startHour: number;
+    endHour: number;
+  }>;
+  skippedWeeks: Array<{ weekStart: string; clinicianId: number }>;
+  blocks: Array<{ day: number; startHour: number; endHour: number }>;
+};
+
+export type ImportedRoomsMergeResult<
+  TWorkspace extends { rooms: ImportedRoomRecord[] },
+> = {
+  workspace: TWorkspace;
+  addedRooms: ImportedRoomRecord[];
 };
 
 export type SnapshotMergeResult =
@@ -191,6 +226,9 @@ const clean = (value: string | undefined) => (value ?? "").trim();
 const rowHash = (parts: unknown[]) => stableHash(JSON.stringify(parts));
 const normalizeClinician = (value: string) =>
   value.toLowerCase().replace(/\s+/g, " ").trim();
+const cleanLocationLabel = (value: string) => value.replace(/\s+/g, " ").trim();
+const normalizeLocationLabel = (value: string) =>
+  cleanLocationLabel(value).toLowerCase();
 const headerAliases = new Map([
   ["randomid", "client"],
   ["date", "dateofservice"],
@@ -745,6 +783,8 @@ export function buildLocalRetentionMetrics(
     const location = row.location || "Unassigned";
     const metric = roomCounts.get(location) ?? {
       location,
+      source: "attendance_location" as const,
+      measure: "recorded_session_counts" as const,
       showRows: 0,
       clientCancelled: 0,
       noShows: 0,
@@ -764,6 +804,64 @@ export function buildLocalRetentionMetrics(
     billingByClinician: sortByName([...billingByClinician.values()]),
     attendanceByClinician: sortByName([...attendanceByClinician.values()]),
     roomCounts: sortByName([...roomCounts.values()]),
+  };
+}
+
+export function mergeImportedLocationRooms<
+  TWorkspace extends {
+    settings: { forecastStart: string };
+    rooms: ImportedRoomRecord[];
+  },
+>(
+  workspace: TWorkspace,
+  snapshots: LocalSnapshot[],
+  createId: () => string = () => crypto.randomUUID(),
+): ImportedRoomsMergeResult<TWorkspace> {
+  const existingNames = new Set(
+    workspace.rooms.map((room) => normalizeLocationLabel(room.name)),
+  );
+  const importedNames = new Map<string, string>();
+  for (const snapshot of snapshots) {
+    if (snapshot.kind !== "attendance") continue;
+    for (const row of snapshot.rows) {
+      if (!row.location) continue;
+      const name = cleanLocationLabel(row.location);
+      if (!name) continue;
+      const key = normalizeLocationLabel(name);
+      if (!key || existingNames.has(key) || importedNames.has(key)) continue;
+      importedNames.set(key, name);
+    }
+  }
+  const addedRooms = [...importedNames.values()].map(
+    (name): ImportedRoomRecord => ({
+      id: createId(),
+      name,
+      archived: false,
+      notes:
+        "Imported from attendance Location labels. Review whether this is a physical room, telehealth label, or other location before assigning capacity.",
+      planningOnly: false,
+      start: workspace.settings.forecastStart,
+      end: null,
+      sourceAttachmentId: null,
+      locationId: null,
+      weeklyHours: 0,
+      sessionMinutes: 60,
+      usablePct: 85,
+      telehealthUsesRoom: false,
+      usage: "shared",
+      dedicatedClinicianId: null,
+      assignments: [],
+      skippedWeeks: [],
+      blocks: [],
+    }),
+  );
+  if (!addedRooms.length) return { workspace, addedRooms };
+  return {
+    workspace: {
+      ...workspace,
+      rooms: [...workspace.rooms, ...addedRooms],
+    } as TWorkspace,
+    addedRooms,
   };
 }
 

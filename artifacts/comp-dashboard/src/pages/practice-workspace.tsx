@@ -102,6 +102,7 @@ import WorkspaceCalculations from "@/components/practice/workspace-calculations"
 import LocalRetentionWorkspace, {
   useLocalRetentionWorkspaceState,
 } from "@/components/practice/local-retention-workspace";
+import { mergeImportedLocationRooms } from "@/lib/retention-local";
 import LeadFlow from "@/components/practice/lead-flow";
 import { applyBulkLeads, planBulkLeads, type LeadBulkChange } from "@/lib/bulk-lead-flow";
 import MoneyFlowToday from "@/components/practice/money-flow-today";
@@ -497,6 +498,7 @@ export default function PracticeWorkspace() {
   } | null>(null);
   const pendingGoal = useRef<Proposal | null>(null);
   const pendingSandboxModel = useRef<Proposal | null>(null);
+  const lastImportedRoomBackfillKey = useRef("");
   const today = new Date().toLocaleDateString("en-CA");
   const sandbox = mode === "sandbox" || (mode === "goals" && !!draft);
   const planningEdit = mode === "goals" && !!draft;
@@ -644,6 +646,52 @@ export default function PracticeWorkspace() {
         : [],
     [stagedWorkspace, workspace, context],
   );
+  const importedRoomBackfillKey = useMemo(
+    () =>
+      localRetentionState.snapshots
+        .filter((snapshot) => snapshot.kind === "attendance")
+        .map((snapshot) => `${snapshot.kind}:${snapshot.sourceHash}`)
+        .join("|"),
+    [localRetentionState.snapshots],
+  );
+  useEffect(() => {
+    if (
+      !workspace ||
+      sandbox ||
+      stagedWorkspace ||
+      !localRetentionState.snapshots.length ||
+      !importedRoomBackfillKey ||
+      lastImportedRoomBackfillKey.current === importedRoomBackfillKey
+    )
+      return;
+    const result = mergeImportedLocationRooms(
+      workspace,
+      localRetentionState.snapshots,
+    );
+    lastImportedRoomBackfillKey.current = importedRoomBackfillKey;
+    if (!result.addedRooms.length) return;
+    setStagedWorkspace(result.workspace);
+    setStagedLabels((prior) => ({
+      ...prior,
+      ...Object.fromEntries(
+        result.addedRooms.map((room) => [
+          "rooms:" + room.id,
+          "Imported location room: " + room.name,
+        ]),
+      ),
+    }));
+    setReviewStaged(true);
+    setSection("rooms");
+    setMessage(
+      `Found ${result.addedRooms.length} imported attendance ${result.addedRooms.length === 1 ? "location" : "locations"} to review as Rooms.`,
+    );
+  }, [
+    importedRoomBackfillKey,
+    localRetentionState.snapshots,
+    sandbox,
+    stagedWorkspace,
+    workspace,
+  ]);
   const goals = useMemo(
     () =>
       active(query.data?.data.proposals ?? [])
