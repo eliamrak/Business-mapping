@@ -5,6 +5,7 @@ export type AttendanceStatus =
   | "cancelled"
   | "no show"
   | "clinician cancelled";
+export type VisitKind = "consultation";
 
 const attendanceStatuses: readonly AttendanceStatus[] = [
   "show",
@@ -19,6 +20,8 @@ export type AttendanceRow = {
   serviceDate: string;
   location: string | null;
   status: AttendanceStatus;
+  billingCode?: string | null;
+  visitKind?: VisitKind;
   sourceRowHash: string;
 };
 
@@ -28,6 +31,7 @@ export type BillingRow = {
   serviceDate: string;
   totalFeeCharged: number;
   billingCode: string | null;
+  visitKind?: VisitKind;
   sourceRowHash: string;
 };
 
@@ -114,8 +118,10 @@ export type LocalClientActivityEstimate = {
   leftCensoredClientPairs: number;
   rightCensoredClientPairs: number;
   inactiveClientTransitions: number;
+  inactiveClientReactivations: number;
   activeClientMonthDenominator: number;
   inactiveRelationshipTransitions: number;
+  inactiveRelationshipReactivations: number;
   activeRelationshipMonthDenominator: number;
   averageInactiveClientTransitionsPerMonth: number | null;
   observedAttendedSessionsPerRetainedClient: number | null;
@@ -274,6 +280,8 @@ const clean = (value: string | undefined) => (value ?? "").trim();
 const rowHash = (parts: unknown[]) => stableHash(JSON.stringify(parts));
 const normalizeClinician = (value: string) =>
   value.toLowerCase().replace(/\s+/g, " ").trim();
+const normalizeBillingCode = (value: string | null) =>
+  (value ?? "").toLowerCase().replace(/\s+/g, " ").trim();
 const cleanLocationLabel = (value: string) => value.replace(/\s+/g, " ").trim();
 const normalizeLocationLabel = (value: string) =>
   cleanLocationLabel(value).toLowerCase();
@@ -302,17 +310,99 @@ export function sameDayVisitKey(
   ]);
 }
 
-function showRowsBySameDayVisit(snapshots: LocalSnapshot[]) {
-  const groups = new Map<string, AttendanceRow[]>();
+function isConsultationVisitKind(row: { visitKind?: VisitKind | null }) {
+  return row.visitKind === "consultation";
+}
+
+export function isPhoneConsultBillingRow(
+  row: Pick<BillingRow, "billingCode" | "visitKind">,
+) {
+  return (
+    normalizeBillingCode(row.billingCode) === "phone" ||
+    isConsultationVisitKind(row)
+  );
+}
+
+function factGroupKey(
+  row: Pick<
+    AttendanceRow | BillingRow,
+    "clientId" | "clinician" | "serviceDate"
+  >,
+) {
+  return [
+    row.clientId,
+    normalizeClinician(row.clinician),
+    row.serviceDate,
+  ].join("\u0000");
+}
+
+function phoneOnlyConsultKeys(snapshots: LocalSnapshot[]) {
+  const groups = new Map<
+    string,
+    { phoneRows: number; treatmentRows: number }
+  >();
   for (const snapshot of snapshots) {
-    if (snapshot.kind !== "attendance") continue;
+    if (snapshot.kind !== "billing") continue;
     const seenRows = new Set<string>();
     for (const row of snapshot.rows) {
-      if (row.status !== "show" || seenRows.has(row.sourceRowHash)) continue;
+      if (seenRows.has(row.sourceRowHash)) continue;
       seenRows.add(row.sourceRowHash);
-      const key = sameDayVisitKey(row);
-      groups.set(key, [...(groups.get(key) ?? []), row]);
+      const key = factGroupKey(row);
+      const group = groups.get(key) ?? { phoneRows: 0, treatmentRows: 0 };
+      if (isPhoneConsultBillingRow(row)) group.phoneRows++;
+      else group.treatmentRows++;
+      groups.set(key, group);
     }
+  }
+  return new Set(
+    [...groups.entries()]
+      .filter(([, group]) => group.phoneRows > 0 && group.treatmentRows === 0)
+      .map(([key]) => key),
+  );
+}
+
+export function isPhoneOnlyConsultAttendanceRow(
+  row: Pick<
+    AttendanceRow,
+    "clientId" | "clinician" | "serviceDate" | "visitKind"
+  >,
+  snapshots: LocalSnapshot[],
+) {
+  return (
+    isConsultationVisitKind(row) ||
+    phoneOnlyConsultKeys(snapshots).has(factGroupKey(row))
+  );
+}
+
+export function treatmentAttendanceRows(snapshots: LocalSnapshot[]) {
+  const consultKeys = phoneOnlyConsultKeys(snapshots);
+  return snapshots.flatMap((snapshot) =>
+    snapshot.kind === "attendance"
+      ? snapshot.rows.filter(
+          (row) =>
+            !isConsultationVisitKind(row) &&
+            !consultKeys.has(factGroupKey(row)),
+        )
+      : [],
+  );
+}
+
+export function treatmentBillingRows(snapshots: LocalSnapshot[]) {
+  return snapshots.flatMap((snapshot) =>
+    snapshot.kind === "billing"
+      ? snapshot.rows.filter((row) => !isPhoneConsultBillingRow(row))
+      : [],
+  );
+}
+
+function showRowsBySameDayVisit(snapshots: LocalSnapshot[]) {
+  const groups = new Map<string, AttendanceRow[]>();
+  const seenRows = new Set<string>();
+  for (const row of treatmentAttendanceRows(snapshots)) {
+    if (row.status !== "show" || seenRows.has(row.sourceRowHash)) continue;
+    seenRows.add(row.sourceRowHash);
+    const key = sameDayVisitKey(row);
+    groups.set(key, [...(groups.get(key) ?? []), row]);
   }
   return groups;
 }
@@ -699,6 +789,17 @@ export function buildLocalVisitReconciliation(
         end: snapshot.coverageEnd,
       })),
   );
+  const billingIntervals = mergeIntervals(
+    snapshots
+      .filter(
+        (snapshot): snapshot is Extract<LocalSnapshot, { kind: "billing" }> =>
+          snapshot.kind === "billing",
+      )
+      .map((snapshot) => ({
+        start: snapshot.coverageStart,
+        end: snapshot.coverageEnd,
+      })),
+  );
   const groups = new Map<
     string,
     {
@@ -730,6 +831,10 @@ export function buildLocalVisitReconciliation(
     attendanceIntervals.some(
       (interval) => interval.start <= date && interval.end >= date,
     );
+  const coveredByBilling = (date: string) =>
+    billingIntervals.some(
+      (interval) => interval.start <= date && interval.end >= date,
+    );
   for (const snapshot of snapshots) {
     if (snapshot.kind === "attendance")
       snapshot.rows.forEach((row) => upsert(row, "attendance"));
@@ -745,11 +850,20 @@ export function buildLocalVisitReconciliation(
   let totalMatchedFeesCharged = 0;
   for (const group of groups.values()) {
     const attendanceCount = group.attendanceRows.length;
-    const billingCount = group.billingRows.length;
-    const showRows = group.attendanceRows.filter(
+    const treatmentBillingRows = group.billingRows.filter(
+      (row) => !isPhoneConsultBillingRow(row),
+    );
+    const billingCount = treatmentBillingRows.length;
+    const isPhoneOnlyConsult =
+      group.billingRows.length > 0 && treatmentBillingRows.length === 0;
+    const treatmentAttendanceRowsForGroup = isPhoneOnlyConsult
+      ? []
+      : group.attendanceRows.filter((row) => !isConsultationVisitKind(row));
+    const treatmentAttendanceCount = treatmentAttendanceRowsForGroup.length;
+    const showRows = treatmentAttendanceRowsForGroup.filter(
       (row) => row.status === "show",
     );
-    const nonShowRows = group.attendanceRows.filter(
+    const nonShowRows = treatmentAttendanceRowsForGroup.filter(
       (row) => row.status !== "show",
     );
     const derivedShowCount = showRows.length
@@ -761,7 +875,11 @@ export function buildLocalVisitReconciliation(
           ),
         )
       : 0;
-    const totalFeeCharged = group.billingRows.reduce(
+    const totalFeeCharged = treatmentBillingRows.reduce(
+      (sum, row) => sum + row.totalFeeCharged,
+      0,
+    );
+    const rawTotalFeeCharged = group.billingRows.reduce(
       (sum, row) => sum + row.totalFeeCharged,
       0,
     );
@@ -779,14 +897,33 @@ export function buildLocalVisitReconciliation(
       attendanceRows: group.attendanceRows,
       billingRows: group.billingRows,
     };
-    if (attendanceCount > 0 && billingCount === 0) {
-      attendanceOnlyRows += attendanceCount;
+    if (isPhoneOnlyConsult) {
+      rows.push({
+        ...base,
+        status: "matched",
+        totalFeeCharged: rawTotalFeeCharged,
+        reviewReason: null,
+      });
+    } else if (
+      attendanceCount > 0 &&
+      treatmentAttendanceCount === 0 &&
+      billingCount === 0
+    ) {
+      rows.push({
+        ...base,
+        status: "matched",
+        totalFeeCharged: null,
+        reviewReason: null,
+      });
+    } else if (treatmentAttendanceCount > 0 && billingCount === 0) {
+      attendanceOnlyRows += treatmentAttendanceCount;
       rows.push({
         ...base,
         status: "attendance_only",
         totalFeeCharged: null,
         reviewReason:
-          nonShowRows.length && !showRows.length
+          !coveredByBilling(group.serviceDate) ||
+          (nonShowRows.length && !showRows.length)
             ? null
             : "Attended visit has no billing counterpart in imported history.",
       });
@@ -819,7 +956,7 @@ export function buildLocalVisitReconciliation(
         totalFeeCharged,
         reviewReason: null,
       });
-    } else if (billingCount > 0 && attendanceCount === 0) {
+    } else if (billingCount > 0 && treatmentAttendanceCount === 0) {
       billingOnlyRows += billingCount;
       rows.push({
         ...base,
@@ -831,7 +968,7 @@ export function buildLocalVisitReconciliation(
       });
     } else {
       ambiguousGroups++;
-      ambiguousAttendanceRows += attendanceCount;
+      ambiguousAttendanceRows += treatmentAttendanceCount;
       ambiguousBillingRows += billingCount;
       rows.push({
         ...base,
@@ -1039,9 +1176,12 @@ function activeAtMonthStart(
   dates: string[],
   month: string,
   inactivityDays: number,
+  requiredVisits = 1,
 ) {
   const start = monthStart(month);
-  const lastShow = dates.filter((date) => date <= start).at(-1);
+  const priorShows = dates.filter((date) => date <= start);
+  if (priorShows.length < requiredVisits) return false;
+  const lastShow = priorShows.at(-1);
   return lastShow ? addDays(lastShow, inactivityDays) >= start : false;
 }
 
@@ -1050,6 +1190,7 @@ function estimateObservedInactivity(
   coverageIntervals: DateInterval[],
   eligibleMonths: string[],
   inactivityDays: number,
+  requiredVisitsBeforeInactivity = 1,
 ) {
   const monthRows = new Map(
     eligibleMonths.map((month) => [
@@ -1058,23 +1199,51 @@ function estimateObservedInactivity(
     ]),
   );
   let inactiveTransitions = 0;
+  let inactiveReactivations = 0;
   let activeMonthDenominator = 0;
   for (const dates of showDatesByEntity.values()) {
     const uniqueDates = [...new Set(dates)].sort();
-    for (const inactiveOn of inactiveTransitionDates(
+    const transitionDates = inactiveTransitionDates(
       uniqueDates,
       coverageIntervals,
       inactivityDays,
-    )) {
+    );
+    for (const inactiveOn of transitionDates) {
+      let inactiveAfterVisitIndex = -1;
+      for (let index = uniqueDates.length - 1; index >= 0; index--) {
+        if (addDays(uniqueDates[index], inactivityDays) === inactiveOn) {
+          inactiveAfterVisitIndex = index;
+          break;
+        }
+      }
+      if (inactiveAfterVisitIndex + 1 < requiredVisitsBeforeInactivity)
+        continue;
       const month = inactiveOn.slice(0, 7);
       const row = monthRows.get(month);
-      if (!row || !activeAtMonthStart(uniqueDates, month, inactivityDays))
+      if (
+        !row ||
+        !activeAtMonthStart(
+          uniqueDates,
+          month,
+          inactivityDays,
+          requiredVisitsBeforeInactivity,
+        )
+      )
         continue;
       row.inactiveClientTransitions++;
       inactiveTransitions++;
+      if (uniqueDates.some((date) => date > inactiveOn))
+        inactiveReactivations++;
     }
     for (const month of eligibleMonths) {
-      if (activeAtMonthStart(uniqueDates, month, inactivityDays)) {
+      if (
+        activeAtMonthStart(
+          uniqueDates,
+          month,
+          inactivityDays,
+          requiredVisitsBeforeInactivity,
+        )
+      ) {
         monthRows.get(month)!.activeClientsAtStart++;
         activeMonthDenominator++;
       }
@@ -1082,6 +1251,7 @@ function estimateObservedInactivity(
   }
   return {
     inactiveTransitions,
+    inactiveReactivations,
     activeMonthDenominator,
     monthlyRows: [...monthRows.values()],
     monthlyInactivityRate:
@@ -1094,8 +1264,8 @@ function estimateObservedInactivity(
 export function estimateLocalClientActivity(
   snapshots: LocalSnapshot[],
   sameDayVisitOverrides: SameDayVisitOverrides = {},
-  inactivityDays = 42,
-  returnMaturityDays = 14,
+  inactivityDays = 56,
+  returnMaturityDays = 56,
 ): LocalClientActivityEstimate | null {
   const shows = derivedShowVisits(snapshots, sameDayVisitOverrides).sort(
     (a, b) =>
@@ -1137,7 +1307,8 @@ export function estimateLocalClientActivity(
     ]);
   }
   const returnMaturityCutoff = addDays(coverageEnd, -returnMaturityDays);
-  const retained: Array<{ first: string; last: string; count: number }> = [];
+  const retained: Array<{ first: string; retainedOn: string; count: number }> =
+    [];
   let matureNonRetainedClientPairs = 0;
   let immatureClientPairsExcluded = 0;
   let leftCensoredClientPairs = 0;
@@ -1149,10 +1320,26 @@ export function estimateLocalClientActivity(
     if (first === coverageStart) leftCensoredClientPairs++;
     if (!hasCompleteLookForward(coverageIntervals, last, returnMaturityDays))
       rightCensoredClientPairs++;
-    const hasLaterShow = dates.some((date) => date > first);
-    if (hasLaterShow) {
-      retained.push({ first, last, count: dates.length });
-    } else if (first > returnMaturityCutoff) {
+    const initialEpisode: string[] = [];
+    for (const date of dates) {
+      const previous = initialEpisode.at(-1);
+      if (previous && date > addDays(previous, inactivityDays)) break;
+      initialEpisode.push(date);
+    }
+    if (initialEpisode.length >= 3) {
+      retained.push({
+        first,
+        retainedOn: initialEpisode[2],
+        count: initialEpisode.length,
+      });
+    } else if (
+      first > returnMaturityCutoff ||
+      !hasCompleteLookForward(
+        coverageIntervals,
+        initialEpisode.at(-1)!,
+        returnMaturityDays,
+      )
+    ) {
       immatureClientPairsExcluded++;
     } else {
       matureNonRetainedClientPairs++;
@@ -1169,20 +1356,20 @@ export function estimateLocalClientActivity(
     coverageIntervals,
     eligibleInactivityMonths,
     inactivityDays,
+    3,
   );
   const relationshipInactivity = estimateObservedInactivity(
     relationshipShowDates,
     coverageIntervals,
     eligibleInactivityMonths,
     inactivityDays,
+    3,
   );
-  if (!retained.length && practiceInactivity.monthlyInactivityRate === null)
-    return null;
   const observedSessions = retained.reduce((sum, item) => sum + item.count, 0);
   const observedMonthEquivalents = retained.reduce((sum, item) => {
     const days = Math.max(
       1,
-      coveredDaysInRange(coverageIntervals, item.first, item.last),
+      coveredDaysInRange(coverageIntervals, item.first, item.retainedOn),
     );
     return sum + Math.max(1, days / averageDaysPerMonth);
   }, 0);
@@ -1221,8 +1408,11 @@ export function estimateLocalClientActivity(
     leftCensoredClientPairs,
     rightCensoredClientPairs,
     inactiveClientTransitions: practiceInactivity.inactiveTransitions,
+    inactiveClientReactivations: practiceInactivity.inactiveReactivations,
     activeClientMonthDenominator: practiceInactivity.activeMonthDenominator,
     inactiveRelationshipTransitions: relationshipInactivity.inactiveTransitions,
+    inactiveRelationshipReactivations:
+      relationshipInactivity.inactiveReactivations,
     activeRelationshipMonthDenominator:
       relationshipInactivity.activeMonthDenominator,
     averageInactiveClientTransitionsPerMonth:
@@ -1255,18 +1445,20 @@ export function buildLocalRetentionMetrics(
   const attendance = snapshots.flatMap((snapshot) =>
     snapshot.kind === "attendance" ? snapshot.rows : [],
   );
+  const treatmentAttendance = treatmentAttendanceRows(snapshots);
   const derivedShows = derivedShowVisits(snapshots, sameDayVisitOverrides);
   const rawShowRows = attendance.filter((row) => row.status === "show").length;
   const billing = snapshots.flatMap((snapshot) =>
     snapshot.kind === "billing" ? snapshot.rows : [],
   );
+  const treatmentBilling = treatmentBillingRows(snapshots);
   const allDates = [...attendance, ...billing]
     .map((row) => row.serviceDate)
     .sort();
   const coverageStart = allDates[0] ?? null;
   const coverageEnd = allDates[allDates.length - 1] ?? null;
   const billingByClinician = new Map<string, ClinicianBillingMetric>();
-  for (const row of billing) {
+  for (const row of treatmentBilling) {
     const metric = billingByClinician.get(row.clinician) ?? {
       clinician: row.clinician,
       billedRows: 0,
@@ -1286,7 +1478,7 @@ export function buildLocalRetentionMetrics(
   }
   const attendanceByClinician = new Map<string, ClinicianAttendanceMetric>();
   const showDatesByClinicianClient = new Map<string, string[]>();
-  for (const row of attendance) {
+  for (const row of treatmentAttendance) {
     const metric = attendanceByClinician.get(row.clinician) ?? {
       clinician: row.clinician,
       shows: 0,
@@ -1322,7 +1514,7 @@ export function buildLocalRetentionMetrics(
     const sorted = dates.sort();
     const firstShowDate = sorted[0];
     metric.uniqueActiveClients++;
-    if (sorted.some((date) => date > firstShowDate)) metric.retainedClients++;
+    if (new Set(sorted).size >= 3) metric.retainedClients++;
     else {
       metric.firstObservedClients++;
       const first = new Date(`${firstShowDate}T12:00:00Z`).getTime();
@@ -1334,7 +1526,7 @@ export function buildLocalRetentionMetrics(
     }
   }
   const roomCounts = new Map<string, RoomMetric>();
-  for (const row of attendance) {
+  for (const row of treatmentAttendance) {
     const location = row.location || "Unassigned";
     const metric = roomCounts.get(location) ?? {
       location,
@@ -1503,6 +1695,17 @@ function packageNullableString(
   invalidPackage(`${label} must be null or a non-empty string`);
 }
 
+function packageOptionalVisitKind(
+  record: Record<string, unknown>,
+  key: string,
+  label: string,
+): VisitKind | undefined {
+  if (!(key in record)) return undefined;
+  const value = record[key];
+  if (value === "consultation") return value;
+  invalidPackage(`${label} must be consultation when present`);
+}
+
 function packageServiceDate(
   record: Record<string, unknown>,
   key: string,
@@ -1642,7 +1845,15 @@ function validatePackageAttendanceRows(rows: unknown[]) {
       invalidPackage(`attendance row ${index + 1} must be an object`);
     rejectUnknownKeys(
       value,
-      ["clientId", "clinician", "serviceDate", "location", "status"],
+      [
+        "clientId",
+        "clinician",
+        "serviceDate",
+        "location",
+        "status",
+        "billingCode",
+        "visitKind",
+      ],
       `attendance row ${index + 1}`,
       invalidPackage,
     );
@@ -1669,12 +1880,27 @@ function validatePackageAttendanceRows(rows: unknown[]) {
       "location",
       `attendance row ${index + 1} location`,
     );
+    const billingCode =
+      "billingCode" in value
+        ? packageNullableString(
+            value,
+            "billingCode",
+            `attendance row ${index + 1} billingCode`,
+          )
+        : undefined;
+    const visitKind = packageOptionalVisitKind(
+      value,
+      "visitKind",
+      `attendance row ${index + 1} visitKind`,
+    );
     return {
       clientId,
       clinician,
       serviceDate,
       location,
       status,
+      ...(billingCode !== undefined ? { billingCode } : {}),
+      ...(visitKind !== undefined ? { visitKind } : {}),
       sourceRowHash: rowHash([
         "attendance",
         clientId,
@@ -1682,6 +1908,8 @@ function validatePackageAttendanceRows(rows: unknown[]) {
         serviceDate,
         location,
         status,
+        billingCode,
+        visitKind,
         index,
       ]),
     };
@@ -1700,6 +1928,7 @@ function validatePackageBillingRows(rows: unknown[]) {
         "serviceDate",
         "totalFeeCharged",
         "billingCode",
+        "visitKind",
       ],
       `billing row ${index + 1}`,
       invalidPackage,
@@ -1731,12 +1960,18 @@ function validatePackageBillingRows(rows: unknown[]) {
       "billingCode",
       `billing row ${index + 1} billingCode`,
     );
+    const visitKind = packageOptionalVisitKind(
+      value,
+      "visitKind",
+      `billing row ${index + 1} visitKind`,
+    );
     return {
       clientId,
       clinician,
       serviceDate,
       totalFeeCharged,
       billingCode,
+      ...(visitKind !== undefined ? { visitKind } : {}),
       sourceRowHash: rowHash([
         "billing",
         clientId,
@@ -1744,6 +1979,7 @@ function validatePackageBillingRows(rows: unknown[]) {
         serviceDate,
         totalFeeCharged,
         billingCode,
+        visitKind,
         index,
       ]),
     };

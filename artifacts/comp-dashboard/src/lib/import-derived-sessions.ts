@@ -1,6 +1,8 @@
 import { type SessionRecord, rangesOverlap } from "@workspace/practice";
 import type { Context, ImportedBillingActual } from "@workspace/practice/hub";
 import {
+  isPhoneConsultBillingRow,
+  isPhoneOnlyConsultAttendanceRow,
   sameDayVisitKey,
   type AttendanceRow,
   type BillingRow,
@@ -110,6 +112,7 @@ export function buildImportedSessionOverlay(
         ambiguousClinicianLabels.add(row.clinician);
         continue;
       }
+      if (isPhoneOnlyConsultAttendanceRow(row, snapshots)) continue;
       if (row.status !== "show") {
         excludedNonShowRows++;
         continue;
@@ -146,6 +149,7 @@ export function buildImportedSessionOverlay(
         ambiguousBillingClinicianLabels.add(row.clinician);
         continue;
       }
+      if (isPhoneConsultBillingRow(row)) continue;
       billingActuals.push(billingActual(matches[0].id, row));
     }
   }

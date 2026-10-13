@@ -35,6 +35,8 @@ Attendance row allowed fields only:
 - `serviceDate`: valid `YYYY-MM-DD`
 - `location`: `null` or non-empty readable room/location label from the report
 - `status`: exactly one of `show`, `cancelled`, `no show`, `clinician cancelled`
+- `billingCode`: optional `null` or non-empty string when explicitly available
+- `visitKind`: optional; exactly `consultation` only when explicitly evidenced by Phone billing code, title, or status
 
 ## Billing Collection
 
@@ -54,8 +56,11 @@ Billing row allowed fields only:
 - `serviceDate`: valid `YYYY-MM-DD`
 - `totalFeeCharged`: finite non-negative number
 - `billingCode`: `null` or non-empty string
+- `visitKind`: optional; exactly `consultation` only when explicitly evidenced by Phone billing code, title, or status
 
 Billing rows are charged-fee facts only. They do not imply attendance and are not treated as cash collected.
+
+Raw appointment title text and appointment time must not be serialized. Source titles can contain client names or sensitive notes, and time is not needed for the Practice v1 treatment/consultation distinction. Converters may use those fields locally to derive `visitKind`, then discard them before export.
 
 ## Billing-Code Minutes
 
@@ -65,4 +70,4 @@ Billing rows are charged-fee facts only. They do not imply attendance and are no
 
 The Practice app validates the entire package before changing local state. Exact duplicate package content is ignored even if `exportedAt` differs. A changed package under the same `packageId` is rejected. Exact duplicate attendance or billing snapshots from a new package are skipped so later backfills can add the missing counterpart without double-counting previously imported facts. Overlapping non-duplicate package ranges require explicit user review before replacing whole overlapping local snapshots.
 
-Practice derives visit reconciliation from the accumulated separate fact tables. It matches attendance and billing only when there is exactly one attendance row and exactly one billing row for the same de-identified `clientId`, normalized clinician label, and `serviceDate`. Missing counterpart rows remain incomplete data, not zero-fee visits or cancellations. Multiple same-day rows for the same client and clinician remain reviewable because package v1 does not export a trustworthy appointment ID or time.
+Practice derives visit reconciliation from the accumulated separate fact tables. Phone/consultation evidence is preserved as raw facts but excluded from treatment starts, treatment visits, retention, inactivity resets, and billed treatment counts. Practice recognizes consultation evidence only from exact normalized billing code `Phone` or explicit `visitKind: "consultation"` supplied by the converter from exact source evidence; Practice does not fuzzy-match raw titles. Attendance rows without explicit consultation metadata are excluded only when their same de-identified `clientId`, normalized clinician label, and `serviceDate` group has Phone/consultation billing rows and no treatment billing rows. Mixed Phone plus treatment-code groups preserve treatment evidence. Missing counterpart rows remain incomplete data, not zero-fee visits or cancellations. Multiple same-day treatment rows for the same client and clinician remain reviewable unless the Practice app has an explicit same-day visit override.

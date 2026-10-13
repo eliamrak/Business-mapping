@@ -124,8 +124,8 @@ test("local imports keep billing and attendance as separate fact tables", () => 
       noShows: 1,
       clinicianCancelled: 0,
       uniqueActiveClients: 1,
-      firstObservedClients: 0,
-      retainedClients: 1,
+      firstObservedClients: 1,
+      retainedClients: 0,
       immatureClientsExcluded: 0,
     },
   );
@@ -195,39 +195,43 @@ CID-active,Dr Moss,2026-03-12,Room B,show`,
 
   assert.equal(estimate.coverageStart, "2025-12-01");
   assert.equal(estimate.coverageEnd, "2026-03-31");
-  assert.equal(estimate.inactivityDays, 42);
+  assert.equal(estimate.inactivityDays, 56);
   assert.deepEqual(estimate.eligibleInactivityMonths, ["2026-02", "2026-03"]);
-  assert.equal(estimate.retainedClientPairs, 2);
-  assert.equal(estimate.matureNonRetainedClientPairs, 2);
-  assert.equal(estimate.immatureClientPairsExcluded, 1);
+  assert.equal(estimate.retainedClientPairs, 1);
+  assert.equal(estimate.matureNonRetainedClientPairs, 1);
+  assert.equal(estimate.immatureClientPairsExcluded, 3);
   assert.equal(estimate.leftCensoredClientPairs, 0);
-  assert.equal(estimate.rightCensoredClientPairs, 1);
-  assert.equal(estimate.inactiveClientTransitions, 2);
-  assert.equal(estimate.activeClientMonthDenominator, 5);
-  assert.equal(estimate.inactiveRelationshipTransitions, 2);
-  assert.equal(estimate.activeRelationshipMonthDenominator, 5);
-  assert.equal(estimate.averageInactiveClientTransitionsPerMonth, 1);
-  assert.equal(estimate.observedAttendedSessionsPerRetainedClient, 2.5);
+  assert.equal(estimate.rightCensoredClientPairs, 3);
+  assert.equal(estimate.inactiveClientTransitions, 1);
+  assert.equal(estimate.activeClientMonthDenominator, 1);
+  assert.equal(estimate.inactiveRelationshipTransitions, 1);
+  assert.equal(estimate.activeRelationshipMonthDenominator, 1);
+  assert.equal(estimate.averageInactiveClientTransitionsPerMonth, 0.5);
+  assert.equal(estimate.observedAttendedSessionsPerRetainedClient, 3);
   assert.ok(estimate.observedAttendedSessionsPerMonth > 1);
   assert.ok(estimate.estimatedMonths >= 1);
-  assert.equal(estimate.monthlyAttritionRate, 0.4);
+  assert.equal(estimate.monthlyAttritionRate, 1);
   assert.equal(estimate.latestCompleteMonth, "2026-03");
-  assert.equal(estimate.activeClientsInLatestCompleteMonth, 3);
-  assert.equal(estimate.estimatedClientsLeavingPerMonth, 1);
+  assert.equal(estimate.activeClientsInLatestCompleteMonth, 1);
+  assert.equal(estimate.estimatedClientsLeavingPerMonth, 0.5);
 });
 
-test("client activity estimate needs repeat attended clients", () => {
+test("client activity estimate separates immature starts from estimates", () => {
   const attendance = importAttendanceCsv(
     `Client,Clinician,Date of service,Location,Status
 CID-single-a,Dr Lane,2026-01-05,Room A,show
 CID-single-b,Dr Lane,2026-01-19,Room A,show
 CID-no-show,Dr Lane,2026-01-20,Room A,no show`,
   ).snapshot;
+  const estimate = estimateLocalClientActivity([attendance])!;
 
-  assert.equal(estimateLocalClientActivity([attendance]), null);
+  assert.equal(estimate.retainedClientPairs, 0);
+  assert.equal(estimate.immatureClientPairsExcluded, 2);
+  assert.equal(estimate.monthlyAttritionRate, null);
+  assert.equal(estimate.observedAttendedSessionsPerRetainedClient, null);
 });
 
-test("client inactivity estimate works without any return visits", () => {
+test("client inactivity estimate does not count pre-retention starts as established attrition", () => {
   const attendance = attendanceSnapshot(
     `Client,Clinician,Date of service,Location,Status
 CID-one-a,Dr Lane,2026-01-01,Room A,show
@@ -246,20 +250,24 @@ CID-one-b,Dr Moss,2026-01-15,Room B,show`,
     "2026-03",
     "2026-04",
   ]);
-  assert.equal(estimate.inactiveClientTransitions, 2);
-  assert.equal(estimate.activeClientMonthDenominator, 2);
-  assert.equal(estimate.averageInactiveClientTransitionsPerMonth, 2 / 3);
-  assert.equal(estimate.monthlyAttritionPct, 100);
-  assert.equal(estimate.estimatedClientsLeavingPerMonth, 2 / 3);
+  assert.equal(estimate.inactiveClientTransitions, 0);
+  assert.equal(estimate.activeClientMonthDenominator, 0);
+  assert.equal(estimate.averageInactiveClientTransitionsPerMonth, 0);
+  assert.equal(estimate.monthlyAttritionPct, null);
+  assert.equal(estimate.estimatedClientsLeavingPerMonth, 0);
 });
 
-test("client inactivity estimate counts the 42-day boundary and reactivation", () => {
+test("client inactivity estimate counts the 56-day boundary and reactivation", () => {
   const attendance = attendanceSnapshot(
     `Client,Clinician,Date of service,Location,Status
 CID-boundary,Dr Lane,2026-01-01,Room A,show
-CID-boundary,Dr Lane,2026-02-12,Room A,show
+CID-boundary,Dr Lane,2026-01-15,Room A,show
+CID-boundary,Dr Lane,2026-01-29,Room A,show
+CID-boundary,Dr Lane,2026-03-26,Room A,show
 CID-after,Dr Lane,2026-01-01,Room A,show
-CID-after,Dr Lane,2026-02-20,Room A,show`,
+CID-after,Dr Lane,2026-01-15,Room A,show
+CID-after,Dr Lane,2026-01-29,Room A,show
+CID-after,Dr Lane,2026-03-27,Room A,show`,
     "2025-12-01",
     "2026-04-30",
   );
@@ -272,14 +280,15 @@ CID-after,Dr Lane,2026-02-20,Room A,show`,
       row.activeClientsAtStart,
     ]),
     [
-      ["2026-02", 1, 2],
+      ["2026-02", 0, 2],
       ["2026-03", 1, 2],
-      ["2026-04", 1, 1],
+      ["2026-04", 0, 2],
     ],
   );
-  assert.equal(estimate.inactiveClientTransitions, 3);
-  assert.equal(estimate.averageInactiveClientTransitionsPerMonth, 1);
-  assert.equal(estimate.monthlyAttritionPct, 60);
+  assert.equal(estimate.inactiveClientTransitions, 1);
+  assert.equal(estimate.inactiveClientReactivations, 1);
+  assert.equal(estimate.averageInactiveClientTransitionsPerMonth, 1 / 3);
+  assert.ok(Math.abs(estimate.monthlyAttritionPct! - 100 / 6) < 0.000001);
 });
 
 test("client inactivity estimate ignores uncovered gaps and partial current months", () => {
@@ -309,7 +318,9 @@ CID-other,Dr Lane,2026-03-10,Room A,show`,
   const partialApril = attendanceSnapshot(
     `Client,Clinician,Date of service,Location,Status
 CID-partial,Dr Lane,2026-01-01,Room A,show
-CID-partial,Dr Lane,2026-03-01,Room A,show`,
+CID-partial,Dr Lane,2026-01-10,Room A,show
+CID-partial,Dr Lane,2026-01-20,Room A,show
+CID-partial,Dr Lane,2026-03-20,Room A,show`,
     "2025-12-01",
     "2026-04-15",
   );
@@ -323,8 +334,8 @@ CID-partial,Dr Lane,2026-03-01,Room A,show`,
       row.inactiveClientTransitions,
     ]),
     [
-      ["2026-02", 1],
-      ["2026-03", 0],
+      ["2026-02", 0],
+      ["2026-03", 1],
     ],
   );
 });
@@ -333,7 +344,8 @@ test("client inactivity estimate avoids first-month left-censoring artifacts", (
   const attendance = attendanceSnapshot(
     `Client,Clinician,Date of service,Location,Status
 CID-left,Dr Lane,2026-01-01,Room A,show
-CID-left,Dr Lane,2026-02-15,Room A,show`,
+CID-left,Dr Lane,2026-01-15,Room A,show
+CID-left,Dr Lane,2026-01-29,Room A,show`,
     "2026-01-01",
     "2026-03-31",
   );
@@ -350,24 +362,32 @@ test("client inactivity estimate collapses duplicate visits and separates clinic
     `Client,Clinician,Date of service,Location,Status
 CID-duplicate,Dr Lane,2026-01-01,Room A,show
 CID-duplicate,Dr Lane,2026-01-01,Room A,show
-CID-duplicate,Dr Lane,2026-03-01,Room A,show
+CID-duplicate,Dr Lane,2026-01-15,Room A,show
+CID-duplicate,Dr Lane,2026-01-29,Room A,show
+CID-duplicate,Dr Lane,2026-03-27,Room A,show
 CID-transfer,Dr Lane,2026-01-01,Room A,show
-CID-transfer,Dr Moss,2026-01-30,Room B,show`,
+CID-transfer,Dr Lane,2026-01-15,Room A,show
+CID-transfer,Dr Lane,2026-01-29,Room A,show
+CID-transfer,Dr Moss,2026-01-30,Room B,show
+CID-transfer,Dr Moss,2026-02-10,Room B,show
+CID-transfer,Dr Moss,2026-02-20,Room B,show`,
     "2025-12-01",
     "2026-04-30",
   );
   const estimate = estimateLocalClientActivity([attendance])!;
 
-  assert.equal(estimate.retainedClientPairs, 1);
-  assert.equal(estimate.inactiveClientTransitions, 3);
-  assert.equal(estimate.inactiveRelationshipTransitions, 4);
+  assert.equal(estimate.retainedClientPairs, 3);
+  assert.equal(estimate.inactiveClientTransitions, 2);
+  assert.equal(estimate.inactiveClientReactivations, 1);
+  assert.equal(estimate.inactiveRelationshipTransitions, 3);
+  assert.equal(estimate.inactiveRelationshipReactivations, 1);
   assert.deepEqual(
     estimate.monthlyInactiveClientTransitions.map((row) => [
       row.month,
       row.inactiveClientTransitions,
     ]),
     [
-      ["2026-02", 1],
+      ["2026-02", 0],
       ["2026-03", 1],
       ["2026-04", 1],
     ],
@@ -452,17 +472,18 @@ test("client activity monthly frequency uses covered days, not uncovered gaps", 
   const january = importAttendanceCsv(
     `Client,Clinician,Date of service,Location,Status
 CID-retained,Dr Lane,2026-01-01,Room A,show
+CID-retained,Dr Lane,2026-01-31,Room A,show
 CID-january,Dr Lane,2026-01-31,Room A,show`,
   ).snapshot;
   const march = importAttendanceCsv(
     `Client,Clinician,Date of service,Location,Status
-CID-retained,Dr Lane,2026-03-31,Room A,show
+CID-retained,Dr Lane,2026-03-15,Room A,show
 CID-march,Dr Lane,2026-03-01,Room A,show`,
   ).snapshot;
   const estimate = estimateLocalClientActivity([january, march])!;
 
-  assert.ok(estimate.observedAttendedSessionsPerMonth > 0.9);
-  assert.ok(estimate.observedAttendedSessionsPerMonth < 1.1);
+  assert.ok(estimate.observedAttendedSessionsPerMonth! > 1.9);
+  assert.ok(estimate.observedAttendedSessionsPerMonth! < 2.1);
   assert.equal(estimate.latestCompleteMonth, null);
 });
 
@@ -630,6 +651,33 @@ test("single Practice package validates collections and imports atomically", () 
       ?.billedRows,
     1,
   );
+});
+
+test("Practice package accepts coordinated optional consultation metadata", () => {
+  const packageData = packageFixture();
+  packageData.collections.attendance.rows[0].billingCode = "Phone";
+  packageData.collections.attendance.rows[0].visitKind = "consultation";
+  packageData.collections.billing.rows[0].visitKind = "consultation";
+  const parsed = importLocalPackage(packageData);
+
+  assert.equal(parsed.snapshots[0].rows[0].visitKind, "consultation");
+  assert.equal(parsed.snapshots[0].rows[0].billingCode, "Phone");
+  assert.equal(parsed.snapshots[1].rows[0].visitKind, "consultation");
+  assert.throws(() => {
+    const invalid = packageFixture();
+    invalid.collections.attendance.rows[0].visitKind = "treatment";
+    importLocalPackage(invalid);
+  }, /visitKind must be consultation/);
+  assert.throws(() => {
+    const leaked = packageFixture();
+    leaked.collections.attendance.rows[0].appointmentTitle = "Client name";
+    importLocalPackage(leaked);
+  }, /unsupported fields: appointmentTitle/);
+  assert.throws(() => {
+    const leaked = packageFixture();
+    leaked.collections.attendance.rows[0].appointmentTime = "09:00";
+    importLocalPackage(leaked);
+  }, /unsupported fields: appointmentTime/);
 });
 
 test("Practice package rejects malformed coverage, counts, fees and identity fields", () => {
@@ -1038,6 +1086,106 @@ test("same-day duplicate shows collapse by default but billing line items stay s
   assert.equal(mossAttendance?.firstObservedClients, 1);
   assert.equal(mossBilling?.billedRows, 2);
   assert.equal(mossBilling?.totalFeesCharged, 250);
+});
+
+test("Phone-only meet-and-greets stay raw but do not become treatment metrics", () => {
+  const attendance =
+    importAttendanceCsv(`Client,Clinician,Date of service,Location,Status
+CID-phone,Dr Lane,2026-10-01,Room A,show
+CID-treatment,Dr Lane,2026-10-02,Room A,show
+CID-treatment,Dr Lane,2026-10-16,Room A,show
+CID-treatment,Dr Lane,2026-10-30,Room A,show`).snapshot;
+  const billing =
+    importBillingCsv(`Date of Service,Client,Clinician,Total Fee,Billing Code
+2026-10-01,CID-phone,Dr Lane,0,Phone
+2026-10-02,CID-treatment,Dr Lane,150,90837
+2026-10-16,CID-treatment,Dr Lane,150,90837
+2026-10-30,CID-treatment,Dr Lane,150,90837`).snapshot;
+  const metrics = buildLocalRetentionMetrics([attendance, billing], {
+    Phone: 15,
+    "90837": 53,
+  });
+  const attendanceMetric = metrics.attendanceByClinician[0];
+  const billingMetric = metrics.billingByClinician[0];
+  const reconciliation = buildLocalVisitReconciliation([attendance, billing]);
+
+  assert.equal(metrics.attendanceRows, 4);
+  assert.equal(metrics.billingRows, 4);
+  assert.equal(metrics.rawShowRows, 4);
+  assert.equal(metrics.derivedShowVisits, 3);
+  assert.equal(attendanceMetric.shows, 3);
+  assert.equal(attendanceMetric.retainedClients, 1);
+  assert.equal(billingMetric.billedRows, 3);
+  assert.equal(billingMetric.configuredMinuteRows, 3);
+  assert.equal(billingMetric.totalFeesCharged, 450);
+  assert.equal(reconciliation.matchedVisits, 3);
+  assert.equal(reconciliation.rows.length, 4);
+  assert.equal(
+    reconciliation.rows.find((row) => row.clientId === "CID-phone")
+      ?.reviewReason,
+    null,
+  );
+});
+
+test("explicit consultation attendance stays out of reconciliation action rows", () => {
+  const attendance =
+    importAttendanceCsv(`Client,Clinician,Date of service,Location,Status
+CID-consult,Dr Lane,2026-10-01,Room A,show
+CID-consult-only,Dr Lane,2026-10-03,Room A,show
+CID-mixed,Dr Lane,2026-10-02,Room A,show
+CID-mixed,Dr Lane,2026-10-02,Room A,show`).snapshot;
+  attendance.rows[0].visitKind = "consultation";
+  attendance.rows[1].visitKind = "consultation";
+  attendance.rows[2].visitKind = "consultation";
+  const billing =
+    importBillingCsv(`Date of Service,Client,Clinician,Total Fee,Billing Code
+2026-10-01,CID-consult,Dr Lane,150,90837
+2026-10-03,CID-other,Dr Lane,150,90837
+2026-10-02,CID-mixed,Dr Lane,150,90837`).snapshot;
+  const metrics = buildLocalRetentionMetrics([attendance, billing]);
+  const reconciliation = buildLocalVisitReconciliation([attendance, billing]);
+
+  assert.equal(metrics.rawShowRows, 4);
+  assert.equal(metrics.derivedShowVisits, 1);
+  assert.equal(metrics.attendanceByClinician[0].shows, 1);
+  assert.equal(reconciliation.matchedVisits, 1);
+  assert.equal(
+    reconciliation.rows.find((row) => row.clientId === "CID-consult")?.status,
+    "billing_only",
+  );
+  assert.equal(
+    reconciliation.rows.find((row) => row.clientId === "CID-mixed")?.status,
+    "matched",
+  );
+  const consultOnly = reconciliation.rows.find(
+    (row) => row.clientId === "CID-consult-only",
+  );
+  assert.equal(consultOnly?.status, "matched");
+  assert.equal(consultOnly?.reviewReason, null);
+});
+
+test("mixed Phone and treatment billing preserves same-day treatment evidence", () => {
+  const attendance =
+    importAttendanceCsv(`Client,Clinician,Date of service,Location,Status
+CID-mixed,Dr Lane,2026-10-01,Room A,show
+CID-mixed,Dr Lane,2026-10-01,Room A,show
+CID-mixed,Dr Lane,2026-10-15,Room A,show
+CID-mixed,Dr Lane,2026-10-29,Room A,show`).snapshot;
+  const billing =
+    importBillingCsv(`Date of Service,Client,Clinician,Total Fee,Billing Code
+2026-10-01,CID-mixed,Dr Lane,0,Phone
+2026-10-01,CID-mixed,Dr Lane,150,90837
+2026-10-15,CID-mixed,Dr Lane,150,90837
+2026-10-29,CID-mixed,Dr Lane,150,90837`).snapshot;
+  const metrics = buildLocalRetentionMetrics([attendance, billing]);
+  const reconciliation = buildLocalVisitReconciliation([attendance, billing]);
+
+  assert.equal(metrics.rawShowRows, 4);
+  assert.equal(metrics.derivedShowVisits, 3);
+  assert.equal(metrics.attendanceByClinician[0].retainedClients, 1);
+  assert.equal(metrics.billingByClinician[0].billedRows, 3);
+  assert.equal(reconciliation.matchedVisits, 3);
+  assert.equal(reconciliation.ambiguousGroups, 0);
 });
 
 test("same-day repeat shows collapse without becoming return retention", () => {

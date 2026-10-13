@@ -24,6 +24,8 @@ type AttendanceRow = {
   serviceDate: string;
   location: string | null;
   status: (typeof attendanceStatuses)[number];
+  billingCode?: string | null;
+  visitKind?: "consultation";
   sourceRowHash: string;
 };
 type BillingRow = {
@@ -32,6 +34,7 @@ type BillingRow = {
   serviceDate: string;
   totalFeeCharged: number;
   billingCode: string | null;
+  visitKind?: "consultation";
   sourceRowHash: string;
 };
 type Snapshot = {
@@ -55,6 +58,7 @@ const dateSchema = z
     );
   });
 const nonEmpty = z.string().trim().min(1).max(200);
+const visitKindSchema = z.literal("consultation").optional();
 const packageRowLimit = 100_000;
 const billingCodeMinutesSchema = z
   .record(
@@ -72,6 +76,8 @@ const attendanceRowSchema = z
     serviceDate: dateSchema,
     location: nonEmpty.nullable(),
     status: z.enum(attendanceStatuses),
+    billingCode: nonEmpty.nullable().optional(),
+    visitKind: visitKindSchema,
   })
   .strict();
 const billingRowSchema = z
@@ -81,6 +87,7 @@ const billingRowSchema = z
     serviceDate: dateSchema,
     totalFeeCharged: z.number().finite().min(0).max(Number.MAX_SAFE_INTEGER),
     billingCode: nonEmpty.nullable(),
+    visitKind: visitKindSchema,
   })
   .strict();
 const packageSchema = z

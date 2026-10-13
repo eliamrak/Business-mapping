@@ -158,8 +158,8 @@ export default function WorkspaceCalculations({
               {clientActivityEstimate.retainedClientPairs.toLocaleString()}
             </strong>
             <small>
-              A client counts for a clinician after a later-date derived
-              attended visit with that same clinician; one client can count for
+              A client counts for a clinician after a third derived attended
+              treatment visit with that same clinician; one client can count for
               more than one clinician, and this does not mean they are currently
               active.
             </small>
@@ -187,7 +187,7 @@ export default function WorkspaceCalculations({
             </strong>
             <small>
               {eligibleInactivityRange && averageClientLosses !== null
-                ? `Estimated from ${clientActivityEstimate.inactiveClientTransitions.toLocaleString()} six-week inactivity transition${clientActivityEstimate.inactiveClientTransitions === 1 ? "" : "s"} across ${eligibleInactivityMonthCount.toLocaleString()} eligible fully covered month${eligibleInactivityMonthCount === 1 ? "" : "s"}, ${eligibleInactivityRange}.`
+                ? `Estimated from ${clientActivityEstimate.inactiveClientTransitions.toLocaleString()} eight-week established-client inactivity transition${clientActivityEstimate.inactiveClientTransitions === 1 ? "" : "s"} across ${eligibleInactivityMonthCount.toLocaleString()} eligible fully covered month${eligibleInactivityMonthCount === 1 ? "" : "s"}, ${eligibleInactivityRange}.`
                 : "Needs eligible fully covered history before estimating monthly losses."}
             </small>
           </div>
@@ -241,17 +241,18 @@ export default function WorkspaceCalculations({
         </p>
         {clientActivityEstimate && hasReturnFrequencyEstimate ? (
           <p>
-            Visit-frequency estimate: clients who returned to the same clinician
-            only; observed visit count is the average derived attended visits
-            already imported for those client-clinician histories. Monthly
-            frequency is derived attended visits divided by each history's
-            observed month-equivalent span from first visit to last visit.
+            Visit-frequency estimate: client-clinician histories that reached a
+            third attended treatment visit; observed visit count is the average
+            imported before that retention threshold. Monthly frequency is
+            derived attended visits divided by each history's covered
+            month-equivalent span from first visit to retention.
           </p>
         ) : clientActivityEstimate ? (
           <p>
-            Visit-frequency estimates need clients who returned to the same
-            clinician. The monthly loss estimate can still use six-week
-            inactivity transitions from clients with one attended visit.
+            Visit-frequency estimates need client-clinician histories with at
+            least three attended treatment visits. The monthly loss estimate can
+            still use eight-week inactivity transitions from established
+            clients.
           </p>
         ) : (
           <p>
@@ -280,7 +281,7 @@ export default function WorkspaceCalculations({
             <strong>{suggestedAttrition.toFixed(1)}%</strong>
             <small>
               {clientActivityEstimate && hasObservedInactivityEstimate
-                ? `${clientActivityEstimate.inactiveClientTransitions.toLocaleString()} client inactivity transition${clientActivityEstimate.inactiveClientTransitions === 1 ? "" : "s"} / ${clientActivityEstimate.activeClientMonthDenominator.toLocaleString()} active-client month${clientActivityEstimate.activeClientMonthDenominator === 1 ? "" : "s"} at the start of eligible fully covered months`
+                ? `${clientActivityEstimate.inactiveClientTransitions.toLocaleString()} established-client inactivity transition${clientActivityEstimate.inactiveClientTransitions === 1 ? "" : "s"} / ${clientActivityEstimate.activeClientMonthDenominator.toLocaleString()} established active-client month${clientActivityEstimate.activeClientMonthDenominator === 1 ? "" : "s"} at the start of eligible fully covered months`
                 : observed
                   ? `Inferred from sessions and new clients across ${observed.months} months, through ${observed.through}`
                   : `Based on your ${settings.retentionMonths}-month average client lifespan`}
@@ -313,10 +314,16 @@ export default function WorkspaceCalculations({
         )}
         {clientActivityEstimate && hasObservedInactivityEstimate && (
           <p>
-            A client is counted as a monthly loss when they cross 42 consecutive
-            covered days without an attended session; a later attended session
-            reactivates them. Inactivity is a proxy for loss, not a measured
-            discharge. Clinician relationship inactivity is tracked separately:
+            An established client is counted as a monthly loss when they cross
+            56 consecutive covered days without an attended treatment session;{" "}
+            {clientActivityEstimate.inactiveClientReactivations.toLocaleString()}{" "}
+            later reactivation
+            {clientActivityEstimate.inactiveClientReactivations === 1
+              ? ""
+              : "s"}{" "}
+            are tracked separately. Inactivity is a proxy for loss, not a
+            measured discharge. Clinician relationship inactivity is tracked
+            separately:
             {clientActivityEstimate.inactiveRelationshipTransitions.toLocaleString()}{" "}
             relationship transition
             {clientActivityEstimate.inactiveRelationshipTransitions === 1

@@ -392,6 +392,61 @@ test("billed fees feed revenue without adding attended sessions", () => {
   assert.equal(october.revenue, 225);
 });
 
+test("Phone-only meet-and-greet rows do not derive treatment sessions or fees", () => {
+  const overlay = buildImportedSessionOverlay(
+    context(),
+    [
+      attendanceSnapshot([
+        {
+          clientId: "client-phone",
+          clinician: "Dr Lane",
+          serviceDate: "2026-10-01",
+          location: "Room A",
+          status: "show",
+          sourceRowHash: "a-phone",
+        },
+        {
+          clientId: "client-treatment",
+          clinician: "Dr Lane",
+          serviceDate: "2026-10-02",
+          location: "Room A",
+          status: "show",
+          sourceRowHash: "a-treatment",
+        },
+      ]),
+      billingSnapshot([
+        {
+          clientId: "client-phone",
+          clinician: "Dr Lane",
+          serviceDate: "2026-10-01",
+          totalFeeCharged: 0,
+          billingCode: "Phone",
+          sourceRowHash: "b-phone",
+        },
+        {
+          clientId: "client-treatment",
+          clinician: "Dr Lane",
+          serviceDate: "2026-10-02",
+          totalFeeCharged: 150,
+          billingCode: "90837",
+          sourceRowHash: "b-treatment",
+        },
+      ]),
+    ],
+    7,
+  );
+
+  assert.deepEqual(
+    overlay.derivedSessions.map((item) => [item.start, item.completed]),
+    [["2026-10-02", 1]],
+  );
+  assert.equal(overlay.importedBillingActuals.length, 1);
+  assert.equal(overlay.importedBillingActuals[0].totalFeeCharged, 150);
+  assert.equal(overlay.diagnostic.rawAttendedRows, 1);
+  assert.equal(overlay.diagnostic.billedRows, 1);
+  assert.equal(overlay.diagnostic.billedFees, 150);
+});
+
 test("missing and ambiguous clinician mappings exclude imported rows", () => {
   const source = context();
   source.clinicians.push(clinician(3, "Dr Moss"));

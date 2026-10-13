@@ -284,6 +284,53 @@ test("same-practice authorized actors share converted history while actor stays 
   ]);
 });
 
+test("package import accepts coordinated optional consultation metadata", async () => {
+  const packageData = packageFor({
+    packageId: "pkg-consultation-metadata",
+    attendanceStart: "2026-11-01",
+    attendanceEnd: "2026-11-14",
+  });
+  packageData.collections.attendance.rows[0].billingCode = "Phone";
+  packageData.collections.attendance.rows[0].visitKind = "consultation";
+  packageData.collections.billing.rows[0].visitKind = "consultation";
+
+  const imported = await call("/practice-imports/package", {
+    package: packageData,
+  });
+  assert.equal(imported.status, 200, JSON.stringify(imported.data));
+  assert.equal(imported.data.status, "added");
+  const attendance = imported.data.snapshots.find(
+    (item) => item.kind === "attendance",
+  );
+  const billing = imported.data.snapshots.find(
+    (item) => item.kind === "billing",
+  );
+  assert.equal(attendance.rows[0].visitKind, "consultation");
+  assert.equal(attendance.rows[0].billingCode, "Phone");
+  assert.equal(billing.rows[0].visitKind, "consultation");
+
+  const invalid = packageFor({ packageId: "pkg-invalid-visit-kind" });
+  invalid.collections.attendance.rows[0].visitKind = "treatment";
+  const rejected = await call("/practice-imports/package", {
+    package: invalid,
+  });
+  assert.equal(rejected.status, 400);
+
+  const leaked = packageFor({ packageId: "pkg-title-leak" });
+  leaked.collections.attendance.rows[0].appointmentTitle = "Client name";
+  const titleRejected = await call("/practice-imports/package", {
+    package: leaked,
+  });
+  assert.equal(titleRejected.status, 400);
+
+  const timed = packageFor({ packageId: "pkg-time-leak" });
+  timed.collections.attendance.rows[0].appointmentTime = "09:00";
+  const timeRejected = await call("/practice-imports/package", {
+    package: timed,
+  });
+  assert.equal(timeRejected.status, 400);
+});
+
 test("separate configured practices cannot see each other's converted history", async () => {
   const other = await call("/practice-imports", undefined, "GET", {
     actor: "owner-c@example.test",
