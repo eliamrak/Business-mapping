@@ -288,6 +288,37 @@ CID-phone,Dr Lane,2026-01-31,Room A,show`,
   assert.equal(estimate.initialNonRetainedLaterReturnPairs, 1);
 });
 
+test("practice-wide initial retention counts transfers once across clinicians", () => {
+  const attendance = attendanceSnapshot(
+    `Client,Clinician,Date of service,Location,Status
+CID-transfer,Dr Lane,2026-01-01,Room A,show
+CID-transfer,Dr Moss,2026-01-15,Room B,show
+CID-transfer,Dr Moss,2026-01-29,Room B,show
+CID-slow,Dr Lane,2026-01-05,Room A,show
+CID-slow,Dr Lane,2026-02-03,Room A,show
+CID-slow,Dr Moss,2026-02-10,Room B,show`,
+    "2025-12-01",
+    "2026-03-31",
+  );
+  const estimate = estimateLocalClientActivity([attendance])!;
+  const metrics = buildLocalRetentionMetrics([attendance]);
+
+  assert.equal(estimate.retainedClientPairs, 1);
+  assert.equal(estimate.matureNonRetainedClientPairs, 1);
+  assert.equal(estimate.initialRetentionDenominator, 2);
+  assert.equal(estimate.initialRetentionRate, 0.5);
+  assert.equal(
+    metrics.attendanceByClinician.find((row) => row.clinician === "Dr Lane")
+      ?.retainedClients,
+    0,
+  );
+  assert.equal(
+    metrics.attendanceByClinician.find((row) => row.clinician === "Dr Moss")
+      ?.retainedClients,
+    0,
+  );
+});
+
 test("client activity estimate ignores future visits and coverage for retention", () => {
   const attendance = attendanceSnapshot(
     `Client,Clinician,Date of service,Location,Status
@@ -509,7 +540,7 @@ CID-transfer,Dr Moss,2026-02-20,Room B,show`,
   );
   const estimate = estimateLocalClientActivity([attendance])!;
 
-  assert.equal(estimate.retainedClientPairs, 3);
+  assert.equal(estimate.retainedClientPairs, 2);
   assert.equal(estimate.inactiveClientTransitions, 2);
   assert.equal(estimate.inactiveClientReactivations, 1);
   assert.equal(estimate.inactiveRelationshipTransitions, 3);

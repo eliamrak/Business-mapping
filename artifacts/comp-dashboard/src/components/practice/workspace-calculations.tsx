@@ -168,12 +168,12 @@ export default function WorkspaceCalculations({
             </strong>
             <small>
               {initialRetentionDenominator > 0
-                ? `${clientActivityEstimate.retainedClientPairs.toLocaleString()} retained / ${initialRetentionDenominator.toLocaleString()} mature initial client-clinician start${initialRetentionDenominator === 1 ? "" : "s"}; ${clientActivityEstimate.immatureClientPairsExcluded.toLocaleString()} pending.`
-                : `${clientActivityEstimate.immatureClientPairsExcluded.toLocaleString()} initial client-clinician start${clientActivityEstimate.immatureClientPairsExcluded === 1 ? "" : "s"} still pending enough follow-up.`}
+                ? `${clientActivityEstimate.retainedClientPairs.toLocaleString()} retained / ${initialRetentionDenominator.toLocaleString()} mature initial client start${initialRetentionDenominator === 1 ? "" : "s"}; ${clientActivityEstimate.immatureClientPairsExcluded.toLocaleString()} pending.`
+                : `${clientActivityEstimate.immatureClientPairsExcluded.toLocaleString()} initial client start${clientActivityEstimate.immatureClientPairsExcluded === 1 ? "" : "s"} still pending enough follow-up.`}
             </small>
           </div>
           <div>
-            <span>Observed visits per returning client-clinician</span>
+            <span>Observed visits per returning client</span>
             <strong>
               {suggestedSessionCount === null ||
               suggestedSessionCount === undefined
@@ -211,7 +211,7 @@ export default function WorkspaceCalculations({
           max={31}
           onCommit={(value) => onSetting("sessionsPerClientMonth", value)}
           estimate={suggestedSessionsPerMonth}
-          estimateLabel="Returning client-clinician attendance frequency"
+          estimateLabel="Returning client attendance frequency"
           onUseEstimate={
             suggestedSessionsPerMonth === undefined ||
             suggestedSessionsPerMonth === null
@@ -249,7 +249,7 @@ export default function WorkspaceCalculations({
         </p>
         {clientActivityEstimate && hasReturnFrequencyEstimate ? (
           <p>
-            Visit-frequency estimate: client-clinician histories that reached a
+            Visit-frequency estimate: practice clients who reached a
             third attended treatment visit; observed visit count is the average
             imported before that retention threshold. Initial retention uses
             three attended treatment dates without a gap longer than{" "}
@@ -261,7 +261,7 @@ export default function WorkspaceCalculations({
           </p>
         ) : clientActivityEstimate ? (
           <p>
-            Visit-frequency estimates need client-clinician histories with at
+            Visit-frequency estimates need practice client histories with at
             least three attended treatment visits within the{" "}
             {clientActivityEstimate.initialRetentionGapDays}-day initial gap
             rule. Pending starts are excluded until the import coverage can

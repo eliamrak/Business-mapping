@@ -1350,12 +1350,10 @@ export function estimateLocalClientActivity(
   const coverageStart = coverageDates[0];
   const coverageEnd = coverageDates.at(-1);
   if (!coverageStart || !coverageEnd) return null;
-  const pairShows = new Map<string, AttendanceRow[]>();
   const practiceShowDates = new Map<string, string[]>();
   const relationshipShowDates = new Map<string, string[]>();
   for (const row of shows) {
     const key = `${normalizeClinician(row.clinician)}\u0000${row.clientId}`;
-    pairShows.set(key, [...(pairShows.get(key) ?? []), row]);
     practiceShowDates.set(row.clientId, [
       ...(practiceShowDates.get(row.clientId) ?? []),
       row.serviceDate,
@@ -1372,8 +1370,8 @@ export function estimateLocalClientActivity(
   let initialNonRetainedLaterReturnPairs = 0;
   let leftCensoredClientPairs = 0;
   let rightCensoredClientPairs = 0;
-  for (const rows of pairShows.values()) {
-    const dates = uniqueSortedDates(rows);
+  for (const datesForClient of practiceShowDates.values()) {
+    const dates = [...new Set(datesForClient)].sort();
     const first = dates[0];
     const last = dates.at(-1)!;
     if (first === coverageStart) leftCensoredClientPairs++;
