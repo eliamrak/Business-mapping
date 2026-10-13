@@ -206,6 +206,10 @@ CID-active,Dr Moss,2026-03-12,Room B,show`,
   assert.equal(estimate.retainedClientPairs, 1);
   assert.equal(estimate.matureNonRetainedClientPairs, 1);
   assert.equal(estimate.immatureClientPairsExcluded, 3);
+  assert.equal(estimate.initialRetentionGapDays, 28);
+  assert.equal(estimate.initialRetentionDenominator, 2);
+  assert.equal(estimate.initialRetentionRate, 0.5);
+  assert.equal(estimate.initialNonRetainedLaterReturnPairs, 0);
   assert.equal(estimate.leftCensoredClientPairs, 0);
   assert.equal(estimate.rightCensoredClientPairs, 3);
   assert.equal(estimate.inactiveClientTransitions, 1);
@@ -220,6 +224,67 @@ CID-active,Dr Moss,2026-03-12,Room B,show`,
   assert.equal(estimate.latestCompleteMonth, "2026-03");
   assert.equal(estimate.activeClientsInLatestCompleteMonth, 1);
   assert.equal(estimate.estimatedClientsLeavingPerMonth, 0.5);
+});
+
+test("client activity estimate uses a 28-day initial retention gap boundary", () => {
+  const attendance = attendanceSnapshot(
+    `Client,Clinician,Date of service,Location,Status
+CID-day-28,Dr Lane,2026-01-01,Room A,show
+CID-day-28,Dr Lane,2026-01-29,Room A,show
+CID-day-28,Dr Lane,2026-02-20,Room A,show
+CID-day-29,Dr Lane,2026-01-01,Room A,show
+CID-day-29,Dr Lane,2026-01-30,Room A,show
+CID-day-29,Dr Lane,2026-02-10,Room A,show`,
+    "2025-12-01",
+    "2026-03-31",
+  );
+  const estimate = estimateLocalClientActivity([attendance])!;
+
+  assert.equal(estimate.retainedClientPairs, 1);
+  assert.equal(estimate.matureNonRetainedClientPairs, 1);
+  assert.equal(estimate.immatureClientPairsExcluded, 0);
+  assert.equal(estimate.initialRetentionDenominator, 2);
+  assert.equal(estimate.initialRetentionRate, 0.5);
+  assert.equal(estimate.initialNonRetainedLaterReturnPairs, 1);
+});
+
+test("client activity estimate keeps initial retention pending without covered follow-up", () => {
+  const attendance = attendanceSnapshot(
+    `Client,Clinician,Date of service,Location,Status
+CID-pending,Dr Lane,2026-01-01,Room A,show
+CID-pending,Dr Lane,2026-01-20,Room A,show`,
+    "2026-01-01",
+    "2026-02-10",
+  );
+  const estimate = estimateLocalClientActivity([attendance])!;
+
+  assert.equal(estimate.retainedClientPairs, 0);
+  assert.equal(estimate.matureNonRetainedClientPairs, 0);
+  assert.equal(estimate.immatureClientPairsExcluded, 1);
+  assert.equal(estimate.initialRetentionDenominator, 0);
+  assert.equal(estimate.initialRetentionRate, null);
+});
+
+test("client activity estimate does not let Phone consults count or reset retention", () => {
+  const attendance = attendanceSnapshot(
+    `Client,Clinician,Date of service,Location,Status
+CID-phone,Dr Lane,2026-01-01,Room A,show
+CID-phone,Dr Lane,2026-01-20,Room A,show
+CID-phone,Dr Lane,2026-01-31,Room A,show`,
+    "2026-01-01",
+    "2026-02-28",
+  );
+  const billing = importBillingCsv(
+    `Date of Service,Client,Clinician,Total Fee,Billing Code
+2026-01-20,CID-phone,Dr Lane,0,Phone`,
+  ).snapshot;
+  const estimate = estimateLocalClientActivity([attendance, billing])!;
+
+  assert.equal(estimate.retainedClientPairs, 0);
+  assert.equal(estimate.matureNonRetainedClientPairs, 1);
+  assert.equal(estimate.immatureClientPairsExcluded, 0);
+  assert.equal(estimate.initialRetentionDenominator, 1);
+  assert.equal(estimate.initialNonRetainedLaterReturnPairs, 1);
 });
 
 test("client activity estimate separates immature starts from estimates", () => {
@@ -478,6 +543,7 @@ test("client activity monthly frequency uses covered days, not uncovered gaps", 
   const january = importAttendanceCsv(
     `Client,Clinician,Date of service,Location,Status
 CID-retained,Dr Lane,2026-01-01,Room A,show
+CID-retained,Dr Lane,2026-01-15,Room A,show
 CID-retained,Dr Lane,2026-01-31,Room A,show
 CID-january,Dr Lane,2026-01-31,Room A,show`,
   ).snapshot;
@@ -488,8 +554,8 @@ CID-march,Dr Lane,2026-03-01,Room A,show`,
   ).snapshot;
   const estimate = estimateLocalClientActivity([january, march])!;
 
-  assert.ok(estimate.observedAttendedSessionsPerMonth! > 1.9);
-  assert.ok(estimate.observedAttendedSessionsPerMonth! < 2.1);
+  assert.ok(estimate.observedAttendedSessionsPerMonth! > 2.9);
+  assert.ok(estimate.observedAttendedSessionsPerMonth! < 3.1);
   assert.equal(estimate.latestCompleteMonth, null);
 });
 

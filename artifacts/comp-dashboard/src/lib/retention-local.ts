@@ -106,6 +106,7 @@ export type LocalClientActivityEstimate = {
   coverageStart: string;
   coverageEnd: string;
   inactivityDays: number;
+  initialRetentionGapDays: number;
   returnMaturityDays: number;
   eligibleInactivityMonths: string[];
   monthlyInactiveClientTransitions: Array<{
@@ -116,6 +117,9 @@ export type LocalClientActivityEstimate = {
   retainedClientPairs: number;
   matureNonRetainedClientPairs: number;
   immatureClientPairsExcluded: number;
+  initialRetentionDenominator: number;
+  initialRetentionRate: number | null;
+  initialNonRetainedLaterReturnPairs: number;
   leftCensoredClientPairs: number;
   rightCensoredClientPairs: number;
   inactiveClientTransitions: number;
@@ -1173,6 +1177,24 @@ function inactiveTransitionDates(
   return transitions;
 }
 
+function initialRetentionEpisode(
+  dates: string[],
+  initialRetentionGapDays: number,
+) {
+  const initialEpisode: string[] = [];
+  let laterReturnAfterInitialGap = false;
+  for (const date of dates) {
+    const previous = initialEpisode.at(-1);
+    if (previous && date > addDays(previous, initialRetentionGapDays)) {
+      laterReturnAfterInitialGap = true;
+      break;
+    }
+    initialEpisode.push(date);
+    if (initialEpisode.length >= 3) break;
+  }
+  return { initialEpisode, laterReturnAfterInitialGap };
+}
+
 function activeAtMonthStart(
   dates: string[],
   month: string,
@@ -1267,6 +1289,7 @@ export function estimateLocalClientActivity(
   sameDayVisitOverrides: SameDayVisitOverrides = {},
   inactivityDays = 56,
   returnMaturityDays = 56,
+  initialRetentionGapDays = 28,
 ): LocalClientActivityEstimate | null {
   const shows = derivedShowVisits(snapshots, sameDayVisitOverrides).sort(
     (a, b) =>
@@ -1307,11 +1330,11 @@ export function estimateLocalClientActivity(
       row.serviceDate,
     ]);
   }
-  const returnMaturityCutoff = addDays(coverageEnd, -returnMaturityDays);
   const retained: Array<{ first: string; retainedOn: string; count: number }> =
     [];
   let matureNonRetainedClientPairs = 0;
   let immatureClientPairsExcluded = 0;
+  let initialNonRetainedLaterReturnPairs = 0;
   let leftCensoredClientPairs = 0;
   let rightCensoredClientPairs = 0;
   for (const rows of pairShows.values()) {
@@ -1321,12 +1344,8 @@ export function estimateLocalClientActivity(
     if (first === coverageStart) leftCensoredClientPairs++;
     if (!hasCompleteLookForward(coverageIntervals, last, returnMaturityDays))
       rightCensoredClientPairs++;
-    const initialEpisode: string[] = [];
-    for (const date of dates) {
-      const previous = initialEpisode.at(-1);
-      if (previous && date > addDays(previous, inactivityDays)) break;
-      initialEpisode.push(date);
-    }
+    const { initialEpisode, laterReturnAfterInitialGap } =
+      initialRetentionEpisode(dates, initialRetentionGapDays);
     if (initialEpisode.length >= 3) {
       retained.push({
         first,
@@ -1334,18 +1353,25 @@ export function estimateLocalClientActivity(
         count: initialEpisode.length,
       });
     } else if (
-      first > returnMaturityCutoff ||
+      first > addDays(coverageEnd, -initialRetentionGapDays) ||
       !hasCompleteLookForward(
         coverageIntervals,
         initialEpisode.at(-1)!,
-        returnMaturityDays,
+        initialRetentionGapDays,
       )
     ) {
       immatureClientPairsExcluded++;
     } else {
       matureNonRetainedClientPairs++;
+      if (laterReturnAfterInitialGap) initialNonRetainedLaterReturnPairs++;
     }
   }
+  const initialRetentionDenominator =
+    retained.length + matureNonRetainedClientPairs;
+  const initialRetentionRate =
+    initialRetentionDenominator > 0
+      ? retained.length / initialRetentionDenominator
+      : null;
   const eligibleInactivityMonths = completeInactivityMonths(
     coverageIntervals,
     coverageStart,
@@ -1400,12 +1426,16 @@ export function estimateLocalClientActivity(
     coverageStart,
     coverageEnd,
     inactivityDays,
+    initialRetentionGapDays,
     returnMaturityDays,
     eligibleInactivityMonths,
     monthlyInactiveClientTransitions: practiceInactivity.monthlyRows,
     retainedClientPairs: retained.length,
     matureNonRetainedClientPairs,
     immatureClientPairsExcluded,
+    initialRetentionDenominator,
+    initialRetentionRate,
+    initialNonRetainedLaterReturnPairs,
     leftCensoredClientPairs,
     rightCensoredClientPairs,
     inactiveClientTransitions: practiceInactivity.inactiveTransitions,

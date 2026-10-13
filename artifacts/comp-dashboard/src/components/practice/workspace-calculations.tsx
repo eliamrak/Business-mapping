@@ -139,6 +139,13 @@ export default function WorkspaceCalculations({
     clientActivityEstimate && eligibleInactivityMonthCount > 0
       ? `${clientActivityEstimate.eligibleInactivityMonths[0]} to ${clientActivityEstimate.eligibleInactivityMonths.at(-1)}`
       : null;
+  const initialRetentionDenominator =
+    clientActivityEstimate?.initialRetentionDenominator ?? 0;
+  const initialRetentionPct =
+    clientActivityEstimate?.initialRetentionRate === null ||
+    clientActivityEstimate?.initialRetentionRate === undefined
+      ? null
+      : clientActivityEstimate.initialRetentionRate * 100;
 
   return (
     <section className="pw-calculations" aria-label="Session calculations">
@@ -153,15 +160,16 @@ export default function WorkspaceCalculations({
       {clientActivityEstimate && (
         <div className="pw-client-activity-estimate">
           <div>
-            <span>Client-clinician returns</span>
+            <span>Initial retention rate</span>
             <strong>
-              {clientActivityEstimate.retainedClientPairs.toLocaleString()}
+              {initialRetentionPct === null
+                ? "--"
+                : `${initialRetentionPct.toFixed(1)}%`}
             </strong>
             <small>
-              A client counts for a clinician after a third derived attended
-              treatment visit with that same clinician; one client can count for
-              more than one clinician, and this does not mean they are currently
-              active.
+              {initialRetentionDenominator > 0
+                ? `${clientActivityEstimate.retainedClientPairs.toLocaleString()} retained / ${initialRetentionDenominator.toLocaleString()} mature initial client-clinician start${initialRetentionDenominator === 1 ? "" : "s"}; ${clientActivityEstimate.immatureClientPairsExcluded.toLocaleString()} pending.`
+                : `${clientActivityEstimate.immatureClientPairsExcluded.toLocaleString()} initial client-clinician start${clientActivityEstimate.immatureClientPairsExcluded === 1 ? "" : "s"} still pending enough follow-up.`}
             </small>
           </div>
           <div>
@@ -243,16 +251,21 @@ export default function WorkspaceCalculations({
           <p>
             Visit-frequency estimate: client-clinician histories that reached a
             third attended treatment visit; observed visit count is the average
-            imported before that retention threshold. Monthly frequency is
-            derived attended visits divided by each history's covered
-            month-equivalent span from first visit to retention.
+            imported before that retention threshold. Initial retention uses
+            three attended treatment dates without a gap longer than{" "}
+            {clientActivityEstimate.initialRetentionGapDays} covered days;
+            later returns after an initial non-retention gap are tracked
+            separately and do not change the first-start denominator. Monthly
+            frequency is derived attended visits divided by each history's
+            covered month-equivalent span from first visit to retention.
           </p>
         ) : clientActivityEstimate ? (
           <p>
             Visit-frequency estimates need client-clinician histories with at
-            least three attended treatment visits. The monthly loss estimate can
-            still use eight-week inactivity transitions from established
-            clients.
+            least three attended treatment visits within the{" "}
+            {clientActivityEstimate.initialRetentionGapDays}-day initial gap
+            rule. Pending starts are excluded until the import coverage can
+            observe the full follow-up window.
           </p>
         ) : (
           <p>
@@ -346,8 +359,14 @@ export default function WorkspaceCalculations({
             may have started before imported history, and{" "}
             {clientActivityEstimate.immatureClientPairsExcluded.toLocaleString()}{" "}
             first shows are inside the{" "}
-            {clientActivityEstimate.returnMaturityDays}-day return-frequency
-            maturity cutoff.
+            {clientActivityEstimate.initialRetentionGapDays}-day initial
+            retention follow-up window.{" "}
+            {clientActivityEstimate.initialNonRetainedLaterReturnPairs.toLocaleString()}{" "}
+            mature initial non-retention
+            {clientActivityEstimate.initialNonRetainedLaterReturnPairs === 1
+              ? ""
+              : "s"}{" "}
+            later returned after that gap.
           </p>
         )}
       </div>
