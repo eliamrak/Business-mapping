@@ -291,7 +291,9 @@ test("package import accepts coordinated optional consultation metadata", async 
     attendanceEnd: "2026-11-14",
   });
   packageData.collections.attendance.rows[0].billingCode = "Phone";
+  packageData.collections.attendance.rows[0].appointmentTime = "09:00";
   packageData.collections.attendance.rows[0].visitKind = "consultation";
+  packageData.collections.billing.rows[0].appointmentTime = null;
   packageData.collections.billing.rows[0].visitKind = "consultation";
 
   const imported = await call("/practice-imports/package", {
@@ -307,7 +309,9 @@ test("package import accepts coordinated optional consultation metadata", async 
   );
   assert.equal(attendance.rows[0].visitKind, "consultation");
   assert.equal(attendance.rows[0].billingCode, "Phone");
+  assert.equal(attendance.rows[0].appointmentTime, "09:00");
   assert.equal(billing.rows[0].visitKind, "consultation");
+  assert.equal(billing.rows[0].appointmentTime, null);
 
   const invalid = packageFor({ packageId: "pkg-invalid-visit-kind" });
   invalid.collections.attendance.rows[0].visitKind = "treatment";
@@ -323,12 +327,12 @@ test("package import accepts coordinated optional consultation metadata", async 
   });
   assert.equal(titleRejected.status, 400);
 
-  const timed = packageFor({ packageId: "pkg-time-leak" });
-  timed.collections.attendance.rows[0].appointmentTime = "09:00";
-  const timeRejected = await call("/practice-imports/package", {
-    package: timed,
+  const titledBilling = packageFor({ packageId: "pkg-billing-title-leak" });
+  titledBilling.collections.billing.rows[0].appointmentTitle = "Client name";
+  const billingTitleRejected = await call("/practice-imports/package", {
+    package: titledBilling,
   });
-  assert.equal(timeRejected.status, 400);
+  assert.equal(billingTitleRejected.status, 400);
 });
 
 test("separate configured practices cannot see each other's converted history", async () => {
