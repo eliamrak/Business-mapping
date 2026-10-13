@@ -29,7 +29,7 @@ The harness starts a local Vite server for
 which renders the actual React `LocalRetentionWorkspace` component. It launches
 Playwright against a local browser executable, exercises real browser file input
 selection and blob download behavior, and captures browser network requests
-during the CSV import/export/restore operations.
+during the package import and CSV import/export/restore operations.
 
 Latest run:
 
@@ -38,9 +38,16 @@ Latest run:
   "status": "passed",
   "url": "http://127.0.0.1:4397/test-harness/local-retention-browser-harness.html",
   "browserExecutablePath": "/Users/eliam/Library/Caches/ms-playwright/chromium_headless_shell-1234/chrome-headless-shell-mac-arm64/chrome-headless-shell",
-  "operationRequests": [],
-  "browserSinkEvents": [],
-  "stableSummary": "Coverage2026-10-01 to 2026-10-15Attendance rows3Billed rows2",
+  "packageFlow": {
+    "operationRequests": [],
+    "browserSinkEvents": [],
+    "stableSummary": "Coverage2026-10-01 to 2026-10-20Attendance rows4Billed rows4"
+  },
+  "csvFlow": {
+    "operationRequests": [],
+    "browserSinkEvents": [],
+    "stableSummary": "Coverage2026-10-01 to 2026-10-15Attendance rows3Billed rows2"
+  },
   "downloadedBackupBytes": 1993
 }
 ```
@@ -52,8 +59,10 @@ component does not require auth and no business records should be touched.
 
 Assertions:
 
+- The golden local import package is imported through the actual browser package
+  file input.
 - Synthetic attendance and billing CSVs are imported through actual browser file
-  inputs.
+  inputs after a page reload.
 - Backup export is captured through actual browser download handling.
 - Backup restore is exercised through the actual backup file input.
 - Invalid duplicate and overlapping backup restores throw in the browser flow
@@ -64,8 +73,9 @@ Assertions:
   `WebSocket`, `EventSource`, `localStorage`, `sessionStorage`, `indexedDB`) are
   exactly `[]`.
 - `localStorage.length` and `sessionStorage.length` remain `0`.
-- Synthetic row tokens such as `CID-browser-alpha`, `Dr Browser`, room labels,
-  and billing codes do not appear in captured request or sink payloads.
+- Synthetic row tokens from both flows, such as `CID-browser-alpha`,
+  `pkg-synthetic-october-v1`, `client-alpha`, `Dr Browser`, `Dr Lane`, room
+  labels, and billing codes do not appear in captured request or sink payloads.
 - Backup export JSON contains the synthetic rows by design, but stays in the
   browser download path.
 

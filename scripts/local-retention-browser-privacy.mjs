@@ -32,6 +32,12 @@ const syntheticBillingCsv = `Date of Service,Client,Clinician,Total Fee,Billing 
 2026-10-01,CID-browser-alpha,Dr Browser,150,90837
 2026-10-02,CID-browser-beta,Dr Browser,100,NO-SHOW`;
 
+const syntheticPackagePath = path.join(
+  repoRoot,
+  "docs/practice-local-import-package-v1.golden.json",
+);
+const syntheticPackageText = await fs.readFile(syntheticPackagePath, "utf8");
+
 const syntheticTokens = [
   "CID-browser-alpha",
   "CID-browser-beta",
@@ -40,6 +46,17 @@ const syntheticTokens = [
   "Room Browser B",
   "90837",
   "NO-SHOW",
+  "pkg-synthetic-october-v1",
+  "client-alpha",
+  "client-beta",
+  "client-gamma",
+  "client-only-billed",
+  "Dr Lane",
+  "Dr Moss",
+  "Room A",
+  "Room B",
+  "90834",
+  "00000",
 ];
 
 const browserExecutableCandidates = [
@@ -191,8 +208,15 @@ async function summaryText(page) {
   return normalize(await page.locator(".pw-retention-summary").textContent());
 }
 
-async function importFile(page, inputIndex, file) {
-  await page.locator("input[type=file]").nth(inputIndex).setInputFiles(file);
+function fileInputForSection(page, sectionHeading) {
+  return page
+    .getByRole("heading", { name: sectionHeading, exact: true })
+    .locator("xpath=ancestor::section[1]")
+    .locator("input[type=file]");
+}
+
+async function importFile(page, sectionHeading, file) {
+  await fileInputForSection(page, sectionHeading).setInputFiles(file);
 }
 
 async function waitForBodyText(page, text) {
@@ -216,6 +240,13 @@ function createOverlappingBackup(backup) {
     sourceRowHash: `${row.sourceRowHash}-overlap-${index}`,
   }));
   return { ...backup, snapshots: [attendance, overlap] };
+}
+
+function assertNoLeakedTokens({ requestText, sinkText, tokens }) {
+  for (const token of tokens) {
+    assert.equal(requestText.includes(token), false, token);
+    assert.equal(sinkText.includes(token), false, token);
+  }
 }
 
 const server = await createServer({
@@ -274,13 +305,42 @@ try {
 
   await importFile(
     page,
-    0,
+    "Complete package",
+    makeFile("practice-package.json", "application/json", syntheticPackageText),
+  );
+  await waitForBodyText(page, "Loaded package pkg-synthetic-october-v1");
+  const packageSummary = await summaryText(page);
+  assert.match(packageSummary, /Attendance rows\s*4/);
+  assert.match(packageSummary, /Billed rows\s*4/);
+
+  const packageBrowserSinkEvents = await readPrivacyEvents(page);
+  const packageOperationRequests = [...operationRequests];
+  const packageRequestText = JSON.stringify(packageOperationRequests);
+  const packageSinkText = JSON.stringify(packageBrowserSinkEvents);
+  assertNoLeakedTokens({
+    requestText: packageRequestText,
+    sinkText: packageSinkText,
+    tokens: syntheticTokens,
+  });
+  assert.deepEqual(packageOperationRequests, []);
+  assert.deepEqual(packageBrowserSinkEvents, []);
+  assert.equal(await page.evaluate(() => window.localStorage.length), 0);
+  assert.equal(await page.evaluate(() => window.sessionStorage.length), 0);
+
+  await page.reload({ waitUntil: "networkidle" });
+  await page.waitForSelector('section[aria-label="Local retention workspace"]');
+  operationRequests.length = 0;
+  await installBrowserSinkCapture(page);
+
+  await importFile(
+    page,
+    "Attendance CSV",
     makeFile("attendance.csv", "text/csv", syntheticAttendanceCsv),
   );
   await waitForBodyText(page, "Loaded 3 attendance rows");
   await importFile(
     page,
-    1,
+    "Billing CSV",
     makeFile("billing.csv", "text/csv", syntheticBillingCsv),
   );
   await waitForBodyText(page, "Loaded 2 billing rows");
@@ -300,7 +360,7 @@ try {
 
   await importFile(
     page,
-    2,
+    "Local plaintext backup",
     makeFile("restore.json", "application/json", backupText),
   );
   await waitForBodyText(page, "Restored 2 local snapshots from backup.");
@@ -314,7 +374,7 @@ try {
   };
   await importFile(
     page,
-    2,
+    "Local plaintext backup",
     makeFile(
       "duplicate-restore.json",
       "application/json",
@@ -326,7 +386,7 @@ try {
 
   await importFile(
     page,
-    2,
+    "Local plaintext backup",
     makeFile(
       "overlap-restore.json",
       "application/json",
@@ -339,10 +399,7 @@ try {
   const browserSinkEvents = await readPrivacyEvents(page);
   const requestText = JSON.stringify(operationRequests);
   const sinkText = JSON.stringify(browserSinkEvents);
-  for (const token of syntheticTokens) {
-    assert.equal(requestText.includes(token), false, token);
-    assert.equal(sinkText.includes(token), false, token);
-  }
+  assertNoLeakedTokens({ requestText, sinkText, tokens: syntheticTokens });
   assert.deepEqual(operationRequests, []);
   assert.deepEqual(browserSinkEvents, []);
   assert.equal(await page.evaluate(() => window.localStorage.length), 0);
@@ -354,9 +411,16 @@ try {
         status: "passed",
         url,
         browserExecutablePath,
-        operationRequests,
-        browserSinkEvents,
-        stableSummary,
+        packageFlow: {
+          operationRequests: packageOperationRequests,
+          browserSinkEvents: packageBrowserSinkEvents,
+          stableSummary: packageSummary,
+        },
+        csvFlow: {
+          operationRequests,
+          browserSinkEvents,
+          stableSummary,
+        },
         downloadedBackupBytes: Buffer.byteLength(backupText),
       },
       null,
