@@ -22,6 +22,7 @@ import {
   mergeLocalPackage,
   replaceOverlappingPackageSnapshots,
   replaceOverlappingSnapshots,
+  sameDayVisitKey,
 } from "./retention-local.ts";
 
 const attendanceCsv = `Client,Clinician,Date of service,Location,Status
@@ -99,6 +100,9 @@ test("local imports keep billing and attendance as separate fact tables", () => 
 
   assert.equal(metrics.attendanceRows, 7);
   assert.equal(metrics.billingRows, 5);
+  assert.equal(metrics.rawShowRows, 4);
+  assert.equal(metrics.derivedShowVisits, 3);
+  assert.equal(metrics.collapsedDuplicateShowRows, 1);
   assert.deepEqual(
     metrics.attendanceByClinician.find((row) => row.clinician === "Dr Lane"),
     {
@@ -117,7 +121,7 @@ test("local imports keep billing and attendance as separate fact tables", () => 
     metrics.attendanceByClinician.find((row) => row.clinician === "Dr Moss"),
     {
       clinician: "Dr Moss",
-      shows: 2,
+      shows: 1,
       clientCancelled: 0,
       noShows: 0,
       clinicianCancelled: 1,
@@ -157,7 +161,10 @@ test("retention workspace copy describes saved authenticated history", () => {
   assert.match(source, /saved to authenticated practice storage/);
   assert.match(source, /Billed fees/);
   assert.match(source, /row\.status !== "attendance_only"/);
-  assert.match(source, /attendance-only rows stay in saved history and are hidden here/);
+  assert.match(
+    source,
+    /attendance-only rows stay in saved history and are hidden here/,
+  );
   assert.doesNotMatch(source, /Local-only package workspace/);
 });
 
@@ -193,7 +200,8 @@ CID-active,Dr Moss,2026-03-12,Room B,show`,
   assert.equal(estimate.activeClientsInLatestCompleteMonth, 2);
   assert.equal(
     estimate.estimatedClientsLeavingPerMonth,
-    estimate.activeClientsInLatestCompleteMonth! * estimate.monthlyAttritionRate,
+    estimate.activeClientsInLatestCompleteMonth! *
+      estimate.monthlyAttritionRate,
   );
 });
 
@@ -624,9 +632,13 @@ CID-delta,Dr Moss,2026-10-04,,show`).snapshot;
   assert.match(first.addedRooms[1].notes, /physical room, telehealth label/);
   assert.deepEqual(first.workspace.rooms[0], workspace.rooms[0]);
 
-  const second = mergeImportedLocationRooms(first.workspace, [attendance], () => {
-    throw new Error("no additional IDs should be needed");
-  });
+  const second = mergeImportedLocationRooms(
+    first.workspace,
+    [attendance],
+    () => {
+      throw new Error("no additional IDs should be needed");
+    },
+  );
   assert.equal(second.addedRooms.length, 0);
   assert.equal(second.workspace.rooms.length, 3);
 });
@@ -662,7 +674,11 @@ CID-beta,Dr Lane,2026-10-02,Room C,show`).snapshot;
     ],
   };
 
-  const result = mergeImportedLocationRooms(workspace, [attendance], () => "room-c");
+  const result = mergeImportedLocationRooms(
+    workspace,
+    [attendance],
+    () => "room-c",
+  );
   assert.deepEqual(
     result.addedRooms.map((room) => room.name),
     ["Room C"],
@@ -723,7 +739,7 @@ CID-alpha,Dr Lane,2026-10-01,Room A,show`).snapshot;
   );
 });
 
-test("Practice package preserves same-day legitimate session volume", () => {
+test("Practice package collapses same-day show rows until an extra visit is confirmed", () => {
   const packageData = packageFixture();
   packageData.packageId = "pkg-same-day-synthetic";
   packageData.collections.attendance = {
@@ -779,14 +795,30 @@ test("Practice package preserves same-day legitimate session volume", () => {
   const billing = metrics.billingByClinician.find(
     (row) => row.clinician === "Dr Lane",
   );
-  assert.equal(attendance?.shows, 2);
+  assert.equal(metrics.rawShowRows, 2);
+  assert.equal(metrics.derivedShowVisits, 1);
+  assert.equal(metrics.collapsedDuplicateShowRows, 1);
+  assert.equal(attendance?.shows, 1);
   assert.equal(attendance?.retainedClients, 0);
   assert.equal(attendance?.uniqueActiveClients, 1);
   assert.equal(billing?.billedRows, 2);
   assert.equal(billing?.totalFeesCharged, 300);
+
+  const overrideKey = sameDayVisitKey(parsed.snapshots[0].rows[0]);
+  const confirmed = buildLocalRetentionMetrics(
+    parsed.snapshots,
+    parsed.billingCodeMinutes,
+    { [overrideKey]: 2 },
+  );
+  assert.equal(
+    confirmed.attendanceByClinician.find((row) => row.clinician === "Dr Lane")
+      ?.shows,
+    2,
+  );
+  assert.equal(confirmed.collapsedDuplicateShowRows, 0);
 });
 
-test("same-day duplicate sessions are not collapsed or joined without appointment IDs", () => {
+test("same-day duplicate shows collapse by default but billing line items stay separate", () => {
   const attendance = importAttendanceCsv(attendanceCsv).snapshot;
   const billing = importBillingCsv(billingCsv).snapshot;
   const mossAttendance = buildLocalRetentionMetrics([
@@ -795,14 +827,14 @@ test("same-day duplicate sessions are not collapsed or joined without appointmen
   const mossBilling = buildLocalRetentionMetrics([
     billing,
   ]).billingByClinician.find((row) => row.clinician === "Dr Moss");
-  assert.equal(mossAttendance?.shows, 2);
+  assert.equal(mossAttendance?.shows, 1);
   assert.equal(mossAttendance?.retainedClients, 0);
   assert.equal(mossAttendance?.firstObservedClients, 1);
   assert.equal(mossBilling?.billedRows, 2);
   assert.equal(mossBilling?.totalFeesCharged, 250);
 });
 
-test("same-day repeat shows stay session volume without becoming return retention", () => {
+test("same-day repeat shows collapse without becoming return retention", () => {
   const attendance =
     importAttendanceCsv(`Client,Clinician,Date of service,Location,Status
 CID-same,Dr Lane,2026-10-01,Room A,show
@@ -815,11 +847,56 @@ CID-same,Dr Lane,2026-10-01,Room A,show`).snapshot;
     billing,
   ]).attendanceByClinician.find((row) => row.clinician === "Dr Lane");
 
-  assert.equal(lane?.shows, 2);
+  assert.equal(lane?.shows, 1);
   assert.equal(lane?.uniqueActiveClients, 1);
   assert.equal(lane?.retainedClients, 0);
   assert.equal(lane?.firstObservedClients, 1);
   assert.equal(lane?.immatureClientsExcluded, 0);
+});
+
+test("same-day review preserves mixed statuses and clinician boundaries", () => {
+  const attendance =
+    importAttendanceCsv(`Client,Clinician,Date of service,Location,Status
+CID-same,Dr Lane,2026-10-01,Room A,show
+CID-same,Dr Lane,2026-10-01,Room B,show
+CID-same,Dr Moss,2026-10-01,Room C,show
+CID-same,Dr Lane,2026-10-01,Room A,cancelled`).snapshot;
+  const base = buildLocalRetentionMetrics([attendance]);
+  assert.equal(base.rawShowRows, 3);
+  assert.equal(base.derivedShowVisits, 2);
+  assert.equal(base.collapsedDuplicateShowRows, 1);
+  assert.equal(
+    base.attendanceByClinician.find((row) => row.clinician === "Dr Lane")
+      ?.shows,
+    1,
+  );
+  assert.equal(
+    base.attendanceByClinician.find((row) => row.clinician === "Dr Lane")
+      ?.clientCancelled,
+    1,
+  );
+  assert.equal(
+    base.attendanceByClinician.find((row) => row.clinician === "Dr Moss")
+      ?.shows,
+    1,
+  );
+
+  const laneShow = attendance.rows.find(
+    (row) => row.status === "show" && row.clinician === "Dr Lane",
+  )!;
+  const confirmed = buildLocalRetentionMetrics(
+    [attendance],
+    {},
+    {
+      [sameDayVisitKey(laneShow)]: 2,
+    },
+  );
+  assert.equal(confirmed.derivedShowVisits, 3);
+  assert.equal(
+    confirmed.attendanceByClinician.find((row) => row.clinician === "Dr Lane")
+      ?.shows,
+    2,
+  );
 });
 
 test("unknown status and missing required columns block import", () => {
@@ -893,14 +970,23 @@ test("local backup restore validates and sanitizes exported shape", () => {
     "2026-10-12T00:00:00Z",
   ).snapshot;
   const billing = importBillingCsv(billingCsv, "2026-10-12T00:00:00Z").snapshot;
-  const backup = exportLocalBackup([attendance, billing], {
-    "90837": 53,
-    "90834": 38,
-  });
+  const backup = exportLocalBackup(
+    [attendance, billing],
+    {
+      "90837": 53,
+      "90834": 38,
+    },
+    {
+      "0123456789abcdef": 2,
+    },
+  );
   const restored = importLocalBackup(backup);
 
   assert.deepEqual(restored.snapshots, [attendance, billing]);
   assert.deepEqual(restored.billingCodeMinutes, { "90837": 53, "90834": 38 });
+  assert.deepEqual(restored.sameDayVisitOverrides, {
+    "0123456789abcdef": 2,
+  });
 });
 
 test("local backup restore rejects duplicate same-kind snapshots", () => {
@@ -994,6 +1080,22 @@ test("local backup restore rejects invalid snapshots and billing-code minutes", 
         billingCodeMinutes: { "90837": -5 },
       }),
     /billing-code minutes/,
+  );
+  assert.throws(
+    () =>
+      importLocalBackup({
+        ...backup,
+        sameDayVisitOverrides: { "not-a-stable-key": 2 },
+      }),
+    /same-day visit override keys/,
+  );
+  assert.throws(
+    () =>
+      importLocalBackup({
+        ...backup,
+        sameDayVisitOverrides: { "0123456789abcdef": 1.5 },
+      }),
+    /same-day visit override counts/,
   );
 });
 

@@ -10,11 +10,13 @@ import { ApiError, customFetch } from "@workspace/api-client-react";
 import { Download, ShieldCheck, Upload } from "lucide-react";
 import {
   buildLocalRetentionMetrics,
+  buildSameDayShowReview,
   buildLocalVisitReconciliation,
   exportLocalBackup,
   importLocalPackage,
   type BillingCodeMinutes,
   type LocalSnapshot,
+  type SameDayVisitOverrides,
 } from "@/lib/retention-local";
 
 const money = (value: number) =>
@@ -26,7 +28,9 @@ const sourceCoverage = (
   snapshots: LocalSnapshot[],
   kind: LocalSnapshot["kind"],
 ) => {
-  const sourceSnapshots = snapshots.filter((snapshot) => snapshot.kind === kind);
+  const sourceSnapshots = snapshots.filter(
+    (snapshot) => snapshot.kind === kind,
+  );
   const serviceDates = sourceSnapshots
     .flatMap((snapshot) => snapshot.rows.map((row) => row.serviceDate))
     .sort();
@@ -66,6 +70,7 @@ type PendingLocalSnapshot = {
 type StoredImportHistory = {
   snapshots: LocalSnapshot[];
   billingCodeMinutes: BillingCodeMinutes;
+  sameDayVisitOverrides: SameDayVisitOverrides;
   packages: Array<{
     packageId: string;
     importedAt: string;
@@ -89,6 +94,8 @@ export type LocalRetentionWorkspaceState = {
   setSnapshots: Dispatch<SetStateAction<LocalSnapshot[]>>;
   billingCodeMinutes: BillingCodeMinutes;
   setBillingCodeMinutes: Dispatch<SetStateAction<BillingCodeMinutes>>;
+  sameDayVisitOverrides: SameDayVisitOverrides;
+  setSameDayVisitOverrides: Dispatch<SetStateAction<SameDayVisitOverrides>>;
   codeDraft: CodeDraft;
   setCodeDraft: Dispatch<SetStateAction<CodeDraft>>;
   status: string;
@@ -105,6 +112,8 @@ export function useLocalRetentionWorkspaceState(): LocalRetentionWorkspaceState 
   const [snapshots, setSnapshots] = useState<LocalSnapshot[]>([]);
   const [billingCodeMinutes, setBillingCodeMinutes] =
     useState<BillingCodeMinutes>({});
+  const [sameDayVisitOverrides, setSameDayVisitOverrides] =
+    useState<SameDayVisitOverrides>({});
   const [codeDraft, setCodeDraft] = useState<CodeDraft>({
     code: "",
     minutes: "",
@@ -119,6 +128,8 @@ export function useLocalRetentionWorkspaceState(): LocalRetentionWorkspaceState 
     setSnapshots,
     billingCodeMinutes,
     setBillingCodeMinutes,
+    sameDayVisitOverrides,
+    setSameDayVisitOverrides,
     codeDraft,
     setCodeDraft,
     status,
@@ -187,6 +198,18 @@ async function saveStoredBillingCodeMinutes(
   );
 }
 
+async function saveStoredSameDayVisitOverrides(
+  sameDayVisitOverrides: SameDayVisitOverrides,
+) {
+  return customFetch<StoredImportHistory>(
+    "/api/practice-imports/same-day-visit-overrides",
+    {
+      method: "PUT",
+      body: JSON.stringify({ sameDayVisitOverrides }),
+    },
+  );
+}
+
 export default function LocalRetentionWorkspace({
   workspaceState,
 }: {
@@ -198,6 +221,8 @@ export default function LocalRetentionWorkspace({
     setSnapshots,
     billingCodeMinutes,
     setBillingCodeMinutes,
+    sameDayVisitOverrides,
+    setSameDayVisitOverrides,
     codeDraft,
     setCodeDraft,
     status,
@@ -211,8 +236,17 @@ export default function LocalRetentionWorkspace({
   } = workspaceState ?? ownedState;
   const packageInput = useRef<HTMLInputElement>(null);
   const metrics = useMemo(
-    () => buildLocalRetentionMetrics(snapshots, billingCodeMinutes),
-    [snapshots, billingCodeMinutes],
+    () =>
+      buildLocalRetentionMetrics(
+        snapshots,
+        billingCodeMinutes,
+        sameDayVisitOverrides,
+      ),
+    [snapshots, billingCodeMinutes, sameDayVisitOverrides],
+  );
+  const sameDayReview = useMemo(
+    () => buildSameDayShowReview(snapshots, sameDayVisitOverrides),
+    [snapshots, sameDayVisitOverrides],
   );
   const reconciliation = useMemo(
     () => buildLocalVisitReconciliation(snapshots),
@@ -242,6 +276,7 @@ export default function LocalRetentionWorkspace({
         if (cancelled) return;
         setSnapshots(history.snapshots);
         setBillingCodeMinutes(history.billingCodeMinutes);
+        setSameDayVisitOverrides(history.sameDayVisitOverrides ?? {});
         setStatus(
           history.snapshots.length
             ? `Loaded ${history.snapshots.length} saved converted snapshots from practice storage.`
@@ -262,7 +297,14 @@ export default function LocalRetentionWorkspace({
     return () => {
       cancelled = true;
     };
-  }, [setBillingCodeMinutes, setBusy, setError, setSnapshots, setStatus]);
+  }, [
+    setBillingCodeMinutes,
+    setBusy,
+    setError,
+    setSameDayVisitOverrides,
+    setSnapshots,
+    setStatus,
+  ]);
 
   async function importPackage(file: File | undefined) {
     if (!file) return;
@@ -275,6 +317,7 @@ export default function LocalRetentionWorkspace({
       const saved = await importStoredPackage(packageData);
       setSnapshots(saved.snapshots);
       setBillingCodeMinutes(saved.billingCodeMinutes);
+      setSameDayVisitOverrides(saved.sameDayVisitOverrides ?? {});
       if (saved.status === "duplicate") {
         setStatus(
           `Package ${parsed.packageId} is already loaded. Nothing was added.`,
@@ -332,6 +375,7 @@ export default function LocalRetentionWorkspace({
       .then((saved) => {
         setSnapshots(saved.snapshots);
         setBillingCodeMinutes(saved.billingCodeMinutes);
+        setSameDayVisitOverrides(saved.sameDayVisitOverrides ?? {});
         setStatus(
           `Replaced overlapping converted snapshots with package ${pending.packageId}.`,
         );
@@ -373,9 +417,34 @@ export default function LocalRetentionWorkspace({
     setError("");
   }
 
+  function setSameDayVisitCount(
+    key: string,
+    rawShowRows: number,
+    value: number,
+  ) {
+    const parsed = Number.isFinite(value) ? Math.trunc(value) : 1;
+    const count = Math.min(rawShowRows, Math.max(1, parsed));
+    const next = { ...sameDayVisitOverrides };
+    if (count === 1) delete next[key];
+    else next[key] = count;
+    setSameDayVisitOverrides(next);
+    void saveStoredSameDayVisitOverrides(next)
+      .then((history) => {
+        setSameDayVisitOverrides(history.sameDayVisitOverrides ?? {});
+        setStatus("Updated same-day visit confirmation.");
+      })
+      .catch((cause) =>
+        setError(
+          cause instanceof Error
+            ? cause.message
+            : "Same-day visit confirmation could not be saved.",
+        ),
+      );
+  }
+
   function exportBackup() {
     localDownload(
-      exportLocalBackup(snapshots, billingCodeMinutes),
+      exportLocalBackup(snapshots, billingCodeMinutes, sameDayVisitOverrides),
       "emc-local-retention-backup.json",
     );
     setStatus(
@@ -408,7 +477,9 @@ export default function LocalRetentionWorkspace({
         </span>
         <span>Manual session records are unchanged.</span>
         <span>Billing is charged fees, not collected payments.</span>
-        <span>Room use is recorded Location counts, not exact occupancy hours.</span>
+        <span>
+          Room use is recorded Location counts, not exact occupancy hours.
+        </span>
       </div>
 
       <div className="pw-local-import-grid">
@@ -564,6 +635,15 @@ export default function LocalRetentionWorkspace({
           <span>Attendance rows</span>
           <strong>{metrics.attendanceRows.toLocaleString()}</strong>
         </div>
+        <div title="Derived attended visits after same-day duplicate show rows are collapsed unless a confirmed extra visit is marked below.">
+          <span>Derived attended visits</span>
+          <strong>{metrics.derivedShowVisits.toLocaleString()}</strong>
+          <small>
+            {metrics.collapsedDuplicateShowRows.toLocaleString()} duplicate show{" "}
+            {metrics.collapsedDuplicateShowRows === 1 ? "row" : "rows"}{" "}
+            collapsed
+          </small>
+        </div>
         <div title="Converted billing fact rows with charged fee amounts. These are charges, not collected payments.">
           <span>Billed rows</span>
           <strong>{metrics.billingRows.toLocaleString()}</strong>
@@ -589,13 +669,79 @@ export default function LocalRetentionWorkspace({
         </div>
         <div title="Same stable client ID, clinician, and service date has multiple rows to pair. Rows are kept and need matching review rather than being treated as duplicates.">
           <span>Groups needing matching review</span>
-          <strong>
-            {reconciliation.ambiguousGroups.toLocaleString()}
-          </strong>
+          <strong>{reconciliation.ambiguousGroups.toLocaleString()}</strong>
         </div>
       </div>
 
       <div className="pw-local-tables">
+        <section>
+          <h3>Same-day show review</h3>
+          <p className="pw-note">
+            By default, repeated show rows for the same client, clinician and
+            date count as one attended visit. Only confirm extra visits when
+            there is evidence of a separate second appointment; billing amounts
+            stay unchanged either way.
+          </p>
+          <table>
+            <thead>
+              <tr>
+                <th>Date</th>
+                <th>Clinician</th>
+                <th>Client ID</th>
+                <th>Locations</th>
+                <th>Show rows</th>
+                <th>Count as visits</th>
+                <th>Collapsed</th>
+              </tr>
+            </thead>
+            <tbody>
+              {sameDayReview.slice(0, 50).map((group) => (
+                <tr key={group.key}>
+                  <td>{group.serviceDate}</td>
+                  <td>{group.clinician}</td>
+                  <td>{group.clientId}</td>
+                  <td>{group.locations.join(", ")}</td>
+                  <td>{group.rawShowRows}</td>
+                  <td>
+                    <select
+                      aria-label={`Confirmed visits for ${group.clientId} on ${group.serviceDate}`}
+                      disabled={busy}
+                      value={group.confirmedVisitCount}
+                      onChange={(event) =>
+                        setSameDayVisitCount(
+                          group.key,
+                          group.rawShowRows,
+                          Number(event.target.value),
+                        )
+                      }
+                    >
+                      {Array.from(
+                        { length: group.rawShowRows },
+                        (_, index) => index + 1,
+                      ).map((count) => (
+                        <option value={count} key={count}>
+                          {count}
+                          {count === 1 ? " (default)" : ""}
+                        </option>
+                      ))}
+                    </select>
+                  </td>
+                  <td>
+                    {group.collapsedRows}
+                    {group.overrideApplied ? " (confirmed)" : ""}
+                  </td>
+                </tr>
+              ))}
+              {!sameDayReview.length && (
+                <tr>
+                  <td colSpan={7}>
+                    Repeated same-day show rows will appear here for review.
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </section>
         <section>
           <h3>Matching review</h3>
           <p className="pw-note">
@@ -656,7 +802,7 @@ export default function LocalRetentionWorkspace({
             <thead>
               <tr>
                 <th>Clinician</th>
-                <th>Shows</th>
+                <th>Derived shows</th>
                 <th>Client cancel</th>
                 <th>No-show</th>
                 <th>Clinician cancel</th>
@@ -736,7 +882,7 @@ export default function LocalRetentionWorkspace({
             <thead>
               <tr>
                 <th>Attendance location</th>
-                <th>Shows</th>
+                <th>Derived shows</th>
                 <th>Client cancel</th>
                 <th>No-show</th>
                 <th>Clinician cancel</th>
@@ -754,7 +900,9 @@ export default function LocalRetentionWorkspace({
               ))}
               {!metrics.roomCounts.length && (
                 <tr>
-                  <td colSpan={5}>Imported attendance locations will appear here.</td>
+                  <td colSpan={5}>
+                    Imported attendance locations will appear here.
+                  </td>
                 </tr>
               )}
             </tbody>

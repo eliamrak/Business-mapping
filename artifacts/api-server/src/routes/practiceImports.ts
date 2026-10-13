@@ -62,6 +62,9 @@ const billingCodeMinutesSchema = z
     z.number().finite().min(1).max(1440),
   )
   .default({});
+const sameDayVisitOverridesSchema = z
+  .record(z.string().regex(/^[0-9a-f]{16}$/), z.number().int().min(1).max(20))
+  .default({});
 const attendanceRowSchema = z
   .object({
     clientId: nonEmpty,
@@ -117,6 +120,9 @@ const importBodySchema = z
   .strict();
 const minutesBodySchema = z
   .object({ billingCodeMinutes: billingCodeMinutesSchema })
+  .strict();
+const sameDayVisitOverridesBodySchema = z
+  .object({ sameDayVisitOverrides: sameDayVisitOverridesSchema })
   .strict();
 
 const stableJson = (value: unknown): string => {
@@ -252,6 +258,13 @@ async function historyFor(practiceId: string, accountId: string) {
       (acc, row) => ({
         ...acc,
         ...(row.billingCodeMinutes as Record<string, number>),
+      }),
+      {},
+    ),
+    sameDayVisitOverrides: packages.reduce<Record<string, number>>(
+      (acc, row) => ({
+        ...acc,
+        ...(row.sameDayVisitOverrides as Record<string, number>),
       }),
       {},
     ),
@@ -496,6 +509,39 @@ router.put("/practice-imports/billing-code-minutes", async (req, res) => {
       action: "update-billing-code-minutes",
       actor,
       detail: { codeCount: Object.keys(body.data.billingCodeMinutes).length },
+    });
+  });
+  return res.json(await historyFor(practiceId, accountId));
+});
+
+router.put("/practice-imports/same-day-visit-overrides", async (req, res) => {
+  const body = sameDayVisitOverridesBodySchema.safeParse(req.body);
+  if (!body.success)
+    return res
+      .status(400)
+      .json({ error: "Check the same-day visit overrides." });
+  const { practiceId, accountId, actor } = scope(res);
+  await db.transaction(async (tx) => {
+    await tx
+      .update(practiceImportPackagesTable)
+      .set({ sameDayVisitOverrides: body.data.sameDayVisitOverrides })
+      .where(
+        and(
+          eq(practiceImportPackagesTable.practiceId, practiceId),
+          eq(practiceImportPackagesTable.accountId, accountId),
+          eq(practiceImportPackagesTable.active, 1),
+        ),
+      );
+    await tx.insert(practiceImportAuditTable).values({
+      id: randomUUID(),
+      practiceId,
+      accountId,
+      packageId: "same-day-visit-overrides",
+      action: "update-same-day-visit-overrides",
+      actor,
+      detail: {
+        overrideCount: Object.keys(body.data.sameDayVisitOverrides).length,
+      },
     });
   });
   return res.json(await historyFor(practiceId, accountId));

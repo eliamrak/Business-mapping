@@ -1,6 +1,12 @@
 import { type SessionRecord, rangesOverlap } from "@workspace/practice";
 import type { Context, ImportedBillingActual } from "@workspace/practice/hub";
-import type { AttendanceRow, BillingRow, LocalSnapshot } from "./retention-local";
+import {
+  sameDayVisitKey,
+  type AttendanceRow,
+  type BillingRow,
+  type LocalSnapshot,
+  type SameDayVisitOverrides,
+} from "./retention-local.ts";
 
 export type ImportedSessionDiagnostic = {
   missingClinicianLabels: string[];
@@ -15,6 +21,9 @@ export type ImportedSessionDiagnostic = {
   ambiguousBillingClinicianLabels: string[];
   billedRows: number;
   billedFees: number;
+  rawAttendedRows: number;
+  collapsedDuplicateShowRows: number;
+  sameDayVisitOverrideCount: number;
 };
 
 export type ImportedSessionOverlay = {
@@ -53,6 +62,7 @@ export function buildImportedSessionOverlay(
   context: Context,
   snapshots: LocalSnapshot[],
   teamId: number | null,
+  sameDayVisitOverrides: SameDayVisitOverrides = {},
 ): ImportedSessionOverlay {
   const clinicians = context.clinicians.filter(
     (person) => (person.goalId ?? null) === teamId,
@@ -75,8 +85,9 @@ export function buildImportedSessionOverlay(
   const attendanceCoverage: Array<{ start: string; end: string }> = [];
   const attendedByClinicianDate = new Map<
     string,
-    { clinicianId: number; date: string; rows: AttendanceRow[] }
+    { clinicianId: number; date: string; rows: AttendanceRow[]; visits: number }
   >();
+  const sameDayShowGroups = new Map<string, AttendanceRow[]>();
   const billingActuals: ImportedBillingActual[] = [];
   let excludedNonShowRows = 0;
 
@@ -103,12 +114,18 @@ export function buildImportedSessionOverlay(
         excludedNonShowRows++;
         continue;
       }
+      const sameDayKey = sameDayVisitKey(row);
+      sameDayShowGroups.set(sameDayKey, [
+        ...(sameDayShowGroups.get(sameDayKey) ?? []),
+        row,
+      ]);
       const clinicianId = matches[0].id;
       const key = `${clinicianId}\u0000${row.serviceDate}`;
       const current = attendedByClinicianDate.get(key) ?? {
         clinicianId,
         date: row.serviceDate,
         rows: [],
+        visits: 0,
       };
       current.rows.push(row);
       attendedByClinicianDate.set(key, current);
@@ -141,6 +158,29 @@ export function buildImportedSessionOverlay(
   const attended = [...attendedByClinicianDate.values()].sort(
     (a, b) => a.date.localeCompare(b.date) || a.clinicianId - b.clinicianId,
   );
+  let rawAttendedRows = 0;
+  let collapsedDuplicateShowRows = 0;
+  let sameDayVisitOverrideCount = 0;
+  for (const rows of sameDayShowGroups.values()) {
+    const key = sameDayVisitKey(rows[0]);
+    const override = sameDayVisitOverrides[key];
+    const visits =
+      Number.isInteger(override) && override >= 1
+        ? Math.min(override, rows.length)
+        : 1;
+    rawAttendedRows += rows.length;
+    collapsedDuplicateShowRows += rows.length - visits;
+    if (override !== undefined) sameDayVisitOverrideCount++;
+    const first = rows[0];
+    const matches =
+      cliniciansByLabel.get(normalizeLabel(first.clinician)) ?? [];
+    if (matches.length === 1) {
+      const grouped = attendedByClinicianDate.get(
+        `${matches[0].id}\u0000${first.serviceDate}`,
+      );
+      if (grouped) grouped.visits += visits;
+    }
+  }
   for (const item of attended) {
     const overlappingManual = context.sessions.filter(
       (record) =>
@@ -158,16 +198,17 @@ export function buildImportedSessionOverlay(
         for (const record of overlappingManual) {
           if (!replacedManualIds.has(record.id)) {
             manualImportOverrideCount += record.completed;
-            if (!fullyCovered) manualImportConflictCount += item.rows.length;
+            if (!fullyCovered) manualImportConflictCount += item.visits;
           }
           replacedManualIds.add(record.id);
         }
       } else {
-        manualImportConflictCount += item.rows.length;
+        manualImportConflictCount += item.visits;
         continue;
       }
     }
-    const completed = item.rows.length;
+    const completed = item.visits;
+    if (!completed) continue;
     derivedSessions.push({
       id: dateId(item.clinicianId, item.date, derivedSessions.length),
       clinicianId: item.clinicianId,
@@ -190,7 +231,9 @@ export function buildImportedSessionOverlay(
     context: {
       ...context,
       sessions: [
-        ...context.sessions.filter((record) => !replacedManualIds.has(record.id)),
+        ...context.sessions.filter(
+          (record) => !replacedManualIds.has(record.id),
+        ),
         ...derivedSessions,
       ],
       importedBillingActuals: [
@@ -218,6 +261,9 @@ export function buildImportedSessionOverlay(
         (sum, row) => sum + row.totalFeeCharged,
         0,
       ),
+      rawAttendedRows,
+      collapsedDuplicateShowRows,
+      sameDayVisitOverrideCount,
     },
   };
 }

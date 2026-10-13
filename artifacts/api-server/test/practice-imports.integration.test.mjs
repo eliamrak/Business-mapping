@@ -119,13 +119,12 @@ before(async () => {
   url.pathname = `/${databaseName}`;
   process.env.DATABASE_URL = url.toString();
   execFileSync("psql", [url.toString(), "-v", "ON_ERROR_STOP=1"], {
-    input: readFileSync(
-      new URL(
-        "../../../lib/db/migrations/006_practice_import_history.sql",
-        import.meta.url,
-      ),
-      "utf8",
-    ),
+    input: [
+      "../../../lib/db/migrations/006_practice_import_history.sql",
+      "../../../lib/db/migrations/007_practice_same_day_visit_overrides.sql",
+    ]
+      .map((path) => readFileSync(new URL(path, import.meta.url), "utf8"))
+      .join("\n"),
     stdio: ["pipe", "pipe", "pipe"],
   });
   testClient = new Client({ connectionString: url.toString() });
@@ -317,6 +316,55 @@ test("later backfills skip duplicate collections and add missing counterparts", 
   assert.equal(audit.rows[0].detail.skippedDuplicateSnapshotCount, 1);
   assert.equal(audit.rows[0].detail.attendanceRows, 0);
   assert.equal(audit.rows[0].detail.billingRows, 2);
+});
+
+test("same-day visit confirmations persist across authenticated history reloads", async () => {
+  const imported = await call(
+    "/practice-imports/package",
+    { package: packageFor({ packageId: "pkg-same-day-confirmation" }) },
+    "POST",
+    { practice: "practice-same-day@example.test" },
+  );
+  assert.equal(imported.status, 200, JSON.stringify(imported.data));
+  assert.deepEqual(imported.data.sameDayVisitOverrides, {});
+
+  const saved = await call(
+    "/practice-imports/same-day-visit-overrides",
+    { sameDayVisitOverrides: { "0123456789abcdef": 2 } },
+    "PUT",
+    {
+      actor: "owner-a@example.test",
+      practice: "practice-same-day@example.test",
+    },
+  );
+  assert.equal(saved.status, 200, JSON.stringify(saved.data));
+  assert.deepEqual(saved.data.sameDayVisitOverrides, {
+    "0123456789abcdef": 2,
+  });
+
+  const reloaded = await call("/practice-imports", undefined, "GET", {
+    actor: "owner-b@example.test",
+    practice: "practice-same-day@example.test",
+  });
+  assert.equal(reloaded.status, 200, JSON.stringify(reloaded.data));
+  assert.deepEqual(reloaded.data.sameDayVisitOverrides, {
+    "0123456789abcdef": 2,
+  });
+
+  const isolated = await call("/practice-imports", undefined, "GET", {
+    actor: "owner-c@example.test",
+    practice: "practice-same-day-other@example.test",
+  });
+  assert.equal(isolated.status, 200, JSON.stringify(isolated.data));
+  assert.deepEqual(isolated.data.sameDayVisitOverrides, {});
+
+  const bad = await call(
+    "/practice-imports/same-day-visit-overrides",
+    { sameDayVisitOverrides: { "not-a-stable-key": 2 } },
+    "PUT",
+    { practice: "practice-same-day@example.test" },
+  );
+  assert.equal(bad.status, 400);
 });
 
 test("partial overlap replacement keeps retained package metadata and code minutes", async () => {

@@ -2,7 +2,10 @@ import type { Context, Workspace } from "@workspace/practice/hub";
 import { estimatePracticeAttrition } from "@/lib/session-attrition";
 import type { LocalClientActivityEstimate } from "@/lib/retention-local";
 
-type Setting = "sessionsPerClientMonth" | "retentionMonths" | "baselineRetentionPct";
+type Setting =
+  | "sessionsPerClientMonth"
+  | "retentionMonths"
+  | "baselineRetentionPct";
 
 const rounded = (value: number, places = 1) => {
   const factor = 10 ** places;
@@ -34,7 +37,9 @@ function NumberSetting({
   onUseEstimate?: () => void;
 }) {
   const estimateInUse =
-    estimate !== null && estimate !== undefined && sameEstimate(value, estimate);
+    estimate !== null &&
+    estimate !== undefined &&
+    sameEstimate(value, estimate);
   return (
     <div className="pw-calculation-row">
       <label>
@@ -52,7 +57,12 @@ function NumberSetting({
             }}
             onBlur={(event) => {
               const next = Number(event.currentTarget.value);
-              if (event.currentTarget.value.trim() === "" || !Number.isFinite(next) || next < min || next > max) {
+              if (
+                event.currentTarget.value.trim() === "" ||
+                !Number.isFinite(next) ||
+                next < min ||
+                next > max
+              ) {
                 event.currentTarget.value = String(rounded(value));
               } else if (Math.abs(next - value) > 0.001) {
                 onCommit(next);
@@ -102,8 +112,11 @@ export default function WorkspaceCalculations({
     settings.teamId,
     new Date().toLocaleDateString("en-CA"),
   );
-  const activitySuggestedAttrition = clientActivityEstimate?.monthlyAttritionPct;
-  const suggestedAttrition = rounded(activitySuggestedAttrition ?? observed?.attritionPct ?? lifespanRate);
+  const activitySuggestedAttrition =
+    clientActivityEstimate?.monthlyAttritionPct;
+  const suggestedAttrition = rounded(
+    activitySuggestedAttrition ?? observed?.attritionPct ?? lifespanRate,
+  );
   const suggestionInUse = sameEstimate(attrition, suggestedAttrition);
   const suggestedSessionsPerMonth =
     clientActivityEstimate?.observedAttendedSessionsPerMonth;
@@ -117,15 +130,22 @@ export default function WorkspaceCalculations({
     <section className="pw-calculations" aria-label="Session calculations">
       <header>
         <h2>Calculations</h2>
-        <p>Edit the manual forecast inputs used to estimate client sessions and hiring demand. Import-derived estimates refresh when new packages are saved, but these fields stay manual until you choose Use estimate.</p>
+        <p>
+          Edit the manual forecast inputs used to estimate client sessions and
+          hiring demand. Import-derived estimates refresh when new packages are
+          saved, but these fields stay manual until you choose Use estimate.
+        </p>
       </header>
       {clientActivityEstimate && (
         <div className="pw-client-activity-estimate">
           <div>
             <span>Observed retained client pairs</span>
-            <strong>{clientActivityEstimate.retainedClientPairs.toLocaleString()}</strong>
+            <strong>
+              {clientActivityEstimate.retainedClientPairs.toLocaleString()}
+            </strong>
             <small>
-              A retained pair has a later attended show after its first observed show.
+              A retained pair has a later derived attended visit after its first
+              observed visit.
             </small>
           </div>
           <div>
@@ -136,7 +156,8 @@ export default function WorkspaceCalculations({
           <div>
             <span>Estimated clients leaving / month</span>
             <strong>
-              {estimatedClientsLeaving === null || estimatedClientsLeaving === undefined
+              {estimatedClientsLeaving === null ||
+              estimatedClientsLeaving === undefined
                 ? "--"
                 : rounded(estimatedClientsLeaving).toFixed(1)}
             </strong>
@@ -151,7 +172,7 @@ export default function WorkspaceCalculations({
       <div className="pw-calculation-group">
         <h3>Client activity</h3>
         <NumberSetting
-          label="Average attended sessions per client"
+          label="Average attended visits per client"
           value={settings.sessionsPerClientMonth}
           unit="per month"
           min={0.1}
@@ -159,8 +180,15 @@ export default function WorkspaceCalculations({
           onCommit={(value) => onSetting("sessionsPerClientMonth", value)}
           estimate={suggestedSessionsPerMonth}
           estimateLabel="Retained-pair attendance frequency"
-          onUseEstimate={suggestedSessionsPerMonth === undefined ? undefined : () =>
-            onSetting("sessionsPerClientMonth", rounded(suggestedSessionsPerMonth))}
+          onUseEstimate={
+            suggestedSessionsPerMonth === undefined
+              ? undefined
+              : () =>
+                  onSetting(
+                    "sessionsPerClientMonth",
+                    rounded(suggestedSessionsPerMonth),
+                  )
+          }
         />
         <NumberSetting
           label="Average client lifespan"
@@ -171,16 +199,35 @@ export default function WorkspaceCalculations({
           onCommit={(value) => onSetting("retentionMonths", value)}
           estimate={suggestedRetentionMonths}
           estimateLabel="Observed session count / monthly frequency"
-          onUseEstimate={suggestedRetentionMonths === undefined ? undefined : () =>
-            onSetting("retentionMonths", rounded(suggestedRetentionMonths))}
+          onUseEstimate={
+            suggestedRetentionMonths === undefined
+              ? undefined
+              : () =>
+                  onSetting(
+                    "retentionMonths",
+                    rounded(suggestedRetentionMonths),
+                  )
+          }
         />
-        <p>At this pace, one new client contributes about {rounded(settings.sessionsPerClientMonth * settings.retentionMonths)} attended sessions over the forecast lifespan.</p>
+        <p>
+          At this pace, one new client contributes about{" "}
+          {rounded(settings.sessionsPerClientMonth * settings.retentionMonths)}{" "}
+          attended visits over the forecast lifespan.
+        </p>
         {clientActivityEstimate ? (
           <p>
-            Estimate formula: retained client-clinician pairs only; observed session count is the average attended shows already imported. Monthly frequency is attended shows divided by each retained pair's observed month-equivalent span from first show to last show. Estimated months = count / frequency, and monthly attrition = 1 / months.
+            Estimate formula: retained client-clinician pairs only; observed
+            visit count is the average derived attended visits already imported.
+            Monthly frequency is derived attended visits divided by each
+            retained pair's observed month-equivalent span from first visit to
+            last visit. Estimated months = count / frequency, and monthly
+            attrition = 1 / months.
           </p>
         ) : (
-          <p>Import attendance history with repeat attended clients to calculate retained-client estimates.</p>
+          <p>
+            Import attendance history with repeat attended clients to calculate
+            retained-client estimates.
+          </p>
         )}
       </div>
       <div className="pw-calculation-group">
@@ -197,22 +244,52 @@ export default function WorkspaceCalculations({
           <div>
             <span>Suggested monthly attrition</span>
             <strong>{suggestedAttrition.toFixed(1)}%</strong>
-            <small>{clientActivityEstimate
-              ? `Estimated from retained client activity across ${clientActivityEstimate.coverageStart} to ${clientActivityEstimate.coverageEnd}`
-              : observed
-              ? `Inferred from sessions and new clients across ${observed.months} months, through ${observed.through}`
-              : `Based on your ${settings.retentionMonths}-month average client lifespan`}</small>
+            <small>
+              {clientActivityEstimate
+                ? `Estimated from retained client activity across ${clientActivityEstimate.coverageStart} to ${clientActivityEstimate.coverageEnd}`
+                : observed
+                  ? `Inferred from sessions and new clients across ${observed.months} months, through ${observed.through}`
+                  : `Based on your ${settings.retentionMonths}-month average client lifespan`}
+            </small>
           </div>
-          <button type="button" className="pw-button" disabled={suggestionInUse}
-            onClick={() => onSetting("baselineRetentionPct", 100 - suggestedAttrition)}>
+          <button
+            type="button"
+            className="pw-button"
+            disabled={suggestionInUse}
+            onClick={() =>
+              onSetting("baselineRetentionPct", 100 - suggestedAttrition)
+            }
+          >
             {suggestionInUse ? "Using estimate" : "Use estimate"}
           </button>
         </div>
-        {!clientActivityEstimate && !observed && <p>A session-based suggestion needs retained imported clients or four consecutive months of complete team sessions and booked-client counts.</p>}
-        {observed && !clientActivityEstimate && <p>This is a session-based estimate, not a measured exit count. It assumes each newly booked client contributes {settings.sessionsPerClientMonth} sessions in the booking month.</p>}
+        {!clientActivityEstimate && !observed && (
+          <p>
+            A session-based suggestion needs retained imported clients or four
+            consecutive months of complete team sessions and booked-client
+            counts.
+          </p>
+        )}
+        {observed && !clientActivityEstimate && (
+          <p>
+            This is a session-based estimate, not a measured exit count. It
+            assumes each newly booked client contributes{" "}
+            {settings.sessionsPerClientMonth} sessions in the booking month.
+          </p>
+        )}
         {clientActivityEstimate && (
           <p>
-            This is a planning assumption from attendance patterns, not measured churn or discharge. The estimate does not infer exits from last visit dates; {clientActivityEstimate.rightCensoredClientPairs.toLocaleString()} pair{clientActivityEstimate.rightCensoredClientPairs === 1 ? "" : "s"} are right-censored near the import end, {clientActivityEstimate.leftCensoredClientPairs.toLocaleString()} may have started before imported history, and {clientActivityEstimate.immatureClientPairsExcluded.toLocaleString()} first shows are inside the {14}-day maturity cutoff.
+            This is a planning assumption from attendance patterns, not measured
+            churn or discharge. The estimate does not infer exits from last
+            visit dates;{" "}
+            {clientActivityEstimate.rightCensoredClientPairs.toLocaleString()}{" "}
+            pair
+            {clientActivityEstimate.rightCensoredClientPairs === 1 ? "" : "s"}{" "}
+            are right-censored near the import end,{" "}
+            {clientActivityEstimate.leftCensoredClientPairs.toLocaleString()}{" "}
+            may have started before imported history, and{" "}
+            {clientActivityEstimate.immatureClientPairsExcluded.toLocaleString()}{" "}
+            first shows are inside the {14}-day maturity cutoff.
           </p>
         )}
       </div>

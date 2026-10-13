@@ -52,6 +52,7 @@ export type LocalSnapshot =
     };
 
 export type BillingCodeMinutes = Record<string, number>;
+export type SameDayVisitOverrides = Record<string, number>;
 
 export type ClinicianBillingMetric = {
   clinician: string;
@@ -88,6 +89,9 @@ export type LocalRetentionMetrics = {
   coverageEnd: string | null;
   attendanceRows: number;
   billingRows: number;
+  rawShowRows: number;
+  derivedShowVisits: number;
+  collapsedDuplicateShowRows: number;
   billingByClinician: ClinicianBillingMetric[];
   attendanceByClinician: ClinicianAttendanceMetric[];
   roomCounts: RoomMetric[];
@@ -109,6 +113,19 @@ export type LocalClientActivityEstimate = {
   latestCompleteMonth: string | null;
   activeClientsInLatestCompleteMonth: number | null;
   estimatedClientsLeavingPerMonth: number | null;
+};
+
+export type SameDayShowReviewGroup = {
+  key: string;
+  clientId: string;
+  clinician: string;
+  serviceDate: string;
+  locations: string[];
+  rawShowRows: number;
+  defaultVisitCount: number;
+  confirmedVisitCount: number;
+  collapsedRows: number;
+  overrideApplied: boolean;
 };
 
 export type LocalVisitReconciliationStatus =
@@ -259,6 +276,89 @@ function stableHash(value: string) {
     hash = Math.imul(hash, 16777619);
   }
   return (hash >>> 0).toString(16).padStart(8, "0");
+}
+
+export function sameDayVisitKey(
+  row: Pick<AttendanceRow, "clientId" | "clinician" | "serviceDate">,
+) {
+  return rowHash([
+    "same-day-visit",
+    row.clientId,
+    normalizeClinician(row.clinician),
+    row.serviceDate,
+  ]);
+}
+
+function showRowsBySameDayVisit(snapshots: LocalSnapshot[]) {
+  const groups = new Map<string, AttendanceRow[]>();
+  for (const snapshot of snapshots) {
+    if (snapshot.kind !== "attendance") continue;
+    const seenRows = new Set<string>();
+    for (const row of snapshot.rows) {
+      if (row.status !== "show" || seenRows.has(row.sourceRowHash)) continue;
+      seenRows.add(row.sourceRowHash);
+      const key = sameDayVisitKey(row);
+      groups.set(key, [...(groups.get(key) ?? []), row]);
+    }
+  }
+  return groups;
+}
+
+function resolvedVisitCount(
+  rows: AttendanceRow[],
+  overrides: SameDayVisitOverrides,
+) {
+  const key = rows[0] ? sameDayVisitKey(rows[0]) : "";
+  const override = overrides[key];
+  if (Number.isInteger(override) && override >= 1)
+    return Math.min(override, rows.length);
+  return rows.length ? 1 : 0;
+}
+
+function derivedShowVisits(
+  snapshots: LocalSnapshot[],
+  overrides: SameDayVisitOverrides = {},
+) {
+  const visits: AttendanceRow[] = [];
+  for (const rows of showRowsBySameDayVisit(snapshots).values()) {
+    visits.push(...rows.slice(0, resolvedVisitCount(rows, overrides)));
+  }
+  return visits;
+}
+
+export function buildSameDayShowReview(
+  snapshots: LocalSnapshot[],
+  overrides: SameDayVisitOverrides = {},
+): SameDayShowReviewGroup[] {
+  return [...showRowsBySameDayVisit(snapshots).values()]
+    .filter(
+      (rows) =>
+        rows.length > 1 || overrides[sameDayVisitKey(rows[0])] !== undefined,
+    )
+    .map((rows) => {
+      const key = sameDayVisitKey(rows[0]);
+      const confirmedVisitCount = resolvedVisitCount(rows, overrides);
+      return {
+        key,
+        clientId: rows[0].clientId,
+        clinician: rows[0].clinician,
+        serviceDate: rows[0].serviceDate,
+        locations: [
+          ...new Set(rows.map((row) => row.location || "Unassigned")),
+        ].sort(),
+        rawShowRows: rows.length,
+        defaultVisitCount: 1,
+        confirmedVisitCount,
+        collapsedRows: rows.length - confirmedVisitCount,
+        overrideApplied: overrides[key] !== undefined,
+      };
+    })
+    .sort(
+      (a, b) =>
+        a.serviceDate.localeCompare(b.serviceDate) ||
+        a.clinician.localeCompare(b.clinician) ||
+        a.clientId.localeCompare(b.clientId),
+    );
 }
 
 export function parseCsv(text: string): string[][] {
@@ -727,10 +827,12 @@ function addDays(date: string, days: number) {
 }
 
 function daysBetweenInclusive(start: string, end: string) {
-  return Math.floor(
-    (Date.parse(`${end}T12:00:00Z`) - Date.parse(`${start}T12:00:00Z`)) /
-      isoDay,
-  ) + 1;
+  return (
+    Math.floor(
+      (Date.parse(`${end}T12:00:00Z`) - Date.parse(`${start}T12:00:00Z`)) /
+        isoDay,
+    ) + 1
+  );
 }
 
 function monthStart(month: string) {
@@ -765,11 +867,21 @@ function mergeIntervals(intervals: DateInterval[]) {
   return merged;
 }
 
-function intervalCoversRange(intervals: DateInterval[], start: string, end: string) {
-  return intervals.some((interval) => interval.start <= start && interval.end >= end);
+function intervalCoversRange(
+  intervals: DateInterval[],
+  start: string,
+  end: string,
+) {
+  return intervals.some(
+    (interval) => interval.start <= start && interval.end >= end,
+  );
 }
 
-function coveredDaysInRange(intervals: DateInterval[], start: string, end: string) {
+function coveredDaysInRange(
+  intervals: DateInterval[],
+  start: string,
+  end: string,
+) {
   return intervals.reduce((sum, interval) => {
     const overlapStart = interval.start > start ? interval.start : start;
     const overlapEnd = interval.end < end ? interval.end : end;
@@ -778,7 +890,11 @@ function coveredDaysInRange(intervals: DateInterval[], start: string, end: strin
   }, 0);
 }
 
-function completeCoverageMonths(intervals: DateInterval[], start: string, end: string) {
+function completeCoverageMonths(
+  intervals: DateInterval[],
+  start: string,
+  end: string,
+) {
   const months: string[] = [];
   let month = start.slice(0, 7);
   const last = end.slice(0, 7);
@@ -798,16 +914,15 @@ function completeCoverageMonths(intervals: DateInterval[], start: string, end: s
 
 export function estimateLocalClientActivity(
   snapshots: LocalSnapshot[],
+  sameDayVisitOverrides: SameDayVisitOverrides = {},
   maturityDays = 14,
 ): LocalClientActivityEstimate | null {
-  const shows = snapshots
-    .flatMap((snapshot) => snapshot.kind === "attendance" ? snapshot.rows : [])
-    .filter((row) => row.status === "show")
-    .sort((a, b) =>
+  const shows = derivedShowVisits(snapshots, sameDayVisitOverrides).sort(
+    (a, b) =>
       a.serviceDate.localeCompare(b.serviceDate) ||
       a.clinician.localeCompare(b.clinician) ||
       a.clientId.localeCompare(b.clientId),
-    );
+  );
   if (!shows.length) return null;
   const attendanceSnapshots = snapshots.filter(
     (snapshot): snapshot is Extract<LocalSnapshot, { kind: "attendance" }> =>
@@ -882,7 +997,10 @@ export function estimateLocalClientActivity(
     ? new Set(
         shows
           .filter((row) => row.serviceDate.slice(0, 7) === latestCompleteMonth)
-          .map((row) => `${normalizeClinician(row.clinician)}\u0000${row.clientId}`),
+          .map(
+            (row) =>
+              `${normalizeClinician(row.clinician)}\u0000${row.clientId}`,
+          ),
       ).size
     : null;
   const monthlyAttritionRate = 1 / estimatedMonths;
@@ -911,11 +1029,14 @@ export function estimateLocalClientActivity(
 export function buildLocalRetentionMetrics(
   snapshots: LocalSnapshot[],
   billingCodeMinutes: BillingCodeMinutes = {},
+  sameDayVisitOverrides: SameDayVisitOverrides = {},
   followUpDays = 14,
 ): LocalRetentionMetrics {
   const attendance = snapshots.flatMap((snapshot) =>
     snapshot.kind === "attendance" ? snapshot.rows : [],
   );
+  const derivedShows = derivedShowVisits(snapshots, sameDayVisitOverrides);
+  const rawShowRows = attendance.filter((row) => row.status === "show").length;
   const billing = snapshots.flatMap((snapshot) =>
     snapshot.kind === "billing" ? snapshot.rows : [],
   );
@@ -958,16 +1079,21 @@ export function buildLocalRetentionMetrics(
       immatureClientsExcluded: 0,
     };
     if (row.status === "show") {
-      metric.shows++;
-      const key = `${row.clinician}\u0000${row.clientId}`;
-      showDatesByClinicianClient.set(key, [
-        ...(showDatesByClinicianClient.get(key) ?? []),
-        row.serviceDate,
-      ]);
+      // Count attended volume from de-duplicated same-day visits below.
     } else if (row.status === "cancelled") metric.clientCancelled++;
     else if (row.status === "no show") metric.noShows++;
     else metric.clinicianCancelled++;
     attendanceByClinician.set(row.clinician, metric);
+  }
+  for (const row of derivedShows) {
+    const metric = attendanceByClinician.get(row.clinician);
+    if (!metric) continue;
+    metric.shows++;
+    const key = `${row.clinician}\u0000${row.clientId}`;
+    showDatesByClinicianClient.set(key, [
+      ...(showDatesByClinicianClient.get(key) ?? []),
+      row.serviceDate,
+    ]);
   }
   for (const [key, dates] of showDatesByClinicianClient) {
     const clinician = key.split("\u0000")[0];
@@ -999,10 +1125,25 @@ export function buildLocalRetentionMetrics(
       noShows: 0,
       clinicianCancelled: 0,
     };
-    if (row.status === "show") metric.showRows++;
-    else if (row.status === "cancelled") metric.clientCancelled++;
+    if (row.status === "show") {
+      // Count attended room use from de-duplicated same-day visits below.
+    } else if (row.status === "cancelled") metric.clientCancelled++;
     else if (row.status === "no show") metric.noShows++;
     else metric.clinicianCancelled++;
+    roomCounts.set(location, metric);
+  }
+  for (const row of derivedShows) {
+    const location = row.location || "Unassigned";
+    const metric = roomCounts.get(location) ?? {
+      location,
+      source: "attendance_location" as const,
+      measure: "recorded_session_counts" as const,
+      showRows: 0,
+      clientCancelled: 0,
+      noShows: 0,
+      clinicianCancelled: 0,
+    };
+    metric.showRows++;
     roomCounts.set(location, metric);
   }
   return {
@@ -1010,6 +1151,9 @@ export function buildLocalRetentionMetrics(
     coverageEnd,
     attendanceRows: attendance.length,
     billingRows: billing.length,
+    rawShowRows,
+    derivedShowVisits: derivedShows.length,
+    collapsedDuplicateShowRows: rawShowRows - derivedShows.length,
     billingByClinician: sortByName([...billingByClinician.values()]),
     attendanceByClinician: sortByName([...attendanceByClinician.values()]),
     roomCounts: sortByName([...roomCounts.values()]),
@@ -1077,6 +1221,7 @@ export function mergeImportedLocationRooms<
 export function exportLocalBackup(
   snapshots: LocalSnapshot[],
   billingCodeMinutes: BillingCodeMinutes,
+  sameDayVisitOverrides: SameDayVisitOverrides = {},
 ) {
   return {
     format: "emc-local-retention-v1" as const,
@@ -1085,6 +1230,7 @@ export function exportLocalBackup(
       "Contains local de-identified client IDs and row-level facts. Do not upload to the practice API.",
     snapshots,
     billingCodeMinutes,
+    sameDayVisitOverrides,
   };
 }
 
@@ -1692,6 +1838,30 @@ function validateBackupBillingCodeMinutes(value: unknown): BillingCodeMinutes {
   return validateBillingCodeMinutesValue(value, invalidBackup);
 }
 
+function validateBackupSameDayVisitOverrides(
+  value: unknown,
+): SameDayVisitOverrides {
+  if (value === undefined) return {};
+  if (!isRecord(value))
+    invalidBackup("sameDayVisitOverrides must be an object");
+  const overrides: SameDayVisitOverrides = {};
+  for (const [key, count] of Object.entries(value)) {
+    if (!/^[0-9a-f]{16}$/.test(key))
+      invalidBackup("same-day visit override keys must be stable IDs");
+    if (
+      typeof count !== "number" ||
+      !Number.isInteger(count) ||
+      count < 1 ||
+      count > 20
+    )
+      invalidBackup(
+        "same-day visit override counts must be integers from 1 to 20",
+      );
+    overrides[key] = count;
+  }
+  return overrides;
+}
+
 function validateBackupSnapshotCollection(snapshots: LocalSnapshot[]) {
   for (let index = 0; index < snapshots.length; index++) {
     const snapshot = snapshots[index];
@@ -1725,6 +1895,9 @@ export function importLocalBackup(value: unknown) {
     snapshots,
     billingCodeMinutes: validateBackupBillingCodeMinutes(
       value.billingCodeMinutes,
+    ),
+    sameDayVisitOverrides: validateBackupSameDayVisitOverrides(
+      value.sameDayVisitOverrides,
     ),
   };
 }

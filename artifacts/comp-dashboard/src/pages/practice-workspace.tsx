@@ -90,7 +90,10 @@ import {
   type PracticeView,
 } from "@/lib/practice-projection";
 import { buildImportedSessionOverlay } from "@/lib/import-derived-sessions";
-import { compareOperatingPlans, summarizeOperatingPlan } from "@/lib/operating-plan";
+import {
+  compareOperatingPlans,
+  summarizeOperatingPlan,
+} from "@/lib/operating-plan";
 import { newRecord } from "@/components/hub/config";
 import RecordEditor from "@/components/hub/record-editor";
 import RecordTable from "@/components/hub/record-table";
@@ -107,7 +110,11 @@ import {
   mergeImportedLocationRooms,
 } from "@/lib/retention-local";
 import LeadFlow from "@/components/practice/lead-flow";
-import { applyBulkLeads, planBulkLeads, type LeadBulkChange } from "@/lib/bulk-lead-flow";
+import {
+  applyBulkLeads,
+  planBulkLeads,
+  type LeadBulkChange,
+} from "@/lib/bulk-lead-flow";
 import MoneyFlowToday from "@/components/practice/money-flow-today";
 import WeeklyBlocks from "@/components/practice/weekly-blocks";
 import SandboxView from "@/components/sandbox-view";
@@ -397,17 +404,19 @@ function DraftField({
         onBlur={() => {
           if (
             type === "number" &&
-            (text.trim() &&
-              (!Number.isFinite(Number(text)) ||
+            text.trim() &&
+            (!Number.isFinite(Number(text)) ||
               Number(text) < (min ?? 0) ||
-              Number(text) > (max ?? Infinity)))
+              Number(text) > (max ?? Infinity))
           )
             setText(value == null ? "" : String(value));
-          else if (text !== (value == null ? "" : String(value))) onChange(text);
+          else if (text !== (value == null ? "" : String(value)))
+            onChange(text);
         }}
         onKeyDown={(event) => {
           if (event.key === "Enter") event.currentTarget.blur();
-          if (event.key === "Escape") setText(value == null ? "" : String(value));
+          if (event.key === "Escape")
+            setText(value == null ? "" : String(value));
         }}
       />
     </label>
@@ -558,13 +567,24 @@ export default function PracticeWorkspace() {
             context,
             localRetentionState.snapshots,
             workspace.settings.teamId,
+            localRetentionState.sameDayVisitOverrides,
           )
         : null,
-    [sandbox, context, workspace?.settings.teamId, localRetentionState.snapshots],
+    [
+      sandbox,
+      context,
+      workspace?.settings.teamId,
+      localRetentionState.snapshots,
+      localRetentionState.sameDayVisitOverrides,
+    ],
   );
   const clientActivityEstimate = useMemo(
-    () => estimateLocalClientActivity(localRetentionState.snapshots),
-    [localRetentionState.snapshots],
+    () =>
+      estimateLocalClientActivity(
+        localRetentionState.snapshots,
+        localRetentionState.sameDayVisitOverrides,
+      ),
+    [localRetentionState.snapshots, localRetentionState.sameDayVisitOverrides],
   );
   const modelContext = importedSessionOverlay?.context ?? context;
   const planProjection = useMemo(
@@ -593,7 +613,14 @@ export default function PracticeWorkspace() {
                 today,
               )
             : null,
-    [sandbox, practiceView, planProjection, forecastWorkspace, modelContext, today],
+    [
+      sandbox,
+      practiceView,
+      planProjection,
+      forecastWorkspace,
+      modelContext,
+      today,
+    ],
   );
   const savedMonths = useMemo(
     () =>
@@ -616,13 +643,25 @@ export default function PracticeWorkspace() {
     return sandbox
       ? forecast(next, modelContext)
       : buildPracticeProjection(next, modelContext, practiceView, today).months;
-  }, [stagedValidation, modelContext, teams.data, sandbox, practiceView, today]);
+  }, [
+    stagedValidation,
+    modelContext,
+    teams.data,
+    sandbox,
+    practiceView,
+    today,
+  ]);
   const months = stagedValidation?.success ? stagedMonths : savedMonths;
-  const summaryMonth = months.find((month) => month.date === summaryMonthDate) ?? months[0];
+  const summaryMonth =
+    months.find((month) => month.date === summaryMonthDate) ?? months[0];
   const moneyFlowWorkspace = useMemo(
     () =>
       stagedValidation?.success && modelContext
-        ? resolveWorkspaceDefaults(stagedValidation.data, modelContext, teams.data).forecastWorkspace
+        ? resolveWorkspaceDefaults(
+            stagedValidation.data,
+            modelContext,
+            teams.data,
+          ).forecastWorkspace
         : forecastWorkspace,
     [stagedValidation, modelContext, teams.data, forecastWorkspace],
   );
@@ -1023,23 +1062,41 @@ export default function PracticeWorkspace() {
     setStagedLabels((prior) => ({ ...prior, settings: label }));
     setReviewStaged(false);
   }
-  function stageFunnelPatch(id: string, patch: Partial<Workspace["funnels"][number]>) {
+  function stageFunnelPatch(
+    id: string,
+    patch: Partial<Workspace["funnels"][number]>,
+  ) {
     if (!workspace) return;
     setStagedWorkspace((prior) => {
       const current = prior ?? workspace;
-      const funnels = current.funnels.map((row) => row.id === id ? { ...row, ...patch } : row);
+      const funnels = current.funnels.map((row) =>
+        row.id === id ? { ...row, ...patch } : row,
+      );
       const changed = funnels.find((row) => row.id === id);
       return {
         ...current,
         funnels,
-        periods: changed ? current.periods.map((period) => period.id === changed.periodId
-          ? { ...period, funnelComplete: changed.scope === "practice" &&
-              changed.leads !== null && changed.scheduled !== null &&
-              changed.attended !== null && changed.clients !== null }
-          : period) : current.periods,
+        periods: changed
+          ? current.periods.map((period) =>
+              period.id === changed.periodId
+                ? {
+                    ...period,
+                    funnelComplete:
+                      changed.scope === "practice" &&
+                      changed.leads !== null &&
+                      changed.scheduled !== null &&
+                      changed.attended !== null &&
+                      changed.clients !== null,
+                  }
+                : period,
+            )
+          : current.periods,
       };
     });
-    setStagedLabels((prior) => ({ ...prior, ["funnels:" + id]: "Lead flow result" }));
+    setStagedLabels((prior) => ({
+      ...prior,
+      ["funnels:" + id]: "Lead flow result",
+    }));
     setReviewStaged(false);
   }
   function stageFunnelRemove(id: string) {
@@ -1050,29 +1107,55 @@ export default function PracticeWorkspace() {
       return {
         ...current,
         funnels: current.funnels.filter((row) => row.id !== id),
-        periods: removed ? current.periods.map((period) => period.id === removed.periodId
-          ? { ...period, funnelComplete: false }
-          : period) : current.periods,
+        periods: removed
+          ? current.periods.map((period) =>
+              period.id === removed.periodId
+                ? { ...period, funnelComplete: false }
+                : period,
+            )
+          : current.periods,
       };
     });
-    setStagedLabels((prior) => ({ ...prior, ["funnels:" + id]: "Removed lead flow result" }));
+    setStagedLabels((prior) => ({
+      ...prior,
+      ["funnels:" + id]: "Removed lead flow result",
+    }));
     setReviewStaged(false);
   }
   async function saveLeadEntry(
     month: string,
-    entry: Pick<Workspace["funnels"][number], "scope" | "campaignId" | "sourceName" | "clinicianId" | "leads" | "scheduled" | "attended" | "clients">,
+    entry: Pick<
+      Workspace["funnels"][number],
+      | "scope"
+      | "campaignId"
+      | "sourceName"
+      | "clinicianId"
+      | "leads"
+      | "scheduled"
+      | "attended"
+      | "clients"
+    >,
     replacePracticeId?: string,
   ) {
     if (!workspace) throw new Error("Practice data is still loading.");
     const current = stagedWorkspace ?? workspace;
     const start = `${month}-01`;
-    const end = new Date(Date.UTC(Number(month.slice(0, 4)), Number(month.slice(5)), 0))
-      .toISOString().slice(0, 10);
-    const period = current.periods.find((item) => !item.archived && item.start === start && item.end === end) ??
+    const end = new Date(
+      Date.UTC(Number(month.slice(0, 4)), Number(month.slice(5)), 0),
+    )
+      .toISOString()
+      .slice(0, 10);
+    const period =
+      current.periods.find(
+        (item) => !item.archived && item.start === start && item.end === end,
+      ) ??
       periodSchema.parse({
         id: crypto.randomUUID(),
-        name: new Intl.DateTimeFormat("en-US", { month: "long", year: "numeric", timeZone: "UTC" })
-          .format(new Date(`${start}T12:00:00Z`)),
+        name: new Intl.DateTimeFormat("en-US", {
+          month: "long",
+          year: "numeric",
+          timeZone: "UTC",
+        }).format(new Date(`${start}T12:00:00Z`)),
         start,
         end,
       });
@@ -1083,46 +1166,77 @@ export default function PracticeWorkspace() {
       spend: null,
       firstSessions: null,
     });
-    const completed = entry.scope === "practice" &&
-      entry.leads !== null && entry.scheduled !== null &&
-      entry.attended !== null && entry.clients !== null;
-    await persist({
-      ...current,
-      periods: current.periods.some((item) => item.id === period.id)
-        ? current.periods.map((item) => item.id === period.id
-            ? { ...item, funnelComplete: completed }
-            : item)
-        : [...current.periods, { ...period, funnelComplete: completed }],
-      funnels: [...current.funnels.filter((row) =>
-        row.id !== replacePracticeId || row.periodId !== period.id || row.scope !== "practice",
-      ), result],
-    }, "Recorded monthly lead flow");
+    const completed =
+      entry.scope === "practice" &&
+      entry.leads !== null &&
+      entry.scheduled !== null &&
+      entry.attended !== null &&
+      entry.clients !== null;
+    await persist(
+      {
+        ...current,
+        periods: current.periods.some((item) => item.id === period.id)
+          ? current.periods.map((item) =>
+              item.id === period.id
+                ? { ...item, funnelComplete: completed }
+                : item,
+            )
+          : [...current.periods, { ...period, funnelComplete: completed }],
+        funnels: [
+          ...current.funnels.filter(
+            (row) =>
+              row.id !== replacePracticeId ||
+              row.periodId !== period.id ||
+              row.scope !== "practice",
+          ),
+          result,
+        ],
+      },
+      "Recorded monthly lead flow",
+    );
     setStagedWorkspace(null);
     setStagedLabels({});
     setReviewStaged(false);
   }
   async function saveBulkLeadEntries(changes: LeadBulkChange[]) {
     if (!workspace) throw new Error("Practice data is still loading.");
-    if (stagedWorkspace) throw new Error("Save or discard pending edits before saving monthly totals.");
-    const overrides = Object.fromEntries(changes.flatMap((change) =>
-      (["leads", "scheduled", "attended", "clients"] as const).map((field) =>
-        [`${change.month}:${field}`, change[field] === null ? "" : String(change[field])],
+    if (stagedWorkspace)
+      throw new Error(
+        "Save or discard pending edits before saving monthly totals.",
+      );
+    const overrides = Object.fromEntries(
+      changes.flatMap((change) =>
+        (["leads", "scheduled", "attended", "clients"] as const).map(
+          (field) => [
+            `${change.month}:${field}`,
+            change[field] === null ? "" : String(change[field]),
+          ],
+        ),
       ),
-    ));
+    );
     const checked = planBulkLeads(workspace, overrides);
     if (checked.issues.length || checked.changes.length !== changes.length)
-      throw new Error(checked.issues[0]?.message ?? "The monthly totals changed. Review the grid and try again.");
-    await persist(applyBulkLeads(workspace, checked.changes), "Recorded monthly lead flow");
+      throw new Error(
+        checked.issues[0]?.message ??
+          "The monthly totals changed. Review the grid and try again.",
+      );
+    await persist(
+      applyBulkLeads(workspace, checked.changes),
+      "Recorded monthly lead flow",
+    );
   }
   async function completeLeadMonth(periodId: string) {
     if (!workspace) return;
     const current = stagedWorkspace ?? workspace;
-    await persist({
-      ...current,
-      periods: current.periods.map((period) => period.id === periodId
-        ? { ...period, funnelComplete: true }
-        : period),
-    }, "Completed monthly lead flow");
+    await persist(
+      {
+        ...current,
+        periods: current.periods.map((period) =>
+          period.id === periodId ? { ...period, funnelComplete: true } : period,
+        ),
+      },
+      "Completed monthly lead flow",
+    );
     setStagedWorkspace(null);
     setStagedLabels({});
     setReviewStaged(false);
@@ -1142,16 +1256,18 @@ export default function PracticeWorkspace() {
     ] as const;
     const existing = current.allocations.some((item) => !item.archived)
       ? current.allocations
-      : defaults.filter(([, , share]) => share > 0).map(([label, purpose, share]) =>
-          allocationSchema.parse({
-            id: crypto.randomUUID(),
-            name: label,
-            kind: purpose,
-            percent: share,
-            start,
-            household: purpose === "distribution",
-          }),
-        );
+      : defaults
+          .filter(([, , share]) => share > 0)
+          .map(([label, purpose, share]) =>
+            allocationSchema.parse({
+              id: crypto.randomUUID(),
+              name: label,
+              kind: purpose,
+              percent: share,
+              start,
+              household: purpose === "distribution",
+            }),
+          );
     const record = allocationSchema.parse({
       id: crypto.randomUUID(),
       name,
@@ -1298,10 +1414,11 @@ export default function PracticeWorkspace() {
       const record = clinicianSettingSchema.parse({
         id: crypto.randomUUID(),
         clinicianId: person.id,
-        start: context?.sessions
-          .filter((item) => item.clinicianId === person.id)
-          .map((item) => item.start)
-          .sort()[0] ?? today,
+        start:
+          context?.sessions
+            .filter((item) => item.clinicianId === person.id)
+            .map((item) => item.start)
+            .sort()[0] ?? today,
         desiredWeeklySessions: person.sessionsPerWeek,
         expectedSessionRevenue: rate,
       });
@@ -1311,7 +1428,8 @@ export default function PracticeWorkspace() {
       });
       setStagedLabels((prior) => ({
         ...prior,
-        ["clinicians:" + record.id]: person.label + " expected average session revenue",
+        ["clinicians:" + record.id]:
+          person.label + " expected average session revenue",
       }));
       setReviewStaged(false);
       return;
@@ -1342,7 +1460,12 @@ export default function PracticeWorkspace() {
       (row) => row.clinicianId === person.id && row.effectiveDate === start,
     );
     if (existing) {
-      stageRecord("terms", existing.id, termPatch, person.label + " dated money flow inputs");
+      stageRecord(
+        "terms",
+        existing.id,
+        termPatch,
+        person.label + " dated money flow inputs",
+      );
       return;
     }
     const record = termSchema.parse({
@@ -1510,7 +1633,8 @@ export default function PracticeWorkspace() {
     patch: Partial<Context["staff"][number]>,
     options?: { year: number; effectiveDate: string | null },
   ) {
-    if (busy.current) throw new Error("A save is in progress. Please retry this change.");
+    if (busy.current)
+      throw new Error("A save is in progress. Please retry this change.");
     if (workspace && options && member.id) {
       const effectiveDate = options.effectiveDate ?? `${options.year}-01-01`;
       const end = options.effectiveDate ? null : `${options.year}-12-31`;
@@ -1520,12 +1644,18 @@ export default function PracticeWorkspace() {
           term.effectiveDate === effectiveDate &&
           (term.end ?? null) === end,
       );
-      const valueFor = <K extends "annualSalary" | "hourlyRate" | "hoursPerWeek" | "weeksPerYear">(
+      const valueFor = <
+        K extends
+          | "annualSalary"
+          | "hourlyRate"
+          | "hoursPerWeek"
+          | "weeksPerYear",
+      >(
         key: K,
       ) =>
         Object.prototype.hasOwnProperty.call(patch, key)
           ? patch[key]
-          : existing?.[key] ?? null;
+          : (existing?.[key] ?? null);
       const nextTerm = staffTermSchema.parse({
         id: existing?.id ?? crypto.randomUUID(),
         staffMemberId: member.id,
@@ -1565,11 +1695,20 @@ export default function PracticeWorkspace() {
     busy.current = true;
     setSaving(true);
     try {
-      await customFetch("/api/staff/" + member.id, { method: "PATCH", body: JSON.stringify(patch) });
-      cache.setQueryData<Context>(["hub-context"], (old) => old ? {
-        ...old,
-        staff: old.staff.map((row) => row.id === member.id ? { ...row, ...patch } : row),
-      } : old);
+      await customFetch("/api/staff/" + member.id, {
+        method: "PATCH",
+        body: JSON.stringify(patch),
+      });
+      cache.setQueryData<Context>(["hub-context"], (old) =>
+        old
+          ? {
+              ...old,
+              staff: old.staff.map((row) =>
+                row.id === member.id ? { ...row, ...patch } : row,
+              ),
+            }
+          : old,
+      );
       void cache.invalidateQueries({ queryKey: ["/api/staff"] });
       setMessage("Saved to Today");
     } finally {
@@ -2115,13 +2254,18 @@ export default function PracticeWorkspace() {
     fillHorizonMonths,
     today,
   );
-  const baselineOperatingPlan = base ? summarizeOperatingPlan(
-    base.workspace,
-    baselineMonths.find((month) => month.date === summaryMonth?.date),
-    fillHorizonMonths,
-    today,
-  ) : null;
-  const scenarioDelta = compareOperatingPlans(baselineOperatingPlan, operatingPlan);
+  const baselineOperatingPlan = base
+    ? summarizeOperatingPlan(
+        base.workspace,
+        baselineMonths.find((month) => month.date === summaryMonth?.date),
+        fillHorizonMonths,
+        today,
+      )
+    : null;
+  const scenarioDelta = compareOperatingPlans(
+    baselineOperatingPlan,
+    operatingPlan,
+  );
   const table = (collection: Collection) => (
     <RecordTable
       collection={collection}
@@ -2290,16 +2434,16 @@ export default function PracticeWorkspace() {
                     <RotateCcw />
                   </button>
                   {isTransferSection(section) && (
-                      <button
-                        className="pw-button"
-                        onClick={() => {
-                          setTransferSection(section);
-                          setTransferOpen(true);
-                        }}
-                      >
-                        <Download /> Move data
-                      </button>
-                    )}
+                    <button
+                      className="pw-button"
+                      onClick={() => {
+                        setTransferSection(section);
+                        setTransferOpen(true);
+                      }}
+                    >
+                      <Download /> Move data
+                    </button>
+                  )}
                   {mode === "sandbox" && (
                     <>
                       <button
@@ -2336,16 +2480,16 @@ export default function PracticeWorkspace() {
             ) : mode === "practice" ? (
               <>
                 {isTransferSection(section) && (
-                    <button
-                      className="pw-button"
-                      onClick={() => {
-                        setTransferSection(section);
-                        setTransferOpen(true);
-                      }}
-                    >
-                      <Download /> Move data
-                    </button>
-                  )}
+                  <button
+                    className="pw-button"
+                    onClick={() => {
+                      setTransferSection(section);
+                      setTransferOpen(true);
+                    }}
+                  >
+                    <Download /> Move data
+                  </button>
+                )}
                 <button className="pw-button" onClick={startPlanning}>
                   <Flag /> New scenario
                 </button>
@@ -2695,18 +2839,32 @@ export default function PracticeWorkspace() {
                               }
                             />
                             <NumberField
-                              label={person.label + " expected average revenue per completed session"}
+                              label={
+                                person.label +
+                                " expected average revenue per completed session"
+                              }
                               caption="Avg. earned / session"
-                              value={setting?.expectedSessionRevenue ?? person.sessionRate}
+                              value={
+                                setting?.expectedSessionRevenue ??
+                                person.sessionRate
+                              }
                               unit="$"
-                              onSave={async (rate) => stageClinicianAverageRate(person, rate)}
+                              onSave={async (rate) =>
+                                stageClinicianAverageRate(person, rate)
+                              }
                             />
                           </div>
-                          {setting?.expectedSessionRevenue !== null && setting?.expectedSessionRevenue !== undefined && (
-                            <button className="pw-text-button" onClick={() => stageClinicianAverageRate(person, null)}>
-                              Use listed session fee for estimate
-                            </button>
-                          )}
+                          {setting?.expectedSessionRevenue !== null &&
+                            setting?.expectedSessionRevenue !== undefined && (
+                              <button
+                                className="pw-text-button"
+                                onClick={() =>
+                                  stageClinicianAverageRate(person, null)
+                                }
+                              >
+                                Use listed session fee for estimate
+                              </button>
+                            )}
                           <div className="pw-pay-structure">
                             <span>Clinician / practice split</span>
                             <strong>
@@ -3019,20 +3177,28 @@ export default function PracticeWorkspace() {
                     importedSessionOverlay.derivedSessions.length > 0 && (
                       <p className="pw-note">
                         Saved imports are contributing{" "}
-                        {importedSessionOverlay.diagnostic.attendedRows.toLocaleString()}{" "}
-                        attended rows and{" "}
+                        {importedSessionOverlay.diagnostic.rawAttendedRows.toLocaleString()}{" "}
+                        attended rows,{" "}
+                        {(
+                          importedSessionOverlay.diagnostic.rawAttendedRows -
+                          importedSessionOverlay.diagnostic
+                            .collapsedDuplicateShowRows
+                        ).toLocaleString()}{" "}
+                        derived attended visits, and{" "}
                         {importedSessionOverlay.diagnostic.billedRows.toLocaleString()}{" "}
                         billed rows to projections. Fully covered imported
                         attendance replaces{" "}
                         {importedSessionOverlay.diagnostic.manualImportOverrideCount.toLocaleString()}{" "}
                         manual completed session
-                        {importedSessionOverlay.diagnostic.manualImportOverrideCount === 1
+                        {importedSessionOverlay.diagnostic
+                          .manualImportOverrideCount === 1
                           ? ""
                           : "s"}{" "}
                         in this view;{" "}
                         {importedSessionOverlay.diagnostic.manualImportConflictCount.toLocaleString()}{" "}
                         partial-overlap imported row
-                        {importedSessionOverlay.diagnostic.manualImportConflictCount === 1
+                        {importedSessionOverlay.diagnostic
+                          .manualImportConflictCount === 1
                           ? ""
                           : "s"}{" "}
                         replaced stale aggregate manual totals for covered
@@ -3041,14 +3207,18 @@ export default function PracticeWorkspace() {
                       </p>
                     )}
                   {importedSessionOverlay &&
-                    (importedSessionOverlay.diagnostic.missingClinicianLabels.length > 0 ||
-                      importedSessionOverlay.diagnostic.ambiguousClinicianLabels.length > 0) && (
+                    (importedSessionOverlay.diagnostic.missingClinicianLabels
+                      .length > 0 ||
+                      importedSessionOverlay.diagnostic.ambiguousClinicianLabels
+                        .length > 0) && (
                       <p className="pw-error" role="alert">
                         Some imported attendance rows are excluded from
                         projections because clinician labels do not map cleanly:{" "}
                         {[
-                          ...importedSessionOverlay.diagnostic.missingClinicianLabels,
-                          ...importedSessionOverlay.diagnostic.ambiguousClinicianLabels,
+                          ...importedSessionOverlay.diagnostic
+                            .missingClinicianLabels,
+                          ...importedSessionOverlay.diagnostic
+                            .ambiguousClinicianLabels,
                         ].join(", ")}
                         .
                       </p>
@@ -3074,16 +3244,17 @@ export default function PracticeWorkspace() {
               )}
               {section === "retention" && (
                 <>
-                  <LocalRetentionWorkspace workspaceState={localRetentionState} />
+                  <LocalRetentionWorkspace
+                    workspaceState={localRetentionState}
+                  />
                   <div id="retention-calculations">
                     <WorkspaceCalculations
                       workspace={workingWorkspace}
                       context={modelContext ?? context}
                       clientActivityEstimate={clientActivityEstimate}
-                      onSetting={(key, value) => stageSettings(
-                        { [key]: value },
-                        "Session calculations",
-                      )}
+                      onSetting={(key, value) =>
+                        stageSettings({ [key]: value }, "Session calculations")
+                      }
                     />
                   </div>
                 </>
@@ -3095,36 +3266,40 @@ export default function PracticeWorkspace() {
                     marketingTab === "campaigns"
                       ? "Ad spend drives lead estimates. Service costs complete the marketing total."
                       : "Monthly leads, consults, and new clients.",
-                    marketingTab === "campaigns" ? <button
+                    marketingTab === "campaigns" ? (
+                      <button
                         className="pw-button"
                         onClick={() => stageNew("campaigns")}
                       >
                         <Plus />
                         Add campaign
-                      </button> : undefined,
+                      </button>
+                    ) : undefined,
                   )}
-                  {marketingTab === "campaigns" && <div
-                    className="pw-marketing-breakdown"
-                    aria-label="Estimated marketing costs"
-                  >
-                    <div>
-                      <span>Ad spend / month</span>
-                      <strong>{money(months[0]?.values.adSpend)}</strong>
+                  {marketingTab === "campaigns" && (
+                    <div
+                      className="pw-marketing-breakdown"
+                      aria-label="Estimated marketing costs"
+                    >
+                      <div>
+                        <span>Ad spend / month</span>
+                        <strong>{money(months[0]?.values.adSpend)}</strong>
+                      </div>
+                      <div>
+                        <span>Services &amp; campaign costs</span>
+                        <strong>
+                          {money(
+                            (months[0]?.values.marketing ?? 0) -
+                              (months[0]?.values.adSpend ?? 0),
+                          )}
+                        </strong>
+                      </div>
+                      <div>
+                        <span>Total marketing cost</span>
+                        <strong>{money(months[0]?.values.marketing)}</strong>
+                      </div>
                     </div>
-                    <div>
-                      <span>Services &amp; campaign costs</span>
-                      <strong>
-                        {money(
-                          (months[0]?.values.marketing ?? 0) -
-                            (months[0]?.values.adSpend ?? 0),
-                        )}
-                      </strong>
-                    </div>
-                    <div>
-                      <span>Total marketing cost</span>
-                      <strong>{money(months[0]?.values.marketing)}</strong>
-                    </div>
-                  </div>}
+                  )}
                   {marketingTab === "campaigns" && (
                     <p className="pw-note">
                       Count agency fees and retainers either inside a campaign
@@ -3194,7 +3369,8 @@ export default function PracticeWorkspace() {
                                     "campaigns",
                                     c.id,
                                     { method: event.target.value || null },
-                                    displayName(c.name, "Campaign") + " estimate method",
+                                    displayName(c.name, "Campaign") +
+                                      " estimate method",
                                   )
                                 }
                               >
@@ -3235,7 +3411,8 @@ export default function PracticeWorkspace() {
                                   "campaigns",
                                   c.id,
                                   { otherMonthlyCost: optionalNumber(value) },
-                                  displayName(c.name, "Campaign") + " support cost",
+                                  displayName(c.name, "Campaign") +
+                                    " support cost",
                                 )
                               }
                             />
@@ -3249,7 +3426,8 @@ export default function PracticeWorkspace() {
                                     "campaigns",
                                     c.id,
                                     { cpl: optionalNumber(value) },
-                                    displayName(c.name, "Campaign") + " cost per lead",
+                                    displayName(c.name, "Campaign") +
+                                      " cost per lead",
                                   )
                                 }
                               />
@@ -3264,7 +3442,8 @@ export default function PracticeWorkspace() {
                                     "campaigns",
                                     c.id,
                                     { cac: optionalNumber(value) },
-                                    displayName(c.name, "Campaign") + " cost per client",
+                                    displayName(c.name, "Campaign") +
+                                      " cost per client",
                                   )
                                 }
                               />
@@ -3279,7 +3458,8 @@ export default function PracticeWorkspace() {
                                   "campaigns",
                                   c.id,
                                   { consultationPct: optionalNumber(value) },
-                                  displayName(c.name, "Campaign") + " consultation rate",
+                                  displayName(c.name, "Campaign") +
+                                    " consultation rate",
                                 )
                               }
                             />
@@ -3293,7 +3473,8 @@ export default function PracticeWorkspace() {
                                   "campaigns",
                                   c.id,
                                   { attendancePct: optionalNumber(value) },
-                                  displayName(c.name, "Campaign") + " attendance rate",
+                                  displayName(c.name, "Campaign") +
+                                    " attendance rate",
                                 )
                               }
                             />
@@ -3307,7 +3488,8 @@ export default function PracticeWorkspace() {
                                   "campaigns",
                                   c.id,
                                   { closePct: optionalNumber(value) },
-                                  displayName(c.name, "Campaign") + " close rate",
+                                  displayName(c.name, "Campaign") +
+                                    " close rate",
                                 )
                               }
                             />
@@ -3320,7 +3502,8 @@ export default function PracticeWorkspace() {
                                   "campaigns",
                                   c.id,
                                   { start: value || null },
-                                  displayName(c.name, "Campaign") + " start date",
+                                  displayName(c.name, "Campaign") +
+                                    " start date",
                                 )
                               }
                             />
@@ -3482,7 +3665,11 @@ export default function PracticeWorkspace() {
                       context={context}
                       readOnly={sandbox}
                       pending={!!stagedWorkspace}
-                      canSave={!!stagedValidation?.success && !!stagedDifferences.length && !saving}
+                      canSave={
+                        !!stagedValidation?.success &&
+                        !!stagedDifferences.length &&
+                        !saving
+                      }
                       onSaveEntry={saveLeadEntry}
                       onSaveBulk={saveBulkLeadEntries}
                       onCompleteMonth={completeLeadMonth}
@@ -3491,22 +3678,25 @@ export default function PracticeWorkspace() {
                       onSave={() => void commitStaged()}
                       onOpenPeriods={() => setDetail("periods")}
                       onEditDetails={(row) => edit("funnels", row)}
-                      onAddCorrection={(periodId) => edit("funnels", {
-                        ...newRecord("funnels", workspace, today),
-                        periodId,
-                      })}
+                      onAddCorrection={(periodId) =>
+                        edit("funnels", {
+                          ...newRecord("funnels", workspace, today),
+                          periodId,
+                        })
+                      }
                     />
                   )}
-                  {marketingTab === "campaigns" && !active(workspace.campaigns).length && (
-                    <div className="pw-empty">
-                      <ChartNoAxesCombined />
-                      <h3>No lead sources set up yet</h3>
-                      <p>
-                        Add Google Ads, Meta, referrals, or another source to
-                        estimate leads and record results in one place.
-                      </p>
-                    </div>
-                  )}
+                  {marketingTab === "campaigns" &&
+                    !active(workspace.campaigns).length && (
+                      <div className="pw-empty">
+                        <ChartNoAxesCombined />
+                        <h3>No lead sources set up yet</h3>
+                        <p>
+                          Add Google Ads, Meta, referrals, or another source to
+                          estimate leads and record results in one place.
+                        </p>
+                      </div>
+                    )}
                 </>
               )}
               {section === "rooms" && (
@@ -4314,37 +4504,87 @@ export default function PracticeWorkspace() {
               )}
               {section === "money" && mode === "practice" && (
                 <MoneyFlowToday
-                  workspace={stagedWorkspace && !stagedValidation?.success
-                    ? workingWorkspace
-                    : moneyFlowWorkspace ?? workingWorkspace}
+                  workspace={
+                    stagedWorkspace && !stagedValidation?.success
+                      ? workingWorkspace
+                      : (moneyFlowWorkspace ?? workingWorkspace)
+                  }
                   context={modelContext ?? context}
                   today={today}
-                  onPayeeChange={(id) => stageSettings({
-                    familyW2ClinicianId: id,
-                    ...(id !== null ? {
-                      ownerPayrollOverride: true,
-                      ...(resolved?.inherited.ownerPay ? { ownerPayrollMonthly: 0 } : {}),
-                    } : {}),
-                  }, "Family W2 pay")}
-                  onAllocationPercent={(id, percent) => stageRecord("allocations", id, { percent }, "Fund allocation")}
-                  onDefaultAllocationPercent={(key, percent) => stageSettings({ [key]: percent }, "Fund allocation")}
+                  onPayeeChange={(id) =>
+                    stageSettings(
+                      {
+                        familyW2ClinicianId: id,
+                        ...(id !== null
+                          ? {
+                              ownerPayrollOverride: true,
+                              ...(resolved?.inherited.ownerPay
+                                ? { ownerPayrollMonthly: 0 }
+                                : {}),
+                            }
+                          : {}),
+                      },
+                      "Family W2 pay",
+                    )
+                  }
+                  onAllocationPercent={(id, percent) =>
+                    stageRecord(
+                      "allocations",
+                      id,
+                      { percent },
+                      "Fund allocation",
+                    )
+                  }
+                  onDefaultAllocationPercent={(key, percent) =>
+                    stageSettings({ [key]: percent }, "Fund allocation")
+                  }
                   onAddFund={stageFund}
-                  onFundPatch={(id, patch) => stageRecord("allocations", id, patch, "Fund details")}
-                  onFundRemove={(id) => stageRecord("allocations", id, { archived: true }, "Removed fund")}
-                  onSettingNumber={(key, value) => stageSettings({
-                    [key]: value,
-                    ...(key === "ownerPayrollMonthly" ? { ownerPayrollOverride: true } : {}),
-                    ...(key === "overheadFloorMonthly" ? { overheadFloorOverride: true } : {}),
-                  }, "Money flow settings")}
-                  onOverheadMode={(overheadMode) => stageSettings({ overheadMode }, "Overhead basis")}
-                  onAverageRate={(person, rate, start) => stageClinicianModel(person, { expectedSessionRevenue: rate }, start)}
+                  onFundPatch={(id, patch) =>
+                    stageRecord("allocations", id, patch, "Fund details")
+                  }
+                  onFundRemove={(id) =>
+                    stageRecord(
+                      "allocations",
+                      id,
+                      { archived: true },
+                      "Removed fund",
+                    )
+                  }
+                  onSettingNumber={(key, value) =>
+                    stageSettings(
+                      {
+                        [key]: value,
+                        ...(key === "ownerPayrollMonthly"
+                          ? { ownerPayrollOverride: true }
+                          : {}),
+                        ...(key === "overheadFloorMonthly"
+                          ? { overheadFloorOverride: true }
+                          : {}),
+                      },
+                      "Money flow settings",
+                    )
+                  }
+                  onOverheadMode={(overheadMode) =>
+                    stageSettings({ overheadMode }, "Overhead basis")
+                  }
+                  onAverageRate={(person, rate, start) =>
+                    stageClinicianModel(
+                      person,
+                      { expectedSessionRevenue: rate },
+                      start,
+                    )
+                  }
                   onClinicianModel={stageClinicianModel}
                   onPersonPatch={patchPerson}
                   onStaffPatch={patchStaff}
-                  onBudgetPatch={(id, patch) => stageRecord("budgets", id, patch, "Expense details")}
+                  onBudgetPatch={(id, patch) =>
+                    stageRecord("budgets", id, patch, "Expense details")
+                  }
                   onAddExpense={(start) => stageNew("budgets", start)}
                   onAddMarketingCost={stageMarketingSupport}
-                  onCampaignPatch={(id, patch) => stageRecord("campaigns", id, patch, "Campaign costs")}
+                  onCampaignPatch={(id, patch) =>
+                    stageRecord("campaigns", id, patch, "Campaign costs")
+                  }
                   onAddCampaign={(start) => stageNew("campaigns", start)}
                   onNavigate={(target) => setSection(target)}
                 />
@@ -4448,9 +4688,7 @@ export default function PracticeWorkspace() {
                               : "No forecast month"}
                           </p>
                         </div>
-                        <span>
-                          Model estimate
-                        </span>
+                        <span>Model estimate</span>
                       </div>
 
                       <div className="pw-money-group-label">Income</div>
@@ -5109,9 +5347,12 @@ export default function PracticeWorkspace() {
                       <div className="pw-owner-line pw-owner-total">
                         <div>
                           <strong>Planned family take-home</strong>
-                          <span>{workingWorkspace.settings.familyW2ClinicianId !== null
-                            ? "Selected W2 clinician pay after estimated employee taxes, plus distributions"
-                            : "Owner payroll + included clinical pay + marked distributions. Owner payroll is before personal withholding."}</span>
+                          <span>
+                            {workingWorkspace.settings.familyW2ClinicianId !==
+                            null
+                              ? "Selected W2 clinician pay after estimated employee taxes, plus distributions"
+                              : "Owner payroll + included clinical pay + marked distributions. Owner payroll is before personal withholding."}
+                          </span>
                         </div>
                         <span />
                         <b>{money(moneyValues.familyTakeHome)}</b>
@@ -5177,7 +5418,9 @@ export default function PracticeWorkspace() {
                         <select
                           aria-label="Summary month"
                           value={summaryMonth?.date ?? ""}
-                          onChange={(event) => setSummaryMonthDate(event.target.value)}
+                          onChange={(event) =>
+                            setSummaryMonthDate(event.target.value)
+                          }
                         >
                           {months.map((month) => (
                             <option key={month.date} value={month.date}>
@@ -5277,7 +5520,9 @@ export default function PracticeWorkspace() {
                       <div className="pw-operating-grid">
                         <div>
                           <span>Session pace</span>
-                          <strong>{fmt(operatingPlan.weeklySessions)} / week</strong>
+                          <strong>
+                            {fmt(operatingPlan.weeklySessions)} / week
+                          </strong>
                           <small>
                             {fmt(operatingPlan.sessions)} sessions / month
                             {operatingPlan.activeClients !== null
@@ -5287,12 +5532,16 @@ export default function PracticeWorkspace() {
                         </div>
                         <div>
                           <span>Clinician compensation</span>
-                          <strong>{money(operatingPlan.clinicianCompensation)}</strong>
+                          <strong>
+                            {money(operatingPlan.clinicianCompensation)}
+                          </strong>
                           <small>Clinician pay plus employer burden.</small>
                         </div>
                         <div>
                           <span>Other operating costs</span>
-                          <strong>{money(operatingPlan.operatingExpense)}</strong>
+                          <strong>
+                            {money(operatingPlan.operatingExpense)}
+                          </strong>
                           <small>
                             Staff, overhead, marketing, fees, and owner payroll;
                             excludes clinician compensation above.
@@ -5315,14 +5564,17 @@ export default function PracticeWorkspace() {
                         </div>
                       </div>
                       <div className="pw-goal-gap" role="status">
-                        <span>{operatingPlan.targetProfit > 0
-                          ? "Gap to monthly profit goal"
-                          : "Gap to break even"}</span>
+                        <span>
+                          {operatingPlan.targetProfit > 0
+                            ? "Gap to monthly profit goal"
+                            : "Gap to break even"}
+                        </span>
                         <strong>{money(operatingPlan.profitGap)}</strong>
                         <small>
                           {operatingPlan.targetProfit > 0
                             ? `Target ${money(operatingPlan.targetProfit)}`
-                            : "Break-even target $0"};{" "}
+                            : "Break-even target $0"}
+                          ;{" "}
                           {operatingPlan.profitGap === null
                             ? "profit estimate is incomplete"
                             : operatingPlan.profitGap === 0
@@ -5334,117 +5586,172 @@ export default function PracticeWorkspace() {
                                 : `about ${operatingPlan.sessionsToCloseGap} additional sessions / month at the current mix`}
                         </small>
                       </div>
-                      {scenarioDelta && <div className="pw-scenario-delta">
-                        <span>Compared with starting point</span>
-                        <strong>
-                          Profit {scenarioDelta.profit === null ? "--" : `${scenarioDelta.profit >= 0 ? "+" : "-"}${money(Math.abs(scenarioDelta.profit))}`}
-                        </strong>
-                        <small>
-                          Revenue {scenarioDelta.revenue === null ? "--" : `${scenarioDelta.revenue >= 0 ? "+" : "-"}${money(Math.abs(scenarioDelta.revenue))}`}
-                          {scenarioDelta.addedCapacitySessions !== null && scenarioDelta.addedCapacitySessions > 0 &&
-                            `; ${fmt(scenarioDelta.addedCapacitySessions)} added session spaces / month`}
-                        </small>
-                      </div>}
+                      {scenarioDelta && (
+                        <div className="pw-scenario-delta">
+                          <span>Compared with starting point</span>
+                          <strong>
+                            Profit{" "}
+                            {scenarioDelta.profit === null
+                              ? "--"
+                              : `${scenarioDelta.profit >= 0 ? "+" : "-"}${money(Math.abs(scenarioDelta.profit))}`}
+                          </strong>
+                          <small>
+                            Revenue{" "}
+                            {scenarioDelta.revenue === null
+                              ? "--"
+                              : `${scenarioDelta.revenue >= 0 ? "+" : "-"}${money(Math.abs(scenarioDelta.revenue))}`}
+                            {scenarioDelta.addedCapacitySessions !== null &&
+                              scenarioDelta.addedCapacitySessions > 0 &&
+                              `; ${fmt(scenarioDelta.addedCapacitySessions)} added session spaces / month`}
+                          </small>
+                        </div>
+                      )}
                       <details className="pw-operating-disclosure">
                         <summary>See lead and cost math</summary>
-                      <div className="pw-operating-details">
-                        {scenarioDelta && scenarioDelta.addedCapacitySessions !== null && scenarioDelta.addedCapacitySessions > 0 && (
-                          <section>
-                            <h4>Added capacity in this model</h4>
-                            <dl>
-                              <div><dt>New session spaces / month</dt><dd>{fmt(scenarioDelta.addedCapacitySessions)}</dd></div>
-                              <div><dt>Clients to fill them / month</dt><dd>{fmt(scenarioDelta.addedClientsPerMonth)}</dd></div>
-                              <div><dt>Added leads needed / month</dt><dd>{fmt(scenarioDelta.addedLeadsPerMonth)}</dd></div>
-                            </dl>
-                            <p>Additional leads are spread over {fillHorizonMonths} months at the selected conversion rate.</p>
-                          </section>
-                        )}
-                        <section>
-                          <h4>Lead path</h4>
-                          <label className="pw-fill-horizon">
-                            Fill open caseload over
-                            <select
-                              aria-label="Months to fill open caseload"
-                              value={fillHorizonMonths}
-                              onChange={(event) => setFillHorizonMonths(Number(event.target.value))}
-                            >
-                              {[3, 6, 12, 24].map((count) => (
-                                <option key={count} value={count}>{count} months</option>
-                              ))}
-                            </select>
-                          </label>
-                          <p>
-                            Lead conversion: {operatingPlan.leadRateSource === "recorded"
-                              ? "recent recorded results"
-                              : operatingPlan.leadRateSource === "campaign"
-                                ? "campaign estimates"
-                                : "not available"}.
-                            {` Monthly attrition assumption: ${fmt(operatingPlan.monthlyAttritionPct)}%.`}
-                          </p>
-                          <dl>
-                            <div>
-                              <dt>Replacement clients / month</dt>
-                              <dd>{fmt(operatingPlan.replacementClients)}</dd>
-                            </div>
-                            <div>
-                              <dt>Clients to fill capacity / month</dt>
-                              <dd>{fmt(operatingPlan.fillClients)}</dd>
-                            </div>
-                            <div>
-                              <dt>Total clients needed / month</dt>
-                              <dd>{fmt(operatingPlan.clientsNeeded)}</dd>
-                            </div>
-                            <div>
-                              <dt>Scheduled consults needed</dt>
-                              <dd>{fmt(operatingPlan.consultsNeeded)}</dd>
-                            </div>
-                            <div>
-                              <dt>Attended consults needed</dt>
-                              <dd>{fmt(operatingPlan.attendedConsultsNeeded)}</dd>
-                            </div>
-                          </dl>
-                        </section>
-                        <section>
-                          <h4>How the estimate connects</h4>
-                          <dl>
-                            <div>
-                              <dt>Session revenue</dt>
-                              <dd>{money(operatingPlan.estimatedRevenue)}</dd>
-                            </div>
-                            {operatingPlan.otherIncome !== null && Math.abs(operatingPlan.otherIncome) > 0.01 && (
-                              <div>
-                                <dt>Other business income</dt>
-                                <dd>{money(operatingPlan.otherIncome)}</dd>
-                              </div>
+                        <div className="pw-operating-details">
+                          {scenarioDelta &&
+                            scenarioDelta.addedCapacitySessions !== null &&
+                            scenarioDelta.addedCapacitySessions > 0 && (
+                              <section>
+                                <h4>Added capacity in this model</h4>
+                                <dl>
+                                  <div>
+                                    <dt>New session spaces / month</dt>
+                                    <dd>
+                                      {fmt(scenarioDelta.addedCapacitySessions)}
+                                    </dd>
+                                  </div>
+                                  <div>
+                                    <dt>Clients to fill them / month</dt>
+                                    <dd>
+                                      {fmt(scenarioDelta.addedClientsPerMonth)}
+                                    </dd>
+                                  </div>
+                                  <div>
+                                    <dt>Added leads needed / month</dt>
+                                    <dd>
+                                      {fmt(scenarioDelta.addedLeadsPerMonth)}
+                                    </dd>
+                                  </div>
+                                </dl>
+                                <p>
+                                  Additional leads are spread over{" "}
+                                  {fillHorizonMonths} months at the selected
+                                  conversion rate.
+                                </p>
+                              </section>
                             )}
-                            <div>
-                              <dt>Clinician compensation</dt>
-                              <dd>-{money(operatingPlan.clinicianCompensation)}</dd>
-                            </div>
-                            <div>
-                              <dt>Other operating costs</dt>
-                              <dd>-{money(operatingPlan.operatingExpense)}</dd>
-                            </div>
-                            <div>
-                              <dt>Estimated profit</dt>
-                              <dd>{money(operatingPlan.estimatedProfit)}</dd>
-                            </div>
-                          </dl>
-                          <p>
-                            Active clients are estimated from monthly sessions
-                            divided by {fmt(operatingPlan.sessionsPerClientMonth)}{" "}
-                            sessions per client per month. Sessions per week is
-                            clinician workload, not client count.
-                          </p>
-                        </section>
-                        {mode === "practice" && <section>
-                          <h4>Test a hire</h4>
-                          <p>Model a clinician and compare the resulting plan here.</p>
-                          <button type="button" className="pw-button" onClick={startPlanning}>
-                            Open Planning
-                          </button>
-                        </section>}
-                      </div>
+                          <section>
+                            <h4>Lead path</h4>
+                            <label className="pw-fill-horizon">
+                              Fill open caseload over
+                              <select
+                                aria-label="Months to fill open caseload"
+                                value={fillHorizonMonths}
+                                onChange={(event) =>
+                                  setFillHorizonMonths(
+                                    Number(event.target.value),
+                                  )
+                                }
+                              >
+                                {[3, 6, 12, 24].map((count) => (
+                                  <option key={count} value={count}>
+                                    {count} months
+                                  </option>
+                                ))}
+                              </select>
+                            </label>
+                            <p>
+                              Lead conversion:{" "}
+                              {operatingPlan.leadRateSource === "recorded"
+                                ? "recent recorded results"
+                                : operatingPlan.leadRateSource === "campaign"
+                                  ? "campaign estimates"
+                                  : "not available"}
+                              .
+                              {` Monthly attrition assumption: ${fmt(operatingPlan.monthlyAttritionPct)}%.`}
+                            </p>
+                            <dl>
+                              <div>
+                                <dt>Replacement clients / month</dt>
+                                <dd>{fmt(operatingPlan.replacementClients)}</dd>
+                              </div>
+                              <div>
+                                <dt>Clients to fill capacity / month</dt>
+                                <dd>{fmt(operatingPlan.fillClients)}</dd>
+                              </div>
+                              <div>
+                                <dt>Total clients needed / month</dt>
+                                <dd>{fmt(operatingPlan.clientsNeeded)}</dd>
+                              </div>
+                              <div>
+                                <dt>Scheduled consults needed</dt>
+                                <dd>{fmt(operatingPlan.consultsNeeded)}</dd>
+                              </div>
+                              <div>
+                                <dt>Attended consults needed</dt>
+                                <dd>
+                                  {fmt(operatingPlan.attendedConsultsNeeded)}
+                                </dd>
+                              </div>
+                            </dl>
+                          </section>
+                          <section>
+                            <h4>How the estimate connects</h4>
+                            <dl>
+                              <div>
+                                <dt>Session revenue</dt>
+                                <dd>{money(operatingPlan.estimatedRevenue)}</dd>
+                              </div>
+                              {operatingPlan.otherIncome !== null &&
+                                Math.abs(operatingPlan.otherIncome) > 0.01 && (
+                                  <div>
+                                    <dt>Other business income</dt>
+                                    <dd>{money(operatingPlan.otherIncome)}</dd>
+                                  </div>
+                                )}
+                              <div>
+                                <dt>Clinician compensation</dt>
+                                <dd>
+                                  -{money(operatingPlan.clinicianCompensation)}
+                                </dd>
+                              </div>
+                              <div>
+                                <dt>Other operating costs</dt>
+                                <dd>
+                                  -{money(operatingPlan.operatingExpense)}
+                                </dd>
+                              </div>
+                              <div>
+                                <dt>Estimated profit</dt>
+                                <dd>{money(operatingPlan.estimatedProfit)}</dd>
+                              </div>
+                            </dl>
+                            <p>
+                              Active clients are estimated from monthly sessions
+                              divided by{" "}
+                              {fmt(operatingPlan.sessionsPerClientMonth)}{" "}
+                              sessions per client per month. Sessions per week
+                              is clinician workload, not client count.
+                            </p>
+                          </section>
+                          {mode === "practice" && (
+                            <section>
+                              <h4>Test a hire</h4>
+                              <p>
+                                Model a clinician and compare the resulting plan
+                                here.
+                              </p>
+                              <button
+                                type="button"
+                                className="pw-button"
+                                onClick={startPlanning}
+                              >
+                                Open Planning
+                              </button>
+                            </section>
+                          )}
+                        </div>
                       </details>
                       {!!operatingPlan.warnings.length && (
                         <details className="pw-assumption-notes">
@@ -5587,12 +5894,13 @@ export default function PracticeWorkspace() {
                         </tbody>
                       </table>
                     </div>
-                    {workspace.settings.familyW2ClinicianId === null && months.some((row) => (row.values.profit ?? 0) < 0) && (
-                      <p className="pw-projection-note">
-                        Planned family take-home includes owner pay; it can
-                        remain positive while practice profit is negative.
-                      </p>
-                    )}
+                    {workspace.settings.familyW2ClinicianId === null &&
+                      months.some((row) => (row.values.profit ?? 0) < 0) && (
+                        <p className="pw-projection-note">
+                          Planned family take-home includes owner pay; it can
+                          remain positive while practice profit is negative.
+                        </p>
+                      )}
                   </section>
                   {selectedGoal && comparableGoal && (
                     <section className="pw-pace" aria-label="Goal pace">
@@ -5902,7 +6210,10 @@ export default function PracticeWorkspace() {
           </div>
         )}
         {planningEdit && !visibleTool && (
-          <aside className="pw-impact" aria-label="Scenario endpoint comparison">
+          <aside
+            className="pw-impact"
+            aria-label="Scenario endpoint comparison"
+          >
             <div className="pw-impact-heading">
               <span>
                 <ChartNoAxesCombined />

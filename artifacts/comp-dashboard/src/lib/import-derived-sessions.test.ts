@@ -6,7 +6,7 @@ import {
   monthFlow,
   type Context,
 } from "@workspace/practice/hub";
-import type { LocalSnapshot } from "./retention-local";
+import { sameDayVisitKey, type LocalSnapshot } from "./retention-local.ts";
 import { buildImportedSessionOverlay } from "./import-derived-sessions.ts";
 
 const clinician = (id: number, label: string, goalId: number | null = 7) => ({
@@ -187,7 +187,10 @@ test("partial import overlap uses exact imported facts and drops stale aggregate
   );
   assert.equal(overlay.diagnostic.manualImportConflictCount, 1);
   assert.equal(overlay.diagnostic.manualImportOverrideCount, 12);
-  assert.equal(overlay.context.sessions.some((item) => item.id === 11), false);
+  assert.equal(
+    overlay.context.sessions.some((item) => item.id === 11),
+    false,
+  );
 });
 
 test("complete imported attendance coverage replaces overlapping manual actuals in the overlay", () => {
@@ -218,26 +221,30 @@ test("complete imported attendance coverage replaces overlapping manual actuals 
 
   assert.equal(overlay.derivedSessions.length, 2);
   assert.equal(overlay.diagnostic.manualImportOverrideCount, 12);
-  assert.equal(overlay.context.sessions.some((item) => item.id === 11), false);
+  assert.equal(
+    overlay.context.sessions.some((item) => item.id === 11),
+    false,
+  );
   assert.equal(
     overlay.context.sessions.reduce((sum, item) => sum + item.completed, 0),
     2,
   );
 });
 
-test("same-day shows remain separate attended volume and month boundaries stay exact", () => {
+test("same-day shows collapse by default and month boundaries stay exact", () => {
+  const repeatedShow = {
+    clientId: "client-a",
+    clinician: "Dr Lane",
+    serviceDate: "2026-10-31",
+    location: "Room A",
+    status: "show" as const,
+    sourceRowHash: "a1",
+  };
   const overlay = buildImportedSessionOverlay(
     context(),
     [
       attendanceSnapshot([
-        {
-          clientId: "client-a",
-          clinician: "Dr Lane",
-          serviceDate: "2026-10-31",
-          location: "Room A",
-          status: "show",
-          sourceRowHash: "a1",
-        },
+        repeatedShow,
         {
           clientId: "client-a",
           clinician: "Dr Lane",
@@ -262,10 +269,12 @@ test("same-day shows remain separate attended volume and month boundaries stay e
   assert.deepEqual(
     overlay.derivedSessions.map((item) => [item.start, item.completed]),
     [
-      ["2026-10-31", 2],
+      ["2026-10-31", 1],
       ["2026-11-01", 1],
     ],
   );
+  assert.equal(overlay.diagnostic.rawAttendedRows, 3);
+  assert.equal(overlay.diagnostic.collapsedDuplicateShowRows, 1);
 
   const workspace = emptyWorkspace("2026-10-01");
   workspace.settings.teamId = 7;
@@ -276,7 +285,27 @@ test("same-day shows remain separate attended volume and month boundaries stay e
     "2026-10-01",
     "2026-11-10",
   );
-  assert.equal(october.sessions, 2);
+  assert.equal(october.sessions, 1);
+
+  const confirmed = buildImportedSessionOverlay(
+    context(),
+    [
+      attendanceSnapshot([
+        repeatedShow,
+        {
+          ...repeatedShow,
+          sourceRowHash: "a2",
+        },
+      ]),
+    ],
+    7,
+    { [sameDayVisitKey(repeatedShow)]: 2 },
+  );
+  assert.deepEqual(
+    confirmed.derivedSessions.map((item) => [item.start, item.completed]),
+    [["2026-10-31", 2]],
+  );
+  assert.equal(confirmed.diagnostic.sameDayVisitOverrideCount, 1);
 });
 
 test("current month projection uses imported backfill plus weekly-average remainder", () => {

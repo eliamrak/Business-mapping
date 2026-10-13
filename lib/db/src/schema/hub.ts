@@ -87,6 +87,9 @@ export const practiceImportPackagesTable = pgTable(
       .defaultNow(),
     importedBy: text("imported_by").notNull(),
     billingCodeMinutes: jsonb("billing_code_minutes").notNull().default({}),
+    sameDayVisitOverrides: jsonb("same_day_visit_overrides")
+      .notNull()
+      .default({}),
     active: integer("active").notNull().default(1),
   },
   (table) => [
