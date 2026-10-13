@@ -91,6 +91,24 @@ export type LocalRetentionMetrics = {
   roomCounts: RoomMetric[];
 };
 
+export type LocalClientActivityEstimate = {
+  coverageStart: string;
+  coverageEnd: string;
+  retainedClientPairs: number;
+  matureNonRetainedClientPairs: number;
+  immatureClientPairsExcluded: number;
+  leftCensoredClientPairs: number;
+  rightCensoredClientPairs: number;
+  observedAttendedSessionsPerRetainedClient: number;
+  observedAttendedSessionsPerMonth: number;
+  estimatedMonths: number;
+  monthlyAttritionRate: number;
+  monthlyAttritionPct: number;
+  latestCompleteMonth: string | null;
+  activeClientsInLatestCompleteMonth: number | null;
+  estimatedClientsLeavingPerMonth: number | null;
+};
+
 export type LocalVisitReconciliationStatus =
   | "matched"
   | "attendance_only"
@@ -659,6 +677,143 @@ function sortByName<T extends { clinician?: string; location?: string }>(
       b.clinician ?? b.location ?? "",
     ),
   );
+}
+
+const isoDay = 86_400_000;
+const averageDaysPerMonth = 365.25 / 12;
+
+function addDays(date: string, days: number) {
+  return new Date(Date.parse(`${date}T12:00:00Z`) + days * isoDay)
+    .toISOString()
+    .slice(0, 10);
+}
+
+function daysBetweenInclusive(start: string, end: string) {
+  return Math.floor(
+    (Date.parse(`${end}T12:00:00Z`) - Date.parse(`${start}T12:00:00Z`)) /
+      isoDay,
+  ) + 1;
+}
+
+function monthStart(month: string) {
+  return `${month}-01`;
+}
+
+function monthEnd(month: string) {
+  const [year, number] = month.split("-").map(Number);
+  return new Date(Date.UTC(year, number, 0)).toISOString().slice(0, 10);
+}
+
+function nextMonth(month: string) {
+  const [year, number] = month.split("-").map(Number);
+  return new Date(Date.UTC(year, number, 1)).toISOString().slice(0, 7);
+}
+
+function completeCoverageMonths(start: string, end: string) {
+  const months: string[] = [];
+  let month = start.slice(0, 7);
+  const last = end.slice(0, 7);
+  while (month <= last) {
+    if (monthStart(month) >= start && monthEnd(month) <= end)
+      months.push(month);
+    month = nextMonth(month);
+  }
+  return months;
+}
+
+export function estimateLocalClientActivity(
+  snapshots: LocalSnapshot[],
+  maturityDays = 14,
+): LocalClientActivityEstimate | null {
+  const shows = snapshots
+    .flatMap((snapshot) => snapshot.kind === "attendance" ? snapshot.rows : [])
+    .filter((row) => row.status === "show")
+    .sort((a, b) =>
+      a.serviceDate.localeCompare(b.serviceDate) ||
+      a.clinician.localeCompare(b.clinician) ||
+      a.clientId.localeCompare(b.clientId),
+    );
+  if (!shows.length) return null;
+  const coverageDates = snapshots
+    .filter((snapshot) => snapshot.kind === "attendance")
+    .flatMap((snapshot) => [snapshot.coverageStart, snapshot.coverageEnd])
+    .sort();
+  const coverageStart = coverageDates[0];
+  const coverageEnd = coverageDates.at(-1);
+  if (!coverageStart || !coverageEnd) return null;
+  const pairShows = new Map<string, AttendanceRow[]>();
+  for (const row of shows) {
+    const key = `${normalizeClinician(row.clinician)}\u0000${row.clientId}`;
+    pairShows.set(key, [...(pairShows.get(key) ?? []), row]);
+  }
+  const maturityCutoff = addDays(coverageEnd, -maturityDays);
+  const retained: Array<{ first: string; last: string; count: number }> = [];
+  let matureNonRetainedClientPairs = 0;
+  let immatureClientPairsExcluded = 0;
+  let leftCensoredClientPairs = 0;
+  let rightCensoredClientPairs = 0;
+  for (const rows of pairShows.values()) {
+    const sorted = [...rows].sort((a, b) =>
+      a.serviceDate.localeCompare(b.serviceDate),
+    );
+    const first = sorted[0].serviceDate;
+    const last = sorted.at(-1)!.serviceDate;
+    if (first === coverageStart) leftCensoredClientPairs++;
+    if (last > maturityCutoff) rightCensoredClientPairs++;
+    const hasLaterShow = sorted.some((row) => row.serviceDate > first);
+    if (hasLaterShow) {
+      retained.push({ first, last, count: sorted.length });
+    } else if (first > maturityCutoff) {
+      immatureClientPairsExcluded++;
+    } else {
+      matureNonRetainedClientPairs++;
+    }
+  }
+  if (!retained.length) return null;
+  const observedSessions = retained.reduce((sum, item) => sum + item.count, 0);
+  const observedMonthEquivalents = retained.reduce((sum, item) => {
+    const days = Math.max(1, daysBetweenInclusive(item.first, item.last));
+    return sum + Math.max(1, days / averageDaysPerMonth);
+  }, 0);
+  const observedAttendedSessionsPerRetainedClient =
+    observedSessions / retained.length;
+  const observedAttendedSessionsPerMonth =
+    observedSessions / observedMonthEquivalents;
+  if (!(observedAttendedSessionsPerMonth > 0)) return null;
+  const estimatedMonths =
+    observedAttendedSessionsPerRetainedClient /
+    observedAttendedSessionsPerMonth;
+  if (!(estimatedMonths > 0)) return null;
+  const completeMonths = completeCoverageMonths(coverageStart, coverageEnd);
+  const latestCompleteMonth = completeMonths.at(-1) ?? null;
+  const activeClientsInLatestCompleteMonth = latestCompleteMonth
+    ? new Set(
+        shows
+          .filter((row) => row.serviceDate.slice(0, 7) === latestCompleteMonth)
+          .map((row) => `${normalizeClinician(row.clinician)}\u0000${row.clientId}`),
+      ).size
+    : null;
+  const monthlyAttritionRate = 1 / estimatedMonths;
+  return {
+    coverageStart,
+    coverageEnd,
+    retainedClientPairs: retained.length,
+    matureNonRetainedClientPairs,
+    immatureClientPairsExcluded,
+    leftCensoredClientPairs,
+    rightCensoredClientPairs,
+    observedAttendedSessionsPerRetainedClient,
+    observedAttendedSessionsPerMonth,
+    estimatedMonths,
+    monthlyAttritionRate,
+    monthlyAttritionPct: monthlyAttritionRate * 100,
+    latestCompleteMonth,
+    activeClientsInLatestCompleteMonth,
+    estimatedClientsLeavingPerMonth:
+      activeClientsInLatestCompleteMonth === null
+        ? null
+        : activeClientsInLatestCompleteMonth * monthlyAttritionRate,
+  };
 }
 
 export function buildLocalRetentionMetrics(
