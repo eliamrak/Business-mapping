@@ -994,7 +994,7 @@ export function mergeImportedLocationRooms<
       archived: false,
       notes:
         "Imported from attendance Location labels. Review whether this is a physical room, telehealth label, or other location before assigning capacity.",
-      planningOnly: false,
+      planningOnly: true,
       start: workspace.settings.forecastStart,
       end: null,
       sourceAttachmentId: null,

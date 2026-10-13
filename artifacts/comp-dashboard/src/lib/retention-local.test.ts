@@ -1,6 +1,13 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
+import { randomUUID } from "node:crypto";
+import {
+  emptyWorkspace,
+  forecast,
+  roomSchema,
+  type Context,
+} from "@workspace/practice/hub";
 import {
   buildLocalRetentionMetrics,
   buildLocalVisitReconciliation,
@@ -32,6 +39,41 @@ const billingCsv = `Date of Service,Client,Clinician,Total Fee,Billing Code
 2026-10-02,CID-beta,Dr Lane,100,NO-SHOW
 2026-10-10,CID-epsilon,Dr Moss,125,90834
 2026-10-10,CID-epsilon,Dr Moss,125,90834`;
+
+const forecastClinician = {
+  id: 1,
+  label: "Dr Forecast",
+  goalId: null,
+  sessionRate: 100,
+  sessionsPerWeek: 40,
+  weeksWorkedPerYear: 52.1786,
+  capEnabled: false,
+  capAmount: 50000,
+  preCapClinicianSplit: 60,
+  preCapPracticeSplit: 40,
+  postCapClinicianSplit: 75,
+  postCapPracticeSplit: 25,
+  classification: "w2" as const,
+  w2EmployerFicaPct: 7.65,
+  futaSutaPct: 1,
+  workersCompPct: 0.5,
+  otherEmployerBurdenPct: 0.85,
+};
+const forecastContext: Context = {
+  clinicians: [forecastClinician],
+  staff: [],
+  sessions: [],
+};
+
+function forecastWorkspace() {
+  const workspace = emptyWorkspace("2026-10-01");
+  workspace.settings.baselineMode = "manual";
+  workspace.settings.baselineWeeklySessions = 20;
+  workspace.settings.baselineRetentionPct = 100;
+  workspace.settings.defaultInPersonPct = 100;
+  workspace.settings.horizonMonths = 1;
+  return workspace;
+}
 
 const packageFixture = () =>
   JSON.parse(
@@ -494,6 +536,7 @@ CID-delta,Dr Moss,2026-10-04,,show`).snapshot;
     first.addedRooms.map((room) => room.name),
     ["Room A", "Telehealth"],
   );
+  assert.equal(first.addedRooms[0].planningOnly, true);
   assert.equal(first.addedRooms[0].weeklyHours, 0);
   assert.equal(first.addedRooms[0].telehealthUsesRoom, false);
   assert.match(first.addedRooms[1].notes, /physical room, telehealth label/);
@@ -543,6 +586,59 @@ CID-beta,Dr Lane,2026-10-02,Room C,show`).snapshot;
     ["Room C"],
   );
   assert.deepEqual(result.workspace.rooms[0], workspace.rooms[0]);
+});
+
+test("imported attendance locations do not cap forecast room capacity", () => {
+  const attendance =
+    importAttendanceCsv(`Client,Clinician,Date of service,Location,Status
+CID-alpha,Dr Lane,2026-10-01,Room A,show`).snapshot;
+  const withoutRooms = forecastWorkspace();
+  const importedOnly = mergeImportedLocationRooms(
+    withoutRooms,
+    [attendance],
+    () => randomUUID(),
+  ).workspace;
+
+  assert.equal(importedOnly.rooms.length, 1);
+  assert.equal(importedOnly.rooms[0].planningOnly, true);
+  assert.equal(importedOnly.rooms[0].weeklyHours, 0);
+  assert.equal(
+    forecast(importedOnly, forecastContext)[0].values.sessions,
+    forecast(withoutRooms, forecastContext)[0].values.sessions,
+  );
+  assert.equal(
+    forecast(importedOnly, forecastContext)[0].values.roomCapacity,
+    null,
+  );
+
+  const manualRoom = forecastWorkspace();
+  manualRoom.rooms = [
+    roomSchema.parse({
+      id: randomUUID(),
+      name: "Manual Room",
+      start: "2026-10-01",
+      weeklyHours: 5,
+      usablePct: 100,
+    }),
+  ];
+  const withManualRoom = mergeImportedLocationRooms(
+    manualRoom,
+    [attendance],
+    () => randomUUID(),
+  ).workspace;
+
+  assert.equal(withManualRoom.rooms.length, 2);
+  assert.equal(withManualRoom.rooms[0].planningOnly, false);
+  assert.equal(withManualRoom.rooms[0].weeklyHours, 5);
+  assert.equal(withManualRoom.rooms[1].planningOnly, true);
+  assert.equal(
+    forecast(withManualRoom, forecastContext)[0].values.sessions,
+    forecast(manualRoom, forecastContext)[0].values.sessions,
+  );
+  assert.equal(
+    forecast(withManualRoom, forecastContext)[0].values.roomCapacity,
+    forecast(manualRoom, forecastContext)[0].values.roomCapacity,
+  );
 });
 
 test("Practice package preserves same-day legitimate session volume", () => {
