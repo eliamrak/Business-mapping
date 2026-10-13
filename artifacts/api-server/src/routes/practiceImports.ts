@@ -138,6 +138,17 @@ const stableJson = (value: unknown): string => {
 const sha256 = (value: unknown) =>
   createHash("sha256").update(stableJson(value)).digest("hex");
 const rowHash = (parts: unknown[]) => sha256(parts).slice(0, 16);
+const normalizeClinician = (value: string) =>
+  value.toLowerCase().replace(/\s+/g, " ").trim();
+const sameDayVisitKey = (
+  row: Pick<AttendanceRow, "clientId" | "clinician" | "serviceDate">,
+) =>
+  rowHash([
+    "same-day-visit",
+    row.clientId,
+    normalizeClinician(row.clinician),
+    row.serviceDate,
+  ]);
 const configuredPracticeId = () =>
   (
     process.env.EMC_PRACTICE_ID?.trim() ||
@@ -160,6 +171,63 @@ const overlaps = (
   a.kind === b.kind &&
   a.coverageStart <= b.coverageEnd &&
   b.coverageStart <= a.coverageEnd;
+
+const snapshotFromRow = (row: {
+  kind: string;
+  createdAt: Date;
+  coverageStart: string;
+  coverageEnd: string;
+  sourceHash: string;
+  rows: unknown;
+}): Snapshot => ({
+  id: `${row.kind}-${row.sourceHash}`,
+  kind: row.kind as FactKind,
+  importedAt: row.createdAt.toISOString(),
+  coverageStart: row.coverageStart,
+  coverageEnd: row.coverageEnd,
+  sourceHash: row.sourceHash,
+  rows: row.rows as AttendanceRow[] | BillingRow[],
+});
+
+const mergeSameDayVisitOverrides = (
+  packages: Array<{ sameDayVisitOverrides: unknown }>,
+) =>
+  packages.reduce<Record<string, number>>(
+    (acc, row) => ({
+      ...acc,
+      ...(row.sameDayVisitOverrides as Record<string, number>),
+    }),
+    {},
+  );
+
+function sameDayShowCounts(snapshots: Snapshot[]) {
+  const counts = new Map<string, number>();
+  for (const snapshot of snapshots) {
+    if (snapshot.kind !== "attendance") continue;
+    const seenRows = new Set<string>();
+    for (const row of snapshot.rows as AttendanceRow[]) {
+      if (row.status !== "show" || seenRows.has(row.sourceRowHash)) continue;
+      seenRows.add(row.sourceRowHash);
+      const key = sameDayVisitKey(row);
+      counts.set(key, (counts.get(key) ?? 0) + 1);
+    }
+  }
+  return counts;
+}
+
+function reconcileSameDayVisitOverrides(
+  overrides: Record<string, number>,
+  snapshots: Snapshot[],
+) {
+  const counts = sameDayShowCounts(snapshots);
+  const reconciled: Record<string, number> = {};
+  for (const [key, count] of Object.entries(overrides)) {
+    const supportedRows = counts.get(key) ?? 0;
+    const supportedCount = Math.min(count, supportedRows);
+    if (supportedCount > 1) reconciled[key] = supportedCount;
+  }
+  return reconciled;
+}
 
 function toSnapshots(
   input: z.infer<typeof packageSchema>,
@@ -242,18 +310,9 @@ async function historyFor(practiceId: string, accountId: string) {
         ),
       ),
   ]);
+  const historySnapshots = snapshots.map(snapshotFromRow);
   return {
-    snapshots: snapshots.map(
-      (row): Snapshot => ({
-        id: `${row.kind}-${row.sourceHash}`,
-        kind: row.kind as FactKind,
-        importedAt: row.createdAt.toISOString(),
-        coverageStart: row.coverageStart,
-        coverageEnd: row.coverageEnd,
-        sourceHash: row.sourceHash,
-        rows: row.rows as AttendanceRow[] | BillingRow[],
-      }),
-    ),
+    snapshots: historySnapshots,
     billingCodeMinutes: packages.reduce<Record<string, number>>(
       (acc, row) => ({
         ...acc,
@@ -261,12 +320,9 @@ async function historyFor(practiceId: string, accountId: string) {
       }),
       {},
     ),
-    sameDayVisitOverrides: packages.reduce<Record<string, number>>(
-      (acc, row) => ({
-        ...acc,
-        ...(row.sameDayVisitOverrides as Record<string, number>),
-      }),
-      {},
+    sameDayVisitOverrides: reconcileSameDayVisitOverrides(
+      mergeSameDayVisitOverrides(packages),
+      historySnapshots,
     ),
     packages: packages.map((row) => ({
       packageId: row.packageId,
@@ -339,6 +395,16 @@ router.post("/practice-imports/package", async (req, res) => {
           eq(practiceImportSnapshotsTable.active, 1),
         ),
       );
+    const activePackages = await tx
+      .select()
+      .from(practiceImportPackagesTable)
+      .where(
+        and(
+          eq(practiceImportPackagesTable.practiceId, practiceId),
+          eq(practiceImportPackagesTable.accountId, accountId),
+          eq(practiceImportPackagesTable.active, 1),
+        ),
+      );
     const duplicateActiveKeys = new Set(
       active
         .filter((row) =>
@@ -377,6 +443,22 @@ router.post("/practice-imports/package", async (req, res) => {
         })),
       };
     const packageImportId = randomUUID();
+    const replacementOverrides = overlapping.length
+      ? reconcileSameDayVisitOverrides(
+          mergeSameDayVisitOverrides(activePackages),
+          [
+            ...active
+              .filter(
+                (row) =>
+                  !overlapping.some(
+                    (overlappingRow) => overlappingRow.id === row.id,
+                  ),
+              )
+              .map(snapshotFromRow),
+            ...snapshotsToInsert,
+          ],
+        )
+      : {};
     if (overlapping.length)
       await tx
         .update(practiceImportSnapshotsTable)
@@ -428,6 +510,7 @@ router.post("/practice-imports/package", async (req, res) => {
       exportedAt: new Date(input.exportedAt),
       importedBy: actor,
       billingCodeMinutes: input.billingCodeMinutes ?? {},
+      sameDayVisitOverrides: replacementOverrides,
     });
     await tx.insert(practiceImportSnapshotsTable).values(
       snapshotsToInsert.map((snapshot) => ({
@@ -522,9 +605,25 @@ router.put("/practice-imports/same-day-visit-overrides", async (req, res) => {
       .json({ error: "Check the same-day visit overrides." });
   const { practiceId, accountId, actor } = scope(res);
   await db.transaction(async (tx) => {
+    const snapshots = (
+      await tx
+        .select()
+        .from(practiceImportSnapshotsTable)
+        .where(
+          and(
+            eq(practiceImportSnapshotsTable.practiceId, practiceId),
+            eq(practiceImportSnapshotsTable.accountId, accountId),
+            eq(practiceImportSnapshotsTable.active, 1),
+          ),
+        )
+    ).map(snapshotFromRow);
+    const sameDayVisitOverrides = reconcileSameDayVisitOverrides(
+      body.data.sameDayVisitOverrides,
+      snapshots,
+    );
     await tx
       .update(practiceImportPackagesTable)
-      .set({ sameDayVisitOverrides: body.data.sameDayVisitOverrides })
+      .set({ sameDayVisitOverrides })
       .where(
         and(
           eq(practiceImportPackagesTable.practiceId, practiceId),
@@ -540,7 +639,9 @@ router.put("/practice-imports/same-day-visit-overrides", async (req, res) => {
       action: "update-same-day-visit-overrides",
       actor,
       detail: {
-        overrideCount: Object.keys(body.data.sameDayVisitOverrides).length,
+        requestedOverrideCount: Object.keys(body.data.sameDayVisitOverrides)
+          .length,
+        storedOverrideCount: Object.keys(sameDayVisitOverrides).length,
       },
     });
   });

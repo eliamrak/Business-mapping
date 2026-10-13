@@ -6,6 +6,7 @@ import { execFileSync } from "node:child_process";
 import { join } from "node:path";
 import net from "node:net";
 import express from "express";
+import { createHash } from "node:crypto";
 
 const require = createRequire(new URL("../package.json", import.meta.url));
 const { Client } = createRequire(
@@ -83,6 +84,71 @@ const packageFor = ({
   },
   billingCodeMinutes: minutes,
 });
+
+const stableJson = (value) => {
+  if (Array.isArray(value)) return `[${value.map(stableJson).join(",")}]`;
+  if (value && typeof value === "object") {
+    return `{${Object.entries(value)
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([key, item]) => `${JSON.stringify(key)}:${stableJson(item)}`)
+      .join(",")}}`;
+  }
+  return JSON.stringify(value);
+};
+const rowHash = (parts) =>
+  createHash("sha256").update(stableJson(parts)).digest("hex").slice(0, 16);
+const normalizeClinician = (value) =>
+  value.toLowerCase().replace(/\s+/g, " ").trim();
+const sameDayVisitKey = (row) =>
+  rowHash([
+    "same-day-visit",
+    row.clientId,
+    normalizeClinician(row.clinician),
+    row.serviceDate,
+  ]);
+
+const sameDayPackageFor = ({
+  packageId,
+  location = "Room Same",
+  rowCount = 2,
+  fee = 150,
+}) => {
+  const attendanceRows = Array.from({ length: rowCount }, () => ({
+    clientId: "client-same-day",
+    clinician: "Dr Lane",
+    serviceDate: "2026-10-10",
+    location,
+    status: "show",
+  }));
+  const billingRows = Array.from({ length: rowCount }, () => ({
+    clientId: "client-same-day",
+    clinician: "Dr Lane",
+    serviceDate: "2026-10-10",
+    totalFeeCharged: fee,
+    billingCode: "90837",
+  }));
+  return {
+    format: "emc-practice-local-import-package",
+    version: 1,
+    packageId,
+    exportedAt: "2026-10-13T14:00:00.000Z",
+    collections: {
+      attendance: {
+        coverageStart: "2026-10-10",
+        coverageEnd: "2026-10-10",
+        rowCount,
+        rows: attendanceRows,
+      },
+      billing: {
+        coverageStart: "2026-10-10",
+        coverageEnd: "2026-10-10",
+        rowCount,
+        rows: billingRows,
+      },
+    },
+    billingCodeMinutes: { 90837: 60 },
+  };
+};
 
 async function call(
   path,
@@ -319,9 +385,15 @@ test("later backfills skip duplicate collections and add missing counterparts", 
 });
 
 test("same-day visit confirmations persist across authenticated history reloads", async () => {
+  const packageData = sameDayPackageFor({
+    packageId: "pkg-same-day-confirmation",
+  });
+  const overrideKey = sameDayVisitKey(
+    packageData.collections.attendance.rows[0],
+  );
   const imported = await call(
     "/practice-imports/package",
-    { package: packageFor({ packageId: "pkg-same-day-confirmation" }) },
+    { package: packageData },
     "POST",
     { practice: "practice-same-day@example.test" },
   );
@@ -330,7 +402,7 @@ test("same-day visit confirmations persist across authenticated history reloads"
 
   const saved = await call(
     "/practice-imports/same-day-visit-overrides",
-    { sameDayVisitOverrides: { "0123456789abcdef": 2 } },
+    { sameDayVisitOverrides: { [overrideKey]: 2 } },
     "PUT",
     {
       actor: "owner-a@example.test",
@@ -339,8 +411,20 @@ test("same-day visit confirmations persist across authenticated history reloads"
   );
   assert.equal(saved.status, 200, JSON.stringify(saved.data));
   assert.deepEqual(saved.data.sameDayVisitOverrides, {
-    "0123456789abcdef": 2,
+    [overrideKey]: 2,
   });
+  assert.equal(
+    saved.data.snapshots
+      .find((snapshot) => snapshot.kind === "attendance")
+      .rows.filter((row) => row.status === "show").length,
+    2,
+  );
+  assert.equal(
+    saved.data.snapshots
+      .find((snapshot) => snapshot.kind === "billing")
+      .rows.reduce((sum, row) => sum + row.totalFeeCharged, 0),
+    300,
+  );
 
   const reloaded = await call("/practice-imports", undefined, "GET", {
     actor: "owner-b@example.test",
@@ -348,8 +432,104 @@ test("same-day visit confirmations persist across authenticated history reloads"
   });
   assert.equal(reloaded.status, 200, JSON.stringify(reloaded.data));
   assert.deepEqual(reloaded.data.sameDayVisitOverrides, {
-    "0123456789abcdef": 2,
+    [overrideKey]: 2,
   });
+
+  const duplicate = await call(
+    "/practice-imports/package",
+    { package: packageData },
+    "POST",
+    { practice: "practice-same-day@example.test" },
+  );
+  assert.equal(duplicate.status, 200, JSON.stringify(duplicate.data));
+  assert.equal(duplicate.data.status, "duplicate");
+  assert.deepEqual(duplicate.data.sameDayVisitOverrides, {
+    [overrideKey]: 2,
+  });
+
+  const replacement = sameDayPackageFor({
+    packageId: "pkg-same-day-confirmation-replacement",
+    location: "Room Same Replacement",
+  });
+  const preview = await call(
+    "/practice-imports/package",
+    { package: replacement },
+    "POST",
+    { practice: "practice-same-day@example.test" },
+  );
+  assert.equal(preview.status, 409);
+  assert.equal(preview.data.code, "OVERLAP_REVIEW_REQUIRED");
+  const replaced = await call(
+    "/practice-imports/package",
+    { package: replacement, replaceOverlaps: true },
+    "POST",
+    { practice: "practice-same-day@example.test" },
+  );
+  assert.equal(replaced.status, 200, JSON.stringify(replaced.data));
+  assert.deepEqual(replaced.data.sameDayVisitOverrides, {
+    [overrideKey]: 2,
+  });
+  assert.equal(
+    replaced.data.snapshots
+      .find((snapshot) => snapshot.kind === "attendance")
+      .rows.filter((row) => row.status === "show").length,
+    2,
+  );
+  assert.equal(
+    replaced.data.snapshots
+      .find((snapshot) => snapshot.kind === "billing")
+      .rows.reduce((sum, row) => sum + row.totalFeeCharged, 0),
+    300,
+  );
+
+  const reset = await call(
+    "/practice-imports/same-day-visit-overrides",
+    { sameDayVisitOverrides: {} },
+    "PUT",
+    { practice: "practice-same-day@example.test" },
+  );
+  assert.equal(reset.status, 200, JSON.stringify(reset.data));
+  assert.deepEqual(reset.data.sameDayVisitOverrides, {});
+  const resetReload = await call("/practice-imports", undefined, "GET", {
+    actor: "owner-b@example.test",
+    practice: "practice-same-day@example.test",
+  });
+  assert.deepEqual(resetReload.data.sameDayVisitOverrides, {});
+
+  const reconfirmed = await call(
+    "/practice-imports/same-day-visit-overrides",
+    { sameDayVisitOverrides: { [overrideKey]: 2 } },
+    "PUT",
+    { practice: "practice-same-day@example.test" },
+  );
+  assert.deepEqual(reconfirmed.data.sameDayVisitOverrides, {
+    [overrideKey]: 2,
+  });
+  const fewerRowsReplacement = sameDayPackageFor({
+    packageId: "pkg-same-day-confirmation-one-row",
+    location: "Room Same Replacement One Row",
+    rowCount: 1,
+  });
+  const fewerRows = await call(
+    "/practice-imports/package",
+    { package: fewerRowsReplacement, replaceOverlaps: true },
+    "POST",
+    { practice: "practice-same-day@example.test" },
+  );
+  assert.equal(fewerRows.status, 200, JSON.stringify(fewerRows.data));
+  assert.deepEqual(fewerRows.data.sameDayVisitOverrides, {});
+  assert.equal(
+    fewerRows.data.snapshots
+      .find((snapshot) => snapshot.kind === "attendance")
+      .rows.filter((row) => row.status === "show").length,
+    1,
+  );
+  assert.equal(
+    fewerRows.data.snapshots
+      .find((snapshot) => snapshot.kind === "billing")
+      .rows.reduce((sum, row) => sum + row.totalFeeCharged, 0),
+    150,
+  );
 
   const isolated = await call("/practice-imports", undefined, "GET", {
     actor: "owner-c@example.test",
