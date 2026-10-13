@@ -249,13 +249,13 @@ export default function LocalRetentionWorkspace({
     [snapshots, sameDayVisitOverrides],
   );
   const reconciliation = useMemo(
-    () => buildLocalVisitReconciliation(snapshots),
-    [snapshots],
+    () => buildLocalVisitReconciliation(snapshots, sameDayVisitOverrides),
+    [snapshots, sameDayVisitOverrides],
   );
   const reconciliationReviewRows = useMemo(
     () =>
       reconciliation.rows.filter(
-        (row) => row.status !== "matched" && row.status !== "attendance_only",
+        (row) => row.status !== "matched" && row.reviewReason !== null,
       ),
     [reconciliation.rows],
   );
@@ -667,20 +667,19 @@ export default function LocalRetentionWorkspace({
           <span>Billing without attendance</span>
           <strong>{reconciliation.billingOnlyRows.toLocaleString()}</strong>
         </div>
-        <div title="Same stable client ID, clinician, and service date has multiple rows to pair. Rows are kept and need matching review rather than being treated as duplicates.">
-          <span>Groups needing matching review</span>
+        <div title="Same stable client ID, clinician, and service date has multiple rows to pair. Rows are kept as diagnostics; this table does not resolve billing ambiguity.">
+          <span>Ambiguous same-day groups</span>
           <strong>{reconciliation.ambiguousGroups.toLocaleString()}</strong>
         </div>
       </div>
 
       <div className="pw-local-tables">
-        <section>
-          <h3>Same-day show review</h3>
+        <details>
+          <summary>Same-day exceptions</summary>
           <p className="pw-note">
-            By default, repeated show rows for the same client, clinician and
-            date count as one attended visit. Only confirm extra visits when
-            there is evidence of a separate second appointment; billing amounts
-            stay unchanged either way.
+            No action is required for ordinary duplicate rows: the default one
+            attended visit is already applied. Open this only to confirm a
+            genuine second same-day appointment; billing amounts stay unchanged.
           </p>
           <table>
             <thead>
@@ -735,19 +734,20 @@ export default function LocalRetentionWorkspace({
               {!sameDayReview.length && (
                 <tr>
                   <td colSpan={7}>
-                    Repeated same-day show rows will appear here for review.
+                    Same-day duplicate rows will appear here only when an
+                    exception can be confirmed.
                   </td>
                 </tr>
               )}
             </tbody>
           </table>
-        </section>
-        <section>
-          <h3>Matching review</h3>
+        </details>
+        <details>
+          <summary>Matching diagnostics</summary>
           <p className="pw-note">
-            Showing only rows that need billing-side review. Matched visits and
-            attendance-only rows stay in saved history and are hidden here for
-            now.
+            These rows are saved diagnostics for billing-only and ambiguous
+            same-day counterparts. They are not an action queue, and unresolved
+            fee values are left unknown rather than treated as zero.
           </p>
           <table>
             <thead>
@@ -774,13 +774,13 @@ export default function LocalRetentionWorkspace({
                         ? "Attendance only"
                         : row.status === "billing_only"
                           ? "Billing only"
-                          : "Review same-day rows"}
+                          : "Ambiguous same-day pairing"}
                   </td>
                   <td>{row.attendanceRows.length}</td>
                   <td>{row.billingRows.length}</td>
                   <td>
                     {row.totalFeeCharged === null
-                      ? "Review"
+                      ? "Unknown"
                       : money(row.totalFeeCharged)}
                   </td>
                 </tr>
@@ -788,14 +788,14 @@ export default function LocalRetentionWorkspace({
               {!reconciliationReviewRows.length && (
                 <tr>
                   <td colSpan={7}>
-                    Billing-only and ambiguous matching groups will appear here
-                    when review is needed.
+                    Billing-only and ambiguous matching diagnostics will appear
+                    here when present.
                   </td>
                 </tr>
               )}
             </tbody>
           </table>
-        </section>
+        </details>
         <section>
           <h3>Attendance and retention</h3>
           <table>

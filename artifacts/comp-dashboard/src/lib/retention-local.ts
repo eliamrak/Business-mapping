@@ -100,16 +100,28 @@ export type LocalRetentionMetrics = {
 export type LocalClientActivityEstimate = {
   coverageStart: string;
   coverageEnd: string;
+  inactivityDays: number;
+  eligibleInactivityMonths: string[];
+  monthlyInactiveClientTransitions: Array<{
+    month: string;
+    inactiveClientTransitions: number;
+    activeClientsAtStart: number;
+  }>;
   retainedClientPairs: number;
   matureNonRetainedClientPairs: number;
   immatureClientPairsExcluded: number;
   leftCensoredClientPairs: number;
   rightCensoredClientPairs: number;
+  inactiveClientTransitions: number;
+  activeClientMonthDenominator: number;
+  inactiveRelationshipTransitions: number;
+  activeRelationshipMonthDenominator: number;
+  averageInactiveClientTransitionsPerMonth: number | null;
   observedAttendedSessionsPerRetainedClient: number;
   observedAttendedSessionsPerMonth: number;
   estimatedMonths: number;
-  monthlyAttritionRate: number;
-  monthlyAttritionPct: number;
+  monthlyAttritionRate: number | null;
+  monthlyAttritionPct: number | null;
   latestCompleteMonth: string | null;
   activeClientsInLatestCompleteMonth: number | null;
   estimatedClientsLeavingPerMonth: number | null;
@@ -671,7 +683,21 @@ function uniqueIncomingSnapshots(
 
 export function buildLocalVisitReconciliation(
   snapshots: LocalSnapshot[],
+  sameDayVisitOverrides: SameDayVisitOverrides = {},
 ): LocalVisitReconciliation {
+  const attendanceIntervals = mergeIntervals(
+    snapshots
+      .filter(
+        (
+          snapshot,
+        ): snapshot is Extract<LocalSnapshot, { kind: "attendance" }> =>
+          snapshot.kind === "attendance",
+      )
+      .map((snapshot) => ({
+        start: snapshot.coverageStart,
+        end: snapshot.coverageEnd,
+      })),
+  );
   const groups = new Map<
     string,
     {
@@ -699,6 +725,10 @@ export function buildLocalVisitReconciliation(
     else group.billingRows.push(row as BillingRow);
     groups.set(key, group);
   };
+  const coveredByAttendance = (date: string) =>
+    attendanceIntervals.some(
+      (interval) => interval.start <= date && interval.end >= date,
+    );
   for (const snapshot of snapshots) {
     if (snapshot.kind === "attendance")
       snapshot.rows.forEach((row) => upsert(row, "attendance"));
@@ -715,6 +745,25 @@ export function buildLocalVisitReconciliation(
   for (const group of groups.values()) {
     const attendanceCount = group.attendanceRows.length;
     const billingCount = group.billingRows.length;
+    const showRows = group.attendanceRows.filter(
+      (row) => row.status === "show",
+    );
+    const nonShowRows = group.attendanceRows.filter(
+      (row) => row.status !== "show",
+    );
+    const derivedShowCount = showRows.length
+      ? Math.max(
+          1,
+          Math.min(
+            showRows.length,
+            sameDayVisitOverrides[sameDayVisitKey(showRows[0])] ?? 1,
+          ),
+        )
+      : 0;
+    const totalFeeCharged = group.billingRows.reduce(
+      (sum, row) => sum + row.totalFeeCharged,
+      0,
+    );
     const base = {
       key: [
         group.clientId,
@@ -729,30 +778,55 @@ export function buildLocalVisitReconciliation(
       attendanceRows: group.attendanceRows,
       billingRows: group.billingRows,
     };
-    if (attendanceCount === 1 && billingCount === 1) {
-      matchedVisits++;
-      totalMatchedFeesCharged += group.billingRows[0].totalFeeCharged;
-      rows.push({
-        ...base,
-        status: "matched",
-        totalFeeCharged: group.billingRows[0].totalFeeCharged,
-        reviewReason: null,
-      });
-    } else if (attendanceCount > 0 && billingCount === 0) {
+    if (attendanceCount > 0 && billingCount === 0) {
       attendanceOnlyRows += attendanceCount;
       rows.push({
         ...base,
         status: "attendance_only",
         totalFeeCharged: null,
-        reviewReason: "Missing billing counterpart in imported history.",
+        reviewReason:
+          nonShowRows.length && !showRows.length
+            ? null
+            : "Attended visit has no billing counterpart in imported history.",
+      });
+    } else if (derivedShowCount > 0 && billingCount >= derivedShowCount) {
+      matchedVisits += derivedShowCount;
+      totalMatchedFeesCharged += totalFeeCharged;
+      rows.push({
+        ...base,
+        status: "matched",
+        totalFeeCharged,
+        reviewReason: null,
+      });
+    } else if (derivedShowCount > billingCount) {
+      ambiguousGroups++;
+      ambiguousAttendanceRows += showRows.length;
+      ambiguousBillingRows += billingCount;
+      rows.push({
+        ...base,
+        status: "ambiguous",
+        totalFeeCharged: billingCount ? totalFeeCharged : null,
+        reviewReason:
+          "Confirmed attended visits exceed billing rows for this client, clinician, and date.",
+      });
+    } else if (billingCount > 0 && nonShowRows.length > 0) {
+      matchedVisits += billingCount;
+      totalMatchedFeesCharged += totalFeeCharged;
+      rows.push({
+        ...base,
+        status: "matched",
+        totalFeeCharged,
+        reviewReason: null,
       });
     } else if (billingCount > 0 && attendanceCount === 0) {
       billingOnlyRows += billingCount;
       rows.push({
         ...base,
         status: "billing_only",
-        totalFeeCharged: null,
-        reviewReason: "Missing attendance counterpart in imported history.",
+        totalFeeCharged,
+        reviewReason: coveredByAttendance(group.serviceDate)
+          ? "Billing row has no attendance or status counterpart inside covered attendance history."
+          : null,
       });
     } else {
       ambiguousGroups++;
@@ -912,10 +986,114 @@ function completeCoverageMonths(
   return months;
 }
 
+function completeInactivityMonths(
+  intervals: DateInterval[],
+  start: string,
+  end: string,
+  inactivityDays: number,
+) {
+  return completeCoverageMonths(intervals, start, end).filter((month) =>
+    intervalCoversRange(
+      intervals,
+      addDays(monthStart(month), -inactivityDays),
+      monthEnd(month),
+    ),
+  );
+}
+
+function uniqueSortedDates(rows: AttendanceRow[]) {
+  return [...new Set(rows.map((row) => row.serviceDate))].sort();
+}
+
+function hasCompleteLookForward(
+  intervals: DateInterval[],
+  date: string,
+  inactivityDays: number,
+) {
+  const start = addDays(date, 1);
+  const end = addDays(date, inactivityDays);
+  if (start > end) return true;
+  return intervalCoversRange(intervals, start, end);
+}
+
+function inactiveTransitionDates(
+  dates: string[],
+  intervals: DateInterval[],
+  inactivityDays: number,
+) {
+  const transitions: string[] = [];
+  for (let index = 0; index < dates.length; index++) {
+    const current = dates[index];
+    const next = dates[index + 1];
+    const inactiveOn = addDays(current, inactivityDays);
+    if (next && next <= inactiveOn) continue;
+    if (hasCompleteLookForward(intervals, current, inactivityDays)) {
+      transitions.push(inactiveOn);
+    }
+  }
+  return transitions;
+}
+
+function activeAtMonthStart(
+  dates: string[],
+  month: string,
+  inactivityDays: number,
+) {
+  const start = monthStart(month);
+  const lastShow = dates.filter((date) => date <= start).at(-1);
+  return lastShow ? addDays(lastShow, inactivityDays) >= start : false;
+}
+
+function estimateObservedInactivity(
+  showDatesByEntity: Map<string, string[]>,
+  coverageIntervals: DateInterval[],
+  eligibleMonths: string[],
+  inactivityDays: number,
+) {
+  const monthRows = new Map(
+    eligibleMonths.map((month) => [
+      month,
+      { month, inactiveClientTransitions: 0, activeClientsAtStart: 0 },
+    ]),
+  );
+  let inactiveTransitions = 0;
+  let activeMonthDenominator = 0;
+  for (const dates of showDatesByEntity.values()) {
+    const uniqueDates = [...new Set(dates)].sort();
+    for (const inactiveOn of inactiveTransitionDates(
+      uniqueDates,
+      coverageIntervals,
+      inactivityDays,
+    )) {
+      const month = inactiveOn.slice(0, 7);
+      const row = monthRows.get(month);
+      if (!row || !activeAtMonthStart(uniqueDates, month, inactivityDays))
+        continue;
+      row.inactiveClientTransitions++;
+      inactiveTransitions++;
+    }
+    for (const month of eligibleMonths) {
+      if (activeAtMonthStart(uniqueDates, month, inactivityDays)) {
+        monthRows.get(month)!.activeClientsAtStart++;
+        activeMonthDenominator++;
+      }
+    }
+  }
+  return {
+    inactiveTransitions,
+    activeMonthDenominator,
+    monthlyRows: [...monthRows.values()],
+    monthlyInactivityRate:
+      activeMonthDenominator > 0
+        ? inactiveTransitions / activeMonthDenominator
+        : null,
+  };
+}
+
 export function estimateLocalClientActivity(
   snapshots: LocalSnapshot[],
   sameDayVisitOverrides: SameDayVisitOverrides = {},
-  maturityDays = 14,
+  inactivityDays = 42,
 ): LocalClientActivityEstimate | null {
   const shows = derivedShowVisits(snapshots, sameDayVisitOverrides).sort(
     (a, b) =>
@@ -942,33 +1120,60 @@ export function estimateLocalClientActivity(
     })),
   );
   const pairShows = new Map<string, AttendanceRow[]>();
+  const practiceShowDates = new Map<string, string[]>();
+  const relationshipShowDates = new Map<string, string[]>();
   for (const row of shows) {
     const key = `${normalizeClinician(row.clinician)}\u0000${row.clientId}`;
     pairShows.set(key, [...(pairShows.get(key) ?? []), row]);
+    practiceShowDates.set(row.clientId, [
+      ...(practiceShowDates.get(row.clientId) ?? []),
+      row.serviceDate,
+    ]);
+    relationshipShowDates.set(key, [
+      ...(relationshipShowDates.get(key) ?? []),
+      row.serviceDate,
+    ]);
   }
-  const maturityCutoff = addDays(coverageEnd, -maturityDays);
+  const maturityCutoff = addDays(coverageEnd, -inactivityDays);
   const retained: Array<{ first: string; last: string; count: number }> = [];
   let matureNonRetainedClientPairs = 0;
   let immatureClientPairsExcluded = 0;
   let leftCensoredClientPairs = 0;
   let rightCensoredClientPairs = 0;
   for (const rows of pairShows.values()) {
-    const sorted = [...rows].sort((a, b) =>
-      a.serviceDate.localeCompare(b.serviceDate),
-    );
-    const first = sorted[0].serviceDate;
-    const last = sorted.at(-1)!.serviceDate;
+    const dates = uniqueSortedDates(rows);
+    const first = dates[0];
+    const last = dates.at(-1)!;
     if (first === coverageStart) leftCensoredClientPairs++;
-    if (last > maturityCutoff) rightCensoredClientPairs++;
-    const hasLaterShow = sorted.some((row) => row.serviceDate > first);
+    if (!hasCompleteLookForward(coverageIntervals, last, inactivityDays))
+      rightCensoredClientPairs++;
+    const hasLaterShow = dates.some((date) => date > first);
     if (hasLaterShow) {
-      retained.push({ first, last, count: sorted.length });
+      retained.push({ first, last, count: dates.length });
     } else if (first > maturityCutoff) {
       immatureClientPairsExcluded++;
     } else {
       matureNonRetainedClientPairs++;
     }
   }
+  const eligibleInactivityMonths = completeInactivityMonths(
+    coverageIntervals,
+    coverageStart,
+    coverageEnd,
+    inactivityDays,
+  );
+  const practiceInactivity = estimateObservedInactivity(
+    practiceShowDates,
+    coverageIntervals,
+    eligibleInactivityMonths,
+    inactivityDays,
+  );
+  const relationshipInactivity = estimateObservedInactivity(
+    relationshipShowDates,
+    coverageIntervals,
+    eligibleInactivityMonths,
+    inactivityDays,
+  );
   if (!retained.length) return null;
   const observedSessions = retained.reduce((sum, item) => sum + item.count, 0);
   const observedMonthEquivalents = retained.reduce((sum, item) => {
@@ -987,42 +1192,47 @@ export function estimateLocalClientActivity(
     observedAttendedSessionsPerRetainedClient /
     observedAttendedSessionsPerMonth;
   if (!(estimatedMonths > 0)) return null;
-  const completeMonths = completeCoverageMonths(
-    coverageIntervals,
-    coverageStart,
-    coverageEnd,
-  );
-  const latestCompleteMonth = completeMonths.at(-1) ?? null;
+  const latestCompleteMonth = eligibleInactivityMonths.at(-1) ?? null;
   const activeClientsInLatestCompleteMonth = latestCompleteMonth
-    ? new Set(
-        shows
-          .filter((row) => row.serviceDate.slice(0, 7) === latestCompleteMonth)
-          .map(
-            (row) =>
-              `${normalizeClinician(row.clinician)}\u0000${row.clientId}`,
-          ),
-      ).size
+    ? (practiceInactivity.monthlyRows.find(
+        (row) => row.month === latestCompleteMonth,
+      )?.activeClientsAtStart ?? null)
     : null;
-  const monthlyAttritionRate = 1 / estimatedMonths;
+  const monthlyAttritionRate = practiceInactivity.monthlyInactivityRate;
   return {
     coverageStart,
     coverageEnd,
+    inactivityDays,
+    eligibleInactivityMonths,
+    monthlyInactiveClientTransitions: practiceInactivity.monthlyRows,
     retainedClientPairs: retained.length,
     matureNonRetainedClientPairs,
     immatureClientPairsExcluded,
     leftCensoredClientPairs,
     rightCensoredClientPairs,
+    inactiveClientTransitions: practiceInactivity.inactiveTransitions,
+    activeClientMonthDenominator: practiceInactivity.activeMonthDenominator,
+    inactiveRelationshipTransitions: relationshipInactivity.inactiveTransitions,
+    activeRelationshipMonthDenominator:
+      relationshipInactivity.activeMonthDenominator,
+    averageInactiveClientTransitionsPerMonth:
+      eligibleInactivityMonths.length > 0
+        ? practiceInactivity.inactiveTransitions /
+          eligibleInactivityMonths.length
+        : null,
     observedAttendedSessionsPerRetainedClient,
     observedAttendedSessionsPerMonth,
     estimatedMonths,
     monthlyAttritionRate,
-    monthlyAttritionPct: monthlyAttritionRate * 100,
+    monthlyAttritionPct:
+      monthlyAttritionRate === null ? null : monthlyAttritionRate * 100,
     latestCompleteMonth,
     activeClientsInLatestCompleteMonth,
     estimatedClientsLeavingPerMonth:
-      activeClientsInLatestCompleteMonth === null
-        ? null
-        : activeClientsInLatestCompleteMonth * monthlyAttritionRate,
+      eligibleInactivityMonths.length > 0
+        ? practiceInactivity.inactiveTransitions /
+          eligibleInactivityMonths.length
+        : null,
   };
 }
 
