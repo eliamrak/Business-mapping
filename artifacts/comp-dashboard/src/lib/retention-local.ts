@@ -137,6 +137,27 @@ export type LocalClientActivityEstimate = {
   latestCompleteMonth: string | null;
   activeClientsInLatestCompleteMonth: number | null;
   estimatedClientsLeavingPerMonth: number | null;
+  endingGapDays: number;
+  endingObservationCutoff: string;
+  endingCoverageEnd: string;
+  monthlyEndedClients: Array<{
+    month: string;
+    endedClients: number;
+    establishedClientsAtStart: number;
+  }>;
+  partialEndingMonth: {
+    month: string;
+    through: string;
+    endedClients: number;
+  } | null;
+  endingFullMonthClientEnds: number;
+  endingFullMonthDenominator: number;
+  averageClientEndingsPerFullMonth: number | null;
+  latestSixEndingMonths: string[];
+  latestSixClientEnds: number;
+  averageClientEndingsPerLatestSixMonths: number | null;
+  endingAttritionPct: number | null;
+  endingLeftCensoredEstablishedClients: number;
 };
 
 export type SameDayShowReviewGroup = {
@@ -1174,6 +1195,17 @@ function completeInactivityMonths(
   );
 }
 
+function monthsBetween(start: string, end: string) {
+  const months: string[] = [];
+  let month = start.slice(0, 7);
+  const last = end.slice(0, 7);
+  while (month <= last) {
+    months.push(month);
+    month = nextMonth(month);
+  }
+  return months;
+}
+
 function uniqueSortedDates(rows: AttendanceRow[]) {
   return [...new Set(rows.map((row) => row.serviceDate))].sort();
 }
@@ -1314,6 +1346,124 @@ function estimateObservedInactivity(
   };
 }
 
+function estimateObservedClientEndings(
+  showDatesByClient: Map<string, string[]>,
+  coverageIntervals: DateInterval[],
+  coverageStart: string,
+  coverageEnd: string,
+  endingGapDays: number,
+) {
+  const endingObservationCutoff = addDays(coverageEnd, -endingGapDays);
+  const monthlyRows = new Map<
+    string,
+    { month: string; endedClients: number; establishedClientsAtStart: number }
+  >();
+  const fullMonths =
+    endingObservationCutoff >= coverageStart
+      ? monthsBetween(coverageStart, endingObservationCutoff).filter(
+          (month) =>
+            monthEnd(month) <= endingObservationCutoff &&
+            intervalCoversRange(coverageIntervals, monthStart(month), monthEnd(month)) &&
+            intervalCoversRange(
+              coverageIntervals,
+              addDays(monthStart(month), 1),
+              addDays(monthEnd(month), endingGapDays),
+            ),
+        )
+      : [];
+  for (const month of fullMonths) {
+    monthlyRows.set(month, {
+      month,
+      endedClients: 0,
+      establishedClientsAtStart: 0,
+    });
+  }
+  const cutoffMonth = endingObservationCutoff.slice(0, 7);
+  const partialEndingMonth =
+    endingObservationCutoff >= coverageStart &&
+    monthEnd(cutoffMonth) > endingObservationCutoff &&
+    intervalCoversRange(
+      coverageIntervals,
+      monthStart(cutoffMonth),
+      endingObservationCutoff,
+    ) &&
+    intervalCoversRange(
+      coverageIntervals,
+      addDays(monthStart(cutoffMonth), 1),
+      addDays(endingObservationCutoff, endingGapDays),
+    )
+      ? {
+          month: cutoffMonth,
+          through: endingObservationCutoff,
+          endedClients: 0,
+        }
+      : null;
+  let endingLeftCensoredEstablishedClients = 0;
+  for (const datesForClient of showDatesByClient.values()) {
+    const dates = [...new Set(datesForClient)].sort();
+    if (dates.length < 3) continue;
+    if (dates[0] === coverageStart) endingLeftCensoredEstablishedClients++;
+    for (const month of fullMonths) {
+      if (activeAtMonthStart(dates, month, endingGapDays, 3))
+        monthlyRows.get(month)!.establishedClientsAtStart++;
+    }
+    const finalTreatmentDate = dates.at(-1)!;
+    if (
+      finalTreatmentDate > endingObservationCutoff ||
+      !hasCompleteLookForward(coverageIntervals, finalTreatmentDate, endingGapDays)
+    )
+      continue;
+    const endingMonth = finalTreatmentDate.slice(0, 7);
+    const row = monthlyRows.get(endingMonth);
+    if (row) row.endedClients++;
+    else if (
+      partialEndingMonth &&
+      endingMonth === partialEndingMonth.month &&
+      finalTreatmentDate <= partialEndingMonth.through
+    )
+      partialEndingMonth.endedClients++;
+  }
+  const monthlyEndedClients = [...monthlyRows.values()];
+  const endingFullMonthClientEnds = monthlyEndedClients.reduce(
+    (sum, row) => sum + row.endedClients,
+    0,
+  );
+  const latestSixEndingMonths = monthlyEndedClients
+    .slice(-6)
+    .map((row) => row.month);
+  const latestSixClientEnds = monthlyEndedClients
+    .slice(-6)
+    .reduce((sum, row) => sum + row.endedClients, 0);
+  const latestFullMonth = monthlyEndedClients.at(-1) ?? null;
+  return {
+    endingGapDays,
+    endingObservationCutoff,
+    endingCoverageEnd: coverageEnd,
+    monthlyEndedClients,
+    partialEndingMonth,
+    endingFullMonthClientEnds,
+    endingFullMonthDenominator: monthlyEndedClients.length,
+    averageClientEndingsPerFullMonth:
+      monthlyEndedClients.length > 0
+        ? endingFullMonthClientEnds / monthlyEndedClients.length
+        : null,
+    latestSixEndingMonths,
+    latestSixClientEnds,
+    averageClientEndingsPerLatestSixMonths:
+      latestSixEndingMonths.length > 0
+        ? latestSixClientEnds / latestSixEndingMonths.length
+        : null,
+    endingAttritionPct:
+      latestFullMonth && latestFullMonth.establishedClientsAtStart > 0
+        ? (latestSixClientEnds /
+            Math.max(1, latestSixEndingMonths.length) /
+            latestFullMonth.establishedClientsAtStart) *
+          100
+        : null,
+    endingLeftCensoredEstablishedClients,
+  };
+}
+
 export function estimateLocalClientActivity(
   snapshots: LocalSnapshot[],
   sameDayVisitOverrides: SameDayVisitOverrides = {},
@@ -1321,6 +1471,7 @@ export function estimateLocalClientActivity(
   returnMaturityDays = 56,
   initialRetentionGapDays = 28,
   asOfDate = "9999-12-31",
+  endingGapDays = 105,
 ): LocalClientActivityEstimate | null {
   const shows = derivedShowVisits(snapshots, sameDayVisitOverrides)
     .filter((row) => row.serviceDate <= asOfDate)
@@ -1455,6 +1606,13 @@ export function estimateLocalClientActivity(
       )?.activeClientsAtStart ?? null)
     : null;
   const monthlyAttritionRate = practiceInactivity.monthlyInactivityRate;
+  const clientEndings = estimateObservedClientEndings(
+    practiceShowDates,
+    coverageIntervals,
+    coverageStart,
+    coverageEnd,
+    endingGapDays,
+  );
   return {
     coverageStart,
     coverageEnd,
@@ -1497,6 +1655,7 @@ export function estimateLocalClientActivity(
         ? practiceInactivity.inactiveTransitions /
           eligibleInactivityMonths.length
         : null,
+    ...clientEndings,
   };
 }
 

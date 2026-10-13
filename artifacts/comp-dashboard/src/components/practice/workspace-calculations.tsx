@@ -112,8 +112,7 @@ export default function WorkspaceCalculations({
     settings.teamId,
     new Date().toLocaleDateString("en-CA"),
   );
-  const activitySuggestedAttrition =
-    clientActivityEstimate?.monthlyAttritionPct;
+  const activitySuggestedAttrition = clientActivityEstimate?.endingAttritionPct;
   const suggestedAttrition = rounded(
     activitySuggestedAttrition ?? observed?.attritionPct ?? lifespanRate,
   );
@@ -128,16 +127,16 @@ export default function WorkspaceCalculations({
     suggestedSessionCount !== undefined &&
     suggestedSessionsPerMonth !== null &&
     suggestedSessionsPerMonth !== undefined;
-  const averageClientLosses =
-    clientActivityEstimate?.estimatedClientsLeavingPerMonth;
-  const hasObservedInactivityEstimate =
-    clientActivityEstimate?.monthlyAttritionPct !== null &&
-    clientActivityEstimate?.monthlyAttritionPct !== undefined;
-  const eligibleInactivityMonthCount =
-    clientActivityEstimate?.eligibleInactivityMonths.length ?? 0;
-  const eligibleInactivityRange =
-    clientActivityEstimate && eligibleInactivityMonthCount > 0
-      ? `${clientActivityEstimate.eligibleInactivityMonths[0]} to ${clientActivityEstimate.eligibleInactivityMonths.at(-1)}`
+  const averageClientEndings =
+    clientActivityEstimate?.averageClientEndingsPerLatestSixMonths ??
+    clientActivityEstimate?.averageClientEndingsPerFullMonth;
+  const hasObservedEndingEstimate =
+    clientActivityEstimate?.endingAttritionPct !== null &&
+    clientActivityEstimate?.endingAttritionPct !== undefined;
+  const endingFullMonthRange =
+    clientActivityEstimate &&
+    clientActivityEstimate.monthlyEndedClients.length > 0
+      ? `${clientActivityEstimate.monthlyEndedClients[0].month} to ${clientActivityEstimate.monthlyEndedClients.at(-1)?.month}`
       : null;
   const initialRetentionDenominator =
     clientActivityEstimate?.initialRetentionDenominator ?? 0;
@@ -187,16 +186,20 @@ export default function WorkspaceCalculations({
             </small>
           </div>
           <div>
-            <span>Average client losses / month</span>
+            <span>Client endings / month</span>
             <strong>
-              {averageClientLosses === null || averageClientLosses === undefined
+              {averageClientEndings === null ||
+              averageClientEndings === undefined
                 ? "--"
-                : rounded(averageClientLosses).toFixed(1)}
+                : rounded(averageClientEndings).toFixed(1)}
             </strong>
             <small>
-              {eligibleInactivityRange && averageClientLosses !== null
-                ? `Estimated from ${clientActivityEstimate.inactiveClientTransitions.toLocaleString()} eight-week established-client inactivity transition${clientActivityEstimate.inactiveClientTransitions === 1 ? "" : "s"} across ${eligibleInactivityMonthCount.toLocaleString()} eligible fully covered month${eligibleInactivityMonthCount === 1 ? "" : "s"}, ${eligibleInactivityRange}.`
-                : "Needs eligible fully covered history before estimating monthly losses."}
+              {clientActivityEstimate.averageClientEndingsPerLatestSixMonths !==
+                null && clientActivityEstimate.latestSixEndingMonths.length > 0
+                ? `${clientActivityEstimate.latestSixClientEnds.toLocaleString()} established-client final session${clientActivityEstimate.latestSixClientEnds === 1 ? "" : "s"} across latest ${clientActivityEstimate.latestSixEndingMonths.length.toLocaleString()} full month${clientActivityEstimate.latestSixEndingMonths.length === 1 ? "" : "s"}, ${clientActivityEstimate.latestSixEndingMonths[0]} to ${clientActivityEstimate.latestSixEndingMonths.at(-1)}.`
+                : endingFullMonthRange
+                  ? `${clientActivityEstimate.endingFullMonthClientEnds.toLocaleString()} established-client final session${clientActivityEstimate.endingFullMonthClientEnds === 1 ? "" : "s"} across ${clientActivityEstimate.endingFullMonthDenominator.toLocaleString()} full month${clientActivityEstimate.endingFullMonthDenominator === 1 ? "" : "s"}, ${endingFullMonthRange}.`
+                  : "Needs complete follow-up after final attended treatment dates."}
             </small>
           </div>
         </div>
@@ -287,14 +290,14 @@ export default function WorkspaceCalculations({
         <div className="pw-calculation-suggestion">
           <div>
             <span>
-              {hasObservedInactivityEstimate
-                ? "Observed monthly inactivity rate"
+              {hasObservedEndingEstimate
+                ? "Observed ending-based monthly attrition"
                 : "Suggested monthly attrition"}
             </span>
             <strong>{suggestedAttrition.toFixed(1)}%</strong>
             <small>
-              {clientActivityEstimate && hasObservedInactivityEstimate
-                ? `${clientActivityEstimate.inactiveClientTransitions.toLocaleString()} established-client inactivity transition${clientActivityEstimate.inactiveClientTransitions === 1 ? "" : "s"} / ${clientActivityEstimate.activeClientMonthDenominator.toLocaleString()} established active-client month${clientActivityEstimate.activeClientMonthDenominator === 1 ? "" : "s"} at the start of eligible fully covered months`
+              {clientActivityEstimate && hasObservedEndingEstimate
+                ? `${rounded(averageClientEndings ?? 0).toFixed(1)} expected established-client final session${rounded(averageClientEndings ?? 0) === 1 ? "" : "s"} per month / latest complete ending month active established clients`
                 : observed
                   ? `Inferred from sessions and new clients across ${observed.months} months, through ${observed.through}`
                   : `Based on your ${settings.retentionMonths}-month average client lifespan`}
@@ -325,38 +328,62 @@ export default function WorkspaceCalculations({
             {settings.sessionsPerClientMonth} sessions in the booking month.
           </p>
         )}
-        {clientActivityEstimate && hasObservedInactivityEstimate && (
+        {clientActivityEstimate && hasObservedEndingEstimate && (
           <p>
-            An established client is counted as a monthly loss when they cross
-            56 consecutive covered days without an attended treatment session;{" "}
-            {clientActivityEstimate.inactiveClientReactivations.toLocaleString()}{" "}
-            later reactivation
-            {clientActivityEstimate.inactiveClientReactivations === 1
-              ? ""
-              : "s"}{" "}
-            are tracked separately. Inactivity is a proxy for loss, not a
-            measured discharge. Clinician relationship inactivity is tracked
-            separately:
-            {clientActivityEstimate.inactiveRelationshipTransitions.toLocaleString()}{" "}
-            relationship transition
-            {clientActivityEstimate.inactiveRelationshipTransitions === 1
-              ? ""
-              : "s"}{" "}
+            An established client is counted in their final attended treatment
+            month only after{" "}
+            {clientActivityEstimate.endingGapDays.toLocaleString()} complete
+            covered days with no later attended treatment session. The current
+            ending cutoff is {clientActivityEstimate.endingObservationCutoff},
+            based on continuous coverage through{" "}
+            {clientActivityEstimate.endingCoverageEnd}; later imported returns
+            remove earlier apparent endings.{" "}
+            {clientActivityEstimate.partialEndingMonth
+              ? `${clientActivityEstimate.partialEndingMonth.endedClients.toLocaleString()} final session${clientActivityEstimate.partialEndingMonth.endedClients === 1 ? "" : "s"} appear in the partial cutoff month ${clientActivityEstimate.partialEndingMonth.month} through ${clientActivityEstimate.partialEndingMonth.through}; partial months are shown separately. `
+              : ""}
+            All full months average{" "}
+            {clientActivityEstimate.averageClientEndingsPerFullMonth === null
+              ? "--"
+              : rounded(
+                  clientActivityEstimate.averageClientEndingsPerFullMonth,
+                ).toFixed(1)}{" "}
+            endings/month from{" "}
+            {clientActivityEstimate.endingFullMonthClientEnds.toLocaleString()}{" "}
+            ending
+            {clientActivityEstimate.endingFullMonthClientEnds === 1 ? "" : "s"}{" "}
             across{" "}
-            {clientActivityEstimate.activeRelationshipMonthDenominator.toLocaleString()}{" "}
-            active relationship-month
-            {clientActivityEstimate.activeRelationshipMonthDenominator === 1
+            {clientActivityEstimate.endingFullMonthDenominator.toLocaleString()}{" "}
+            full month
+            {clientActivityEstimate.endingFullMonthDenominator === 1
               ? ""
               : "s"}
-            . The estimate does not infer exits from uncovered gaps;{" "}
-            {clientActivityEstimate.rightCensoredClientPairs.toLocaleString()}{" "}
-            pair
-            {clientActivityEstimate.rightCensoredClientPairs === 1
+            ; latest-six-month average is{" "}
+            {clientActivityEstimate.averageClientEndingsPerLatestSixMonths ===
+            null
+              ? "--"
+              : rounded(
+                  clientActivityEstimate.averageClientEndingsPerLatestSixMonths,
+                ).toFixed(1)}{" "}
+            from {clientActivityEstimate.latestSixClientEnds.toLocaleString()}{" "}
+            ending
+            {clientActivityEstimate.latestSixClientEnds === 1 ? "" : "s"}{" "}
+            across{" "}
+            {clientActivityEstimate.latestSixEndingMonths.length.toLocaleString()}{" "}
+            full month
+            {clientActivityEstimate.latestSixEndingMonths.length === 1
               ? ""
               : "s"}{" "}
-            are right-censored near the import end,{" "}
-            {clientActivityEstimate.leftCensoredClientPairs.toLocaleString()}{" "}
-            may have started before imported history, and{" "}
+            {clientActivityEstimate.latestSixEndingMonths.length > 0
+              ? `(${clientActivityEstimate.latestSixEndingMonths[0]} to ${clientActivityEstimate.latestSixEndingMonths.at(-1)})`
+              : ""}
+            . These are confirmed no-return endings in imported coverage, not
+            permanent discharge records.{" "}
+            {clientActivityEstimate.endingLeftCensoredEstablishedClients.toLocaleString()}{" "}
+            established client
+            {clientActivityEstimate.endingLeftCensoredEstablishedClients === 1
+              ? ""
+              : "s"}{" "}
+            may be left-censored at the beginning of imported history, and{" "}
             {clientActivityEstimate.immatureClientPairsExcluded.toLocaleString()}{" "}
             first shows are inside the{" "}
             {clientActivityEstimate.initialRetentionGapDays}-day initial

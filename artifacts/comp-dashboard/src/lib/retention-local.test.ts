@@ -319,6 +319,108 @@ CID-slow,Dr Moss,2026-02-10,Room B,show`,
   );
 });
 
+test("client ending estimate assigns final sessions after 105 covered days", () => {
+  const attendance = attendanceSnapshot(
+    `Client,Clinician,Date of service,Location,Status
+CID-ended,Dr Lane,2026-01-01,Room A,show
+CID-ended,Dr Lane,2026-01-15,Room A,show
+CID-ended,Dr Lane,2026-01-29,Room A,show
+CID-return,Dr Lane,2026-01-01,Room A,show
+CID-return,Dr Lane,2026-01-15,Room A,show
+CID-return,Dr Lane,2026-01-29,Room A,show
+CID-return,Dr Lane,2026-05-14,Room A,show
+CID-boundary,Dr Moss,2026-02-01,Room B,show
+CID-boundary,Dr Moss,2026-02-15,Room B,show
+CID-boundary,Dr Moss,2026-03-01,Room B,show
+CID-boundary,Dr Moss,2026-06-14,Room B,show
+CID-partial,Dr Lane,2026-01-15,Room A,show
+CID-partial,Dr Lane,2026-02-15,Room A,show
+CID-partial,Dr Lane,2026-03-01,Room A,show
+CID-consult,Dr Lane,2026-02-01,Room A,show
+CID-consult,Dr Lane,2026-02-15,Room A,show
+CID-consult,Dr Lane,2026-03-01,Room A,show`,
+    "2026-01-01",
+    "2026-06-14",
+  );
+  const billing = importBillingCsv(
+    `Date of Service,Client,Clinician,Total Fee,Billing Code
+2026-02-01,CID-consult,Dr Lane,0,Phone
+2026-02-15,CID-consult,Dr Lane,0,Phone
+2026-03-01,CID-consult,Dr Lane,0,Phone`,
+  ).snapshot;
+  const estimate = estimateLocalClientActivity(
+    [attendance, billing],
+    {},
+    56,
+    56,
+    28,
+    "2026-06-14",
+    105,
+  )!;
+
+  assert.equal(estimate.endingGapDays, 105);
+  assert.equal(estimate.endingObservationCutoff, "2026-03-01");
+  assert.equal(estimate.endingCoverageEnd, "2026-06-14");
+  assert.deepEqual(
+    estimate.monthlyEndedClients.map((row) => [
+      row.month,
+      row.endedClients,
+    ]),
+    [
+      ["2026-01", 1],
+      ["2026-02", 0],
+    ],
+  );
+  assert.deepEqual(estimate.partialEndingMonth, {
+    month: "2026-03",
+    through: "2026-03-01",
+    endedClients: 1,
+  });
+  assert.equal(estimate.endingFullMonthClientEnds, 1);
+  assert.equal(estimate.endingFullMonthDenominator, 2);
+  assert.equal(estimate.averageClientEndingsPerFullMonth, 0.5);
+  assert.deepEqual(estimate.latestSixEndingMonths, ["2026-01", "2026-02"]);
+  assert.equal(estimate.latestSixClientEnds, 1);
+  assert.equal(estimate.averageClientEndingsPerLatestSixMonths, 0.5);
+});
+
+test("client ending estimate deduplicates transfers and respects coverage gaps", () => {
+  const january = attendanceSnapshot(
+    `Client,Clinician,Date of service,Location,Status
+CID-transfer,Dr Lane,2026-01-01,Room A,show
+CID-transfer,Dr Lane,2026-01-15,Room A,show
+CID-transfer,Dr Moss,2026-01-29,Room B,show`,
+    "2026-01-01",
+    "2026-01-31",
+  );
+  const may = attendanceSnapshot(
+    `Client,Clinician,Date of service,Location,Status
+CID-gap,Dr Lane,2026-05-01,Room A,show
+CID-gap,Dr Lane,2026-05-15,Room A,show
+CID-gap,Dr Lane,2026-05-29,Room A,show`,
+    "2026-05-01",
+    "2026-08-31",
+  );
+  const estimate = estimateLocalClientActivity(
+    [january, may],
+    {},
+    56,
+    56,
+    28,
+    "2026-08-31",
+    105,
+  )!;
+
+  assert.equal(estimate.endingObservationCutoff, "2026-05-18");
+  assert.deepEqual(estimate.monthlyEndedClients, []);
+  assert.deepEqual(estimate.partialEndingMonth, {
+    month: "2026-05",
+    through: "2026-05-18",
+    endedClients: 0,
+  });
+  assert.equal(estimate.endingFullMonthClientEnds, 0);
+});
+
 test("client activity estimate ignores future visits and coverage for retention", () => {
   const attendance = attendanceSnapshot(
     `Client,Clinician,Date of service,Location,Status
