@@ -91,6 +91,35 @@ export type LocalRetentionMetrics = {
   roomCounts: RoomMetric[];
 };
 
+export type LocalVisitReconciliationStatus =
+  | "matched"
+  | "attendance_only"
+  | "billing_only"
+  | "ambiguous";
+
+export type LocalVisitReconciliationRow = {
+  key: string;
+  status: LocalVisitReconciliationStatus;
+  clientId: string;
+  clinician: string;
+  serviceDate: string;
+  attendanceRows: AttendanceRow[];
+  billingRows: BillingRow[];
+  totalFeeCharged: number | null;
+  reviewReason: string | null;
+};
+
+export type LocalVisitReconciliation = {
+  matchedVisits: number;
+  attendanceOnlyRows: number;
+  billingOnlyRows: number;
+  ambiguousGroups: number;
+  ambiguousAttendanceRows: number;
+  ambiguousBillingRows: number;
+  totalMatchedFeesCharged: number;
+  rows: LocalVisitReconciliationRow[];
+};
+
 export type LocalImportResult<T extends LocalFactKind> = {
   snapshot: Extract<LocalSnapshot, { kind: T }>;
   warnings: string[];
@@ -160,6 +189,8 @@ const headerKey = (value: string) =>
   value.toLowerCase().replace(/[^a-z0-9]/g, "");
 const clean = (value: string | undefined) => (value ?? "").trim();
 const rowHash = (parts: unknown[]) => stableHash(JSON.stringify(parts));
+const normalizeClinician = (value: string) =>
+  value.toLowerCase().replace(/\s+/g, " ").trim();
 const headerAliases = new Map([
   ["randomid", "client"],
   ["date", "dateofservice"],
@@ -443,26 +474,12 @@ export function mergeLocalPackage(
   billingCodeMinutes: BillingCodeMinutes,
   incoming: LocalPackageImport,
 ): PackageMergeResult {
-  const duplicates = incoming.snapshots.filter((snapshot) =>
-    snapshots.some(
-      (item) =>
-        item.kind === snapshot.kind && item.sourceHash === snapshot.sourceHash,
-    ),
-  );
+  const uniqueIncoming = uniqueIncomingSnapshots(snapshots, incoming.snapshots);
   const warnings = [...incoming.warnings];
-  if (duplicates.length === incoming.snapshots.length)
+  if (!uniqueIncoming.length)
     return { status: "duplicate", snapshots, billingCodeMinutes, warnings };
-  if (duplicates.length)
-    return {
-      status: "blocked",
-      snapshots,
-      billingCodeMinutes,
-      reason:
-        "This package partly duplicates loaded local data. Nothing was added; export a complete package for the intended date range or remove the overlap first.",
-      warnings,
-    };
   const existing = snapshots.filter((snapshot) =>
-    snapshotOverlapsAny(snapshot, incoming.snapshots),
+    snapshotOverlapsAny(snapshot, uniqueIncoming),
   );
   if (existing.length)
     return {
@@ -470,20 +487,146 @@ export function mergeLocalPackage(
       snapshots,
       billingCodeMinutes,
       existing,
-      incoming: incoming.snapshots,
-      warnings: [
-        ...warnings,
-        ...replacementWarnings(existing, incoming.snapshots),
-      ],
+      incoming: uniqueIncoming,
+      warnings: [...warnings, ...replacementWarnings(existing, uniqueIncoming)],
     };
   return {
     status: "added",
-    snapshots: [...snapshots, ...incoming.snapshots],
+    snapshots: [...snapshots, ...uniqueIncoming],
     billingCodeMinutes: {
       ...billingCodeMinutes,
       ...incoming.billingCodeMinutes,
     },
     warnings,
+  };
+}
+
+function snapshotKey(snapshot: Pick<LocalSnapshot, "kind" | "sourceHash">) {
+  return `${snapshot.kind}\u0000${snapshot.sourceHash}`;
+}
+
+function uniqueIncomingSnapshots(
+  snapshots: LocalSnapshot[],
+  incoming: LocalSnapshot[],
+) {
+  const existing = new Set(snapshots.map(snapshotKey));
+  return incoming.filter((snapshot) => !existing.has(snapshotKey(snapshot)));
+}
+
+export function buildLocalVisitReconciliation(
+  snapshots: LocalSnapshot[],
+): LocalVisitReconciliation {
+  const groups = new Map<
+    string,
+    {
+      clientId: string;
+      clinician: string;
+      serviceDate: string;
+      attendanceRows: AttendanceRow[];
+      billingRows: BillingRow[];
+    }
+  >();
+  const upsert = (row: AttendanceRow | BillingRow, kind: LocalFactKind) => {
+    const key = [
+      row.clientId,
+      normalizeClinician(row.clinician),
+      row.serviceDate,
+    ].join("\u0000");
+    const group = groups.get(key) ?? {
+      clientId: row.clientId,
+      clinician: row.clinician,
+      serviceDate: row.serviceDate,
+      attendanceRows: [],
+      billingRows: [],
+    };
+    if (kind === "attendance") group.attendanceRows.push(row as AttendanceRow);
+    else group.billingRows.push(row as BillingRow);
+    groups.set(key, group);
+  };
+  for (const snapshot of snapshots) {
+    if (snapshot.kind === "attendance")
+      snapshot.rows.forEach((row) => upsert(row, "attendance"));
+    else snapshot.rows.forEach((row) => upsert(row, "billing"));
+  }
+  const rows: LocalVisitReconciliationRow[] = [];
+  let matchedVisits = 0;
+  let attendanceOnlyRows = 0;
+  let billingOnlyRows = 0;
+  let ambiguousGroups = 0;
+  let ambiguousAttendanceRows = 0;
+  let ambiguousBillingRows = 0;
+  let totalMatchedFeesCharged = 0;
+  for (const group of groups.values()) {
+    const attendanceCount = group.attendanceRows.length;
+    const billingCount = group.billingRows.length;
+    const base = {
+      key: [
+        group.clientId,
+        normalizeClinician(group.clinician),
+        group.serviceDate,
+        group.attendanceRows.map((row) => row.sourceRowHash).join("|"),
+        group.billingRows.map((row) => row.sourceRowHash).join("|"),
+      ].join("\u0000"),
+      clientId: group.clientId,
+      clinician: group.clinician,
+      serviceDate: group.serviceDate,
+      attendanceRows: group.attendanceRows,
+      billingRows: group.billingRows,
+    };
+    if (attendanceCount === 1 && billingCount === 1) {
+      matchedVisits++;
+      totalMatchedFeesCharged += group.billingRows[0].totalFeeCharged;
+      rows.push({
+        ...base,
+        status: "matched",
+        totalFeeCharged: group.billingRows[0].totalFeeCharged,
+        reviewReason: null,
+      });
+    } else if (attendanceCount > 0 && billingCount === 0) {
+      attendanceOnlyRows += attendanceCount;
+      rows.push({
+        ...base,
+        status: "attendance_only",
+        totalFeeCharged: null,
+        reviewReason: "Missing billing counterpart in imported history.",
+      });
+    } else if (billingCount > 0 && attendanceCount === 0) {
+      billingOnlyRows += billingCount;
+      rows.push({
+        ...base,
+        status: "billing_only",
+        totalFeeCharged: null,
+        reviewReason: "Missing attendance counterpart in imported history.",
+      });
+    } else {
+      ambiguousGroups++;
+      ambiguousAttendanceRows += attendanceCount;
+      ambiguousBillingRows += billingCount;
+      rows.push({
+        ...base,
+        status: "ambiguous",
+        totalFeeCharged: null,
+        reviewReason:
+          "Multiple rows share this client, clinician, and date; review before pairing.",
+      });
+    }
+  }
+  rows.sort(
+    (a, b) =>
+      a.serviceDate.localeCompare(b.serviceDate) ||
+      a.clinician.localeCompare(b.clinician) ||
+      a.clientId.localeCompare(b.clientId) ||
+      a.status.localeCompare(b.status),
+  );
+  return {
+    matchedVisits,
+    attendanceOnlyRows,
+    billingOnlyRows,
+    ambiguousGroups,
+    ambiguousAttendanceRows,
+    ambiguousBillingRows,
+    totalMatchedFeesCharged,
+    rows,
   };
 }
 
@@ -820,7 +963,7 @@ function validatePackageCoverage(
     invalidPackage(`${label} coverage does not match its rows`);
 }
 
-function validatePackageAttendanceRows(rows: unknown[], packageId: string) {
+function validatePackageAttendanceRows(rows: unknown[]) {
   return rows.map((value, index): AttendanceRow => {
     if (!isRecord(value))
       invalidPackage(`attendance row ${index + 1} must be an object`);
@@ -860,7 +1003,6 @@ function validatePackageAttendanceRows(rows: unknown[], packageId: string) {
       location,
       status,
       sourceRowHash: rowHash([
-        packageId,
         "attendance",
         clientId,
         clinician,
@@ -873,7 +1015,7 @@ function validatePackageAttendanceRows(rows: unknown[], packageId: string) {
   });
 }
 
-function validatePackageBillingRows(rows: unknown[], packageId: string) {
+function validatePackageBillingRows(rows: unknown[]) {
   return rows.map((value, index): BillingRow => {
     if (!isRecord(value))
       invalidPackage(`billing row ${index + 1} must be an object`);
@@ -923,7 +1065,6 @@ function validatePackageBillingRows(rows: unknown[], packageId: string) {
       totalFeeCharged,
       billingCode,
       sourceRowHash: rowHash([
-        packageId,
         "billing",
         clientId,
         clinician,
@@ -978,11 +1119,8 @@ export function importLocalPackage(
     value.collections.billing,
     "billing",
   );
-  const attendanceRows = validatePackageAttendanceRows(
-    attendanceBase.rows,
-    packageId,
-  );
-  const billingRows = validatePackageBillingRows(billingBase.rows, packageId);
+  const attendanceRows = validatePackageAttendanceRows(attendanceBase.rows);
+  const billingRows = validatePackageBillingRows(billingBase.rows);
   validatePackageCoverage(
     attendanceRows,
     attendanceBase.coverageStart,

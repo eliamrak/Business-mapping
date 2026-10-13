@@ -162,13 +162,13 @@ function toSnapshots(
   const attendanceRows: AttendanceRow[] = input.collections.attendance.rows.map(
     (row, index) => ({
       ...row,
-      sourceRowHash: rowHash([input.packageId, "attendance", row, index]),
+      sourceRowHash: rowHash(["attendance", row, index]),
     }),
   );
   const billingRows: BillingRow[] = input.collections.billing.rows.map(
     (row, index) => ({
       ...row,
-      sourceRowHash: rowHash([input.packageId, "billing", row, index]),
+      sourceRowHash: rowHash(["billing", row, index]),
     }),
   );
   const attendanceCoverage = coverage(attendanceRows);
@@ -287,7 +287,6 @@ router.post("/practice-imports/package", async (req, res) => {
   }
   const contentHash = sha256({
     packageId: input.packageId,
-    exportedAt: input.exportedAt,
     snapshots: snapshots.map(
       ({ kind, coverageStart, coverageEnd, sourceHash }) => ({
         kind,
@@ -327,8 +326,26 @@ router.post("/practice-imports/package", async (req, res) => {
           eq(practiceImportSnapshotsTable.active, 1),
         ),
       );
+    const duplicateActiveKeys = new Set(
+      active
+        .filter((row) =>
+          snapshots.some(
+            (snapshot) =>
+              snapshot.kind === row.kind &&
+              snapshot.sourceHash === row.sourceHash,
+          ),
+        )
+        .map((row) => `${row.kind}\u0000${row.sourceHash}`),
+    );
+    const snapshotsToInsert = snapshots.filter(
+      (snapshot) =>
+        !duplicateActiveKeys.has(
+          `${snapshot.kind}\u0000${snapshot.sourceHash}`,
+        ),
+    );
+    if (!snapshotsToInsert.length) return { status: "duplicate" as const };
     const overlapping = active.filter((row) =>
-      snapshots.some((snapshot) => overlaps(row, snapshot)),
+      snapshotsToInsert.some((snapshot) => overlaps(row, snapshot)),
     );
     if (overlapping.length && !body.data.replaceOverlaps)
       return {
@@ -338,6 +355,12 @@ router.post("/practice-imports/package", async (req, res) => {
           coverageStart: row.coverageStart,
           coverageEnd: row.coverageEnd,
           rowCount: row.rowCount,
+        })),
+        incoming: snapshotsToInsert.map((snapshot) => ({
+          kind: snapshot.kind,
+          coverageStart: snapshot.coverageStart,
+          coverageEnd: snapshot.coverageEnd,
+          rowCount: snapshot.rows.length,
         })),
       };
     const packageImportId = randomUUID();
@@ -394,7 +417,7 @@ router.post("/practice-imports/package", async (req, res) => {
       billingCodeMinutes: input.billingCodeMinutes ?? {},
     });
     await tx.insert(practiceImportSnapshotsTable).values(
-      snapshots.map((snapshot) => ({
+      snapshotsToInsert.map((snapshot) => ({
         id: randomUUID(),
         packageImportId,
         practiceId,
@@ -416,8 +439,14 @@ router.post("/practice-imports/package", async (req, res) => {
       actor,
       detail: {
         replacedSnapshotCount: overlapping.length,
-        attendanceRows: snapshots[0].rows.length,
-        billingRows: snapshots[1].rows.length,
+        skippedDuplicateSnapshotCount:
+          snapshots.length - snapshotsToInsert.length,
+        attendanceRows:
+          snapshotsToInsert.find((snapshot) => snapshot.kind === "attendance")
+            ?.rows.length ?? 0,
+        billingRows:
+          snapshotsToInsert.find((snapshot) => snapshot.kind === "billing")
+            ?.rows.length ?? 0,
       },
     });
     return {
@@ -435,12 +464,7 @@ router.post("/practice-imports/package", async (req, res) => {
       code: "OVERLAP_REVIEW_REQUIRED",
       error: "This package overlaps existing converted history.",
       existing: result.existing,
-      incoming: snapshots.map((snapshot) => ({
-        kind: snapshot.kind,
-        coverageStart: snapshot.coverageStart,
-        coverageEnd: snapshot.coverageEnd,
-        rowCount: snapshot.rows.length,
-      })),
+      incoming: result.incoming,
     });
   return res.json({
     status: result.status,

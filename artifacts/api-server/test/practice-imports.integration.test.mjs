@@ -247,8 +247,10 @@ test("separate configured practices cannot see each other's converted history", 
 });
 
 test("package import is idempotent and rejects changed content under the same ID", async () => {
+  const reexported = packageFor({ packageId: "pkg-same-practice" });
+  reexported.exportedAt = "2026-10-13T15:00:00.000Z";
   const duplicate = await call("/practice-imports/package", {
-    package: packageFor({ packageId: "pkg-same-practice" }),
+    package: reexported,
   });
   assert.equal(duplicate.status, 200);
   assert.equal(duplicate.data.status, "duplicate");
@@ -258,6 +260,63 @@ test("package import is idempotent and rejects changed content under the same ID
   });
   assert.equal(changed.status, 409);
   assert.equal(changed.data.code, "PACKAGE_ID_CHANGED_CONTENT");
+});
+
+test("later backfills skip duplicate collections and add missing counterparts", async () => {
+  const basePackage = packageFor({
+    packageId: "pkg-backfill-base",
+    attendanceStart: "2027-01-01",
+    attendanceEnd: "2027-01-14",
+    billingStart: "2027-01-20",
+    billingEnd: "2027-01-21",
+    attendanceCode: "backfill-client",
+    billingCode: "90837",
+  });
+  const imported = await call(
+    "/practice-imports/package",
+    {
+      package: basePackage,
+    },
+    "POST",
+    { practice: "practice-backfill@example.test" },
+  );
+  assert.equal(imported.status, 200, JSON.stringify(imported.data));
+  assert.equal(imported.data.status, "added");
+
+  const backfill = packageFor({
+    packageId: "pkg-backfill-billing",
+    attendanceStart: "2027-01-01",
+    attendanceEnd: "2027-01-14",
+    billingStart: "2027-01-01",
+    billingEnd: "2027-01-14",
+    attendanceCode: "backfill-client",
+    billingCode: "90834",
+  });
+  const filled = await call(
+    "/practice-imports/package",
+    { package: backfill },
+    "POST",
+    { practice: "practice-backfill@example.test" },
+  );
+  assert.equal(filled.status, 200, JSON.stringify(filled.data));
+  assert.equal(filled.data.status, "added");
+  assert.equal(filled.data.snapshots.length, 3);
+  assert.equal(
+    filled.data.snapshots.filter((item) => item.kind === "attendance").length,
+    1,
+  );
+  assert.equal(
+    filled.data.snapshots.filter((item) => item.kind === "billing").length,
+    2,
+  );
+
+  const audit = await testClient.query(
+    "SELECT detail FROM practice_import_audit WHERE package_id = $1",
+    ["pkg-backfill-billing"],
+  );
+  assert.equal(audit.rows[0].detail.skippedDuplicateSnapshotCount, 1);
+  assert.equal(audit.rows[0].detail.attendanceRows, 0);
+  assert.equal(audit.rows[0].detail.billingRows, 2);
 });
 
 test("partial overlap replacement keeps retained package metadata and code minutes", async () => {

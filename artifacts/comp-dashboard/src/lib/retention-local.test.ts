@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import {
   buildLocalRetentionMetrics,
+  buildLocalVisitReconciliation,
   exportLocalBackup,
   importAttendanceCsv,
   importBillingCsv,
@@ -97,6 +98,64 @@ test("local imports keep billing and attendance as separate fact tables", () => 
       ?.configuredMinuteRows,
     2,
   );
+});
+
+test("visit reconciliation matches only unambiguous accumulated counterparts", () => {
+  const attendance =
+    importAttendanceCsv(`Client,Clinician,Date of service,Location,Status
+CID-alpha,Dr Lane,2026-10-01,Room A,show
+CID-beta,Dr Lane,2026-10-02,Room A,show
+CID-gamma,Dr Moss,2026-10-03,Room B,show`).snapshot;
+  const billing =
+    importBillingCsv(`Date of Service,Client,Clinician,Total Fee,Billing Code
+2026-10-01,CID-alpha,dr   lane,150,90837
+2026-10-04,CID-delta,Dr Lane,125,90834`).snapshot;
+  const reconciliation = buildLocalVisitReconciliation([attendance, billing]);
+
+  assert.equal(reconciliation.matchedVisits, 1);
+  assert.equal(reconciliation.totalMatchedFeesCharged, 150);
+  assert.equal(reconciliation.attendanceOnlyRows, 2);
+  assert.equal(reconciliation.billingOnlyRows, 1);
+  assert.equal(reconciliation.ambiguousGroups, 0);
+  assert.deepEqual(
+    reconciliation.rows.map((row) => row.status),
+    ["matched", "attendance_only", "attendance_only", "billing_only"],
+  );
+});
+
+test("visit reconciliation backfills missing counterparts without double-counting", () => {
+  const attendance =
+    importAttendanceCsv(`Client,Clinician,Date of service,Location,Status
+CID-alpha,Dr Lane,2026-10-01,Room A,show`).snapshot;
+  const billing =
+    importBillingCsv(`Date of Service,Client,Clinician,Total Fee,Billing Code
+2026-10-01,CID-alpha,Dr Lane,150,90837`).snapshot;
+  const before = buildLocalVisitReconciliation([attendance]);
+  const after = buildLocalVisitReconciliation([attendance, billing]);
+
+  assert.equal(before.matchedVisits, 0);
+  assert.equal(before.attendanceOnlyRows, 1);
+  assert.equal(after.matchedVisits, 1);
+  assert.equal(after.attendanceOnlyRows, 0);
+  assert.equal(after.billingOnlyRows, 0);
+});
+
+test("visit reconciliation leaves same-day multiple rows reviewable", () => {
+  const attendance =
+    importAttendanceCsv(`Client,Clinician,Date of service,Location,Status
+CID-same,Dr Lane,2026-10-01,Room A,show
+CID-same,Dr Lane,2026-10-01,Room A,show`).snapshot;
+  const billing =
+    importBillingCsv(`Date of Service,Client,Clinician,Total Fee,Billing Code
+2026-10-01,CID-same,Dr Lane,150,90837
+2026-10-01,CID-same,Dr Lane,150,90837`).snapshot;
+  const reconciliation = buildLocalVisitReconciliation([attendance, billing]);
+
+  assert.equal(reconciliation.matchedVisits, 0);
+  assert.equal(reconciliation.ambiguousGroups, 1);
+  assert.equal(reconciliation.ambiguousAttendanceRows, 2);
+  assert.equal(reconciliation.ambiguousBillingRows, 2);
+  assert.equal(reconciliation.rows[0].status, "ambiguous");
 });
 
 test("single Practice package validates collections and imports atomically", () => {
@@ -201,7 +260,7 @@ test("Practice package rejects malformed coverage, counts, fees and identity fie
   );
 });
 
-test("Practice package dedupes exact packages and blocks mixed duplicate packages", () => {
+test("Practice package skips duplicate snapshots while allowing backfilled counterparts", () => {
   const parsed = importLocalPackage(
     packageFixture(),
     "2026-10-13T14:05:00.000Z",
@@ -217,11 +276,9 @@ test("Practice package dedupes exact packages and blocks mixed duplicate package
   assert.equal(duplicate.snapshots.length, 2);
 
   const mixed = mergeLocalPackage([parsed.snapshots[0]], {}, parsed);
-  assert.equal(mixed.status, "blocked");
-  if (mixed.status !== "blocked")
-    throw new Error("Expected blocked mixed duplicate.");
-  assert.match(mixed.reason, /partly duplicates/);
-  assert.deepEqual(mixed.snapshots, [parsed.snapshots[0]]);
+  assert.equal(mixed.status, "added");
+  assert.equal(mixed.snapshots.length, 2);
+  assert.deepEqual(mixed.snapshots, [parsed.snapshots[0], parsed.snapshots[1]]);
 });
 
 test("Practice package failures do not mutate current local state", () => {
@@ -240,7 +297,7 @@ test("Practice package failures do not mutate current local state", () => {
     ...importLocalPackage(packageFixture()),
     snapshots: [existing, importLocalPackage(packageFixture()).snapshots[1]],
   });
-  assert.equal(mixed.status, "blocked");
+  assert.equal(mixed.status, "added");
   assert.equal(JSON.stringify(state), before);
 });
 

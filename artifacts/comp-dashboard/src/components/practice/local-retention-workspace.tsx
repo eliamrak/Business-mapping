@@ -10,6 +10,7 @@ import { ApiError, customFetch } from "@workspace/api-client-react";
 import { Download, ShieldCheck, Upload } from "lucide-react";
 import {
   buildLocalRetentionMetrics,
+  buildLocalVisitReconciliation,
   exportLocalBackup,
   importLocalPackage,
   type BillingCodeMinutes,
@@ -192,6 +193,10 @@ export default function LocalRetentionWorkspace({
   const metrics = useMemo(
     () => buildLocalRetentionMetrics(snapshots, billingCodeMinutes),
     [snapshots, billingCodeMinutes],
+  );
+  const reconciliation = useMemo(
+    () => buildLocalVisitReconciliation(snapshots),
+    [snapshots],
   );
 
   useEffect(() => {
@@ -518,9 +523,73 @@ export default function LocalRetentionWorkspace({
           <span>Billed rows</span>
           <strong>{metrics.billingRows.toLocaleString()}</strong>
         </div>
+        <div>
+          <span>Matched visits</span>
+          <strong>{reconciliation.matchedVisits.toLocaleString()}</strong>
+        </div>
+        <div>
+          <span>Incomplete facts</span>
+          <strong>
+            {(
+              reconciliation.attendanceOnlyRows + reconciliation.billingOnlyRows
+            ).toLocaleString()}
+          </strong>
+        </div>
+        <div>
+          <span>Review groups</span>
+          <strong>{reconciliation.ambiguousGroups.toLocaleString()}</strong>
+        </div>
       </div>
 
       <div className="pw-local-tables">
+        <section>
+          <h3>Visit reconciliation</h3>
+          <table>
+            <thead>
+              <tr>
+                <th>Date</th>
+                <th>Clinician</th>
+                <th>Client ID</th>
+                <th>Status</th>
+                <th>Attendance</th>
+                <th>Billing</th>
+                <th>Matched fees</th>
+              </tr>
+            </thead>
+            <tbody>
+              {reconciliation.rows.slice(0, 50).map((row) => (
+                <tr key={row.key}>
+                  <td>{row.serviceDate}</td>
+                  <td>{row.clinician}</td>
+                  <td>{row.clientId}</td>
+                  <td>
+                    {row.status === "matched"
+                      ? "Matched"
+                      : row.status === "attendance_only"
+                        ? "Attendance only"
+                        : row.status === "billing_only"
+                          ? "Billing only"
+                          : "Review same-day rows"}
+                  </td>
+                  <td>{row.attendanceRows.length}</td>
+                  <td>{row.billingRows.length}</td>
+                  <td>
+                    {row.totalFeeCharged === null
+                      ? "Incomplete"
+                      : money(row.totalFeeCharged)}
+                  </td>
+                </tr>
+              ))}
+              {!reconciliation.rows.length && (
+                <tr>
+                  <td colSpan={7}>
+                    Matched, incomplete, and reviewable visits will appear here.
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </section>
         <section>
           <h3>Attendance and retention</h3>
           <table>

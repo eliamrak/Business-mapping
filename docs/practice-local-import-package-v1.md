@@ -63,4 +63,6 @@ Billing rows are charged-fee facts only. They do not imply attendance and are no
 
 ## Merge Semantics
 
-The Practice app validates the entire package before changing local state. Exact duplicate packages are ignored. Partly duplicate packages are blocked. Overlapping package ranges require explicit user review before replacing whole overlapping local snapshots.
+The Practice app validates the entire package before changing local state. Exact duplicate package content is ignored even if `exportedAt` differs. A changed package under the same `packageId` is rejected. Exact duplicate attendance or billing snapshots from a new package are skipped so later backfills can add the missing counterpart without double-counting previously imported facts. Overlapping non-duplicate package ranges require explicit user review before replacing whole overlapping local snapshots.
+
+Practice derives visit reconciliation from the accumulated separate fact tables. It matches attendance and billing only when there is exactly one attendance row and exactly one billing row for the same de-identified `clientId`, normalized clinician label, and `serviceDate`. Missing counterpart rows remain incomplete data, not zero-fee visits or cancellations. Multiple same-day rows for the same client and clinician remain reviewable because package v1 does not export a trustworthy appointment ID or time.
