@@ -20,6 +20,7 @@ export type AttendanceRow = {
   serviceDate: string;
   location: string | null;
   status: AttendanceStatus;
+  appointmentTime?: string | null;
   billingCode?: string | null;
   visitKind?: VisitKind;
   sourceRowHash: string;
@@ -31,6 +32,7 @@ export type BillingRow = {
   serviceDate: string;
   totalFeeCharged: number;
   billingCode: string | null;
+  appointmentTime?: string | null;
   visitKind?: VisitKind;
   sourceRowHash: string;
 };
@@ -1706,6 +1708,14 @@ function packageOptionalVisitKind(
   invalidPackage(`${label} must be consultation when present`);
 }
 
+function packageOptionalNullableString(
+  record: Record<string, unknown>,
+  key: string,
+  label: string,
+) {
+  return key in record ? packageNullableString(record, key, label) : undefined;
+}
+
 function packageServiceDate(
   record: Record<string, unknown>,
   key: string,
@@ -1851,6 +1861,7 @@ function validatePackageAttendanceRows(rows: unknown[]) {
         "serviceDate",
         "location",
         "status",
+        "appointmentTime",
         "billingCode",
         "visitKind",
       ],
@@ -1888,6 +1899,11 @@ function validatePackageAttendanceRows(rows: unknown[]) {
             `attendance row ${index + 1} billingCode`,
           )
         : undefined;
+    const appointmentTime = packageOptionalNullableString(
+      value,
+      "appointmentTime",
+      `attendance row ${index + 1} appointmentTime`,
+    );
     const visitKind = packageOptionalVisitKind(
       value,
       "visitKind",
@@ -1899,6 +1915,7 @@ function validatePackageAttendanceRows(rows: unknown[]) {
       serviceDate,
       location,
       status,
+      ...(appointmentTime !== undefined ? { appointmentTime } : {}),
       ...(billingCode !== undefined ? { billingCode } : {}),
       ...(visitKind !== undefined ? { visitKind } : {}),
       sourceRowHash: rowHash([
@@ -1908,6 +1925,7 @@ function validatePackageAttendanceRows(rows: unknown[]) {
         serviceDate,
         location,
         status,
+        appointmentTime,
         billingCode,
         visitKind,
         index,
@@ -1928,6 +1946,7 @@ function validatePackageBillingRows(rows: unknown[]) {
         "serviceDate",
         "totalFeeCharged",
         "billingCode",
+        "appointmentTime",
         "visitKind",
       ],
       `billing row ${index + 1}`,
@@ -1965,12 +1984,18 @@ function validatePackageBillingRows(rows: unknown[]) {
       "visitKind",
       `billing row ${index + 1} visitKind`,
     );
+    const appointmentTime = packageOptionalNullableString(
+      value,
+      "appointmentTime",
+      `billing row ${index + 1} appointmentTime`,
+    );
     return {
       clientId,
       clinician,
       serviceDate,
       totalFeeCharged,
       billingCode,
+      ...(appointmentTime !== undefined ? { appointmentTime } : {}),
       ...(visitKind !== undefined ? { visitKind } : {}),
       sourceRowHash: rowHash([
         "billing",
@@ -1979,6 +2004,7 @@ function validatePackageBillingRows(rows: unknown[]) {
         serviceDate,
         totalFeeCharged,
         billingCode,
+        appointmentTime,
         visitKind,
         index,
       ]),
@@ -2101,6 +2127,25 @@ function backupNullableString(
   invalidBackup(`${label} must be null or a non-empty string`);
 }
 
+function backupOptionalNullableString(
+  record: Record<string, unknown>,
+  key: string,
+  label: string,
+) {
+  return key in record ? backupNullableString(record, key, label) : undefined;
+}
+
+function backupOptionalVisitKind(
+  record: Record<string, unknown>,
+  key: string,
+  label: string,
+): VisitKind | undefined {
+  if (!(key in record)) return undefined;
+  const value = record[key];
+  if (value === "consultation") return value;
+  invalidBackup(`${label} must be consultation when present`);
+}
+
 function backupServiceDate(
   record: Record<string, unknown>,
   key: string,
@@ -2153,6 +2198,21 @@ function validateAttendanceBackupRow(
   const status = value.status;
   if (!isAttendanceStatus(status))
     invalidBackup(`attendance row ${index + 1} has an invalid status`);
+  const appointmentTime = backupOptionalNullableString(
+    value,
+    "appointmentTime",
+    `attendance row ${index + 1} appointmentTime`,
+  );
+  const billingCode = backupOptionalNullableString(
+    value,
+    "billingCode",
+    `attendance row ${index + 1} billingCode`,
+  );
+  const visitKind = backupOptionalVisitKind(
+    value,
+    "visitKind",
+    `attendance row ${index + 1} visitKind`,
+  );
   return {
     clientId: backupString(
       value,
@@ -2175,6 +2235,9 @@ function validateAttendanceBackupRow(
       `attendance row ${index + 1} location`,
     ),
     status,
+    ...(appointmentTime !== undefined ? { appointmentTime } : {}),
+    ...(billingCode !== undefined ? { billingCode } : {}),
+    ...(visitKind !== undefined ? { visitKind } : {}),
     sourceRowHash: backupString(
       value,
       "sourceRowHash",
@@ -2186,6 +2249,16 @@ function validateAttendanceBackupRow(
 function validateBillingBackupRow(value: unknown, index: number): BillingRow {
   if (!isRecord(value))
     invalidBackup(`billing row ${index + 1} must be an object`);
+  const appointmentTime = backupOptionalNullableString(
+    value,
+    "appointmentTime",
+    `billing row ${index + 1} appointmentTime`,
+  );
+  const visitKind = backupOptionalVisitKind(
+    value,
+    "visitKind",
+    `billing row ${index + 1} visitKind`,
+  );
   return {
     clientId: backupString(
       value,
@@ -2214,6 +2287,8 @@ function validateBillingBackupRow(value: unknown, index: number): BillingRow {
       "billingCode",
       `billing row ${index + 1} billingCode`,
     ),
+    ...(appointmentTime !== undefined ? { appointmentTime } : {}),
+    ...(visitKind !== undefined ? { visitKind } : {}),
     sourceRowHash: backupString(
       value,
       "sourceRowHash",

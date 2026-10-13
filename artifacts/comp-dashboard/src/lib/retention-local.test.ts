@@ -656,13 +656,17 @@ test("single Practice package validates collections and imports atomically", () 
 test("Practice package accepts coordinated optional consultation metadata", () => {
   const packageData = packageFixture();
   packageData.collections.attendance.rows[0].billingCode = "Phone";
+  packageData.collections.attendance.rows[0].appointmentTime = "09:00";
   packageData.collections.attendance.rows[0].visitKind = "consultation";
+  packageData.collections.billing.rows[0].appointmentTime = null;
   packageData.collections.billing.rows[0].visitKind = "consultation";
   const parsed = importLocalPackage(packageData);
 
   assert.equal(parsed.snapshots[0].rows[0].visitKind, "consultation");
   assert.equal(parsed.snapshots[0].rows[0].billingCode, "Phone");
+  assert.equal(parsed.snapshots[0].rows[0].appointmentTime, "09:00");
   assert.equal(parsed.snapshots[1].rows[0].visitKind, "consultation");
+  assert.equal(parsed.snapshots[1].rows[0].appointmentTime, null);
   assert.throws(() => {
     const invalid = packageFixture();
     invalid.collections.attendance.rows[0].visitKind = "treatment";
@@ -673,11 +677,6 @@ test("Practice package accepts coordinated optional consultation metadata", () =
     leaked.collections.attendance.rows[0].appointmentTitle = "Client name";
     importLocalPackage(leaked);
   }, /unsupported fields: appointmentTitle/);
-  assert.throws(() => {
-    const leaked = packageFixture();
-    leaked.collections.attendance.rows[0].appointmentTime = "09:00";
-    importLocalPackage(leaked);
-  }, /unsupported fields: appointmentTime/);
 });
 
 test("Practice package rejects malformed coverage, counts, fees and identity fields", () => {
@@ -1324,6 +1323,11 @@ test("local backup restore validates and sanitizes exported shape", () => {
     "2026-10-12T00:00:00Z",
   ).snapshot;
   const billing = importBillingCsv(billingCsv, "2026-10-12T00:00:00Z").snapshot;
+  attendance.rows[0].appointmentTime = "09:00";
+  attendance.rows[0].billingCode = "Phone";
+  attendance.rows[0].visitKind = "consultation";
+  billing.rows[0].appointmentTime = null;
+  billing.rows[0].visitKind = "consultation";
   const backup = exportLocalBackup(
     [attendance, billing],
     {
