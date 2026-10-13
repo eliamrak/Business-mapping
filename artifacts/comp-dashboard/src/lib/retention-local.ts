@@ -96,6 +96,14 @@ export type LocalImportResult<T extends LocalFactKind> = {
   warnings: string[];
 };
 
+export type LocalPackageImport = {
+  packageId: string;
+  exportedAt: string;
+  snapshots: LocalSnapshot[];
+  billingCodeMinutes: BillingCodeMinutes;
+  warnings: string[];
+};
+
 export type SnapshotMergeResult =
   | { status: "added"; snapshots: LocalSnapshot[] }
   | { status: "duplicate"; snapshots: LocalSnapshot[] }
@@ -104,6 +112,35 @@ export type SnapshotMergeResult =
       snapshots: LocalSnapshot[];
       existing: LocalSnapshot[];
       incoming: LocalSnapshot;
+    };
+
+export type PackageMergeResult =
+  | {
+      status: "added";
+      snapshots: LocalSnapshot[];
+      billingCodeMinutes: BillingCodeMinutes;
+      warnings: string[];
+    }
+  | {
+      status: "duplicate";
+      snapshots: LocalSnapshot[];
+      billingCodeMinutes: BillingCodeMinutes;
+      warnings: string[];
+    }
+  | {
+      status: "blocked";
+      snapshots: LocalSnapshot[];
+      billingCodeMinutes: BillingCodeMinutes;
+      reason: string;
+      warnings: string[];
+    }
+  | {
+      status: "overlap";
+      snapshots: LocalSnapshot[];
+      billingCodeMinutes: BillingCodeMinutes;
+      existing: LocalSnapshot[];
+      incoming: LocalSnapshot[];
+      warnings: string[];
     };
 
 const requiredAttendanceHeaders = [
@@ -123,6 +160,10 @@ const headerKey = (value: string) =>
   value.toLowerCase().replace(/[^a-z0-9]/g, "");
 const clean = (value: string | undefined) => (value ?? "").trim();
 const rowHash = (parts: unknown[]) => stableHash(JSON.stringify(parts));
+const headerAliases = new Map([
+  ["randomid", "client"],
+  ["date", "dateofservice"],
+]);
 
 function stableHash(value: string) {
   let hash = 2166136261;
@@ -163,7 +204,12 @@ export function parseCsv(text: string): string[][] {
 }
 
 function headerMap(headers: string[]) {
-  return new Map(headers.map((header, index) => [headerKey(header), index]));
+  const map = new Map<string, number>();
+  headers.forEach((header, index) => {
+    const key = headerAliases.get(headerKey(header)) ?? headerKey(header);
+    if (!map.has(key)) map.set(key, index);
+  });
+  return map;
 }
 
 function cell(row: string[], map: Map<string, number>, key: string) {
@@ -367,6 +413,101 @@ export function replaceOverlappingSnapshots(
   return [...snapshots.filter((item) => !overlaps(item, incoming)), incoming];
 }
 
+const snapshotOverlapsAny = (
+  snapshot: LocalSnapshot,
+  incoming: LocalSnapshot[],
+) => incoming.some((item) => overlaps(snapshot, item));
+
+function replacementWarnings(
+  existing: LocalSnapshot[],
+  incoming: LocalSnapshot[],
+) {
+  const warnings: string[] = [];
+  for (const current of existing) {
+    for (const next of incoming) {
+      if (!overlaps(current, next)) continue;
+      if (
+        current.coverageStart < next.coverageStart ||
+        current.coverageEnd > next.coverageEnd
+      )
+        warnings.push(
+          `Replacing the ${current.kind} snapshot for ${current.coverageStart} to ${current.coverageEnd} will remove dates outside the incoming ${next.coverageStart} to ${next.coverageEnd} range.`,
+        );
+    }
+  }
+  return warnings;
+}
+
+export function mergeLocalPackage(
+  snapshots: LocalSnapshot[],
+  billingCodeMinutes: BillingCodeMinutes,
+  incoming: LocalPackageImport,
+): PackageMergeResult {
+  const duplicates = incoming.snapshots.filter((snapshot) =>
+    snapshots.some(
+      (item) =>
+        item.kind === snapshot.kind && item.sourceHash === snapshot.sourceHash,
+    ),
+  );
+  const warnings = [...incoming.warnings];
+  if (duplicates.length === incoming.snapshots.length)
+    return { status: "duplicate", snapshots, billingCodeMinutes, warnings };
+  if (duplicates.length)
+    return {
+      status: "blocked",
+      snapshots,
+      billingCodeMinutes,
+      reason:
+        "This package partly duplicates loaded local data. Nothing was added; export a complete package for the intended date range or remove the overlap first.",
+      warnings,
+    };
+  const existing = snapshots.filter((snapshot) =>
+    snapshotOverlapsAny(snapshot, incoming.snapshots),
+  );
+  if (existing.length)
+    return {
+      status: "overlap",
+      snapshots,
+      billingCodeMinutes,
+      existing,
+      incoming: incoming.snapshots,
+      warnings: [
+        ...warnings,
+        ...replacementWarnings(existing, incoming.snapshots),
+      ],
+    };
+  return {
+    status: "added",
+    snapshots: [...snapshots, ...incoming.snapshots],
+    billingCodeMinutes: {
+      ...billingCodeMinutes,
+      ...incoming.billingCodeMinutes,
+    },
+    warnings,
+  };
+}
+
+export function replaceOverlappingPackageSnapshots(
+  snapshots: LocalSnapshot[],
+  billingCodeMinutes: BillingCodeMinutes,
+  incoming: LocalSnapshot[],
+  packageBillingCodeMinutes: BillingCodeMinutes = {},
+) {
+  const existing = snapshots.filter((snapshot) =>
+    snapshotOverlapsAny(snapshot, incoming),
+  );
+  return {
+    snapshots: [
+      ...snapshots.filter(
+        (snapshot) => !snapshotOverlapsAny(snapshot, incoming),
+      ),
+      ...incoming,
+    ],
+    billingCodeMinutes: { ...billingCodeMinutes, ...packageBillingCodeMinutes },
+    warnings: replacementWarnings(existing, incoming),
+  };
+}
+
 function sortByName<T extends { clinician?: string; location?: string }>(
   items: T[],
 ) {
@@ -504,8 +645,391 @@ function invalidBackup(reason: string): never {
   throw new Error(`Invalid local retention backup: ${reason}.`);
 }
 
+function invalidPackage(reason: string): never {
+  throw new Error(`Invalid Practice import package: ${reason}.`);
+}
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return !!value && typeof value === "object" && !Array.isArray(value);
+}
+
+function rejectUnknownKeys(
+  record: Record<string, unknown>,
+  allowed: readonly string[],
+  label: string,
+  fail: (reason: string) => never,
+) {
+  const allowedSet = new Set(allowed);
+  const unknown = Object.keys(record).filter((key) => !allowedSet.has(key));
+  if (unknown.length)
+    fail(`${label} contains unsupported fields: ${unknown.join(", ")}`);
+}
+
+function packageString(
+  record: Record<string, unknown>,
+  key: string,
+  label: string,
+) {
+  const value = record[key];
+  if (typeof value !== "string" || !value.trim())
+    invalidPackage(`${label} must be a non-empty string`);
+  return value;
+}
+
+function packageNullableString(
+  record: Record<string, unknown>,
+  key: string,
+  label: string,
+) {
+  const value = record[key];
+  if (value === null) return null;
+  if (typeof value === "string" && value.trim()) return value;
+  invalidPackage(`${label} must be null or a non-empty string`);
+}
+
+function packageServiceDate(
+  record: Record<string, unknown>,
+  key: string,
+  label: string,
+) {
+  const value = packageString(record, key, label);
+  try {
+    if (parseServiceDate(value) === value) return value;
+  } catch {
+    // Fall through to the package-specific error below.
+  }
+  invalidPackage(`${label} must be a valid YYYY-MM-DD date`);
+}
+
+function packageTimestamp(
+  record: Record<string, unknown>,
+  key: string,
+  label: string,
+) {
+  const value = packageString(record, key, label);
+  if (!Number.isFinite(new Date(value).getTime()))
+    invalidPackage(`${label} must be a valid timestamp`);
+  return value;
+}
+
+function packageNumber(
+  record: Record<string, unknown>,
+  key: string,
+  label: string,
+  min: number,
+  max: number,
+) {
+  const value = record[key];
+  if (
+    typeof value !== "number" ||
+    !Number.isFinite(value) ||
+    value < min ||
+    value > max
+  )
+    invalidPackage(`${label} must be a number from ${min} to ${max}`);
+  return value;
+}
+
+function packageInteger(
+  record: Record<string, unknown>,
+  key: string,
+  label: string,
+  min: number,
+  max: number,
+) {
+  const value = record[key];
+  if (
+    typeof value !== "number" ||
+    !Number.isInteger(value) ||
+    value < min ||
+    value > max
+  )
+    invalidPackage(`${label} must be an integer from ${min} to ${max}`);
+  return value;
+}
+
+function validateBillingCodeMinutesValue(
+  value: unknown,
+  fail: (reason: string) => never,
+): BillingCodeMinutes {
+  if (value === undefined) return {};
+  if (!isRecord(value)) fail("billingCodeMinutes must be an object");
+  const minutesByCode: BillingCodeMinutes = {};
+  for (const [code, minutes] of Object.entries(value)) {
+    if (!code.trim()) fail("billing code keys must be non-empty");
+    if (
+      typeof minutes !== "number" ||
+      !Number.isFinite(minutes) ||
+      minutes <= 0 ||
+      minutes > maxBillingCodeMinutes
+    )
+      fail(
+        `billing-code minutes for ${code} must be from 1 to ${maxBillingCodeMinutes}`,
+      );
+    minutesByCode[code] = minutes;
+  }
+  return minutesByCode;
+}
+
+function validatePackageCollectionBase(
+  value: unknown,
+  label: "attendance" | "billing",
+) {
+  if (!isRecord(value)) invalidPackage(`${label} collection must be an object`);
+  rejectUnknownKeys(
+    value,
+    ["coverageStart", "coverageEnd", "rowCount", "rows"],
+    `${label} collection`,
+    invalidPackage,
+  );
+  const coverageStart = packageServiceDate(
+    value,
+    "coverageStart",
+    `${label}.coverageStart`,
+  );
+  const coverageEnd = packageServiceDate(
+    value,
+    "coverageEnd",
+    `${label}.coverageEnd`,
+  );
+  if (coverageStart > coverageEnd)
+    invalidPackage(`${label} coverage dates are reversed`);
+  const rowCount = packageInteger(
+    value,
+    "rowCount",
+    `${label}.rowCount`,
+    1,
+    1_000_000,
+  );
+  if (!Array.isArray(value.rows))
+    invalidPackage(`${label}.rows must be an array`);
+  if (value.rows.length !== rowCount)
+    invalidPackage(`${label}.rowCount must match rows.length`);
+  return { coverageStart, coverageEnd, rows: value.rows };
+}
+
+function validatePackageCoverage(
+  rows: Array<{ serviceDate: string }>,
+  coverageStart: string,
+  coverageEnd: string,
+  label: "attendance" | "billing",
+) {
+  const dates = rows.map((row) => row.serviceDate).sort();
+  if (!dates.length) invalidPackage(`${label} rows must not be empty`);
+  if (coverageStart !== dates[0] || coverageEnd !== dates[dates.length - 1])
+    invalidPackage(`${label} coverage does not match its rows`);
+}
+
+function validatePackageAttendanceRows(rows: unknown[], packageId: string) {
+  return rows.map((value, index): AttendanceRow => {
+    if (!isRecord(value))
+      invalidPackage(`attendance row ${index + 1} must be an object`);
+    rejectUnknownKeys(
+      value,
+      ["clientId", "clinician", "serviceDate", "location", "status"],
+      `attendance row ${index + 1}`,
+      invalidPackage,
+    );
+    const status = value.status;
+    if (!isAttendanceStatus(status))
+      invalidPackage(`attendance row ${index + 1} has an invalid status`);
+    const clientId = packageString(
+      value,
+      "clientId",
+      `attendance row ${index + 1} clientId`,
+    );
+    const clinician = packageString(
+      value,
+      "clinician",
+      `attendance row ${index + 1} clinician`,
+    );
+    const serviceDate = packageServiceDate(
+      value,
+      "serviceDate",
+      `attendance row ${index + 1} serviceDate`,
+    );
+    const location = packageNullableString(
+      value,
+      "location",
+      `attendance row ${index + 1} location`,
+    );
+    return {
+      clientId,
+      clinician,
+      serviceDate,
+      location,
+      status,
+      sourceRowHash: rowHash([
+        packageId,
+        "attendance",
+        clientId,
+        clinician,
+        serviceDate,
+        location,
+        status,
+        index,
+      ]),
+    };
+  });
+}
+
+function validatePackageBillingRows(rows: unknown[], packageId: string) {
+  return rows.map((value, index): BillingRow => {
+    if (!isRecord(value))
+      invalidPackage(`billing row ${index + 1} must be an object`);
+    rejectUnknownKeys(
+      value,
+      [
+        "clientId",
+        "clinician",
+        "serviceDate",
+        "totalFeeCharged",
+        "billingCode",
+      ],
+      `billing row ${index + 1}`,
+      invalidPackage,
+    );
+    const clientId = packageString(
+      value,
+      "clientId",
+      `billing row ${index + 1} clientId`,
+    );
+    const clinician = packageString(
+      value,
+      "clinician",
+      `billing row ${index + 1} clinician`,
+    );
+    const serviceDate = packageServiceDate(
+      value,
+      "serviceDate",
+      `billing row ${index + 1} serviceDate`,
+    );
+    const totalFeeCharged = packageNumber(
+      value,
+      "totalFeeCharged",
+      `billing row ${index + 1} totalFeeCharged`,
+      0,
+      maxSafeFee,
+    );
+    const billingCode = packageNullableString(
+      value,
+      "billingCode",
+      `billing row ${index + 1} billingCode`,
+    );
+    return {
+      clientId,
+      clinician,
+      serviceDate,
+      totalFeeCharged,
+      billingCode,
+      sourceRowHash: rowHash([
+        packageId,
+        "billing",
+        clientId,
+        clinician,
+        serviceDate,
+        totalFeeCharged,
+        billingCode,
+        index,
+      ]),
+    };
+  });
+}
+
+export function importLocalPackage(
+  value: unknown,
+  now = new Date().toISOString(),
+): LocalPackageImport {
+  if (!isRecord(value))
+    throw new Error("Choose a Practice import package JSON file.");
+  rejectUnknownKeys(
+    value,
+    [
+      "format",
+      "version",
+      "packageId",
+      "exportedAt",
+      "collections",
+      "billingCodeMinutes",
+    ],
+    "Practice import package",
+    invalidPackage,
+  );
+  if (
+    value.format !== "emc-practice-local-import-package" ||
+    value.version !== 1
+  )
+    throw new Error("This is not a supported Practice import package.");
+  const packageId = packageString(value, "packageId", "packageId");
+  const exportedAt = packageTimestamp(value, "exportedAt", "exportedAt");
+  if (!isRecord(value.collections))
+    invalidPackage("collections must be an object");
+  rejectUnknownKeys(
+    value.collections,
+    ["attendance", "billing"],
+    "collections",
+    invalidPackage,
+  );
+  const attendanceBase = validatePackageCollectionBase(
+    value.collections.attendance,
+    "attendance",
+  );
+  const billingBase = validatePackageCollectionBase(
+    value.collections.billing,
+    "billing",
+  );
+  const attendanceRows = validatePackageAttendanceRows(
+    attendanceBase.rows,
+    packageId,
+  );
+  const billingRows = validatePackageBillingRows(billingBase.rows, packageId);
+  validatePackageCoverage(
+    attendanceRows,
+    attendanceBase.coverageStart,
+    attendanceBase.coverageEnd,
+    "attendance",
+  );
+  validatePackageCoverage(
+    billingRows,
+    billingBase.coverageStart,
+    billingBase.coverageEnd,
+    "billing",
+  );
+  const attendanceSourceHash = rowHash(
+    attendanceRows.map((row) => row.sourceRowHash),
+  );
+  const billingSourceHash = rowHash(
+    billingRows.map((row) => row.sourceRowHash),
+  );
+  return {
+    packageId,
+    exportedAt,
+    warnings: [],
+    billingCodeMinutes: validateBillingCodeMinutesValue(
+      value.billingCodeMinutes,
+      invalidPackage,
+    ),
+    snapshots: [
+      {
+        id: `package-attendance-${attendanceSourceHash}`,
+        kind: "attendance",
+        importedAt: now,
+        coverageStart: attendanceBase.coverageStart,
+        coverageEnd: attendanceBase.coverageEnd,
+        sourceHash: attendanceSourceHash,
+        rows: attendanceRows,
+      },
+      {
+        id: `package-billing-${billingSourceHash}`,
+        kind: "billing",
+        importedAt: now,
+        coverageStart: billingBase.coverageStart,
+        coverageEnd: billingBase.coverageEnd,
+        sourceHash: billingSourceHash,
+        rows: billingRows,
+      },
+    ],
+  };
 }
 
 function backupString(
@@ -720,23 +1244,7 @@ function validateBackupSnapshot(value: unknown, index: number): LocalSnapshot {
 }
 
 function validateBackupBillingCodeMinutes(value: unknown): BillingCodeMinutes {
-  if (value === undefined) return {};
-  if (!isRecord(value)) invalidBackup("billingCodeMinutes must be an object");
-  const minutesByCode: BillingCodeMinutes = {};
-  for (const [code, minutes] of Object.entries(value)) {
-    if (!code.trim()) invalidBackup("billing code keys must be non-empty");
-    if (
-      typeof minutes !== "number" ||
-      !Number.isFinite(minutes) ||
-      minutes <= 0 ||
-      minutes > maxBillingCodeMinutes
-    )
-      invalidBackup(
-        `billing-code minutes for ${code} must be from 1 to ${maxBillingCodeMinutes}`,
-      );
-    minutesByCode[code] = minutes;
-  }
-  return minutesByCode;
+  return validateBillingCodeMinutesValue(value, invalidBackup);
 }
 
 function validateBackupSnapshotCollection(snapshots: LocalSnapshot[]) {

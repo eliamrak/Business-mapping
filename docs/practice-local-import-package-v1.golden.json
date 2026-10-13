@@ -1,0 +1,83 @@
+{
+  "format": "emc-practice-local-import-package",
+  "version": 1,
+  "packageId": "pkg-synthetic-october-v1",
+  "exportedAt": "2026-10-13T14:00:00.000Z",
+  "collections": {
+    "attendance": {
+      "coverageStart": "2026-10-01",
+      "coverageEnd": "2026-10-15",
+      "rowCount": 4,
+      "rows": [
+        {
+          "clientId": "client-alpha",
+          "clinician": "Dr Lane",
+          "serviceDate": "2026-10-01",
+          "location": "Room A",
+          "status": "show"
+        },
+        {
+          "clientId": "client-alpha",
+          "clinician": "Dr Lane",
+          "serviceDate": "2026-10-15",
+          "location": "Room A",
+          "status": "show"
+        },
+        {
+          "clientId": "client-beta",
+          "clinician": "Dr Lane",
+          "serviceDate": "2026-10-02",
+          "location": "Room B",
+          "status": "no show"
+        },
+        {
+          "clientId": "client-gamma",
+          "clinician": "Dr Moss",
+          "serviceDate": "2026-10-10",
+          "location": null,
+          "status": "show"
+        }
+      ]
+    },
+    "billing": {
+      "coverageStart": "2026-10-01",
+      "coverageEnd": "2026-10-20",
+      "rowCount": 4,
+      "rows": [
+        {
+          "clientId": "client-alpha",
+          "clinician": "Dr Lane",
+          "serviceDate": "2026-10-01",
+          "totalFeeCharged": 150,
+          "billingCode": "90837"
+        },
+        {
+          "clientId": "client-alpha",
+          "clinician": "Dr Lane",
+          "serviceDate": "2026-10-15",
+          "totalFeeCharged": 150,
+          "billingCode": "90837"
+        },
+        {
+          "clientId": "client-beta",
+          "clinician": "Dr Lane",
+          "serviceDate": "2026-10-02",
+          "totalFeeCharged": 100,
+          "billingCode": "00000"
+        },
+        {
+          "clientId": "client-only-billed",
+          "clinician": "Dr Moss",
+          "serviceDate": "2026-10-20",
+          "totalFeeCharged": 125,
+          "billingCode": "90834"
+        }
+      ]
+    }
+  },
+  "billingCodeMinutes": {
+    "90837": 60,
+    "90834": 45,
+    "00000": 15
+  }
+}

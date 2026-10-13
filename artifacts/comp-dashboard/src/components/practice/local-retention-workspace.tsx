@@ -12,8 +12,10 @@ import {
   importAttendanceCsv,
   importBillingCsv,
   importLocalBackup,
+  importLocalPackage,
+  mergeLocalPackage,
   mergeSnapshot,
-  replaceOverlappingSnapshots,
+  replaceOverlappingPackageSnapshots,
   type BillingCodeMinutes,
   type LocalFactKind,
   type LocalSnapshot,
@@ -37,8 +39,11 @@ const localDownload = (value: unknown, name: string) => {
 type CodeDraft = { code: string; minutes: string };
 
 type PendingLocalSnapshot = {
-  incoming: LocalSnapshot;
+  incoming: LocalSnapshot[];
   existing: LocalSnapshot[];
+  billingCodeMinutes: BillingCodeMinutes;
+  packageId: string;
+  warnings: string[];
 };
 
 export type LocalRetentionWorkspaceState = {
@@ -60,8 +65,12 @@ export type LocalRetentionWorkspaceState = {
 
 export function useLocalRetentionWorkspaceState(): LocalRetentionWorkspaceState {
   const [snapshots, setSnapshots] = useState<LocalSnapshot[]>([]);
-  const [billingCodeMinutes, setBillingCodeMinutes] = useState<BillingCodeMinutes>({});
-  const [codeDraft, setCodeDraft] = useState<CodeDraft>({ code: "", minutes: "" });
+  const [billingCodeMinutes, setBillingCodeMinutes] =
+    useState<BillingCodeMinutes>({});
+  const [codeDraft, setCodeDraft] = useState<CodeDraft>({
+    code: "",
+    minutes: "",
+  });
   const [status, setStatus] = useState("No files imported yet.");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
@@ -86,8 +95,14 @@ export function useLocalRetentionWorkspaceState(): LocalRetentionWorkspaceState 
 }
 
 async function readText(file: File) {
-  if (!/\.(csv|json)$/i.test(file.name) || !file.size || file.size > 10 * 1024 * 1024)
-    throw new Error("Choose a CSV or local backup JSON file up to 10 MB.");
+  if (
+    !/\.(csv|json)$/i.test(file.name) ||
+    !file.size ||
+    file.size > 10 * 1024 * 1024
+  )
+    throw new Error(
+      "Choose a CSV, Practice package, or local backup JSON file up to 10 MB.",
+    );
   return await file.text();
 }
 
@@ -115,6 +130,7 @@ export default function LocalRetentionWorkspace({
   } = workspaceState ?? ownedState;
   const attendanceInput = useRef<HTMLInputElement>(null);
   const billingInput = useRef<HTMLInputElement>(null);
+  const packageInput = useRef<HTMLInputElement>(null);
   const backupInput = useRef<HTMLInputElement>(null);
   const metrics = useMemo(
     () => buildLocalRetentionMetrics(snapshots, billingCodeMinutes),
@@ -128,33 +144,106 @@ export default function LocalRetentionWorkspace({
     setPending(null);
     try {
       const text = await readText(file);
-      const result = kind === "attendance"
-        ? importAttendanceCsv(text)
-        : importBillingCsv(text);
+      const result =
+        kind === "attendance"
+          ? importAttendanceCsv(text)
+          : importBillingCsv(text);
       const merged = mergeSnapshot(snapshots, result.snapshot);
       if (merged.status === "duplicate") {
         setStatus("That exact snapshot is already loaded. Nothing was added.");
       } else if (merged.status === "overlap") {
-        setPending({ incoming: merged.incoming, existing: merged.existing });
-        setStatus("This snapshot overlaps loaded local data. Choose whether to replace the overlapping local snapshot.");
+        setPending({
+          incoming: [merged.incoming],
+          existing: merged.existing,
+          billingCodeMinutes: {},
+          packageId: merged.incoming.id,
+          warnings: [],
+        });
+        setStatus(
+          "This snapshot overlaps loaded local data. Choose whether to replace the overlapping local snapshot.",
+        );
       } else {
         setSnapshots(merged.snapshots);
-        setStatus(`Loaded ${result.snapshot.rows.length} ${kind} rows for ${result.snapshot.coverageStart} to ${result.snapshot.coverageEnd}.`);
+        setStatus(
+          `Loaded ${result.snapshot.rows.length} ${kind} rows for ${result.snapshot.coverageStart} to ${result.snapshot.coverageEnd}.`,
+        );
       }
       if (result.warnings.length) setError(result.warnings.join(" "));
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "The file could not be read.");
+      setError(
+        cause instanceof Error ? cause.message : "The file could not be read.",
+      );
     } finally {
       setBusy(false);
-      if (kind === "attendance" && attendanceInput.current) attendanceInput.current.value = "";
-      if (kind === "billing" && billingInput.current) billingInput.current.value = "";
+      if (kind === "attendance" && attendanceInput.current)
+        attendanceInput.current.value = "";
+      if (kind === "billing" && billingInput.current)
+        billingInput.current.value = "";
+    }
+  }
+
+  async function importPackage(file: File | undefined) {
+    if (!file) return;
+    setBusy(true);
+    setError("");
+    setPending(null);
+    try {
+      const parsed = importLocalPackage(JSON.parse(await readText(file)));
+      const merged = mergeLocalPackage(snapshots, billingCodeMinutes, parsed);
+      if (merged.status === "duplicate") {
+        setStatus(
+          `Package ${parsed.packageId} is already loaded. Nothing was added.`,
+        );
+      } else if (merged.status === "blocked") {
+        setError(merged.reason);
+        setStatus("No local data changed.");
+      } else if (merged.status === "overlap") {
+        setPending({
+          incoming: merged.incoming,
+          existing: merged.existing,
+          billingCodeMinutes: parsed.billingCodeMinutes,
+          packageId: parsed.packageId,
+          warnings: merged.warnings,
+        });
+        setStatus(
+          "This package overlaps loaded local data. Review before replacing overlapping local snapshots.",
+        );
+        if (merged.warnings.length) setError(merged.warnings.join(" "));
+      } else {
+        setSnapshots(merged.snapshots);
+        setBillingCodeMinutes(merged.billingCodeMinutes);
+        setStatus(
+          `Loaded package ${parsed.packageId}: ${parsed.snapshots[0].rows.length} attendance rows and ${parsed.snapshots[1].rows.length} billing rows.`,
+        );
+        if (merged.warnings.length) setError(merged.warnings.join(" "));
+      }
+    } catch (cause) {
+      setError(
+        cause instanceof Error
+          ? cause.message
+          : "The package could not be read.",
+      );
+    } finally {
+      setBusy(false);
+      if (packageInput.current) packageInput.current.value = "";
     }
   }
 
   function replacePending() {
     if (!pending) return;
-    setSnapshots((current) => replaceOverlappingSnapshots(current, pending.incoming));
-    setStatus(`Replaced overlapping ${pending.incoming.kind} snapshot for ${pending.incoming.coverageStart} to ${pending.incoming.coverageEnd}.`);
+    const replaced = replaceOverlappingPackageSnapshots(
+      snapshots,
+      billingCodeMinutes,
+      pending.incoming,
+      pending.billingCodeMinutes,
+    );
+    setSnapshots(replaced.snapshots);
+    setBillingCodeMinutes(replaced.billingCodeMinutes);
+    setStatus(
+      `Replaced overlapping local snapshots with package ${pending.packageId}.`,
+    );
+    const warnings = [...pending.warnings, ...replaced.warnings];
+    setError(warnings.length ? warnings.join(" ") : "");
     setPending(null);
   }
 
@@ -180,7 +269,9 @@ export default function LocalRetentionWorkspace({
       exportLocalBackup(snapshots, billingCodeMinutes),
       "emc-local-retention-backup.json",
     );
-    setStatus("Downloaded an unencrypted local JSON backup. It contains row-level local facts and should stay off the practice API.");
+    setStatus(
+      "Downloaded an unencrypted local JSON backup. It contains row-level local facts and should stay off the practice API.",
+    );
   }
 
   async function importBackup(file: File | undefined) {
@@ -192,9 +283,15 @@ export default function LocalRetentionWorkspace({
       const parsed = importLocalBackup(JSON.parse(await readText(file)));
       setSnapshots(parsed.snapshots);
       setBillingCodeMinutes(parsed.billingCodeMinutes);
-      setStatus(`Restored ${parsed.snapshots.length} local snapshots from backup.`);
+      setStatus(
+        `Restored ${parsed.snapshots.length} local snapshots from backup.`,
+      );
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "The backup could not be read.");
+      setError(
+        cause instanceof Error
+          ? cause.message
+          : "The backup could not be read.",
+      );
     } finally {
       setBusy(false);
       if (backupInput.current) backupInput.current.value = "";
@@ -202,15 +299,19 @@ export default function LocalRetentionWorkspace({
   }
 
   return (
-    <section className="pw-local-retention" aria-label="Local retention workspace">
+    <section
+      className="pw-local-retention"
+      aria-label="Local retention workspace"
+    >
       <div className="pw-local-retention-hero">
         <div>
-          <p className="pw-eyebrow">Local-only CSV workspace</p>
+          <p className="pw-eyebrow">Local-only package workspace</p>
           <h2>Retention and billed sessions</h2>
           <p>
-            Import CSVs prepared with permanent random client IDs and no direct client names.
-            Rows stay in this browser page while you move between workspace tabs.
-            Reloading or closing the page clears them unless you explicitly download a local backup.
+            Import the converter package prepared with permanent random client
+            IDs and no direct client names. Rows stay in this browser page while
+            you move between workspace tabs. Reloading or closing the page
+            clears them unless you explicitly download a local backup.
           </p>
         </div>
         <ShieldCheck aria-hidden="true" />
@@ -224,6 +325,21 @@ export default function LocalRetentionWorkspace({
 
       <div className="pw-local-import-grid">
         <section>
+          <Upload aria-hidden="true" />
+          <h3>Complete package</h3>
+          <p>
+            Upload the one JSON package from the local converter. It contains
+            private stable IDs only.
+          </p>
+          <input
+            ref={packageInput}
+            type="file"
+            accept=".json"
+            disabled={busy}
+            onChange={(event) => void importPackage(event.target.files?.[0])}
+          />
+        </section>
+        <section>
           <FileSpreadsheet aria-hidden="true" />
           <h3>Attendance CSV</h3>
           <p>Client, Clinician, Date of service, optional Location, Status.</p>
@@ -232,27 +348,41 @@ export default function LocalRetentionWorkspace({
             type="file"
             accept=".csv"
             disabled={busy}
-            onChange={(event) => void importCsv("attendance", event.target.files?.[0])}
+            onChange={(event) =>
+              void importCsv("attendance", event.target.files?.[0])
+            }
           />
         </section>
         <section>
           <FileSpreadsheet aria-hidden="true" />
           <h3>Billing CSV</h3>
-          <p>Date of Service, Client, Clinician, Total Fee, optional Billing Code.</p>
+          <p>
+            Date of Service, Client, Clinician, Total Fee, optional Billing
+            Code.
+          </p>
           <input
             ref={billingInput}
             type="file"
             accept=".csv"
             disabled={busy}
-            onChange={(event) => void importCsv("billing", event.target.files?.[0])}
+            onChange={(event) =>
+              void importCsv("billing", event.target.files?.[0])
+            }
           />
         </section>
         <section>
           <Upload aria-hidden="true" />
           <h3>Local plaintext backup</h3>
-          <p>Exports unencrypted JSON with row-level local facts. Store it only in an approved secure location.</p>
+          <p>
+            Exports unencrypted JSON with row-level local facts. Store it only
+            in an approved secure location.
+          </p>
           <div className="pw-backup-actions">
-            <button className="pw-button" disabled={busy || !snapshots.length} onClick={exportBackup}>
+            <button
+              className="pw-button"
+              disabled={busy || !snapshots.length}
+              onClick={exportBackup}
+            >
               <Download />
               Download local JSON backup
             </button>
@@ -270,34 +400,52 @@ export default function LocalRetentionWorkspace({
       {pending && (
         <div className="pw-overlap-review" role="alert">
           <div>
-            <strong>Overlapping local snapshot</strong>
+            <strong>Overlapping local data</strong>
             <p>
-              Incoming {pending.incoming.kind} range {pending.incoming.coverageStart} to {pending.incoming.coverageEnd}
-              {" "}overlaps {pending.existing.length} loaded snapshot{pending.existing.length === 1 ? "" : "s"}.
-              Replace only the overlapping local import, or keep the current one.
+              Incoming package {pending.packageId} overlaps{" "}
+              {pending.existing.length} loaded snapshot
+              {pending.existing.length === 1 ? "" : "s"}. Replacing removes the
+              overlapped local snapshots as whole snapshots before loading the
+              package.
             </p>
           </div>
           <div>
-            <button className="pw-button" onClick={keepExisting}>Keep existing</button>
-            <button className="pw-button pw-primary" onClick={replacePending}>Replace local snapshot</button>
+            <button className="pw-button" onClick={keepExisting}>
+              Keep existing
+            </button>
+            <button className="pw-button pw-primary" onClick={replacePending}>
+              Replace overlapping data
+            </button>
           </div>
         </div>
       )}
 
-      {error && <p className="pw-error" role="alert">{error}</p>}
+      {error && (
+        <p className="pw-error" role="alert">
+          {error}
+        </p>
+      )}
       <p className="pw-note">{status}</p>
 
       <section className="pw-billing-codes">
         <div>
           <h3>Billing-code minutes</h3>
-          <p>Optional. Unknown codes remain unconfigured, and estimated hours are billing-code coverage only.</p>
+          <p>
+            Optional. Unknown codes remain unconfigured, and estimated hours are
+            billing-code coverage only.
+          </p>
         </div>
         <div className="pw-code-entry">
           <input
             aria-label="Billing code"
             placeholder="Code"
             value={codeDraft.code}
-            onChange={(event) => setCodeDraft((current) => ({ ...current, code: event.target.value }))}
+            onChange={(event) =>
+              setCodeDraft((current) => ({
+                ...current,
+                code: event.target.value,
+              }))
+            }
           />
           <input
             aria-label="Default minutes"
@@ -305,9 +453,16 @@ export default function LocalRetentionWorkspace({
             type="number"
             min={1}
             value={codeDraft.minutes}
-            onChange={(event) => setCodeDraft((current) => ({ ...current, minutes: event.target.value }))}
+            onChange={(event) =>
+              setCodeDraft((current) => ({
+                ...current,
+                minutes: event.target.value,
+              }))
+            }
           />
-          <button className="pw-button" onClick={addBillingCodeMinutes}>Add</button>
+          <button className="pw-button" onClick={addBillingCodeMinutes}>
+            Add
+          </button>
         </div>
         {!!Object.keys(billingCodeMinutes).length && (
           <div className="pw-code-list">
@@ -334,7 +489,10 @@ export default function LocalRetentionWorkspace({
       <div className="pw-retention-summary">
         <div>
           <span>Coverage</span>
-          <strong>{dateLabel(metrics.coverageStart)} to {dateLabel(metrics.coverageEnd)}</strong>
+          <strong>
+            {dateLabel(metrics.coverageStart)} to{" "}
+            {dateLabel(metrics.coverageEnd)}
+          </strong>
         </div>
         <div>
           <span>Attendance rows</span>
@@ -371,11 +529,22 @@ export default function LocalRetentionWorkspace({
                   <td>{row.noShows}</td>
                   <td>{row.clinicianCancelled}</td>
                   <td>{row.uniqueActiveClients}</td>
-                  <td>{row.firstObservedClients}{row.immatureClientsExcluded ? ` (${row.immatureClientsExcluded} immature)` : ""}</td>
+                  <td>
+                    {row.firstObservedClients}
+                    {row.immatureClientsExcluded
+                      ? ` (${row.immatureClientsExcluded} immature)`
+                      : ""}
+                  </td>
                   <td>{row.retainedClients}</td>
                 </tr>
               ))}
-              {!metrics.attendanceByClinician.length && <tr><td colSpan={8}>Import attendance CSVs to calculate show-based retention.</td></tr>}
+              {!metrics.attendanceByClinician.length && (
+                <tr>
+                  <td colSpan={8}>
+                    Import attendance CSVs to calculate show-based retention.
+                  </td>
+                </tr>
+              )}
             </tbody>
           </table>
         </section>
@@ -398,10 +567,21 @@ export default function LocalRetentionWorkspace({
                   <td>{row.billedRows}</td>
                   <td>{money(row.totalFeesCharged)}</td>
                   <td>{row.configuredMinuteRows}</td>
-                  <td>{row.estimatedBillingHours === null ? "Unconfigured" : row.estimatedBillingHours.toFixed(1)}</td>
+                  <td>
+                    {row.estimatedBillingHours === null
+                      ? "Unconfigured"
+                      : row.estimatedBillingHours.toFixed(1)}
+                  </td>
                 </tr>
               ))}
-              {!metrics.billingByClinician.length && <tr><td colSpan={5}>Import billing CSVs to calculate billed counts and charged fees.</td></tr>}
+              {!metrics.billingByClinician.length && (
+                <tr>
+                  <td colSpan={5}>
+                    Import billing CSVs to calculate billed counts and charged
+                    fees.
+                  </td>
+                </tr>
+              )}
             </tbody>
           </table>
         </section>
@@ -427,7 +607,11 @@ export default function LocalRetentionWorkspace({
                   <td>{row.clinicianCancelled}</td>
                 </tr>
               ))}
-              {!metrics.roomCounts.length && <tr><td colSpan={5}>Attendance locations will appear here.</td></tr>}
+              {!metrics.roomCounts.length && (
+                <tr>
+                  <td colSpan={5}>Attendance locations will appear here.</td>
+                </tr>
+              )}
             </tbody>
           </table>
         </section>
