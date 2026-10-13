@@ -10,6 +10,7 @@ import {
 } from "@workspace/practice/hub";
 import {
   buildLocalRetentionMetrics,
+  buildSameDayShowReview,
   buildLocalVisitReconciliation,
   estimateLocalClientActivity,
   exportLocalBackup,
@@ -741,6 +742,39 @@ CID-mixed,Dr Lane,2026-10-03,Room A,no show`,
     retainedClients: 0,
     immatureClientsExcluded: 1,
   });
+});
+
+test("visit diagnostics ignore future rows when an as-of date is supplied", () => {
+  const attendance = attendanceSnapshot(
+    `Client,Clinician,Date of service,Location,Status
+CID-current,Dr Lane,2026-01-10,Room A,show
+CID-future,Dr Lane,2026-02-10,Room A,show
+CID-future,Dr Lane,2026-02-10,Room B,show`,
+    "2026-01-01",
+    "2026-02-28",
+  );
+  const billing = importBillingCsv(
+    `Date of Service,Client,Clinician,Total Fee,Billing Code
+2026-01-10,CID-current,Dr Lane,150,90837
+2026-02-10,CID-future,Dr Lane,150,90837`,
+  ).snapshot;
+  const reconciliation = buildLocalVisitReconciliation(
+    [attendance, billing],
+    {},
+    "2026-01-31",
+  );
+  const sameDayReview = buildSameDayShowReview(
+    [attendance],
+    {},
+    "2026-01-31",
+  );
+
+  assert.equal(reconciliation.matchedVisits, 1);
+  assert.deepEqual(
+    reconciliation.rows.map((row) => row.clientId),
+    ["CID-current"],
+  );
+  assert.deepEqual(sameDayReview, []);
 });
 
 test("single Practice package validates collections and imports atomically", () => {

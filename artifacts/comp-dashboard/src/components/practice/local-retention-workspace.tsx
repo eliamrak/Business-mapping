@@ -250,12 +250,13 @@ export default function LocalRetentionWorkspace({
     [snapshots, billingCodeMinutes, sameDayVisitOverrides, today],
   );
   const sameDayReview = useMemo(
-    () => buildSameDayShowReview(snapshots, sameDayVisitOverrides),
-    [snapshots, sameDayVisitOverrides],
+    () => buildSameDayShowReview(snapshots, sameDayVisitOverrides, today),
+    [snapshots, sameDayVisitOverrides, today],
   );
   const reconciliation = useMemo(
-    () => buildLocalVisitReconciliation(snapshots, sameDayVisitOverrides),
-    [snapshots, sameDayVisitOverrides],
+    () =>
+      buildLocalVisitReconciliation(snapshots, sameDayVisitOverrides, today),
+    [snapshots, sameDayVisitOverrides, today],
   );
   const reconciliationReviewRows = useMemo(
     () =>

@@ -400,11 +400,19 @@ export function treatmentBillingRows(snapshots: LocalSnapshot[]) {
   );
 }
 
-function showRowsBySameDayVisit(snapshots: LocalSnapshot[]) {
+function showRowsBySameDayVisit(
+  snapshots: LocalSnapshot[],
+  asOfDate = "9999-12-31",
+) {
   const groups = new Map<string, AttendanceRow[]>();
   const seenRows = new Set<string>();
   for (const row of treatmentAttendanceRows(snapshots)) {
-    if (row.status !== "show" || seenRows.has(row.sourceRowHash)) continue;
+    if (
+      row.status !== "show" ||
+      row.serviceDate > asOfDate ||
+      seenRows.has(row.sourceRowHash)
+    )
+      continue;
     seenRows.add(row.sourceRowHash);
     const key = sameDayVisitKey(row);
     groups.set(key, [...(groups.get(key) ?? []), row]);
@@ -437,8 +445,9 @@ function derivedShowVisits(
 export function buildSameDayShowReview(
   snapshots: LocalSnapshot[],
   overrides: SameDayVisitOverrides = {},
+  asOfDate = "9999-12-31",
 ): SameDayShowReviewGroup[] {
-  return [...showRowsBySameDayVisit(snapshots).values()]
+  return [...showRowsBySameDayVisit(snapshots, asOfDate).values()]
     .filter(
       (rows) =>
         rows.length > 1 || overrides[sameDayVisitKey(rows[0])] !== undefined,
@@ -780,30 +789,37 @@ function uniqueIncomingSnapshots(
 export function buildLocalVisitReconciliation(
   snapshots: LocalSnapshot[],
   sameDayVisitOverrides: SameDayVisitOverrides = {},
+  asOfDate = "9999-12-31",
 ): LocalVisitReconciliation {
   const attendanceIntervals = mergeIntervals(
-    snapshots
-      .filter(
-        (
-          snapshot,
-        ): snapshot is Extract<LocalSnapshot, { kind: "attendance" }> =>
-          snapshot.kind === "attendance",
-      )
-      .map((snapshot) => ({
-        start: snapshot.coverageStart,
-        end: snapshot.coverageEnd,
-      })),
+    clipIntervals(
+      snapshots
+        .filter(
+          (
+            snapshot,
+          ): snapshot is Extract<LocalSnapshot, { kind: "attendance" }> =>
+            snapshot.kind === "attendance",
+        )
+        .map((snapshot) => ({
+          start: snapshot.coverageStart,
+          end: snapshot.coverageEnd,
+        })),
+      asOfDate,
+    ),
   );
   const billingIntervals = mergeIntervals(
-    snapshots
-      .filter(
-        (snapshot): snapshot is Extract<LocalSnapshot, { kind: "billing" }> =>
-          snapshot.kind === "billing",
-      )
-      .map((snapshot) => ({
-        start: snapshot.coverageStart,
-        end: snapshot.coverageEnd,
-      })),
+    clipIntervals(
+      snapshots
+        .filter(
+          (snapshot): snapshot is Extract<LocalSnapshot, { kind: "billing" }> =>
+            snapshot.kind === "billing",
+        )
+        .map((snapshot) => ({
+          start: snapshot.coverageStart,
+          end: snapshot.coverageEnd,
+        })),
+      asOfDate,
+    ),
   );
   const groups = new Map<
     string,
@@ -842,8 +858,13 @@ export function buildLocalVisitReconciliation(
     );
   for (const snapshot of snapshots) {
     if (snapshot.kind === "attendance")
-      snapshot.rows.forEach((row) => upsert(row, "attendance"));
-    else snapshot.rows.forEach((row) => upsert(row, "billing"));
+      snapshot.rows
+        .filter((row) => row.serviceDate <= asOfDate)
+        .forEach((row) => upsert(row, "attendance"));
+    else
+      snapshot.rows
+        .filter((row) => row.serviceDate <= asOfDate)
+        .forEach((row) => upsert(row, "billing"));
   }
   const rows: LocalVisitReconciliationRow[] = [];
   let matchedVisits = 0;
