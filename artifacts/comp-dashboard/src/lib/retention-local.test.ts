@@ -4,6 +4,7 @@ import { readFileSync } from "node:fs";
 import {
   buildLocalRetentionMetrics,
   buildLocalVisitReconciliation,
+  estimateLocalClientActivity,
   exportLocalBackup,
   importAttendanceCsv,
   importBillingCsv,
@@ -116,6 +117,53 @@ test("retention workspace copy describes saved authenticated history", () => {
   assert.match(source, /row\.status !== "attendance_only"/);
   assert.match(source, /attendance-only rows stay in saved history and are hidden here/);
   assert.doesNotMatch(source, /Local-only package workspace/);
+});
+
+test("client activity estimate uses retained pairs without treating maturity as retention", () => {
+  const attendance = importAttendanceCsv(
+    `Client,Clinician,Date of service,Location,Status
+CID-retained-a,Dr Lane,2026-01-05,Room A,show
+CID-retained-a,Dr Lane,2026-01-19,Room A,show
+CID-retained-a,Dr Lane,2026-02-02,Room A,show
+CID-retained-b,Dr Lane,2026-02-10,Room A,show
+CID-retained-b,Dr Lane,2026-03-10,Room A,show
+CID-single-mature,Dr Lane,2026-01-20,Room A,show
+CID-immature,Dr Lane,2026-03-25,Room A,show
+CID-active,Dr Moss,2026-03-12,Room B,show`,
+  ).snapshot;
+  const estimate = estimateLocalClientActivity([attendance])!;
+
+  assert.equal(estimate.coverageStart, "2026-01-05");
+  assert.equal(estimate.coverageEnd, "2026-03-25");
+  assert.equal(estimate.retainedClientPairs, 2);
+  assert.equal(estimate.matureNonRetainedClientPairs, 1);
+  assert.equal(estimate.immatureClientPairsExcluded, 2);
+  assert.equal(estimate.leftCensoredClientPairs, 1);
+  assert.equal(estimate.rightCensoredClientPairs, 2);
+  assert.equal(estimate.observedAttendedSessionsPerRetainedClient, 2.5);
+  assert.ok(estimate.observedAttendedSessionsPerMonth > 1);
+  assert.ok(estimate.estimatedMonths >= 1);
+  assert.equal(
+    Math.round(estimate.monthlyAttritionRate * estimate.estimatedMonths * 1000),
+    1000,
+  );
+  assert.equal(estimate.latestCompleteMonth, "2026-02");
+  assert.equal(estimate.activeClientsInLatestCompleteMonth, 2);
+  assert.equal(
+    estimate.estimatedClientsLeavingPerMonth,
+    estimate.activeClientsInLatestCompleteMonth! * estimate.monthlyAttritionRate,
+  );
+});
+
+test("client activity estimate needs repeat attended clients", () => {
+  const attendance = importAttendanceCsv(
+    `Client,Clinician,Date of service,Location,Status
+CID-single-a,Dr Lane,2026-01-05,Room A,show
+CID-single-b,Dr Lane,2026-01-19,Room A,show
+CID-no-show,Dr Lane,2026-01-20,Room A,no show`,
+  ).snapshot;
+
+  assert.equal(estimateLocalClientActivity([attendance]), null);
 });
 
 test("visit reconciliation matches only unambiguous accumulated counterparts", () => {

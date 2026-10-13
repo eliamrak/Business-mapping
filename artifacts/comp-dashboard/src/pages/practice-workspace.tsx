@@ -102,7 +102,10 @@ import WorkspaceCalculations from "@/components/practice/workspace-calculations"
 import LocalRetentionWorkspace, {
   useLocalRetentionWorkspaceState,
 } from "@/components/practice/local-retention-workspace";
-import { mergeImportedLocationRooms } from "@/lib/retention-local";
+import {
+  estimateLocalClientActivity,
+  mergeImportedLocationRooms,
+} from "@/lib/retention-local";
 import LeadFlow from "@/components/practice/lead-flow";
 import { applyBulkLeads, planBulkLeads, type LeadBulkChange } from "@/lib/bulk-lead-flow";
 import MoneyFlowToday from "@/components/practice/money-flow-today";
@@ -179,7 +182,6 @@ const sections: { id: Section; label: string }[] = [
   { id: "clinicians", label: "Clinicians & pay" },
   { id: "sessions", label: "Sessions" },
   { id: "retention", label: "Retention" },
-  { id: "calculations", label: "Calculations" },
   { id: "marketing", label: "Marketing" },
   { id: "rooms", label: "Rooms" },
   { id: "budgets", label: "Budgets" },
@@ -502,6 +504,19 @@ export default function PracticeWorkspace() {
   const today = new Date().toLocaleDateString("en-CA");
   const sandbox = mode === "sandbox" || (mode === "goals" && !!draft);
   const planningEdit = mode === "goals" && !!draft;
+  useEffect(() => {
+    const url = new URL(window.location.href);
+    const linkedSection = url.searchParams.get("section");
+    if (linkedSection === "calculations" || url.hash === "#calculations") {
+      url.searchParams.set("section", "retention");
+      if (url.hash === "#calculations") url.hash = "#retention-calculations";
+      window.history.replaceState(null, "", url);
+      setSection("retention");
+    }
+  }, []);
+  useEffect(() => {
+    if (section === "calculations") setSection("retention");
+  }, [section]);
   const savedResolved = useMemo(
     () =>
       query.data?.data && contextQuery.data
@@ -546,6 +561,10 @@ export default function PracticeWorkspace() {
           )
         : null,
     [sandbox, context, workspace?.settings.teamId, localRetentionState.snapshots],
+  );
+  const clientActivityEstimate = useMemo(
+    () => estimateLocalClientActivity(localRetentionState.snapshots),
+    [localRetentionState.snapshots],
   );
   const modelContext = importedSessionOverlay?.context ?? context;
   const planProjection = useMemo(
@@ -1914,6 +1933,10 @@ export default function PracticeWorkspace() {
     }
     setIntegratedTool(next);
   }
+  function openRetentionCalculations() {
+    if (integratedTool) showTool(null);
+    setSection("retention");
+  }
   function downloadSection() {
     if (!workspace || !context) return;
     const source =
@@ -3038,7 +3061,7 @@ export default function PracticeWorkspace() {
                     sandbox={sandbox}
                     onEditingChange={setSessionEditing}
                     onPlanHire={startPlanning}
-                    onOpenCalculations={() => setSection("calculations")}
+                    onOpenCalculations={openRetentionCalculations}
                     forecastMonths={months}
                     onSaved={async () => {
                       await contextQuery.refetch();
@@ -3050,17 +3073,20 @@ export default function PracticeWorkspace() {
                 </>
               )}
               {section === "retention" && (
-                <LocalRetentionWorkspace workspaceState={localRetentionState} />
-              )}
-              {section === "calculations" && (
-                <WorkspaceCalculations
-                  workspace={workingWorkspace}
-                  context={modelContext ?? context}
-                  onSetting={(key, value) => stageSettings(
-                    { [key]: value },
-                    "Session calculations",
-                  )}
-                />
+                <>
+                  <LocalRetentionWorkspace workspaceState={localRetentionState} />
+                  <div id="retention-calculations">
+                    <WorkspaceCalculations
+                      workspace={workingWorkspace}
+                      context={modelContext ?? context}
+                      clientActivityEstimate={clientActivityEstimate}
+                      onSetting={(key, value) => stageSettings(
+                        { [key]: value },
+                        "Session calculations",
+                      )}
+                    />
+                  </div>
+                </>
               )}
               {section === "marketing" && (
                 <>
@@ -5243,7 +5269,7 @@ export default function PracticeWorkspace() {
                         <button
                           type="button"
                           className="pw-text-button"
-                          onClick={() => setSection("calculations")}
+                          onClick={openRetentionCalculations}
                         >
                           Assumptions <ChevronRight />
                         </button>
