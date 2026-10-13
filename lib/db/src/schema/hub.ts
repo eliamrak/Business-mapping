@@ -7,6 +7,8 @@ import {
   jsonb,
   uuid,
   uniqueIndex,
+  date,
+  index,
 } from "drizzle-orm/pg-core";
 
 export const hubWorkspacesTable = pgTable("hub_workspaces", {
@@ -69,4 +71,76 @@ export const hubAuthSessionsTable = pgTable("hub_auth_sessions", {
   tokenHash: text("token_hash").primaryKey(),
   userId: text("user_id").notNull(),
   expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+});
+
+export const practiceImportPackagesTable = pgTable(
+  "practice_import_packages",
+  {
+    id: uuid("id").primaryKey(),
+    practiceId: text("practice_id").notNull(),
+    accountId: text("account_id").notNull(),
+    packageId: text("package_id").notNull(),
+    contentHash: text("content_hash").notNull(),
+    exportedAt: timestamp("exported_at", { withTimezone: true }).notNull(),
+    importedAt: timestamp("imported_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    importedBy: text("imported_by").notNull(),
+    billingCodeMinutes: jsonb("billing_code_minutes").notNull().default({}),
+    active: integer("active").notNull().default(1),
+  },
+  (table) => [
+    uniqueIndex("practice_import_packages_scope_package").on(
+      table.practiceId,
+      table.accountId,
+      table.packageId,
+    ),
+  ],
+);
+
+export const practiceImportSnapshotsTable = pgTable(
+  "practice_import_snapshots",
+  {
+    id: uuid("id").primaryKey(),
+    packageImportId: uuid("package_import_id")
+      .notNull()
+      .references(() => practiceImportPackagesTable.id, {
+        onDelete: "restrict",
+      }),
+    practiceId: text("practice_id").notNull(),
+    accountId: text("account_id").notNull(),
+    kind: text("kind").notNull(),
+    coverageStart: date("coverage_start").notNull(),
+    coverageEnd: date("coverage_end").notNull(),
+    sourceHash: text("source_hash").notNull(),
+    rowCount: integer("row_count").notNull(),
+    rows: jsonb("rows").notNull(),
+    active: integer("active").notNull().default(1),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    index("practice_import_snapshots_scope_active").on(
+      table.practiceId,
+      table.accountId,
+      table.active,
+      table.kind,
+      table.coverageStart,
+      table.coverageEnd,
+    ),
+  ],
+);
+
+export const practiceImportAuditTable = pgTable("practice_import_audit", {
+  id: uuid("id").primaryKey(),
+  practiceId: text("practice_id").notNull(),
+  accountId: text("account_id").notNull(),
+  packageId: text("package_id").notNull(),
+  action: text("action").notNull(),
+  actor: text("actor").notNull(),
+  detail: jsonb("detail").notNull().default({}),
+  createdAt: timestamp("created_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
 });

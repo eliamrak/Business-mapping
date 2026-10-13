@@ -1,23 +1,18 @@
 import {
   type Dispatch,
   type SetStateAction,
+  useEffect,
   useMemo,
   useRef,
   useState,
 } from "react";
-import { Download, FileSpreadsheet, ShieldCheck, Upload } from "lucide-react";
+import { ApiError, customFetch } from "@workspace/api-client-react";
+import { Download, ShieldCheck, Upload } from "lucide-react";
 import {
   buildLocalRetentionMetrics,
   exportLocalBackup,
-  importAttendanceCsv,
-  importBillingCsv,
-  importLocalBackup,
   importLocalPackage,
-  mergeLocalPackage,
-  mergeSnapshot,
-  replaceOverlappingPackageSnapshots,
   type BillingCodeMinutes,
-  type LocalFactKind,
   type LocalSnapshot,
 } from "@/lib/retention-local";
 
@@ -43,8 +38,30 @@ type PendingLocalSnapshot = {
   existing: LocalSnapshot[];
   billingCodeMinutes: BillingCodeMinutes;
   packageId: string;
+  packageData?: unknown;
   warnings: string[];
 };
+
+type StoredImportHistory = {
+  snapshots: LocalSnapshot[];
+  billingCodeMinutes: BillingCodeMinutes;
+  packages: Array<{
+    packageId: string;
+    importedAt: string;
+    exportedAt: string;
+    contentHash: string;
+  }>;
+};
+
+type ImportResponse = StoredImportHistory & {
+  status: "added" | "duplicate" | "replaced";
+};
+
+class ImportConflict extends Error {
+  code?: string;
+  existing?: PendingLocalSnapshot["existing"];
+  incoming?: PendingLocalSnapshot["incoming"];
+}
 
 export type LocalRetentionWorkspaceState = {
   snapshots: LocalSnapshot[];
@@ -95,15 +112,58 @@ export function useLocalRetentionWorkspaceState(): LocalRetentionWorkspaceState 
 }
 
 async function readText(file: File) {
-  if (
-    !/\.(csv|json)$/i.test(file.name) ||
-    !file.size ||
-    file.size > 10 * 1024 * 1024
-  )
-    throw new Error(
-      "Choose a CSV, Practice package, or local backup JSON file up to 10 MB.",
-    );
+  if (!/\.json$/i.test(file.name) || !file.size || file.size > 10 * 1024 * 1024)
+    throw new Error("Choose a Practice package JSON file up to 10 MB.");
   return await file.text();
+}
+
+function readImportConflict(apiError: ApiError) {
+  const data = apiError.data as Record<string, unknown> | null;
+  const conflict = new ImportConflict(
+    typeof data?.error === "string"
+      ? data.error
+      : "The package could not be imported.",
+  );
+  conflict.code = typeof data?.code === "string" ? data.code : undefined;
+  conflict.existing = Array.isArray(data?.existing)
+    ? (data.existing as PendingLocalSnapshot["existing"])
+    : undefined;
+  conflict.incoming = Array.isArray(data?.incoming)
+    ? (data.incoming as PendingLocalSnapshot["incoming"])
+    : undefined;
+  return conflict;
+}
+
+async function getStoredHistory() {
+  return customFetch<StoredImportHistory>("/api/practice-imports");
+}
+
+async function importStoredPackage(
+  packageData: unknown,
+  replaceOverlaps = false,
+) {
+  try {
+    return await customFetch<ImportResponse>("/api/practice-imports/package", {
+      method: "POST",
+      body: JSON.stringify({ package: packageData, replaceOverlaps }),
+    });
+  } catch (error) {
+    if (error instanceof ApiError && error.status === 409)
+      throw readImportConflict(error);
+    throw error;
+  }
+}
+
+async function saveStoredBillingCodeMinutes(
+  billingCodeMinutes: BillingCodeMinutes,
+) {
+  return customFetch<StoredImportHistory>(
+    "/api/practice-imports/billing-code-minutes",
+    {
+      method: "PUT",
+      body: JSON.stringify({ billingCodeMinutes }),
+    },
+  );
 }
 
 export default function LocalRetentionWorkspace({
@@ -128,59 +188,41 @@ export default function LocalRetentionWorkspace({
     pending,
     setPending,
   } = workspaceState ?? ownedState;
-  const attendanceInput = useRef<HTMLInputElement>(null);
-  const billingInput = useRef<HTMLInputElement>(null);
   const packageInput = useRef<HTMLInputElement>(null);
-  const backupInput = useRef<HTMLInputElement>(null);
   const metrics = useMemo(
     () => buildLocalRetentionMetrics(snapshots, billingCodeMinutes),
     [snapshots, billingCodeMinutes],
   );
 
-  async function importCsv(kind: LocalFactKind, file: File | undefined) {
-    if (!file) return;
+  useEffect(() => {
+    let cancelled = false;
     setBusy(true);
-    setError("");
-    setPending(null);
-    try {
-      const text = await readText(file);
-      const result =
-        kind === "attendance"
-          ? importAttendanceCsv(text)
-          : importBillingCsv(text);
-      const merged = mergeSnapshot(snapshots, result.snapshot);
-      if (merged.status === "duplicate") {
-        setStatus("That exact snapshot is already loaded. Nothing was added.");
-      } else if (merged.status === "overlap") {
-        setPending({
-          incoming: [merged.incoming],
-          existing: merged.existing,
-          billingCodeMinutes: {},
-          packageId: merged.incoming.id,
-          warnings: [],
-        });
+    getStoredHistory()
+      .then((history) => {
+        if (cancelled) return;
+        setSnapshots(history.snapshots);
+        setBillingCodeMinutes(history.billingCodeMinutes);
         setStatus(
-          "This snapshot overlaps loaded local data. Choose whether to replace the overlapping local snapshot.",
+          history.snapshots.length
+            ? `Loaded ${history.snapshots.length} saved converted snapshots from practice storage.`
+            : "No converted packages imported yet.",
         );
-      } else {
-        setSnapshots(merged.snapshots);
-        setStatus(
-          `Loaded ${result.snapshot.rows.length} ${kind} rows for ${result.snapshot.coverageStart} to ${result.snapshot.coverageEnd}.`,
+      })
+      .catch((cause) => {
+        if (cancelled) return;
+        setError(
+          cause instanceof Error
+            ? cause.message
+            : "Saved converted history could not be loaded.",
         );
-      }
-      if (result.warnings.length) setError(result.warnings.join(" "));
-    } catch (cause) {
-      setError(
-        cause instanceof Error ? cause.message : "The file could not be read.",
-      );
-    } finally {
-      setBusy(false);
-      if (kind === "attendance" && attendanceInput.current)
-        attendanceInput.current.value = "";
-      if (kind === "billing" && billingInput.current)
-        billingInput.current.value = "";
-    }
-  }
+      })
+      .finally(() => {
+        if (!cancelled) setBusy(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [setBillingCodeMinutes, setBusy, setError, setSnapshots, setStatus]);
 
   async function importPackage(file: File | undefined) {
     if (!file) return;
@@ -188,36 +230,50 @@ export default function LocalRetentionWorkspace({
     setError("");
     setPending(null);
     try {
-      const parsed = importLocalPackage(JSON.parse(await readText(file)));
-      const merged = mergeLocalPackage(snapshots, billingCodeMinutes, parsed);
-      if (merged.status === "duplicate") {
+      const packageData = JSON.parse(await readText(file));
+      const parsed = importLocalPackage(packageData);
+      const saved = await importStoredPackage(packageData);
+      setSnapshots(saved.snapshots);
+      setBillingCodeMinutes(saved.billingCodeMinutes);
+      if (saved.status === "duplicate") {
         setStatus(
           `Package ${parsed.packageId} is already loaded. Nothing was added.`,
         );
-      } else if (merged.status === "blocked") {
-        setError(merged.reason);
-        setStatus("No local data changed.");
-      } else if (merged.status === "overlap") {
-        setPending({
-          incoming: merged.incoming,
-          existing: merged.existing,
-          billingCodeMinutes: parsed.billingCodeMinutes,
-          packageId: parsed.packageId,
-          warnings: merged.warnings,
-        });
+      } else if (saved.status === "replaced") {
         setStatus(
-          "This package overlaps loaded local data. Review before replacing overlapping local snapshots.",
+          `Replaced overlapping converted snapshots with package ${parsed.packageId}.`,
         );
-        if (merged.warnings.length) setError(merged.warnings.join(" "));
       } else {
-        setSnapshots(merged.snapshots);
-        setBillingCodeMinutes(merged.billingCodeMinutes);
         setStatus(
-          `Loaded package ${parsed.packageId}: ${parsed.snapshots[0].rows.length} attendance rows and ${parsed.snapshots[1].rows.length} billing rows.`,
+          `Saved package ${parsed.packageId}: ${parsed.snapshots[0].rows.length} attendance rows and ${parsed.snapshots[1].rows.length} billing rows.`,
         );
-        if (merged.warnings.length) setError(merged.warnings.join(" "));
       }
+      if (parsed.warnings.length) setError(parsed.warnings.join(" "));
     } catch (cause) {
+      if (
+        cause instanceof ImportConflict &&
+        cause.code === "OVERLAP_REVIEW_REQUIRED"
+      ) {
+        try {
+          const packageData = JSON.parse(await readText(file));
+          const parsed = importLocalPackage(packageData);
+          setPending({
+            incoming: cause.incoming ?? parsed.snapshots,
+            existing: cause.existing ?? [],
+            billingCodeMinutes: parsed.billingCodeMinutes,
+            packageId: parsed.packageId,
+            packageData,
+            warnings: parsed.warnings,
+          });
+          setStatus(
+            "This package overlaps saved converted history. Review before replacing overlapping snapshots.",
+          );
+          if (parsed.warnings.length) setError(parsed.warnings.join(" "));
+          return;
+        } catch {
+          // Fall through to the original import error.
+        }
+      }
       setError(
         cause instanceof Error
           ? cause.message
@@ -231,20 +287,25 @@ export default function LocalRetentionWorkspace({
 
   function replacePending() {
     if (!pending) return;
-    const replaced = replaceOverlappingPackageSnapshots(
-      snapshots,
-      billingCodeMinutes,
-      pending.incoming,
-      pending.billingCodeMinutes,
-    );
-    setSnapshots(replaced.snapshots);
-    setBillingCodeMinutes(replaced.billingCodeMinutes);
-    setStatus(
-      `Replaced overlapping local snapshots with package ${pending.packageId}.`,
-    );
-    const warnings = [...pending.warnings, ...replaced.warnings];
-    setError(warnings.length ? warnings.join(" ") : "");
-    setPending(null);
+    setBusy(true);
+    importStoredPackage(pending.packageData, true)
+      .then((saved) => {
+        setSnapshots(saved.snapshots);
+        setBillingCodeMinutes(saved.billingCodeMinutes);
+        setStatus(
+          `Replaced overlapping converted snapshots with package ${pending.packageId}.`,
+        );
+        setError(pending.warnings.length ? pending.warnings.join(" ") : "");
+        setPending(null);
+      })
+      .catch((cause) =>
+        setError(
+          cause instanceof Error
+            ? cause.message
+            : "The overlapping package could not be saved.",
+        ),
+      )
+      .finally(() => setBusy(false));
   }
 
   function keepExisting() {
@@ -259,7 +320,15 @@ export default function LocalRetentionWorkspace({
       setError("Enter a billing code and positive default minutes.");
       return;
     }
-    setBillingCodeMinutes((current) => ({ ...current, [code]: minutes }));
+    const next = { ...billingCodeMinutes, [code]: minutes };
+    setBillingCodeMinutes(next);
+    void saveStoredBillingCodeMinutes(next).catch((cause) =>
+      setError(
+        cause instanceof Error
+          ? cause.message
+          : "Billing-code minutes could not be saved.",
+      ),
+    );
     setCodeDraft({ code: "", minutes: "" });
     setError("");
   }
@@ -274,30 +343,6 @@ export default function LocalRetentionWorkspace({
     );
   }
 
-  async function importBackup(file: File | undefined) {
-    if (!file) return;
-    setBusy(true);
-    setError("");
-    setPending(null);
-    try {
-      const parsed = importLocalBackup(JSON.parse(await readText(file)));
-      setSnapshots(parsed.snapshots);
-      setBillingCodeMinutes(parsed.billingCodeMinutes);
-      setStatus(
-        `Restored ${parsed.snapshots.length} local snapshots from backup.`,
-      );
-    } catch (cause) {
-      setError(
-        cause instanceof Error
-          ? cause.message
-          : "The backup could not be read.",
-      );
-    } finally {
-      setBusy(false);
-      if (backupInput.current) backupInput.current.value = "";
-    }
-  }
-
   return (
     <section
       className="pw-local-retention"
@@ -309,16 +354,18 @@ export default function LocalRetentionWorkspace({
           <h2>Retention and billed sessions</h2>
           <p>
             Import the converter package prepared with permanent random client
-            IDs and no direct client names. Rows stay in this browser page while
-            you move between workspace tabs. Reloading or closing the page
-            clears them unless you explicitly download a local backup.
+            IDs and no direct client names. Converted attendance and billing
+            facts are saved to authenticated practice storage so biweekly
+            imports accumulate across reloads and sign-ins.
           </p>
         </div>
         <ShieldCheck aria-hidden="true" />
       </div>
 
       <div className="pw-privacy-strip">
-        <span>Raw rows are not sent to the API.</span>
+        <span>
+          No source reports, names, paths, headers, or crosswalks are stored.
+        </span>
         <span>Manual session records are unchanged.</span>
         <span>Billing is charged fees, not collected payments.</span>
       </div>
@@ -340,42 +387,11 @@ export default function LocalRetentionWorkspace({
           />
         </section>
         <section>
-          <FileSpreadsheet aria-hidden="true" />
-          <h3>Attendance CSV</h3>
-          <p>Client, Clinician, Date of service, optional Location, Status.</p>
-          <input
-            ref={attendanceInput}
-            type="file"
-            accept=".csv"
-            disabled={busy}
-            onChange={(event) =>
-              void importCsv("attendance", event.target.files?.[0])
-            }
-          />
-        </section>
-        <section>
-          <FileSpreadsheet aria-hidden="true" />
-          <h3>Billing CSV</h3>
-          <p>
-            Date of Service, Client, Clinician, Total Fee, optional Billing
-            Code.
-          </p>
-          <input
-            ref={billingInput}
-            type="file"
-            accept=".csv"
-            disabled={busy}
-            onChange={(event) =>
-              void importCsv("billing", event.target.files?.[0])
-            }
-          />
-        </section>
-        <section>
           <Upload aria-hidden="true" />
-          <h3>Local plaintext backup</h3>
+          <h3>Converted history backup</h3>
           <p>
-            Exports unencrypted JSON with row-level local facts. Store it only
-            in an approved secure location.
+            Downloads unencrypted JSON with de-identified converted facts from
+            the saved history view.
           </p>
           <div className="pw-backup-actions">
             <button
@@ -384,15 +400,8 @@ export default function LocalRetentionWorkspace({
               onClick={exportBackup}
             >
               <Download />
-              Download local JSON backup
+              Download JSON backup
             </button>
-            <input
-              ref={backupInput}
-              type="file"
-              accept=".json"
-              disabled={busy}
-              onChange={(event) => void importBackup(event.target.files?.[0])}
-            />
           </div>
         </section>
       </div>
@@ -403,10 +412,10 @@ export default function LocalRetentionWorkspace({
             <strong>Overlapping local data</strong>
             <p>
               Incoming package {pending.packageId} overlaps{" "}
-              {pending.existing.length} loaded snapshot
-              {pending.existing.length === 1 ? "" : "s"}. Replacing removes the
-              overlapped local snapshots as whole snapshots before loading the
-              package.
+              {pending.existing.length} saved snapshot
+              {pending.existing.length === 1 ? "" : "s"}. Replacing archives
+              only the overlapping converted snapshots before loading the
+              package; unrelated history stays in place.
             </p>
           </div>
           <div>
@@ -474,6 +483,13 @@ export default function LocalRetentionWorkspace({
                   setBillingCodeMinutes((current) => {
                     const next = { ...current };
                     delete next[code];
+                    void saveStoredBillingCodeMinutes(next).catch((cause) =>
+                      setError(
+                        cause instanceof Error
+                          ? cause.message
+                          : "Billing-code minutes could not be saved.",
+                      ),
+                    );
                     return next;
                   })
                 }
