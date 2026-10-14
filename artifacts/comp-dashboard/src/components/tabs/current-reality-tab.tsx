@@ -10,7 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Info, Pencil, Wand2 } from "lucide-react";
 import { formatCurrency, formatPercent } from "@/lib/format";
-import { calculateCurrentRealityGap } from "@/lib/calculations";
+import { calculateCurrentRealityGap, calculateCapitalGoalProgress } from "@/lib/calculations";
 import { useQueryClient } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
 
@@ -206,20 +206,21 @@ export default function CurrentRealityTab() {
                         <div><span className="text-muted-foreground block text-xs">Current Production Est.</span><span className="font-semibold">{formatCurrency(gapAnalysis.currentAnnualProductionEstimate)}</span></div>
                         <div><span className="text-muted-foreground block text-xs">Current Net / Clinician</span><span className="font-semibold">{formatCurrency(gapAnalysis.currentNetPerClinicianEstimate)}</span></div>
                         <div>
-                          <span className="text-muted-foreground block text-xs">Gap to Goal</span>
-                          <span className={`font-semibold ${gapAnalysis.gapToGoal > 0 ? "text-destructive" : "text-green-600"}`}>
-                            {gapAnalysis.gapToGoal > 0 ? "-" : "+"}{formatCurrency(Math.abs(gapAnalysis.gapToGoal))}
+                          <span className="text-muted-foreground block text-xs">Recurring Flow Gap</span>
+                          <span className={`font-semibold ${gapAnalysis.percentAchieved === null ? "text-muted-foreground" : gapAnalysis.gapToGoal > 0 ? "text-destructive" : "text-green-600"}`}>
+                            {gapAnalysis.percentAchieved === null ? "No recurring target" : <>{gapAnalysis.gapToGoal > 0 ? "-" : "+"}{formatCurrency(Math.abs(gapAnalysis.gapToGoal))}</>}
                           </span>
                         </div>
                         <div>
-                          <span className="text-muted-foreground block text-xs">Goal Achieved</span>
-                          <span className={`font-semibold ${gapAnalysis.percentAchieved >= 100 ? "text-green-600" : "text-amber-600"}`}>
-                            {formatPercent(gapAnalysis.percentAchieved)}
+                          <span className="text-muted-foreground block text-xs">Recurring Flow Progress</span>
+                          <span className={`font-semibold ${gapAnalysis.percentAchieved === null ? "text-muted-foreground" : gapAnalysis.percentAchieved >= 100 ? "text-green-600" : "text-amber-600"}`}>
+                            {gapAnalysis.percentAchieved === null ? "No recurring target" : formatPercent(gapAnalysis.percentAchieved)}
                           </span>
                         </div>
                       </div>
+                      {calculateCapitalGoalProgress(currentReality, selectedGoal).map((fund) => <div key={fund.name} className="flex justify-between gap-3 text-sm"><span>{fund.name}</span><span>{fund.balance == null ? "Balance unknown" : formatCurrency(fund.balance)} / {formatCurrency(fund.target)}{fund.percent === null ? "" : ` (${formatPercent(fund.percent)})`}</span></div>)}
                       <div className="mt-2 rounded bg-muted p-3 text-xs text-muted-foreground">
-                        <strong>Gap</strong> = Goal's total annual business need minus your current tracked actuals (owner pay + overhead + profit + building fund + cash reserve).
+                        <strong>Recurring flow gap</strong> = Annual recurring business need minus current owner pay, overhead and profit. Capital balances are compared separately.
                       </div>
                     </div>
                   )}

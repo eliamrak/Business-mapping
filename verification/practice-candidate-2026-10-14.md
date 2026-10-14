@@ -34,19 +34,40 @@ Page/prototype changes, access grants, or new infrastructure.
 
 ## Verification
 
-- `corepack pnpm test`: 465 passed, zero failed.
+- `corepack pnpm test`: 467 passed, zero failed.
 - `corepack pnpm run typecheck:libs`: passed.
 - Dashboard and API typechecks: passed.
 - Frontend production build with PORT and BASE_PATH set: passed; existing
   sourcemap, mixed jsPDF import and large-chunk warnings remain.
-- Synthetic isolated Playwright harness: 36 desktop/mobile captures, no horizontal
+- Synthetic isolated Playwright harness: 38 desktop/mobile captures, no horizontal
   overflow or navigation overlap. Checks include keyboard navigation, circular
   retention/practice marker, Compare, staff cost, percentage persistence/reload,
   generated-plan unsaved protection, saved plans, imports and legacy daily visits.
+  The capital-only Current Reality screen shows no recurring target and a separate
+  zero-percent Building Fund balance, without a green overall achievement claim.
 - Independent read-only main integration review found three issues; all were
   corrected and re-reviewed without remaining findings. Reviewer independently
   ran 39 focused tests, dashboard typecheck and the 36-capture harness.
 - `git diff --check`: passed.
+
+## Exact-candidate audit follow-up
+
+The independent audit of `c1d5e63` passed 27 checks covering the original defects,
+ETA boundary, existing controls and additional inverse/coverage cases. It found
+two remaining blockers, fixed by this follow-up:
+
+- Financial Goal rejects unverified room capacity and other unsupported forecast
+  warnings; it cannot mark capacity sufficient from those fallbacks. Regression
+  controls retain a valid solution when telehealth is explicitly configured.
+- Current Reality has no recurring achievement percentage when annual recurring
+  need is zero. UI and export labels distinguish recurring flow from capital
+  balances; Building Fund and Emergency Reserve use their respective balances,
+  while Growth remains unknown because no current Growth balance exists there.
+
+Independent read-only follow-up review found no issues, with 31 focused tests and
+dashboard/API typechecks passing. The new frozen commit still requires the separate
+auditor's exact-commit confirmation; c1d5e63 audit results do not certify these new
+changes. No deployment was performed.
 
 ## Limits and release gates
 

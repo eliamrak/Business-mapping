@@ -109,8 +109,8 @@ export default function PDFExportTab() {
               ["Avg Weeks Worked/Year", currentReality.currentAvgWeeksWorkedPerYear],
               ...(gap ? [["Est. Annual Production", formatCurrency(gap.currentAnnualProductionEstimate)]] : []),
               ...(gap && linkedGoal ? [
-                ["Gap to Goal (" + linkedGoal.name + ")", formatCurrency(gap.gapToGoal)],
-                ["Goal Achieved %", gap.percentAchieved.toFixed(1) + "%"],
+                ["Recurring Flow Gap (" + linkedGoal.name + ")", gap.percentAchieved === null ? "No recurring target" : formatCurrency(gap.gapToGoal)],
+                ["Recurring Flow Progress", gap.percentAchieved === null ? "No recurring target" : gap.percentAchieved.toFixed(1) + "%"],
               ] : []),
             ],
             styles: { fontSize: 8 },
@@ -317,13 +317,13 @@ export default function PDFExportTab() {
               g.timeHorizon,
               formatCurrency(o.totalAnnualBusinessNeed),
               formatCurrency(o.requiredNetPerClinician),
-              gap ? gap.percentAchieved.toFixed(1) + "%" : "—",
-              gap ? formatCurrency(gap.gapToGoal) : "—",
+              gap?.percentAchieved != null ? gap.percentAchieved.toFixed(1) + "%" : "No recurring target",
+              gap?.percentAchieved != null ? formatCurrency(gap.gapToGoal) : "—",
             ];
           });
           autoTable(doc, {
             startY: startY + 4,
-            head: [["Goal", "Horizon", "Total Need", "Net/Clinician Needed", "% Achieved", "Gap"]],
+            head: [["Goal", "Horizon", "Annual Recurring Need", "Net/Clinician Needed", "Recurring Flow %", "Recurring Gap"]],
             body: rows,
             styles: { fontSize: 8 },
             headStyles: { fillColor: BRAND_COLOR },

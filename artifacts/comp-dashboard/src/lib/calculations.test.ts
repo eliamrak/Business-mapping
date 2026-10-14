@@ -6,6 +6,7 @@ import {
   calculateTotalStaffCost,
   calculateBusinessGoalOutputs,
   calculateCurrentRealityGap,
+  calculateCapitalGoalProgress,
   type ClinicianMetricsInput,
 } from "./calculations.ts";
 
@@ -180,4 +181,19 @@ test("current savings balances do not masquerade as recurring goal achievement",
   assert.equal(calculateCurrentRealityGap(current as never, goal as never, {
     goalContributions: [contribution], currentContributions: [{ ...contribution, amount: 500 }],
   })!.gapToGoal, 30000);
+});
+
+test("capital-only goals have no recurring achievement percentage and retain separate balance progress", () => {
+  const current = { currentCliniciansCount: 0, currentAvgSessionRate: 0, currentAvgSessionsPerWeek: 0, currentAvgWeeksWorkedPerYear: 0, currentOwnerPay: 0, currentSecondOwnerPay: 0, currentAnnualOverhead: 0, currentBusinessProfit: 0, currentBuildingFund: 0, currentCashReserve: 0 };
+  const goal = { ownerPayGoal: 0, secondOwnerPayGoal: 0, annualOverheadGoal: 0, businessProfitGoal: 0, buildingFundGoal: 120000, emergencyReserveGoal: 10000, growthFundGoal: 20000, desiredCliniciansCount: 2 };
+  const before = structuredClone({ current, goal });
+  assert.equal(calculateCurrentRealityGap(current as never, goal as never)!.percentAchieved, null);
+  const progress = calculateCapitalGoalProgress(current as never, goal as never);
+  assert.equal(progress.find((fund) => fund.name === "Building Fund")!.percent, 0);
+  assert.equal(progress.find((fund) => fund.name === "Emergency Reserve")!.percent, 0);
+  assert.equal(progress.find((fund) => fund.name === "Growth Fund")!.percent, null);
+  assert.deepEqual({ current, goal }, before);
+  current.currentBuildingFund = 120000;
+  assert.equal(calculateCapitalGoalProgress(current as never, goal as never)[0].percent, 100);
+  assert.equal(calculateCurrentRealityGap(current as never, goal as never)!.percentAchieved, null, "meeting a capital goal does not create a recurring target");
 });

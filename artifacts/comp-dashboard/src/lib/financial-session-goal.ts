@@ -462,12 +462,12 @@ export function financialSessionGoal(
       m.warnings.some(
         (warning) =>
           !warning.startsWith("Historical session coverage is incomplete") &&
-          /unknown|missing|incomplete|unavailable|exceed 100%/.test(warning),
+          /unknown|missing|incomplete|unavailable|unverified|not found|choose|must be|exceed 100%/i.test(warning),
       ),
     )
   ) {
     reasons.push(
-      "Forecast reports missing financial assumptions or invalid allocations; its fallback assumptions cannot establish a financial minimum.",
+      "Forecast reports missing financial assumptions, unverified capacity or invalid allocations; its fallback assumptions cannot establish a financial minimum.",
     );
     return result;
   }

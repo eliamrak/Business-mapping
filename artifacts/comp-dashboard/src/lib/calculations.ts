@@ -71,7 +71,7 @@ export function calculateCurrentRealityGap(current: CurrentReality | undefined, 
 
   let gapToGoal = 0;
   let gapPerClinician = 0;
-  let percentAchieved = 0;
+  let percentAchieved: number | null = null;
 
   if (goal) {
     const goalOutputs = calculateBusinessGoalOutputs(goal, recurring.goalContributions);
@@ -83,7 +83,7 @@ export function calculateCurrentRealityGap(current: CurrentReality | undefined, 
     percentAchieved =
       goalOutputs.totalAnnualBusinessNeed > 0
         ? (currentTotalAchieved / goalOutputs.totalAnnualBusinessNeed) * 100
-        : 100;
+        : null;
   }
 
   return {
@@ -93,4 +93,15 @@ export function calculateCurrentRealityGap(current: CurrentReality | undefined, 
     gapPerClinician,
     percentAchieved,
   };
+}
+
+export function calculateCapitalGoalProgress(current: CurrentReality, goal: BusinessGoal) {
+  return [
+    { name: "Building Fund", target: goal.buildingFundGoal, balance: current.currentBuildingFund },
+    { name: "Emergency Reserve", target: goal.emergencyReserveGoal, balance: current.currentCashReserve },
+    { name: "Growth Fund", target: goal.growthFundGoal, balance: null },
+  ].filter((fund) => Number.isFinite(fund.target) && fund.target > 0).map((fund) => ({
+    ...fund,
+    percent: fund.balance == null || !Number.isFinite(fund.balance) ? null : fund.balance / fund.target * 100,
+  }));
 }

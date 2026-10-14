@@ -101,6 +101,7 @@ test("owner pretax distributions, fixed co-owner salary, retained cash and profi
       clinicianId: 2,
       start: "2026-01-01",
       desiredWeeklySessions: 100,
+      inPersonPct: 0,
       payMode: "salary",
       payAmount: 12000,
     }),
@@ -436,6 +437,7 @@ test("salary-only financial Goal covers salary and overhead once instead of fina
       clinicianId: 1,
       start: "2026-01-01",
       desiredWeeklySessions: 100,
+      inPersonPct: 0,
       payMode: "salary",
       payAmount: 12000,
     }),
@@ -485,4 +487,17 @@ test("unknown opening compensation cap cannot silently become zero", () => {
     goal.unavailableReasons.join(" "),
     /missing financial assumptions/,
   );
+});
+
+test("unverified in-person capacity cannot certify a financial session Goal", () => {
+  const input = setup();
+  input.workspace.settings.defaultInPersonPct = 100;
+  const result = financialSessionGoal(input);
+  assert.equal(result.status, "unavailable");
+  assert.equal(result.practiceWeeklyGoal, null);
+  assert.equal(result.capacity.sufficient, null);
+  assert.match(result.knownSourceAssumptions.join(" "), /capacity is unverified/);
+  assert.match(result.unavailableReasons.join(" "), /unverified capacity/);
+  input.workspace.settings.defaultInPersonPct = 0;
+  assert.equal(financialSessionGoal(input).status, "available", "explicit telehealth capacity retains the existing valid financial solution");
 });

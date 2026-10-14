@@ -587,6 +587,18 @@ assert.ok(await page.locator(".hub-tabs button").evaluateAll((nodes) => {
   const rects = nodes.map((node) => node.getBoundingClientRect());
   return rects.length === 4 && rects.every((a, index) => a.left >= 0 && a.right <= innerWidth && rects.every((b, other) => index === other || a.right <= b.left + 1 || b.right <= a.left + 1 || a.bottom <= b.top + 1 || b.bottom <= a.top + 1));
 }), "shared Settings tabs fit the mobile viewport and never overlap");
+
+await page.route("**/api/business-goals", (route) => route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify([{ id: 1, name: "Synthetic capital-only goal", ownerPayGoal: 0, secondOwnerPayGoal: 0, annualOverheadGoal: 0, businessProfitGoal: 0, desiredCliniciansCount: 2, buildingFundGoal: 120000, emergencyReserveGoal: 0, growthFundGoal: 0 }]) }));
+await page.route("**/api/current-reality", (route) => route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ id: 1, currentOwnerPay: 0, currentSecondOwnerPay: 0, currentAnnualOverhead: 0, currentBusinessProfit: 0, currentCashReserve: 0, currentBuildingFund: 0, currentCliniciansCount: 0, currentAvgSessionRate: 0, currentAvgSessionsPerWeek: 0, currentAvgWeeksWorkedPerYear: 0 }) }));
+await page.reload(); await clickSection("Overview");
+await page.getByRole("button", { name: "Compensation baseline", exact: true }).click();
+await page.getByText("Select a goal to compare", { exact: true }).click();
+await page.getByRole("option", { name: "Synthetic capital-only goal", exact: true }).click();
+assert.ok(await page.getByText("No recurring target", { exact: true }).count(), "capital-only target does not render recurring achievement");
+assert.equal(await page.getByText("Goal Achieved", { exact: true }).count(), 0, "baseline never claims overall goal achievement from a zero flow denominator");
+assert.ok(await page.getByText(/\$0.*\$120,000.*0(?:\.0+)?%/).count(), "capital balance progress remains separately visible");
+await capture("capital-only-reality-desktop", 1280, 900);
+await capture("capital-only-reality-mobile", 390, 900);
 const localAuthErrors = browserErrors.filter((error) => error.includes("Clerk: Failed to load Clerk JS") && error.includes("clerk.127.0.0.1"));
 assert.deepEqual(browserErrors.filter((error) => !localAuthErrors.includes(error)), [], "no application browser exceptions");
 
