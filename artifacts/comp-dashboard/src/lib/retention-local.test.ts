@@ -86,8 +86,7 @@ function attendanceSnapshot(
 ) {
   return {
     ...importAttendanceCsv(csv).snapshot,
-    coverageStart,
-    coverageEnd,
+    reportCoverage: { start: coverageStart, end: coverageEnd, complete: true as const },
   };
 }
 
@@ -521,7 +520,8 @@ CID-transfer,Dr Moss,2026-01-29,Room B,show`,
     `Client,Clinician,Date of service,Location,Status
 CID-gap,Dr Lane,2026-05-01,Room A,show
 CID-gap,Dr Lane,2026-05-15,Room A,show
-CID-gap,Dr Lane,2026-05-29,Room A,show`,
+CID-gap,Dr Lane,2026-05-29,Room A,show
+CID-scope,Dr Moss,2026-05-01,Room B,no show`,
     "2026-05-01",
     "2026-08-31",
   );
@@ -1138,6 +1138,7 @@ converted,Dr Treatment,2026-01-10,Room A,show
 unknown-miss,Dr Intake,2026-01-02,Phone,show
 unknown-miss,Dr Backup,2026-01-03,Phone,show
 pending,Dr Intake,2026-02-01,Phone,show`).snapshot;
+  attendance.reportCoverage = { start: "2026-01-01", end: "2026-02-06", complete: true };
   for (const row of attendance.rows) {
     if (row.location === "Phone") row.visitKind = "consultation";
   }
@@ -1173,6 +1174,7 @@ pending,Dr Intake,2026-02-01,Phone,show`).snapshot;
 test("sole consult clinician receives missed credit only after explicit manual confirmation", () => {
   const attendance = importAttendanceCsv(`Client,Clinician,Date of service,Location,Status
 missed,Dr Intake,2026-01-02,Phone,show`).snapshot;
+  attendance.reportCoverage = { start: "2026-01-02", end: "2026-02-06", complete: true };
   attendance.rows[0].visitKind = "consultation";
   for (const overrides of [
     [],
@@ -1239,6 +1241,7 @@ missed,Dr Intake,2026-01-02,Phone,show`).snapshot;
 
 test("consult conversion separates treatment-start candidates from confirmed closer credit", () => {
   const packageData = packageFixture();
+  packageData.collections.attendance.reportCoverage = { start: "2026-01-01", end: "2026-02-06", complete: true };
   packageData.collections.attendance.coverageStart = "2026-01-01";
   packageData.collections.attendance.coverageEnd = "2026-01-20";
   packageData.collections.attendance.rows = [

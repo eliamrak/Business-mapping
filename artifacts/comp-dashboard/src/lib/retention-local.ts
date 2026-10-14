@@ -1,4 +1,5 @@
 export type LocalFactKind = "attendance" | "billing";
+export type ReportCoverage = { start: string; end: string; complete: true };
 
 export type AttendanceStatus =
   | "show"
@@ -42,6 +43,7 @@ export type LocalSnapshot =
       importedAt: string;
       coverageStart: string;
       coverageEnd: string;
+      reportCoverage?: ReportCoverage;
       sourceHash: string;
       rows: AttendanceRow[];
     }
@@ -51,6 +53,7 @@ export type LocalSnapshot =
       importedAt: string;
       coverageStart: string;
       coverageEnd: string;
+      reportCoverage?: ReportCoverage;
       sourceHash: string;
       rows: BillingRow[];
     };
@@ -80,6 +83,7 @@ export type ClinicianAttendanceMetric = {
 
 export type ClinicianClientActivityMetric = {
   clinician: string;
+  coverageVerified: boolean;
   initialRetentionGapDays: number;
   retainedClients: number;
   matureNonRetainedClients: number;
@@ -112,6 +116,7 @@ export type RoomMetric = {
 };
 
 export type LocalRetentionMetrics = {
+  coverageVerified: boolean;
   coverageStart: string | null;
   coverageEnd: string | null;
   attendanceRows: number;
@@ -127,6 +132,7 @@ export type LocalRetentionMetrics = {
 };
 
 export type LocalClientActivityEstimate = {
+  coverageVerified: boolean;
   endingEvents: { clientId: string; date: string }[];
   endingEventCoverageComplete: boolean;
   coverageStart: string;
@@ -235,6 +241,7 @@ export type ConsultJourneyStatus =
   | "needs_attribution";
 
 export type ConsultJourney = {
+  coverageVerified: boolean;
   clientId: string;
   consultDate: string;
   deadline: string;
@@ -268,6 +275,7 @@ export type ConsultConversionMetric = {
 };
 
 export type ConsultConversionSummary = {
+  coverageVerified: boolean;
   periodStart: string;
   periodEnd: string;
   asOfDate: string;
@@ -1208,6 +1216,51 @@ function nextMonth(month: string) {
 
 type DateInterval = { start: string; end: string };
 
+function verifiedAttendanceIntervals(
+  snapshots: LocalSnapshot[],
+  asOfDate: string,
+  clinician?: string,
+): DateInterval[] {
+  if (clinician === undefined) {
+    const clinicians = new Set(snapshots.flatMap((snapshot) =>
+      snapshot.kind === "attendance"
+        ? snapshot.rows.filter((row) => row.serviceDate <= asOfDate).map((row) => row.clinician)
+        : [],
+    ));
+    // Practice-wide absence needs reports for every observed clinician, including transfers.
+    let common: DateInterval[] | null = null;
+    for (const name of clinicians) {
+      const intervals = verifiedAttendanceIntervals(snapshots, asOfDate, name);
+      common = common === null ? intervals : mergeIntervals(common.flatMap((a) =>
+        intervals.flatMap((b) => {
+          const start = a.start > b.start ? a.start : b.start;
+          const end = a.end < b.end ? a.end : b.end;
+          return start <= end ? [{ start, end }] : [];
+        }),
+      ));
+    }
+    return common ?? [];
+  }
+  const intervals: DateInterval[] = [];
+  for (const snapshot of snapshots) {
+    if (snapshot.kind !== "attendance" || !snapshot.rows.length) continue;
+    if (!snapshot.rows.some((row) => row.clinician === clinician)) continue;
+    const dates = snapshot.rows.map((row) => row.serviceDate).sort();
+    try {
+      const proof = validateReportCoverage(
+        snapshot.reportCoverage,
+        dates[0] < snapshot.coverageStart ? dates[0] : snapshot.coverageStart,
+        dates.at(-1)! > snapshot.coverageEnd ? dates.at(-1)! : snapshot.coverageEnd,
+        (reason) => { throw new Error(reason); },
+      );
+      if (proof) intervals.push({ start: proof.start, end: proof.end });
+    } catch {
+      // Invalid or stale declarations cannot certify missing attendance.
+    }
+  }
+  return mergeIntervals(clipIntervals(intervals, asOfDate));
+}
+
 function mergeIntervals(intervals: DateInterval[]) {
   const ordered = [...intervals].sort(
     (a, b) => a.start.localeCompare(b.start) || a.end.localeCompare(b.end),
@@ -1607,7 +1660,7 @@ export function estimateLocalClientActivity(
     (snapshot): snapshot is Extract<LocalSnapshot, { kind: "attendance" }> =>
       snapshot.kind === "attendance",
   );
-  const coverageIntervals = mergeIntervals(
+  const observedIntervals = mergeIntervals(
     clipIntervals(
       attendanceSnapshots.map((snapshot) => ({
         start: snapshot.coverageStart,
@@ -1616,7 +1669,8 @@ export function estimateLocalClientActivity(
       asOfDate,
     ),
   );
-  const coverageDates = coverageIntervals
+  const coverageIntervals = verifiedAttendanceIntervals(snapshots, asOfDate);
+  const coverageDates = [...observedIntervals, ...coverageIntervals]
     .flatMap((interval) => [interval.start, interval.end])
     .sort();
   const coverageStart = coverageDates[0];
@@ -1662,10 +1716,10 @@ export function estimateLocalClientActivity(
       });
     } else if (
       first > addDays(coverageEnd, -initialRetentionGapDays) ||
-      !hasCompleteLookForward(
+      !intervalCoversRange(
         coverageIntervals,
-        initialEpisode.at(-1)!,
-        initialRetentionGapDays,
+        first,
+        addDays(initialEpisode.at(-1)!, initialRetentionGapDays),
       )
     ) {
       immatureClientPairsExcluded++;
@@ -1706,7 +1760,7 @@ export function estimateLocalClientActivity(
   const observedMonthEquivalents = retained.reduce((sum, item) => {
     const days = Math.max(
       1,
-      coveredDaysInRange(coverageIntervals, item.first, item.retainedOn),
+      coveredDaysInRange(observedIntervals, item.first, item.retainedOn),
     );
     return sum + Math.max(1, days / averageDaysPerMonth);
   }, 0);
@@ -1742,6 +1796,7 @@ export function estimateLocalClientActivity(
     eventEnd,
   );
   return {
+    coverageVerified: intervalCoversRange(coverageIntervals, coverageStart, coverageEnd),
     coverageStart,
     coverageEnd,
     inactivityDays,
@@ -1819,6 +1874,7 @@ export function summarizeConsultConversions(
   asOfDate = "9999-12-31",
   attributionOverrides: ConsultAttributionOverrideInput[] = [],
 ): ConsultConversionSummary {
+  const coverageIntervals = verifiedAttendanceIntervals(snapshots, asOfDate);
   const overridesByClient = new Map(
     attributionOverrides
       .filter((override) => !override.archived)
@@ -1894,7 +1950,8 @@ export function summarizeConsultConversions(
       ...new Set(firstTreatmentRows.map((row) => row.clinician).filter(Boolean)),
     ].sort();
     const converted = firstTreatmentRows.length > 0;
-    const pending = !converted && asOfDate < deadline;
+    const coverageVerified = intervalCoversRange(coverageIntervals, consultDate, deadline);
+    const pending = !converted && (asOfDate < deadline || !coverageVerified);
     const override = overridesByClient.get(clientId);
     const treatmentStartClinician =
       converted && treatmentClinicians.length === 1 ? treatmentClinicians[0] : null;
@@ -1937,6 +1994,7 @@ export function summarizeConsultConversions(
           ? "needs_attribution"
           : "missed";
     journeys.push({
+      coverageVerified,
       clientId,
       consultDate,
       deadline,
@@ -2011,6 +2069,7 @@ export function summarizeConsultConversions(
     else metric.missed++;
   }
   return {
+    coverageVerified: journeys.length > 0 && journeys.every((journey) => journey.coverageVerified),
     periodStart,
     periodEnd,
     asOfDate,
@@ -2117,22 +2176,16 @@ export function buildLocalRetentionMetrics(
       row.serviceDate,
     ]);
   }
-  const coverageIntervals = mergeIntervals(
-    clipIntervals(
-      snapshots
-        .filter(
-          (
-            snapshot,
-          ): snapshot is Extract<LocalSnapshot, { kind: "attendance" }> =>
-            snapshot.kind === "attendance",
-        )
-        .map((snapshot) => ({
-          start: snapshot.coverageStart,
-          end: snapshot.coverageEnd,
-        })),
-      asOfDate,
-    ),
-  );
+  const coverageIntervals = verifiedAttendanceIntervals(snapshots, asOfDate);
+  const coverageByClinician = new Map<string, DateInterval[]>();
+  const coverageForClinician = (clinician: string) => {
+    let intervals = coverageByClinician.get(clinician);
+    if (!intervals) {
+      intervals = verifiedAttendanceIntervals(snapshots, asOfDate, clinician);
+      coverageByClinician.set(clinician, intervals);
+    }
+    return intervals;
+  };
   const clinicianClientDates = new Map<string, Map<string, string[]>>();
   const clientActivityByClinician = new Map<
     string,
@@ -2151,6 +2204,7 @@ export function buildLocalRetentionMetrics(
     clinicianClientDates.set(clinician, clinicianDates);
     const activity = clientActivityByClinician.get(clinician) ?? {
       clinician,
+      coverageVerified: false,
       initialRetentionGapDays: followUpDays,
       retainedClients: 0,
       matureNonRetainedClients: 0,
@@ -2178,10 +2232,10 @@ export function buildLocalRetentionMetrics(
     } else {
       metric.firstObservedClients++;
       if (
-        !hasCompleteLookForward(
-          coverageIntervals,
-          initialEpisode.at(-1) ?? firstShowDate,
-          followUpDays,
+        !intervalCoversRange(
+          coverageForClinician(clinician),
+          firstShowDate,
+          addDays(initialEpisode.at(-1) ?? firstShowDate, followUpDays),
         )
       ) {
         metric.immatureClientsExcluded++;
@@ -2199,36 +2253,39 @@ export function buildLocalRetentionMetrics(
         : null;
     clientActivityByClinician.set(clinician, activity);
   }
-  const coverageDates = coverageIntervals
-    .flatMap((interval) => [interval.start, interval.end])
-    .sort();
-  const activityCoverageStart = coverageDates[0];
-  const activityCoverageEnd = coverageDates.at(-1);
-  if (activityCoverageStart && activityCoverageEnd) {
-    for (const [clinician, clientDates] of clinicianClientDates) {
-      const activity = clientActivityByClinician.get(clinician);
-      if (!activity) continue;
-      const endings = estimateObservedClientEndings(
-        clientDates,
-        coverageIntervals,
-        activityCoverageStart,
-        activityCoverageEnd,
-        endingGapDays,
-        eventStart,
-        eventEnd,
-      );
-      activity.endingObservationCutoff = endings.endingObservationCutoff;
-      activity.endingFullMonthClientEnds = endings.endingFullMonthClientEnds;
-      activity.endingFullMonthDenominator = endings.endingFullMonthDenominator;
-      activity.averageClientEndingsPerFullMonth =
-        endings.averageClientEndingsPerFullMonth;
-      activity.latestSixEndingMonths = endings.latestSixEndingMonths;
-      activity.latestSixClientEnds = endings.latestSixClientEnds;
-      activity.averageClientEndingsPerLatestSixMonths =
-        endings.averageClientEndingsPerLatestSixMonths;
-      activity.partialEndingMonth = endings.partialEndingMonth;
-      clientActivityByClinician.set(clinician, activity);
-    }
+  for (const [clinician, clientDates] of clinicianClientDates) {
+    const activity = clientActivityByClinician.get(clinician);
+    if (!activity) continue;
+    const clinicianIntervals = coverageForClinician(clinician);
+    const activityCoverageStart = clinicianIntervals[0]?.start;
+    const activityCoverageEnd = clinicianIntervals.at(-1)?.end;
+    if (!activityCoverageStart || !activityCoverageEnd) continue;
+    const endings = estimateObservedClientEndings(
+      clientDates,
+      clinicianIntervals,
+      activityCoverageStart,
+      activityCoverageEnd,
+      endingGapDays,
+      eventStart,
+      eventEnd,
+    );
+    activity.endingObservationCutoff = endings.endingObservationCutoff;
+    activity.endingFullMonthClientEnds = endings.endingFullMonthClientEnds;
+    activity.endingFullMonthDenominator = endings.endingFullMonthDenominator;
+    activity.averageClientEndingsPerFullMonth =
+      endings.averageClientEndingsPerFullMonth;
+    activity.latestSixEndingMonths = endings.latestSixEndingMonths;
+    activity.latestSixClientEnds = endings.latestSixClientEnds;
+    activity.averageClientEndingsPerLatestSixMonths =
+      endings.averageClientEndingsPerLatestSixMonths;
+    activity.partialEndingMonth = endings.partialEndingMonth;
+    const observedDates = [...clientDates.values()].flat().sort();
+    activity.coverageVerified = intervalCoversRange(
+      clinicianIntervals,
+      observedDates[0],
+      observedDates.at(-1)!,
+    );
+    clientActivityByClinician.set(clinician, activity);
   }
   const roomCounts = new Map<string, RoomMetric>();
   for (const row of treatmentAttendance) {
@@ -2264,6 +2321,8 @@ export function buildLocalRetentionMetrics(
     roomCounts.set(location, metric);
   }
   return {
+    coverageVerified: coverageStart !== null && coverageEnd !== null &&
+      intervalCoversRange(coverageIntervals, coverageStart, coverageEnd),
     coverageStart,
     coverageEnd,
     attendanceRows: attendance.length,
@@ -2547,7 +2606,7 @@ function validatePackageCollectionBase(
   if (!isRecord(value)) invalidPackage(`${label} collection must be an object`);
   rejectUnknownKeys(
     value,
-    ["coverageStart", "coverageEnd", "rowCount", "rows"],
+    ["coverageStart", "coverageEnd", "reportCoverage", "rowCount", "rows"],
     `${label} collection`,
     invalidPackage,
   );
@@ -2574,7 +2633,32 @@ function validatePackageCollectionBase(
     invalidPackage(`${label}.rows must be an array`);
   if (value.rows.length !== rowCount)
     invalidPackage(`${label}.rowCount must match rows.length`);
-  return { coverageStart, coverageEnd, rows: value.rows };
+  if (value.reportCoverage === null) invalidPackage("reportCoverage must be an object");
+  const reportCoverage = validateReportCoverage(value.reportCoverage, coverageStart, coverageEnd, invalidPackage);
+  return { coverageStart, coverageEnd, reportCoverage, rows: value.rows };
+}
+
+function validateReportCoverage(
+  value: unknown,
+  observedStart: string,
+  observedEnd: string,
+  fail: (reason: string) => never,
+): ReportCoverage | undefined {
+  if (value === undefined || value === null) return undefined;
+  if (!isRecord(value)) fail("reportCoverage must be an object");
+  rejectUnknownKeys(value, ["start", "end", "complete"], "reportCoverage", fail);
+  for (const key of ["start", "end"] as const) {
+    const date = value[key];
+    if (typeof date !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(date))
+      fail(`reportCoverage.${key} must be a valid date`);
+    const parsed = new Date(`${date}T12:00:00Z`);
+    if (!Number.isFinite(parsed.getTime()) || parsed.toISOString().slice(0, 10) !== date)
+      fail(`reportCoverage.${key} must be a valid date`);
+  }
+  const { start, end } = value as { start: string; end: string };
+  if (value.complete !== true || start > end || start > observedStart || end < observedEnd)
+    fail("reportCoverage must declare complete: true and contain the observed row span");
+  return { start, end, complete: true };
 }
 
 function validatePackageCoverage(
@@ -2817,6 +2901,7 @@ export function importLocalPackage(
         importedAt: now,
         coverageStart: attendanceBase.coverageStart,
         coverageEnd: attendanceBase.coverageEnd,
+        ...(attendanceBase.reportCoverage ? { reportCoverage: attendanceBase.reportCoverage } : {}),
         sourceHash: attendanceSourceHash,
         rows: attendanceRows,
       },
@@ -2826,6 +2911,7 @@ export function importLocalPackage(
         importedAt: now,
         coverageStart: billingBase.coverageStart,
         coverageEnd: billingBase.coverageEnd,
+        ...(billingBase.reportCoverage ? { reportCoverage: billingBase.reportCoverage } : {}),
         sourceHash: billingSourceHash,
         rows: billingRows,
       },
@@ -3067,9 +3153,12 @@ function validateBackupSnapshot(value: unknown, index: number): LocalSnapshot {
   };
   if (!Array.isArray(value.rows))
     invalidBackup(`snapshot ${index + 1} rows must be an array`);
+  const reportCoverage = validateReportCoverage(value.reportCoverage, base.coverageStart, base.coverageEnd, invalidBackup);
+  const proof = reportCoverage ? { reportCoverage } : {};
   if (kind === "attendance") {
     const snapshot: LocalSnapshot = {
       ...base,
+      ...proof,
       kind,
       rows: value.rows.map(validateAttendanceBackupRow),
     };
@@ -3079,6 +3168,7 @@ function validateBackupSnapshot(value: unknown, index: number): LocalSnapshot {
   if (kind === "billing") {
     const snapshot: LocalSnapshot = {
       ...base,
+      ...proof,
       kind,
       rows: value.rows.map(validateBillingBackupRow),
     };

@@ -285,7 +285,7 @@ export interface FundProjectionSummary {
 }
 
 export function fundProjectionSummary(
-  goal: Workspace["fundGoals"][number] | undefined,
+  goal: Pick<Workspace["fundGoals"][number], "name" | "amount" | "currentBalance" | "balanceDate"> | undefined,
   allocations: Workspace["allocations"],
   monthlyValues: ForecastMonth["values"],
   monthDate: string | undefined,

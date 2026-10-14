@@ -7,6 +7,7 @@ import {
   summarizeHiringReadiness,
   summarizeLast1099Period,
   summarizeSessionOverview,
+  observedBiweeklySessionRecords,
 } from "./session-overview.ts";
 
 const record = (start: string, end: string, completed: number): SessionRecord => ({
@@ -89,6 +90,62 @@ test("last 1099 period distinguishes missing data from recorded zero", () => {
   ], "2026-10-02");
   assert.equal(zero?.completed, 0);
   assert.equal(zero?.recorded, true);
+});
+
+test("last 14-day payroll card sums dated imported facts and identifies partial coverage", () => {
+  const facts = [record("2026-09-24", "2026-09-24", 3), record("2026-10-07", "2026-10-07", 4)];
+  const complete = summarizeLast1099Period(facts, "2026-10-14", [{ clinicianId: 1, start: "2026-09-24", end: "2026-10-07" }], 1);
+  assert.equal(complete?.completed, 7);
+  assert.equal(complete?.coverageComplete, true);
+  const partial = summarizeLast1099Period(facts, "2026-10-14", [], 1);
+  assert.equal(partial?.completed, 7);
+  assert.equal(partial?.coverageComplete, false);
+});
+test("overview calendar pace preserves a partial observed total without goal fullness", () => {
+  const facts = [record("2026-09-16", "2026-09-16", 36)];
+  const period = { start: "2026-09-15", end: "2026-10-14" };
+  const options = { period, clinicianId: 1, attendanceCoverage: [{ clinicianId: 1, ...period }] };
+  assert.equal(summarizeSessionOverview(facts, [], 15, options).averageWeekly, 8.4);
+  const partial = summarizeSessionOverview(facts, [], 15, { ...options, attendanceCoverage: [] });
+  assert.equal(partial.averageWeekly, null);
+  assert.equal(partial.observedCompleted, 36);
+  assert.equal(partial.fullness, null);
+});
+test("last 14 days excludes crossing manual aggregates without proration", () => {
+  const result = summarizeLast1099Period([record("2026-09-20", "2026-10-03", 20)], "2026-10-14", [], 1);
+  assert.equal(result?.completed, null);
+  assert.equal(result?.recorded, false);
+});
+
+test("legacy observed total stays visible while weekly comparisons and fullness stay unknown", () => {
+  const facts = [{ ...record("2026-10-02", "2026-10-02", 178), id: -1 }];
+  const overview = summarizeSessionOverview(facts, [record("2026-09-03", "2026-09-30", 160)], 20, {
+    clinicianId: 1, period: { start: "2026-10-01", end: "2026-10-28" },
+    previousPeriod: { start: "2026-09-03", end: "2026-09-30" }, attendanceCoverage: [],
+  });
+  assert.equal(overview.observedCompleted, 178);
+  assert.equal(overview.calendarWindowWeeklyEstimate, 44.5);
+  assert.equal(overview.averageWeekly, null);
+  assert.equal(overview.fullness, null);
+  assert.equal(overview.openWeekly, null);
+  assert.equal(overview.trendWeekly, null);
+});
+
+test("overlapping totals remain unknown instead of falling back to double-counted observations", () => {
+  const facts = [record("2026-10-01", "2026-10-14", 20), record("2026-10-01", "2026-10-14", 20)];
+  const overview = summarizeSessionOverview(facts, [], 20, {
+    clinicianId: 1, period: { start: "2026-10-01", end: "2026-10-14" }, attendanceCoverage: [],
+  });
+  assert.equal(overview.observedCompleted, null);
+  assert.equal(overview.calendarWindowWeeklyEstimate, null);
+});
+test("daily import hiring uses four complete payroll windows, not four visit dates", () => {
+  const coverage = [{ clinicianId: 1, start: "2026-08-27", end: "2026-10-21" }];
+  const facts = [record("2026-08-27", "2026-08-27", 18), record("2026-09-10", "2026-09-10", 18), record("2026-09-24", "2026-09-24", 18), record("2026-10-08", "2026-10-08", 18)];
+  const periods = observedBiweeklySessionRecords(facts, 1, "2026-10-22", coverage);
+  assert.equal(periods.length, 4);
+  assert.equal(summarizeHiringReadiness([{ id: 1, goalWeekly: 10, records: periods }], 80).status, "review_hire");
+  assert.equal(observedBiweeklySessionRecords(facts, 1, "2026-10-22", []).length, 0);
 });
 
 const fourPeriods = (completed: number) => [

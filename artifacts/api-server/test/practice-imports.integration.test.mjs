@@ -253,6 +253,44 @@ after(async () => {
   }
 });
 
+test("coverage migration preserves legacy reads and gates proof writes, then persists declared proof", async () => {
+  const options = { practice: "practice-coverage@example.test" };
+  const legacy = packageFor({ packageId: "pkg-legacy-coverage" });
+  const imported = await call("/practice-imports/package", { package: legacy }, "POST", options);
+  assert.equal(imported.status, 200, JSON.stringify(imported.data));
+  assert.ok(imported.data.snapshots.every((snapshot) => snapshot.reportCoverage === null));
+  const beforeMigration = await call("/practice-imports", undefined, "GET", options);
+  assert.equal(beforeMigration.status, 200);
+
+  const declared = packageFor({ packageId: "pkg-declared-coverage" });
+  const proof = { start: "2026-10-01", end: "2026-10-31", complete: true };
+  declared.collections.attendance.reportCoverage = proof;
+  const blocked = await call("/practice-imports/package", { package: declared }, "POST", options);
+  assert.equal(blocked.status, 503);
+  assert.equal(blocked.data.code, "REPORT_COVERAGE_MIGRATION_REQUIRED");
+
+  const migration = readFileSync(new URL("../../../lib/db/migrations/008_practice_report_coverage.sql", import.meta.url), "utf8");
+  await testClient.query(migration);
+  await testClient.query(migration);
+  const afterMigration = await call("/practice-imports", undefined, "GET", options);
+  assert.ok(afterMigration.data.snapshots.every((snapshot) => snapshot.reportCoverage === null));
+  const preview = await call("/practice-imports/package", { package: declared }, "POST", options);
+  assert.equal(preview.status, 409);
+  assert.equal(preview.data.code, "OVERLAP_REVIEW_REQUIRED");
+  const saved = await call("/practice-imports/package", { package: declared, replaceOverlaps: true }, "POST", options);
+  assert.equal(saved.status, 200, JSON.stringify(saved.data));
+  const reloaded = await call("/practice-imports", undefined, "GET", options);
+  const attendance = reloaded.data.snapshots.find((snapshot) => snapshot.kind === "attendance");
+  assert.deepEqual(attendance.reportCoverage, proof);
+  assert.equal(attendance.coverageStart, "2026-10-01");
+  assert.equal(attendance.coverageEnd, "2026-10-14");
+  assert.equal(reloaded.data.packages.find((item) => item.packageId === declared.packageId).exportedAt, declared.exportedAt);
+  declared.collections.attendance.reportCoverage = { ...proof, end: "2026-11-01" };
+  const changedProof = await call("/practice-imports/package", { package: declared }, "POST", options);
+  assert.equal(changedProof.status, 409);
+  assert.equal(changedProof.data.code, "PACKAGE_ID_CHANGED_CONTENT");
+});
+
 test("same-practice authorized actors share converted history while actor stays audit-only", async () => {
   const packageId = "pkg-same-practice";
   const first = await call("/practice-imports/package", {

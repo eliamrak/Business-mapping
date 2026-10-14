@@ -2,6 +2,8 @@ import type { ForecastMonth, Workspace } from "@workspace/practice/hub";
 import { derivedShowVisits, estimateLocalClientActivity, type LocalSnapshot, type SameDayVisitOverrides } from "./retention-local.ts";
 import { fundProjectionSummary } from "./practice-money-visuals.ts";
 import { moneyBridgeSummary } from "./money-bridge.ts";
+import { linkedGoalFor } from "./legacy-practice-goals.ts";
+import type { CompensationGoal } from "./workspace-defaults.ts";
 
 export function overviewClientFlow(snapshots: LocalSnapshot[], overrides: SameDayVisitOverrides, start: string, end: string, asOf: string) {
   const activity = estimateLocalClientActivity(snapshots, overrides, 56, 56, 28, asOf, 90, start, end);
@@ -21,11 +23,11 @@ export function overviewClientFlow(snapshots: LocalSnapshot[], overrides: SameDa
   };
 }
 
-export function overviewFundingSummary(workspace: Workspace, annualMonths: ForecastMonth[]) {
+export function overviewFundingSummary(workspace: Workspace, annualMonths: ForecastMonth[], legacyGoal?: CompensationGoal | null) {
   const sum = (metric: string) => annualMonths.length === 12 && annualMonths.every((row) => row.values[metric] != null)
     ? annualMonths.reduce((total, row) => total + row.values[metric]!, 0) : null;
   const monthly = (name: string) => {
-    const goal = workspace.goals.find((item) => !item.archived && item.name.toLowerCase() === name.toLowerCase());
+    const goal = linkedGoalFor(name, workspace, legacyGoal).goal;
     return goal ? goal.amount / (goal.basis === "annual" ? 12 : 1) : null;
   };
   const owner = monthly("Owner pay");

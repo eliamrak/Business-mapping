@@ -1,5 +1,6 @@
 import { daysInclusive, type SessionRecord } from "@workspace/practice";
 import { biweeklyThursdayPayDatesThrough, payrollPeriodForPayDate } from "@workspace/practice/hub";
+import { sessionPeriodObservation, type SessionAttendanceCoverage, type SessionPeriod } from "./session-trend.ts";
 
 const weeklyPace = (records: SessionRecord[]) => {
   const recordedDays = records.reduce(
@@ -14,13 +15,17 @@ export function summarizeSessionOverview(
   records: SessionRecord[],
   previousRecords: SessionRecord[],
   weeklyGoal: number,
+  options?: { period: SessionPeriod; previousPeriod?: SessionPeriod; clinicianId: number; attendanceCoverage: SessionAttendanceCoverage[] },
 ) {
   const latest = records.reduce<SessionRecord | null>(
     (current, record) => !current || record.end > current.end ? record : current,
     null,
   );
-  const averageWeekly = weeklyPace(records);
-  const previousAverageWeekly = weeklyPace(previousRecords);
+  const observation = options ? sessionPeriodObservation(records, [options.clinicianId], options.period, options.attendanceCoverage) : null;
+  const averageWeekly = observation ? observation.completedWeekly : records.some((record) => record.id < 0) ? null : weeklyPace(records);
+  const previousAverageWeekly = options ? options.previousPeriod
+    ? sessionPeriodObservation(previousRecords, [options.clinicianId], options.previousPeriod, options.attendanceCoverage).completedWeekly : null
+    : previousRecords.some((record) => record.id < 0) ? null : weeklyPace(previousRecords);
   const fullness = averageWeekly !== null && weeklyGoal > 0
     ? averageWeekly / weeklyGoal * 100
     : null;
@@ -39,6 +44,10 @@ export function summarizeSessionOverview(
       ? Math.round((averageWeekly - previousAverageWeekly) * 10) / 10
       : null,
     count: records.length,
+    observedCompleted: observation ? observation.observedCompleted : (records.length ? records.reduce((sum, record) => sum + record.completed, 0) : null),
+    calendarWindowWeeklyEstimate: observation?.calendarWindowWeeklyEstimate ?? null,
+    coverageComplete: observation?.coverageComplete ?? null,
+    observedCoverageDays: observation?.observedCoverageDays ?? null,
   };
 }
 
@@ -48,15 +57,33 @@ export function lastCompleted1099ServicePeriod(today: string) {
   return { payDate, ...payrollPeriodForPayDate("biweekly_thursday", payDate) };
 }
 
-export function summarizeLast1099Period(records: SessionRecord[], today: string) {
+export function summarizeLast1099Period(records: SessionRecord[], today: string, attendanceCoverage: SessionAttendanceCoverage[] = [], clinicianId?: number) {
   const period = lastCompleted1099ServicePeriod(today);
   if (!period) return null;
-  const record = records.find((item) => item.start === period.start && item.end === period.end);
+  const ids = clinicianId !== undefined ? [clinicianId] : [...new Set(records.map((record) => record.clinicianId))];
+  const observation = sessionPeriodObservation(records, ids, period, attendanceCoverage);
   return {
     ...period,
-    completed: record?.completed ?? null,
-    recorded: !!record,
+    completed: observation.observedCompleted,
+    recorded: observation.observedCompleted !== null,
+    coverageComplete: observation.coverageComplete,
+    observedCoverageDays: observation.observedCoverageDays,
   };
+}
+
+/** Daily imports qualify for hiring only through complete, anchored payroll windows. */
+export function observedBiweeklySessionRecords(records: SessionRecord[], clinicianId: number, today: string, attendanceCoverage: SessionAttendanceCoverage[] = [], count = 4): SessionRecord[] {
+  const latest = lastCompleted1099ServicePeriod(today);
+  if (!latest) return [];
+  const shift = (date: string, days: number) => new Date(Date.parse(date + "T12:00:00Z") + days * 86400000).toISOString().slice(0, 10);
+  return Array.from({ length: count }, (_, index): SessionRecord | null => {
+    const period = { start: shift(latest.start, -14 * index), end: shift(latest.end, -14 * index) };
+    const observation = sessionPeriodObservation(records, [clinicianId], period, attendanceCoverage);
+    if (!observation.coverageComplete || observation.observedCompleted === null) return null;
+    return { id: -(index + 1), clinicianId, ...period, completed: observation.observedCompleted,
+      desired: 0, cancelled: null, noShow: null, scheduled: null, inPerson: null, telehealth: null,
+      sourceAttachmentId: null, revision: 1, updatedAt: `${period.end}T12:00:00.000Z` };
+  }).filter((record): record is SessionRecord => record !== null);
 }
 
 export type HiringPace = {

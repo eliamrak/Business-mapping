@@ -91,6 +91,8 @@ class ImportConflict extends Error {
 }
 
 export type LocalRetentionWorkspaceState = {
+  packages: StoredImportHistory["packages"];
+  setPackages: Dispatch<SetStateAction<StoredImportHistory["packages"]>>;
   snapshots: LocalSnapshot[];
   setSnapshots: Dispatch<SetStateAction<LocalSnapshot[]>>;
   billingCodeMinutes: BillingCodeMinutes;
@@ -110,6 +112,7 @@ export type LocalRetentionWorkspaceState = {
 };
 
 export function useLocalRetentionWorkspaceState(enabled = true): LocalRetentionWorkspaceState {
+  const [packages, setPackages] = useState<StoredImportHistory["packages"]>([]);
   const [snapshots, setSnapshots] = useState<LocalSnapshot[]>([]);
   const [billingCodeMinutes, setBillingCodeMinutes] =
     useState<BillingCodeMinutes>({});
@@ -132,6 +135,7 @@ export function useLocalRetentionWorkspaceState(enabled = true): LocalRetentionW
       .then((history) => {
         if (cancelled) return;
         setSnapshots(history.snapshots);
+        setPackages(history.packages ?? []);
         setBillingCodeMinutes(history.billingCodeMinutes);
         setSameDayVisitOverrides(history.sameDayVisitOverrides ?? {});
         setStatus(history.snapshots.length
@@ -146,6 +150,8 @@ export function useLocalRetentionWorkspaceState(enabled = true): LocalRetentionW
   }, [enabled]);
 
   return {
+    packages,
+    setPackages,
     snapshots,
     setSnapshots,
     billingCodeMinutes,
@@ -241,6 +247,8 @@ export default function LocalRetentionWorkspace({
 }) {
   const ownedState = useLocalRetentionWorkspaceState(!workspaceState);
   const {
+    packages,
+    setPackages,
     snapshots,
     setSnapshots,
     billingCodeMinutes,
@@ -312,6 +320,7 @@ export default function LocalRetentionWorkspace({
       const parsed = importLocalPackage(packageData);
       const saved = await importStoredPackage(packageData);
       setSnapshots(saved.snapshots);
+      setPackages(saved.packages ?? []);
       setBillingCodeMinutes(saved.billingCodeMinutes);
       setSameDayVisitOverrides(saved.sameDayVisitOverrides ?? {});
       if (saved.status === "duplicate") {
@@ -370,6 +379,7 @@ export default function LocalRetentionWorkspace({
     importStoredPackage(pending.packageData, true)
       .then((saved) => {
         setSnapshots(saved.snapshots);
+        setPackages(saved.packages ?? []);
         setBillingCodeMinutes(saved.billingCodeMinutes);
         setSameDayVisitOverrides(saved.sameDayVisitOverrides ?? {});
         setStatus(
@@ -456,7 +466,7 @@ export default function LocalRetentionWorkspace({
       <div className="pw-local-retention-hero">
         <div>
           <p className="pw-eyebrow">Saved import history</p>
-          <h2>Retention and billed sessions</h2>
+          <h2>Imported clinical history</h2>
           <p>
             Import the converter package prepared with permanent random client
             IDs and no direct client names. Converted attendance and billing
@@ -466,6 +476,13 @@ export default function LocalRetentionWorkspace({
         </div>
         <ShieldCheck aria-hidden="true" />
       </div>
+      <details className="pw-import-provenance" aria-label="Saved import provenance">
+        <summary>Saved packages and observed service dates ({snapshots.length} snapshots)</summary>
+        <p>Service-date spans describe rows present in the export. They do not prove complete reporting for missing days.</p>
+        {packages.map((item) => <div className="pw-import-source" key={item.packageId}><strong>{item.packageId}</strong><span>Exported {item.exportedAt} · imported {item.importedAt}</span><small title={item.contentHash}>Content hash {item.contentHash.slice(0, 12)}</small></div>)}
+        {snapshots.map((snapshot) => <div className="pw-import-source" key={snapshot.id}><strong>{snapshot.kind}: {snapshot.rows.length} rows</strong><span>Observed service dates {snapshot.coverageStart} through {snapshot.coverageEnd}</span><span>{snapshot.reportCoverage ? `Declared complete report: ${snapshot.reportCoverage.start} through ${snapshot.reportCoverage.end}` : "Report completeness unverified"}</span><span>Imported {snapshot.importedAt}</span><small title={snapshot.sourceHash}>Source hash {snapshot.sourceHash.slice(0, 12)}</small></div>)}
+        {!packages.length && <p>No package metadata is available for these snapshots.</p>}
+      </details>
 
       <div className="pw-privacy-strip">
         <span>

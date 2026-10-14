@@ -8,6 +8,8 @@ import {
 } from "@workspace/practice/hub";
 import { sameDayVisitKey, type LocalSnapshot } from "./retention-local.ts";
 import { buildImportedSessionOverlay } from "./import-derived-sessions.ts";
+import { buildSessionTrend, selectedPeriodSessionSummary } from "./session-trend.ts";
+import { observedBiweeklySessionRecords, summarizeLast1099Period, summarizeSessionOverview } from "./session-overview.ts";
 
 const clinician = (id: number, label: string, goalId: number | null = 7) => ({
   id,
@@ -88,6 +90,117 @@ const billingSnapshot = (
     .at(-1)!,
   sourceHash: "billing-hash",
   rows,
+});
+
+test("attendance coverage belongs only to clinicians mapped in each snapshot", () => {
+  const snapshot = attendanceSnapshot([
+    { clientId: "a", clinician: "Dr Lane", serviceDate: "2026-09-16", location: "Room A", status: "show", sourceRowHash: "coverage-a" },
+    { clientId: "b", clinician: "Dr Lane", serviceDate: "2026-10-12", location: "Room A", status: "show", sourceRowHash: "coverage-b" },
+  ]);
+  const overlay = buildImportedSessionOverlay(context(), [snapshot], 7);
+  assert.deepEqual(overlay.attendanceCoverage, []);
+  assert.deepEqual(overlay.attendanceObservedSpans[0].clinicianIds, [1]);
+  assert.equal(overlay.attendanceObservedSpans[0].start, "2026-09-16");
+  assert.equal(overlay.attendanceObservedSpans[0].end, "2026-10-12");
+  assert.equal(overlay.derivedSessions.length, 2);
+});
+
+test("snapshot complete report proof certifies visit-free endpoints; false and invalid proofs do not", () => {
+  const rows = [2, 3, 5, 8, 10, 12, 15, 17, 19, 22, 24, 27].flatMap((day) =>
+    Array.from({ length: 3 }, (_, index) => ({ clientId: `proof-${day}-${index}`, clinician: "Dr Lane",
+      serviceDate: `2026-10-${String(day).padStart(2, "0")}`, location: "Room A", status: "show" as const,
+      sourceRowHash: `proof-${day}-${index}` })));
+  const snapshot = attendanceSnapshot(rows);
+  const period = { start: "2026-10-01", end: "2026-10-28" };
+  const overlay = buildImportedSessionOverlay(context(), [{ ...snapshot, reportCoverage: { ...period, complete: true as const } }], 7);
+  assert.deepEqual(overlay.attendanceCoverage, [{ clinicianId: 1, ...period }]);
+  assert.deepEqual(overlay.coveredZeroSessions.filter((item) => item.start === period.start || item.start === period.end).map((item) => item.completed), [0, 0]);
+  assert.equal(selectedPeriodSessionSummary(overlay.context.sessions, [1], period, overlay.attendanceCoverage).completedWeekly, 9);
+  assert.equal(summarizeLast1099Period(overlay.context.sessions, "2026-10-22", overlay.attendanceCoverage, 1)?.completed, 18);
+  assert.equal(overlay.context.sessions.some((item) => item.clinicianId === 2), false);
+  for (const reportCoverage of [{ ...period, complete: false }, { start: "2026-10-03", end: period.end, complete: true }, { start: period.end, end: period.start, complete: true }]) {
+    const invalid = { ...snapshot, reportCoverage } as unknown as Parameters<typeof buildImportedSessionOverlay>[1][number];
+    assert.deepEqual(buildImportedSessionOverlay(context(), [invalid], 7).coveredZeroSessions, []);
+  }
+});
+
+test("cold overlay: 12 session-bearing dates, 36 visits, Oct 1-28 coverage yields 9/week and 18 in Oct 8-21", () => {
+  const dates = [1, 3, 5, 8, 10, 12, 15, 17, 19, 22, 24, 28];
+  const rows = dates.flatMap((day) => Array.from({ length: 3 }, (_, index) => ({
+    clientId: `client-${day}-${index}`, clinician: "Dr Lane", serviceDate: `2026-10-${String(day).padStart(2, "0")}`,
+    location: "Room A", status: "show", sourceRowHash: `gate-${day}-${index}`,
+  })));
+  const snapshot = attendanceSnapshot(rows);
+  const overlay = buildImportedSessionOverlay(context(), [{ ...snapshot, reportCoverage: { start: "2026-10-01", end: "2026-10-28", complete: true } }], 7);
+  const period = { start: "2026-10-01", end: "2026-10-28" };
+  const summary = selectedPeriodSessionSummary(overlay.context.sessions, [1], period, overlay.attendanceCoverage);
+  assert.equal(summary.observedCompleted, 36);
+  assert.equal(summary.completedWeekly, 9);
+  assert.equal(summary.observedCoverageDays, 28);
+  const weeks = buildSessionTrend(overlay.context.sessions, [1], [1, 2], period, () => 20, undefined, overlay.attendanceCoverage);
+  assert.deepEqual(weeks.filter((week) => week.completed !== null).map((week) => week.completed), [9, 9, 9]);
+  assert.equal(summarizeLast1099Period(overlay.context.sessions, "2026-10-22", overlay.attendanceCoverage, 1)?.completed, 18);
+  assert.equal(overlay.context.sessions.filter((item) => item.clinicianId === 1).length, 28);
+  assert.equal(overlay.context.sessions.some((item) => item.clinicianId === 2), false);
+});
+test("covered zero records respect clinician active bounds and reject invalid coverage", () => {
+  const rows = [1, 28].map((day) => ({ clientId: `active-${day}`, clinician: "Dr Lane", serviceDate: `2026-10-${String(day).padStart(2, "0")}`, location: "Room A", status: "show", sourceRowHash: `active-${day}` }));
+  const snapshot = attendanceSnapshot(rows);
+  const overlay = buildImportedSessionOverlay(context(), [{ ...snapshot, reportCoverage: { start: "2026-10-01", end: "2026-10-28", complete: true } }], 7, {}, { clinicianActiveRangesBasis: "employment", clinicianActiveRanges: [{ clinicianId: 1, start: "2026-10-08", end: "2026-10-21" }] });
+  assert.equal(overlay.coveredZeroSessions.length, 14);
+  assert.ok(overlay.coveredZeroSessions.every((item) => item.start >= "2026-10-08" && item.end <= "2026-10-21" && item.clinicianId === 1));
+  assert.deepEqual(buildImportedSessionOverlay(context(), [{ ...snapshot, coverageStart: "2026-10-30", coverageEnd: "2026-10-01" }], 7).coveredZeroSessions, []);
+});
+
+test("declared Oct 1-28 coverage includes visit-free endpoints and ignores compensation effective dates", () => {
+  const dates = [2, 3, 5, 8, 10, 12, 15, 17, 19, 22, 24, 27];
+  const rows = dates.flatMap((day) => Array.from({ length: 3 }, (_, index) => ({
+    clientId: `endpoint-${day}-${index}`, clinician: "Dr Lane", serviceDate: `2026-10-${String(day).padStart(2, "0")}`,
+    location: "Room A", status: "show", sourceRowHash: `endpoint-${day}-${index}`,
+  })));
+  const snapshot = attendanceSnapshot(rows);
+  const overlay = buildImportedSessionOverlay(context(), [{ ...snapshot, reportCoverage: { start: "2026-10-01", end: "2026-10-28", complete: true } }], 7, {}, {
+    clinicianActiveRanges: [{ clinicianId: 1, start: "2026-10-10", end: null }],
+  });
+  assert.deepEqual(overlay.attendanceCoverage, [{ clinicianId: 1, start: "2026-10-01", end: "2026-10-28" }]);
+  for (const date of ["2026-10-01", "2026-10-28"]) assert.equal(overlay.coveredZeroSessions.find((item) => item.start === date)?.completed, 0);
+  const summary = selectedPeriodSessionSummary(overlay.context.sessions, [1], { start: "2026-10-01", end: "2026-10-28" }, overlay.attendanceCoverage);
+  assert.equal(summary.completedWeekly, 9);
+  assert.equal(summary.observedCompleted, 36);
+  assert.equal(summary.observedCoverageDays, 28);
+  assert.equal(overlay.context.sessions.some((item) => item.clinicianId === 2), false);
+  assert.equal(summarizeLast1099Period(overlay.context.sessions, "2026-10-22", overlay.attendanceCoverage, 1)?.completed, 18);
+  const weeks = buildSessionTrend(overlay.context.sessions, [1], [1, 2], { start: "2026-10-01", end: "2026-10-28" }, () => 20, undefined, overlay.attendanceCoverage);
+  assert.deepEqual(weeks.filter((week) => week.completed !== null).map((week) => week.completed), [9, 9, 9]);
+});
+
+test("a later clinician-only snapshot never extends another clinician's coverage", () => {
+  const initial = attendanceSnapshot(["Dr Lane", "Dr Moss"].flatMap((clinician) => [1, 14].map((day) => ({
+    clientId: `${clinician}-${day}`, clinician, serviceDate: `2026-10-${String(day).padStart(2, "0")}`,
+    location: "Room A", status: "show", sourceRowHash: `initial-${clinician}-${day}`,
+  }))));
+  const later = attendanceSnapshot([{ clientId: "later-lane", clinician: "Dr Lane", serviceDate: "2026-10-15", location: "Room A", status: "show", sourceRowHash: "later-lane" }]);
+  const overlay = buildImportedSessionOverlay(context(), [initial, later], 7);
+  assert.deepEqual(overlay.attendanceCoverage, []);
+  assert.equal(overlay.context.sessions.some((record) => record.clinicianId === 2 && record.start === "2026-10-15"), false);
+});
+
+test("legacy observed spans never certify gaps or a daily import hiring window", () => {
+  const rows = Array.from({ length: 14 }, (_, index) => ({ clientId: `legacy-${index}`, clinician: "Dr Lane", serviceDate: `2026-10-${String(index + 8).padStart(2, "0")}`, location: "Room A", status: "show", sourceRowHash: `legacy-${index}` }));
+  const snapshot = attendanceSnapshot(rows);
+  const overlay = buildImportedSessionOverlay(context(), [snapshot], 7);
+  assert.deepEqual(overlay.attendanceCoverage, []);
+  assert.deepEqual(overlay.coveredZeroSessions, []);
+  const period = { start: "2026-10-08", end: "2026-10-21" };
+  const summary = selectedPeriodSessionSummary(overlay.context.sessions, [1], period);
+  assert.equal(summary.completedWeekly, null);
+  assert.equal(summary.observedCompleted, 14);
+  const weeks = buildSessionTrend(overlay.context.sessions, [1], [1], period, () => 20);
+  assert.ok(weeks.every((week) => week.completed === null));
+  assert.equal(weeks.reduce((total, week) => total + (week.observedCompleted ?? 0), 0), 14);
+  assert.equal(summarizeLast1099Period(overlay.context.sessions, "2026-10-22", [], 1)?.coverageComplete, false);
+  assert.equal(observedBiweeklySessionRecords(overlay.context.sessions, 1, "2026-10-22").length, 0);
+  assert.equal(summarizeSessionOverview(overlay.context.sessions, [], 20).averageWeekly, null);
 });
 
 test("imports derive attended sessions from show rows without using billed no-shows", () => {

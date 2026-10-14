@@ -115,6 +115,11 @@ export const practiceImportSnapshotsTable = pgTable(
     kind: text("kind").notNull(),
     coverageStart: date("coverage_start").notNull(),
     coverageEnd: date("coverage_end").notNull(),
+    reportCoverage: jsonb("report_coverage").$type<{
+      start: string;
+      end: string;
+      complete: true;
+    }>(),
     sourceHash: text("source_hash").notNull(),
     rowCount: integer("row_count").notNull(),
     rows: jsonb("rows").notNull(),

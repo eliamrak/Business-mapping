@@ -1,13 +1,24 @@
 import type { Context, Workspace } from "@workspace/practice/hub";
+import type { BusinessGoal } from "@workspace/api-client-react";
 
-export type CompensationGoal = {
-  id: number;
-  name: string;
-  ownerPayGoal: number;
-  secondOwnerPayGoal: number;
-  annualOverheadGoal: number;
-  businessProfitGoal: number;
-};
+export type CompensationGoal = Pick<
+  BusinessGoal,
+  | "id"
+  | "name"
+  | "ownerPayGoal"
+  | "secondOwnerPayGoal"
+  | "annualOverheadGoal"
+  | "businessProfitGoal"
+> &
+  Partial<
+    Pick<
+      BusinessGoal,
+      | "desiredCliniciansCount"
+      | "buildingFundGoal"
+      | "emergencyReserveGoal"
+      | "growthFundGoal"
+    >
+  >;
 
 export type WorkspaceDefaults = {
   workspace: Workspace;

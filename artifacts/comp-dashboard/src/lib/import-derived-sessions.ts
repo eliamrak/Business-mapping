@@ -1,5 +1,6 @@
-import { type SessionRecord, rangesOverlap } from "@workspace/practice";
+import { dateRangeSchema, type SessionRecord, rangesOverlap } from "@workspace/practice";
 import type { Context, ImportedBillingActual } from "@workspace/practice/hub";
+import type { SessionAttendanceCoverage } from "./session-trend.ts";
 import {
   isPhoneConsultBillingRow,
   isPhoneOnlyConsultAttendanceRow,
@@ -7,6 +8,7 @@ import {
   type AttendanceRow,
   type BillingRow,
   type LocalSnapshot,
+  type ReportCoverage,
   type SameDayVisitOverrides,
 } from "./retention-local.ts";
 
@@ -32,8 +34,17 @@ export type ImportedSessionOverlay = {
   context: Context;
   derivedSessions: SessionRecord[];
   importedBillingActuals: ImportedBillingActual[];
+  attendanceCoverage: SessionAttendanceCoverage[];
+  coveredZeroSessions: SessionRecord[];
+  attendanceObservedSpans: ImportedAttendanceObservedSpan[];
   diagnostic: ImportedSessionDiagnostic;
 };
+
+export type ImportedAttendanceObservedSpan = {
+  snapshotId: string; sourceHash: string; importedAt: string;
+  start: string; end: string; clinicianIds: number[];
+};
+export type CompleteAttendanceReportCoverage = ReportCoverage;
 
 const normalizeLabel = (value: string) =>
   value.toLowerCase().replace(/\s+/g, " ").trim();
@@ -65,6 +76,11 @@ export function buildImportedSessionOverlay(
   snapshots: LocalSnapshot[],
   teamId: number | null,
   sameDayVisitOverrides: SameDayVisitOverrides = {},
+  options: {
+    clinicianActiveRanges?: Array<{ clinicianId: number; start: string; end: string | null }>;
+    /** Workspace compensation effective dates must never restrict attendance coverage. */
+    clinicianActiveRangesBasis?: "employment" | "compensation";
+  } = {},
 ): ImportedSessionOverlay {
   const clinicians = context.clinicians.filter(
     (person) => (person.goalId ?? null) === teamId,
@@ -85,6 +101,8 @@ export function buildImportedSessionOverlay(
   const seenAttendanceRows = new Set<string>();
   const seenBillingRows = new Set<string>();
   const attendanceCoverage: Array<{ start: string; end: string }> = [];
+  const scopedAttendanceCoverage: SessionAttendanceCoverage[] = [];
+  const attendanceObservedSpans: ImportedAttendanceObservedSpan[] = [];
   const attendedByClinicianDate = new Map<
     string,
     { clinicianId: number; date: string; rows: AttendanceRow[]; visits: number }
@@ -99,6 +117,36 @@ export function buildImportedSessionOverlay(
       start: snapshot.coverageStart,
       end: snapshot.coverageEnd,
     });
+    const mappedIds = new Set(snapshot.rows.flatMap((row) => {
+      const matches = cliniciansByLabel.get(normalizeLabel(row.clinician)) ?? [];
+      return matches.length === 1 ? [matches[0].id] : [];
+    }));
+    const snapshotRange = { start: snapshot.coverageStart, end: snapshot.coverageEnd };
+    if (dateRangeSchema.safeParse(snapshotRange).success) attendanceObservedSpans.push({
+      snapshotId: snapshot.id, sourceHash: snapshot.sourceHash, importedAt: snapshot.importedAt,
+      ...snapshotRange, clinicianIds: [...mappedIds],
+    });
+    // The stored API bounds are min/max row dates, not a declaration of completeness.
+    const declaredCoverage = snapshot.reportCoverage;
+    const declaredRanges = declaredCoverage?.complete === true
+      ? [declaredCoverage]
+      : [];
+    const verifiedRanges = declaredRanges.filter((range) =>
+      dateRangeSchema.safeParse(range).success &&
+      snapshot.rows.every((row) => row.serviceDate >= range.start && row.serviceDate <= range.end));
+    for (const verifiedRange of verifiedRanges) {
+      for (const clinicianId of mappedIds) {
+        const activeRanges = options.clinicianActiveRangesBasis === "employment"
+          ? options.clinicianActiveRanges?.filter((range) => range.clinicianId === clinicianId)
+          : undefined;
+        // Coverage includes visit-free endpoints for mapped clinicians, never absent providers.
+        for (const range of activeRanges ?? [verifiedRange]) {
+          const start = range.start > verifiedRange.start ? range.start : verifiedRange.start;
+          const end = range.end && range.end < verifiedRange.end ? range.end : verifiedRange.end;
+          if (start <= end) scopedAttendanceCoverage.push({ clinicianId, start, end });
+        }
+      }
+    }
     for (const row of snapshot.rows) {
       if (seenAttendanceRows.has(row.sourceRowHash)) continue;
       seenAttendanceRows.add(row.sourceRowHash);
@@ -200,7 +248,7 @@ export function buildImportedSessionOverlay(
         }
       }
       const fullyCovered = overlappingManual.every((record) =>
-        rangeFullyCovered(attendanceCoverage, record.start, record.end),
+        rangeFullyCovered(scopedAttendanceCoverage.filter((range) => range.clinicianId === record.clinicianId), record.start, record.end),
       );
       const coveredAtAll = overlappingManual.every((record) =>
         rangeCoveredAtAll(attendanceCoverage, record.start, record.end),
@@ -238,14 +286,28 @@ export function buildImportedSessionOverlay(
     });
   }
 
+  const retainedManual = context.sessions.filter((record) => !replacedManualIds.has(record.id));
+  const coveredZeroSessions: SessionRecord[] = [];
+  const knownDates = new Set(derivedSessions.map((record) => `${record.clinicianId}|${record.start}`));
+  for (const range of scopedAttendanceCoverage) {
+    for (let date = range.start; date <= range.end; date = new Date(Date.parse(date + "T12:00:00Z") + 86400000).toISOString().slice(0, 10)) {
+      const key = `${range.clinicianId}|${date}`;
+      if (knownDates.has(key) || retainedManual.some((record) => record.clinicianId === range.clinicianId && record.start <= date && record.end >= date)) continue;
+      knownDates.add(key);
+      coveredZeroSessions.push({
+        id: dateId(range.clinicianId, date, 0), clinicianId: range.clinicianId, start: date, end: date,
+        completed: 0, desired: 0, cancelled: null, noShow: null, scheduled: null, inPerson: null,
+        telehealth: null, sourceAttachmentId: null, revision: 1, updatedAt: `${date}T12:00:00.000Z`,
+      });
+    }
+  }
   return {
     context: {
       ...context,
       sessions: [
-        ...context.sessions.filter(
-          (record) => !replacedManualIds.has(record.id),
-        ),
+        ...retainedManual,
         ...derivedSessions,
+        ...coveredZeroSessions,
       ],
       importedBillingActuals: [
         ...(context.importedBillingActuals ?? []),
@@ -253,6 +315,9 @@ export function buildImportedSessionOverlay(
       ],
     },
     derivedSessions,
+    attendanceCoverage: scopedAttendanceCoverage,
+    coveredZeroSessions,
+    attendanceObservedSpans,
     importedBillingActuals: billingActuals,
     diagnostic: {
       missingClinicianLabels: [...missingClinicianLabels].sort(),

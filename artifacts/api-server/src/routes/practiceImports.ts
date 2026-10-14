@@ -1,6 +1,6 @@
 import { createHash, randomUUID } from "node:crypto";
 import { Router } from "express";
-import { and, eq, inArray, sql } from "drizzle-orm";
+import { and, eq, getTableColumns, inArray, sql } from "drizzle-orm";
 import {
   db,
   practiceImportAuditTable,
@@ -43,6 +43,7 @@ type Snapshot = {
   importedAt: string;
   coverageStart: string;
   coverageEnd: string;
+  reportCoverage?: { start: string; end: string; complete: true } | null;
   sourceHash: string;
   rows: AttendanceRow[] | BillingRow[];
 };
@@ -58,6 +59,11 @@ const dateSchema = z
     );
   });
 const nonEmpty = z.string().trim().min(1).max(200);
+const reportCoverageSchema = z.object({
+  start: dateSchema,
+  end: dateSchema,
+  complete: z.literal(true),
+}).strict().refine((value) => value.start <= value.end);
 const visitKindSchema = z.literal("consultation").optional();
 const packageRowLimit = 100_000;
 const billingCodeMinutesSchema = z
@@ -102,6 +108,7 @@ const packageSchema = z
           .object({
             coverageStart: dateSchema,
             coverageEnd: dateSchema,
+            reportCoverage: reportCoverageSchema.optional(),
             rowCount: z.number().int().min(1).max(packageRowLimit),
             rows: z.array(attendanceRowSchema).min(1).max(packageRowLimit),
           })
@@ -110,6 +117,7 @@ const packageSchema = z
           .object({
             coverageStart: dateSchema,
             coverageEnd: dateSchema,
+            reportCoverage: reportCoverageSchema.optional(),
             rowCount: z.number().int().min(1).max(packageRowLimit),
             rows: z.array(billingRowSchema).min(1).max(packageRowLimit),
           })
@@ -184,6 +192,7 @@ const snapshotFromRow = (row: {
   createdAt: Date;
   coverageStart: string;
   coverageEnd: string;
+  reportCoverage?: unknown;
   sourceHash: string;
   rows: unknown;
 }): Snapshot => ({
@@ -192,6 +201,7 @@ const snapshotFromRow = (row: {
   importedAt: row.createdAt.toISOString(),
   coverageStart: row.coverageStart,
   coverageEnd: row.coverageEnd,
+  reportCoverage: (row.reportCoverage ?? null) as Snapshot["reportCoverage"],
   sourceHash: row.sourceHash,
   rows: row.rows as AttendanceRow[] | BillingRow[],
 });
@@ -254,6 +264,11 @@ function toSnapshots(
   );
   const attendanceCoverage = coverage(attendanceRows);
   const billingCoverage = coverage(billingRows);
+  for (const collection of Object.values(input.collections)) {
+    const proof = collection.reportCoverage;
+    if (proof && (proof.start > collection.coverageStart || proof.end < collection.coverageEnd))
+      throw new Error("Report coverage must contain the observed row span.");
+  }
   if (
     attendanceCoverage.start !== input.collections.attendance.coverageStart ||
     attendanceCoverage.end !== input.collections.attendance.coverageEnd ||
@@ -279,6 +294,7 @@ function toSnapshots(
       importedAt,
       coverageStart: input.collections.attendance.coverageStart,
       coverageEnd: input.collections.attendance.coverageEnd,
+      reportCoverage: input.collections.attendance.reportCoverage,
       sourceHash: attendanceSourceHash,
       rows: attendanceRows,
     },
@@ -288,16 +304,25 @@ function toSnapshots(
       importedAt,
       coverageStart: input.collections.billing.coverageStart,
       coverageEnd: input.collections.billing.coverageEnd,
+      reportCoverage: input.collections.billing.reportCoverage,
       sourceHash: billingSourceHash,
       rows: billingRows,
     },
   ];
 }
 
+// Whole-row JSON extraction does not reference a column absent before migration 008.
+const { reportCoverage: _reportCoverageColumn, ...legacySnapshotColumns } =
+  getTableColumns(practiceImportSnapshotsTable);
+const snapshotColumns = {
+  ...legacySnapshotColumns,
+  reportCoverage: sql<Snapshot["reportCoverage"]>`to_jsonb(${practiceImportSnapshotsTable}) -> 'report_coverage'`,
+};
+
 async function historyFor(practiceId: string, accountId: string) {
   const [snapshots, packages] = await Promise.all([
     db
-      .select()
+      .select(snapshotColumns)
       .from(practiceImportSnapshotsTable)
       .where(
         and(
@@ -364,11 +389,12 @@ router.post("/practice-imports/package", async (req, res) => {
   const contentHash = sha256({
     packageId: input.packageId,
     snapshots: snapshots.map(
-      ({ kind, coverageStart, coverageEnd, sourceHash }) => ({
+      ({ kind, coverageStart, coverageEnd, sourceHash, reportCoverage }) => ({
         kind,
         coverageStart,
         coverageEnd,
         sourceHash,
+        ...(reportCoverage ? { reportCoverage } : {}),
       }),
     ),
     billingCodeMinutes: input.billingCodeMinutes ?? {},
@@ -377,6 +403,16 @@ router.post("/practice-imports/package", async (req, res) => {
     await tx.execute(
       sql`SELECT pg_advisory_xact_lock(hashtext(${practiceId}), hashtext(${accountId}))`,
     );
+    const availability = await tx.execute(sql`
+      SELECT EXISTS (
+        SELECT 1 FROM pg_attribute
+        WHERE attrelid = to_regclass('practice_import_snapshots')
+          AND attname = 'report_coverage' AND NOT attisdropped
+      ) AS available
+    `);
+    const hasReportCoverage = availability.rows[0]?.available === true;
+    if (!hasReportCoverage && snapshots.some((snapshot) => snapshot.reportCoverage))
+      return { status: "migration-required" as const };
     const [samePackage] = await tx
       .select()
       .from(practiceImportPackagesTable)
@@ -393,7 +429,7 @@ router.post("/practice-imports/package", async (req, res) => {
       return { status: "duplicate" as const };
     }
     const active = await tx
-      .select()
+      .select(snapshotColumns)
       .from(practiceImportSnapshotsTable)
       .where(
         and(
@@ -418,7 +454,8 @@ router.post("/practice-imports/package", async (req, res) => {
           snapshots.some(
             (snapshot) =>
               snapshot.kind === row.kind &&
-              snapshot.sourceHash === row.sourceHash,
+              snapshot.sourceHash === row.sourceHash &&
+              stableJson(snapshot.reportCoverage ?? null) === stableJson(row.reportCoverage ?? null),
           ),
         )
         .map((row) => `${row.kind}\u0000${row.sourceHash}`),
@@ -519,20 +556,19 @@ router.post("/practice-imports/package", async (req, res) => {
       billingCodeMinutes: input.billingCodeMinutes ?? {},
       sameDayVisitOverrides: replacementOverrides,
     });
-    await tx.insert(practiceImportSnapshotsTable).values(
-      snapshotsToInsert.map((snapshot) => ({
-        id: randomUUID(),
-        packageImportId,
-        practiceId,
-        accountId,
-        kind: snapshot.kind,
-        coverageStart: snapshot.coverageStart,
-        coverageEnd: snapshot.coverageEnd,
-        sourceHash: snapshot.sourceHash,
-        rowCount: snapshot.rows.length,
-        rows: snapshot.rows,
-      })),
-    );
+    for (const snapshot of snapshotsToInsert) {
+      // Omit the physical column entirely for legacy writes before migration 008.
+      await tx.execute(sql`
+        INSERT INTO practice_import_snapshots
+          (id, package_import_id, practice_id, account_id, kind,
+           coverage_start, coverage_end, source_hash, row_count, rows
+           ${hasReportCoverage ? sql`, report_coverage` : sql``})
+        VALUES (${randomUUID()}, ${packageImportId}, ${practiceId}, ${accountId},
+          ${snapshot.kind}, ${snapshot.coverageStart}, ${snapshot.coverageEnd},
+          ${snapshot.sourceHash}, ${snapshot.rows.length}, ${JSON.stringify(snapshot.rows)}::jsonb
+          ${hasReportCoverage ? sql`, ${snapshot.reportCoverage ? JSON.stringify(snapshot.reportCoverage) : null}::jsonb` : sql``})
+      `);
+    }
     await tx.insert(practiceImportAuditTable).values({
       id: randomUUID(),
       practiceId,
@@ -556,6 +592,11 @@ router.post("/practice-imports/package", async (req, res) => {
       status: overlapping.length ? ("replaced" as const) : ("added" as const),
     };
   });
+  if (result.status === "migration-required")
+    return res.status(503).json({
+      code: "REPORT_COVERAGE_MIGRATION_REQUIRED",
+      error: "Report coverage cannot be saved until migration 008_practice_report_coverage.sql is applied.",
+    });
   if (result.status === "changed-package")
     return res.status(409).json({
       code: "PACKAGE_ID_CHANGED_CONTENT",
@@ -614,7 +655,7 @@ router.put("/practice-imports/same-day-visit-overrides", async (req, res) => {
   await db.transaction(async (tx) => {
     const snapshots = (
       await tx
-        .select()
+        .select(snapshotColumns)
         .from(practiceImportSnapshotsTable)
         .where(
           and(

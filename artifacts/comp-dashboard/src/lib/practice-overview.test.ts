@@ -45,8 +45,9 @@ test("Overview departures use exact dates and include the mature partial cutoff 
     ["june", "2026-05-20"], ["june", "2026-05-27"], ["june", "2026-06-03"],
     ["july", "2026-06-26"], ["july", "2026-07-03"], ["july", "2026-07-10"],
   ].map(([clientId, serviceDate]) => ({ clientId, serviceDate, clinician: "A", status: "show" as const, location: null, sourceRowHash: clientId + serviceDate }));
-  const snapshot = { id: "synthetic", kind: "attendance" as const, sourceHash: "synthetic", importedAt: "2026-10-14T00:00:00Z", coverageStart: "2026-01-01", coverageEnd: "2026-10-14", rows };
+  const snapshot = { id: "synthetic", kind: "attendance" as const, sourceHash: "synthetic", importedAt: "2026-10-14T00:00:00Z", coverageStart: "2026-05-20", coverageEnd: "2026-07-10", reportCoverage: { start: "2026-01-01", end: "2026-10-14", complete: true as const }, rows };
+  assert.equal(overviewClientFlow([{ ...snapshot, reportCoverage: undefined }], {}, "2026-06-15", "2026-06-20", "2026-10-14").departures, null);
   assert.equal(overviewClientFlow([snapshot], {}, "2026-06-15", "2026-06-20", "2026-10-14").departures, 0);
   assert.equal(overviewClientFlow([snapshot], {}, "2026-07-01", "2026-07-16", "2026-10-14").departures, 1);
-  assert.equal(overviewClientFlow([{ ...snapshot, coverageEnd: "2026-07-15" }, { ...snapshot, id: "later", coverageStart: "2026-09-01", rows: [] }], {}, "2026-07-01", "2026-07-16", "2026-10-14").departures, null);
+  assert.equal(overviewClientFlow([{ ...snapshot, reportCoverage: { ...snapshot.reportCoverage, end: "2026-07-15" } }, { ...snapshot, id: "later", coverageStart: "2026-09-01", coverageEnd: "2026-10-14", reportCoverage: undefined, rows: [] }], {}, "2026-07-01", "2026-07-16", "2026-10-14").departures, null);
 });

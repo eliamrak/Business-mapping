@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { ApiError } from "@workspace/api-client-react";
 import { CartesianGrid, Legend, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
@@ -24,6 +24,7 @@ import {
   type SessionWrite,
 } from "@workspace/practice";
 import type { Context, ForecastMonth } from "@workspace/practice/hub";
+import type { ImportedAttendanceObservedSpan } from "@/lib/import-derived-sessions";
 import {
   listSessionGoals,
   saveSessionGoal,
@@ -37,8 +38,8 @@ import {
   sessionGoalYear,
   weeklyGoalFromPeriodDesired,
 } from "@/lib/session-goals";
-import { firstHiringReviewMonth, summarizeHiringReadiness, summarizeLast1099Period, summarizeSessionOverview } from "@/lib/session-overview";
-import { buildSessionTrend, containedSessionRecords, selectedPeriodSessionSummary, type SessionPeriod } from "@/lib/session-trend";
+import { firstHiringReviewMonth, observedBiweeklySessionRecords, summarizeHiringReadiness, summarizeLast1099Period, summarizeSessionOverview } from "@/lib/session-overview";
+import { buildSessionTrend, containedSessionRecords, selectedPeriodSessionSummary, type SessionAttendanceCoverage, type SessionPeriod } from "@/lib/session-trend";
 import SessionImportDialog from "./session-import-dialog";
 import BulkSessionEntry from "./bulk-session-entry";
 
@@ -94,6 +95,9 @@ export default function WorkspaceSessions({
   contributorId = null,
   compareWholePractice = false,
   requiredWeeklySessions,
+  attendanceCoverage = [],
+  attendanceObservedSpans = [],
+  controls,
 }: {
   context: Context;
   summaryContext?: Context;
@@ -108,6 +112,9 @@ export default function WorkspaceSessions({
   contributorId?: number | null;
   compareWholePractice?: boolean;
   requiredWeeklySessions?: number;
+  attendanceCoverage?: SessionAttendanceCoverage[];
+  attendanceObservedSpans?: ImportedAttendanceObservedSpan[];
+  controls?: ReactNode;
 }) {
   const queryClient = useQueryClient();
   const team = teamId === null ? "unassigned" : String(teamId);
@@ -361,7 +368,10 @@ export default function WorkspaceSessions({
     readPeople.filter((person) => !excludedFromHire.has(person.id)).map((person) => ({
       id: person.id,
       goalWeekly: person.sessionsPerWeek,
-      records: currentFour.flatMap((period) =>
+      records: records.some((record) => record.clinicianId === person.id && record.start === record.end)
+        ? observedBiweeklySessionRecords(records, person.id, selectedPeriod && selectedPeriod.end < today ? selectedPeriod.end : today, attendanceCoverage)
+          .filter((record) => !selectedPeriod || (record.start >= selectedPeriod.start && record.end <= selectedPeriod.end))
+        : currentFour.flatMap((period) =>
         period.records.filter((record) => record.clinicianId === person.id),
       ),
     })),
@@ -400,6 +410,9 @@ export default function WorkspaceSessions({
     : previousBounds
       ? containedSessionRecords(records, readIds, previousBounds)
       : [];
+  const previousOverviewPeriod = previousBounds ?? (!selectedPeriod && historyRange === "4periods" && previousFour.length
+    ? { start: previousFour.at(-1)!.start, end: previousFour[0].end }
+    : undefined);
   const recordFor = (period: Period, personId: number) =>
     period.records.find((record) => record.clinicianId === personId);
   const visibleRecords = filteredPeriods.flatMap((period) => period.records);
@@ -415,8 +428,18 @@ export default function WorkspaceSessions({
     (date) => readPeople.reduce((sum, person) => sum +
       (annualGoalFor(person.id, Number(date.slice(0, 4)), annualGoals) ?? person.sessionsPerWeek ?? 0), 0),
     requiredWeeklySessions,
+    attendanceCoverage,
   ) : [];
-  const practiceSummary = selectedPeriodSessionSummary(practiceRecords, people.map((person) => person.id), chartBounds);
+  const practiceSummary = selectedPeriodSessionSummary(practiceRecords, people.map((person) => person.id), chartBounds, attendanceCoverage);
+  const selectedSummary = selectedPeriodSessionSummary(records, readIds, chartBounds, attendanceCoverage);
+  const comparisonAvailable = compareWholePractice && selectedSummary.coverageComplete === true && practiceSummary.coverageComplete === true;
+  const selectedGoal = readPeople.reduce((sum, person) => sum + (annualGoalFor(person.id, Number(chartBounds.end.slice(0, 4)), annualGoals) ?? person.sessionsPerWeek ?? 0), 0);
+  const requiredPace = requiredWeeklySessions != null && Number.isFinite(requiredWeeklySessions) ? requiredWeeklySessions : null;
+  const capacityColor = requiredPace !== null && requiredPace > selectedGoal ? "#ee8c84" : "#f2f4f5";
+  const progressScale = Math.max(selectedGoal, requiredPace ?? 0, selectedSummary.completedWeekly ?? 0, 1);
+  const progressPosition = (number: number) => `${Math.min(100, Math.max(0, number / progressScale * 100))}%`;
+  const sourceSpan = attendanceObservedSpans.filter((span) => span.start <= chartBounds.end && span.end >= chartBounds.start && span.clinicianIds.some((id) => readIds.includes(id)))
+    .sort((a, b) => b.importedAt.localeCompare(a.importedAt))[0];
   const overviewFor = (personId: number) => {
     const current = visibleRecords.filter((record) => record.clinicianId === personId);
     const previous = previousOverviewRecords.filter((record) => record.clinicianId === personId);
@@ -424,6 +447,7 @@ export default function WorkspaceSessions({
       current, previous,
       annualGoalFor(personId, Number(chartBounds.end.slice(0, 4)), annualGoals) ??
         people.find((person) => person.id === personId)?.sessionsPerWeek ?? 0,
+      { period: chartBounds, previousPeriod: previousOverviewPeriod, clinicianId: personId, attendanceCoverage },
     );
     return {
       ...summary,
@@ -447,31 +471,24 @@ export default function WorkspaceSessions({
             100
         : null;
     };
-    const recordedDays = entries.reduce(
-      (sum, record) => sum + daysInclusive(record.start, record.end),
-      0,
-    );
+    const overview = overviewFor(personId);
     return {
       average: average(entries.map((record) => record.completed)),
       desired: average(entries.map(comparisonDesiredFor)),
-      weekly: recordedDays
-        ? (entries.reduce((sum, record) => sum + record.completed, 0) /
-            recordedDays) *
-          7
-        : null,
-      fullness: fullness(entries),
+      weekly: overview.averageWeekly,
+      fullness: overview.fullness,
       recent: average(recent.map((record) => record.completed)),
-      recentFullness: fullness(recent),
+      recentFullness: overview.coverageComplete ? fullness(recent) : null,
     };
   };
 
   return (
     <section aria-label="Session totals" className="pw-session-tracker">
-      <div className="pw-section-heading">
-        <div>
-          <h2>Sessions</h2>
-          <p>Recorded session pace</p>
-        </div>
+      <div className="pw-section-heading pw-session-panel-header">
+        <h2>Sessions</h2>
+        {controls && <div className="pw-session-panel-controls">{controls}</div>}
+        <details className="pw-session-tools">
+          <summary>Session tools</summary>
         <div className="pw-actions">
           {!sandbox && (
             <button
@@ -510,12 +527,14 @@ export default function WorkspaceSessions({
             </div>
           </details>
         </div>
+        </details>
       </div>
 
       <div className="pw-session-overview-heading">
         <div>
-          <h3>{contributorId === null ? "Practice pace" : readPeople[0]?.label ?? "Contributor pace"}</h3>
-          <p>{filteredPeriods.length} recorded period{filteredPeriods.length === 1 ? "" : "s"} in view</p>
+          <p className="pw-session-date-context">{shortDate(chartBounds.start)} - {shortDate(chartBounds.end)}; {display(selectedSummary.observedCompleted ?? null)} observed sessions</p>
+          <small className="pw-session-coverage-context">{selectedSummary.coverageComplete ? `${selectedSummary.observedCoverageDays} covered days` : "Coverage unknown; verified weekly pace unknown"}{sourceSpan ? `; source observed ${shortDate(sourceSpan.start)} - ${shortDate(sourceSpan.end)}` : ""}</small>
+          {!selectedSummary.coverageComplete && selectedSummary.calendarWindowWeeklyEstimate != null && <small className="pw-session-coverage-context">Calendar-window estimate: {display(selectedSummary.calendarWindowWeeklyEstimate)} sessions / week</small>}
         </div>
         {!selectedPeriod && <div className="pw-session-range">
           <select
@@ -541,10 +560,27 @@ export default function WorkspaceSessions({
           )}
         </div>}
       </div>
-      <div aria-label="Calendar weekly session trend" style={{ width: "100%", minWidth: 0 }}>
-        <h3>Calendar weekly trend</h3>
-        <p>{shortDate(chartBounds.start)} - {shortDate(chartBounds.end)}. Period rates are shown at period end.</p>
-        <div style={{ width: "100%", height: 300 }}>
+      <div className="pw-session-headline" aria-label="Selected period session pace">
+        <div className="pw-session-headline-actual">
+          <span>{selectedSummary.completedWeekly === null ? "Estimated sessions / week" : "Sessions / week"}</span>
+          <strong className="pw-session-headline-actual-value" style={{ color: "#9fd8c2", fontSize: 54 }}>{(selectedSummary.completedWeekly ?? selectedSummary.calendarWindowWeeklyEstimate)?.toLocaleString("en-US", { minimumFractionDigits: 1, maximumFractionDigits: 1 }) ?? "-"}</strong>
+        </div>
+        <div className="pw-session-headline-capacity">
+          <span>Capacity</span><strong className="pw-session-headline-secondary-value" style={{ color: capacityColor, fontSize: 32 }}>{display(selectedGoal)}</strong>
+        </div>
+        <div className="pw-session-headline-required">
+          <span>Required</span><strong className="pw-session-headline-secondary-value" style={{ color: "#76dda4", fontSize: 32 }}>{display(requiredPace)}</strong>
+        </div>
+      </div>
+      <div className="pw-session-progress" aria-label="Weekly pace against capacity and required sessions">
+        <div className="pw-session-progress-track">
+          {selectedSummary.coverageComplete && <span className="pw-session-progress-fill" style={{ width: progressPosition(selectedSummary.completedWeekly ?? 0), backgroundColor: "#9fd8c2" }} />}
+          <span className="pw-session-progress-marker pw-session-progress-capacity" title={`Capacity ${display(selectedGoal)}`} style={{ left: progressPosition(selectedGoal), backgroundColor: capacityColor }} />
+          {requiredPace !== null && <span className="pw-session-progress-marker pw-session-progress-required" title={`Required ${display(requiredPace)}`} style={{ left: progressPosition(requiredPace), backgroundColor: "#76dda4" }} />}
+        </div>
+      </div>
+      <div className="pw-session-chart" aria-label="Calendar weekly session trend" style={{ width: "100%", minWidth: 0 }}>
+        <div style={{ width: "100%", height: 229 }}>
           <ResponsiveContainer width="100%" height="100%">
             <LineChart data={chartData} margin={{ top: 12, right: 20, bottom: 8, left: 0 }} accessibilityLayer>
               <CartesianGrid strokeDasharray="3 3" vertical={false} />
@@ -553,49 +589,56 @@ export default function WorkspaceSessions({
               <YAxis width={44} domain={[0, 'auto']} />
               <Tooltip labelFormatter={(_, payload) => payload[0]?.payload.label ?? ""}
                 formatter={(number: number) => display(number)} />
-              <Legend />
-              <Line dataKey="completed" name="Recorded calendar week" stroke="#047857" strokeWidth={2} dot={{ r: 4 }} connectNulls={false} isAnimationActive={false} />
-              <Line dataKey="periodRate" name="Recorded period rate / week" stroke="#047857" strokeWidth={0} dot={{ r: 5, strokeWidth: 2, fill: "#047857" }} activeDot={{ r: 6, strokeWidth: 2 }} isAnimationActive={false} />
-              <Line dataKey="capacity" name="Weekly capacity" stroke="#be123c" dot={false} strokeDasharray="6 3" isAnimationActive={false} />
-              {requiredWeeklySessions != null && <Line dataKey="required" name="Required sessions / week" stroke="#27824b" dot={false} strokeDasharray="3 3" isAnimationActive={false} />}
-              {compareWholePractice && <Line dataKey="benchmark" name="Practice recorded calendar week" stroke="#0369a1" dot={{ r: 4 }} connectNulls={false} isAnimationActive={false} />}
-              {compareWholePractice && <Line dataKey="benchmarkPeriodRate" name="Practice period rate / week" stroke="#0369a1" strokeWidth={0} dot={{ r: 5, strokeWidth: 2, fill: "#0369a1" }} isAnimationActive={false} />}
+              <Legend iconSize={8} wrapperStyle={{ fontSize: 11 }} />
+              {chartData.some((point) => point.completed !== null) && <Line dataKey="completed" name="Sessions" stroke="#9fd8c2" strokeWidth={2} dot={{ r: 3 }} connectNulls={false} isAnimationActive={false} />}
+              {chartData.some((point) => point.observedCompleted !== null) && <Line dataKey="observedCompleted" name="Observed sessions (coverage unknown or partial)" stroke="#9fd8c2" strokeWidth={0} dot={{ r: 4, fill: "#12171d", strokeWidth: 2 }} isAnimationActive={false} />}
+              {chartData.some((point) => point.periodRate !== null) && <Line dataKey="periodRate" name="Period pace" stroke="#9fd8c2" strokeWidth={0} dot={{ r: 4, strokeWidth: 2, fill: "#9fd8c2" }} activeDot={{ r: 5, strokeWidth: 2 }} isAnimationActive={false} />}
+              <Line dataKey="capacity" name="Capacity" stroke={capacityColor} dot={false} strokeDasharray="6 3" isAnimationActive={false} />
+              {requiredPace !== null && <Line dataKey="required" name="Required" stroke="#76dda4" dot={false} strokeDasharray="3 3" isAnimationActive={false} />}
+              {comparisonAvailable && chartData.some((point) => point.benchmark !== null) && <Line dataKey="benchmark" name="Practice sessions" stroke="#84b9db" dot={{ r: 3 }} connectNulls={false} isAnimationActive={false} />}
+              {comparisonAvailable && chartData.some((point) => point.benchmarkPeriodRate !== null) && <Line dataKey="benchmarkPeriodRate" name="Practice period pace" stroke="#84b9db" strokeWidth={0} dot={{ r: 4, strokeWidth: 2, fill: "#84b9db" }} isAnimationActive={false} />}
             </LineChart>
           </ResponsiveContainer>
         </div>
-        {!visibleRecords.length && <p className="pw-empty">No complete recorded periods in this date range.</p>}
-        {compareWholePractice && <p>Whole practice: {display(practiceSummary.completedWeekly)} completed / week; {practiceSummary.observedCoverageDays} observed days.</p>}
+        {!visibleRecords.length && !chartData.some((point) => point.completed !== null || point.observedCompleted !== null) && <p className="pw-empty">No complete recorded periods in this date range.</p>}
+        {comparisonAvailable && <p>Whole practice: {display(practiceSummary.completedWeekly)} completed / week; {display(practiceSummary.observedCompleted ?? null)} observed sessions; {practiceSummary.observedCoverageDays} covered days.</p>}
       </div>
       {!!readPeople.length && (
+        <details className="pw-session-clinician-details">
+          <summary>Clinician details</summary>
         <div className="pw-session-overview" aria-label="Clinician session pace">
           {readPeople.map((person, index) => {
-            const { latest, averageWeekly, goalWeekly, openWeekly, overGoalWeekly, fullness, trendWeekly, count } = overviewFor(person.id);
-            const last1099 = summarizeLast1099Period(
-              visibleRecords.filter((record) => record.clinicianId === person.id),
-              today,
+            const { latest, averageWeekly, goalWeekly, openWeekly, overGoalWeekly, fullness, trendWeekly, count, observedCompleted, coverageComplete, observedCoverageDays } = overviewFor(person.id);
+            const payrollSummary = summarizeLast1099Period(
+              records.filter((record) => record.clinicianId === person.id),
+              chartBounds.end < today ? chartBounds.end : today,
+              attendanceCoverage,
+              person.id,
             );
+            const last1099 = payrollSummary && payrollSummary.start >= chartBounds.start && payrollSummary.end <= chartBounds.end ? payrollSummary : null;
             const trend = trendWeekly == null ? "empty" : trendWeekly > 0 ? "up" : trendWeekly < 0 ? "down" : "flat";
             return (
               <div className="pw-session-overview-row" key={person.id}>
                 <div className="pw-session-overview-name">
                   <span className={`pw-session-avatar pw-avatar-${index % 3}`}>{person.label.slice(0, 1).toUpperCase()}</span>
-                  <div><strong>{person.label}</strong><small>{count} recorded period{count === 1 ? "" : "s"}{latest ? `, through ${shortDate(latest.end)}` : ""}</small></div>
+                  <div><strong>{person.label}</strong><small>{count} recorded period{count === 1 ? "" : "s"}{latest ? `, through ${shortDate(latest.end)}` : ""}</small><small>{display(observedCompleted)} observed sessions; {observedCoverageDays ?? 0}/{daysInclusive(chartBounds.start, chartBounds.end)} days covered{coverageComplete ? "" : "; partial coverage"}</small></div>
                 </div>
                 <div className="pw-session-overview-stat pw-session-overview-capacity">
                   <span>Sessions / week</span>
                   <div className="pw-session-capacity-values">
                     <div className="pw-session-biweekly">
                       <strong>{last1099 ? display(last1099.completed) : "-"}</strong>
-                      <small>{last1099?.recorded === false ? "Last two weeks; not recorded" : "Last two weeks"}</small>
+                      <small>{last1099?.recorded === false ? "Last two weeks; not recorded" : last1099?.coverageComplete ? "Last two weeks" : "Last two weeks; partial count"}</small>
+                      {last1099 && <small>{shortDate(last1099.start)} - {shortDate(last1099.end)}</small>}
                     </div>
-                    <div><strong>{display(averageWeekly)}</strong><small>avg completed</small></div>
+                    <div><strong>{display(averageWeekly)}</strong><small>{coverageComplete ? "avg completed" : "pace needs complete coverage"}</small></div>
                     <div><strong>{display(openWeekly)}</strong><small>to desired pace</small></div>
                   </div>
-                  <div className="pw-session-fill-track" aria-hidden="true">
+                  {coverageComplete && <div className="pw-session-fill-track" aria-hidden="true">
                     <span style={{ width: `${Math.min(Math.max(fullness ?? 0, 0), 100)}%` }} />
-                  </div>
+                  </div>}
                   <small>{goalWeekly > 0
-                    ? `Goal ${display(goalWeekly)} / week, ${display(fullness, "%")} filled${overGoalWeekly ? `, ${display(overGoalWeekly)} over goal` : ""}`
+                    ? `Goal ${display(goalWeekly)} / week${coverageComplete ? `, ${display(fullness, "%")} filled${overGoalWeekly ? `, ${display(overGoalWeekly)} over goal` : ""}` : ""}`
                     : "No weekly goal set"}</small>
                 </div>
                 <div className="pw-session-overview-stat pw-session-overview-trend" data-trend={trend}>
@@ -617,9 +660,12 @@ export default function WorkspaceSessions({
             );
           })}
         </div>
+        </details>
       )}
 
-      {!sandbox && (
+      {!sandbox && selectedSummary.coverageComplete && (
+        <details className="pw-session-hiring-details">
+          <summary>Hiring outlook</summary>
         <section className="pw-hiring-pulse" aria-label="Hiring outlook">
           <div className="pw-hiring-pulse-main">
             <div>
@@ -690,6 +736,7 @@ export default function WorkspaceSessions({
             </div>
           </details>
         </section>
+        </details>
       )}
 
       {!sandbox && (
@@ -936,12 +983,8 @@ export default function WorkspaceSessions({
         </p>
       )}
 
-      <div className="pw-session-history-heading">
-        <div>
-          <h3>Recorded period history</h3>
-          <p>Select a period to edit its totals</p>
-        </div>
-      </div>
+      <details className="pw-session-history-details">
+        <summary>Recorded period history</summary>
       <div className="pw-session-matrix-wrap">
         <table className="pw-session-matrix">
           <thead>
@@ -981,7 +1024,7 @@ export default function WorkspaceSessions({
                         <div className="pw-session-history-value">
                           <strong>{record.completed}</strong>
                           {columns.desired && <span>of {desired}</span>}
-                          {columns.fullness && fullness != null && (
+                          {columns.fullness && overviewFor(person.id).coverageComplete && fullness != null && (
                             <em
                               data-tone={
                                 fullness >= 80
@@ -1080,6 +1123,7 @@ export default function WorkspaceSessions({
           )}
         </table>
       </div>
+      </details>
       {!people.length && (
         <p className="pw-empty">Add a clinician to this practice first.</p>
       )}

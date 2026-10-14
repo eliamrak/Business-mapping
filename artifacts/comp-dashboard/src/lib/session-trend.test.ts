@@ -44,3 +44,64 @@ test("empty or invalid ranges have no observed coverage or rate", () => {
   assert.deepEqual(selectedPeriodSessionSummary([], [1], period), { completedWeekly: null, inPersonWeekly: null, observedCoverageDays: 0 });
   assert.deepEqual(buildSessionTrend([], [1], [1], { start: period.end, end: period.start }, () => 10), []);
 });
+
+const importedDates = ["09-16", "09-18", "09-21", "09-23", "09-25", "09-28", "09-30", "10-02", "10-05", "10-07", "10-09", "10-12"];
+const importedFacts = importedDates.map((date) => record(1, `2026-${date}`, `2026-${date}`, 3));
+const selected30 = { start: "2026-09-15", end: "2026-10-14" };
+test("one-day imports show calendar totals and partial observed counts without phantom zeros", () => {
+  const coverage = [{ clinicianId: 1, start: "2026-09-16", end: "2026-10-12" }];
+  const points = buildSessionTrend(importedFacts, [1], [1, 2], selected30, () => 15, undefined, coverage);
+  assert.deepEqual(points.filter((point) => point.completed !== null).map((point) => point.completed), [9, 9, 9]);
+  assert.equal(points[0].observedCompleted, 6);
+  assert.equal(points[0].completed, null);
+  assert.equal(points.find((point) => point.label.startsWith("2026-10-12"))?.observedCompleted, 3);
+  assert.ok(points.every((point) => point.benchmark === null));
+});
+test("selected 30-day calendar pace uses explicit coverage rather than 12 active visit days", () => {
+  const complete = [{ clinicianId: 1, ...selected30 }];
+  const summary = selectedPeriodSessionSummary(importedFacts, [1], selected30, complete);
+  assert.equal(summary.completedWeekly, 36 / 30 * 7);
+  assert.equal(summary.observedCompleted, 36);
+  assert.equal(summary.coverageComplete, true);
+  const partial = selectedPeriodSessionSummary(importedFacts, [1], selected30, [{ clinicianId: 1, start: "2026-09-16", end: "2026-10-12" }]);
+  assert.equal(partial.completedWeekly, null);
+  assert.equal(partial.observedCompleted, 36);
+  assert.equal(partial.observedCoverageDays, 27);
+  assert.equal(partial.coverageComplete, false);
+});
+test("coverage union is per clinician and manual gaps stay unknown", () => {
+  const facts = [record(1, "2026-09-21", "2026-09-21", 3)];
+  const week = { start: "2026-09-21", end: "2026-09-27" };
+  const coverage = [{ clinicianId: 1, start: week.start, end: "2026-09-23" }, { clinicianId: 1, start: "2026-09-24", end: week.end }];
+  assert.equal(selectedPeriodSessionSummary(facts, [1], week, coverage).completedWeekly, 3);
+  assert.equal(selectedPeriodSessionSummary(facts, [1, 2], week, coverage).completedWeekly, null);
+  assert.equal(buildSessionTrend(facts, [1], [1], week, () => 10)[0].completed, null);
+  assert.equal(buildSessionTrend(facts, [1], [1], week, () => 10)[0].observedCompleted, 3);
+});
+test("a covered zero week is zero, an uncovered empty week is unknown", () => {
+  const week = { start: "2026-09-21", end: "2026-09-27" };
+  assert.equal(buildSessionTrend([], [1], [1], week, () => 10, undefined, [{ clinicianId: 1, ...week }])[0].completed, 0);
+  assert.equal(buildSessionTrend([], [1], [1], week, () => 10)[0].observedCompleted, null);
+});
+
+test("legacy 36 visits over 28 calendar days expose an estimate without verifying pace", () => {
+  const period = { start: "2026-10-01", end: "2026-10-28" };
+  const facts = [2, 3, 5, 8, 10, 12, 15, 17, 19, 22, 24, 27].map((day) => ({
+    ...record(1, `2026-10-${String(day).padStart(2, "0")}`, `2026-10-${String(day).padStart(2, "0")}`, 3), id: -day,
+  }));
+  const summary = selectedPeriodSessionSummary(facts, [1], period, []);
+  assert.equal(summary.calendarWindowWeeklyEstimate, 9);
+  assert.equal(summary.completedWeekly, null);
+  assert.equal(summary.coverageComplete, false);
+  assert.equal(summary.observedCompleted, 36);
+  const points = buildSessionTrend(facts, [1], [1], period, () => 20);
+  assert.ok(points.every((point) => point.completed === null && point.benchmark === null));
+  assert.equal(points.reduce((sum, point) => sum + (point.observedCompleted ?? 0), 0), 36);
+});
+
+test("an imported aggregate cannot produce a filled period-rate point without coverage proof", () => {
+  const imported = { ...record(1, "2026-10-01", "2026-10-28", 36), id: -1 };
+  const period = { start: imported.start, end: imported.end };
+  assert.ok(buildSessionTrend([imported], [1], [1], period, () => 20).every((point) => point.periodRate === null));
+  assert.equal(buildSessionTrend([imported], [1], [1], period, () => 20, undefined, [{ clinicianId: 1, ...period }]).at(-1)?.periodRate, 9);
+});

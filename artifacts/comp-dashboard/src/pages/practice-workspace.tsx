@@ -3,6 +3,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   customFetch,
   useListBusinessGoals,
+  useListScenarios,
   ApiError,
 } from "@workspace/api-client-react";
 import {
@@ -108,6 +109,8 @@ import { evaluateCompletedGoal } from "@/lib/completed-goals";
 import { planRevisionSignature, planFocusHighlights } from "@/lib/plan-focus";
 import { overviewClientFlow, overviewFundingSummary } from "@/lib/practice-overview";
 import { moneyBridgeSummary } from "@/lib/money-bridge";
+import { linkedGoalFor, linkedFundGoalFor, type LinkedPracticeGoal, type LinkedFundGoal } from "@/lib/legacy-practice-goals";
+import { completedFundGoalStatus } from "@/lib/completed-fund-goals";
 import { newRecord } from "@/components/hub/config";
 import RecordEditor from "@/components/hub/record-editor";
 import RecordTable from "@/components/hub/record-table";
@@ -152,6 +155,7 @@ import {
 import "@/pages/practice.css";
 import "@/pages/hub.css";
 import "@/pages/practice-workspace.css";
+import "@/pages/practice-approved.css";
 
 type Mode = "practice" | "sandbox" | "goals";
 type IntegratedTool =
@@ -223,7 +227,7 @@ type PlanAdoptionMetadata = {
 };
 const sections: { id: Section; label: string; active?: Section[] }[] = [
   { id: "summary", label: "Overview" },
-  { id: "sessions", label: "Sessions", active: ["sessions", "retention"] },
+  { id: "sessions", label: "Sessions", active: ["sessions"] },
   { id: "clinicians", label: "Team" },
   { id: "money", label: "Money" },
   { id: "marketing", label: "Growth", active: ["marketing", "rooms"] },
@@ -620,11 +624,11 @@ function MetricTargetBar({
   valueLabel?: string;
 }) {
   const finiteValues = [value, goal, benchmark, limit].filter(
-    (item): item is number => item !== null && item !== undefined && item >= 0,
+    (item): item is number => item !== null && item !== undefined && Number.isFinite(item) && item >= 0,
   );
   const scale = Math.max(max ?? 0, ...finiteValues, 1) * 1.08;
   const pct = (item: number | null | undefined) =>
-    item === null || item === undefined ? null : Math.min(100, (item / scale) * 100);
+    item === null || item === undefined || !Number.isFinite(item) ? null : Math.max(0, Math.min(100, (item / scale) * 100));
   return (
     <div
       className={`pw-target-bar ${lowerIsBetter ? "pw-lower-better" : ""}`}
@@ -682,6 +686,7 @@ export default function PracticeWorkspace() {
     queryFn: getContext,
   });
   const teams = useListBusinessGoals();
+  const legacyScenarioQuery = useListScenarios();
   const [mode, setMode] = useState<Mode>("practice");
   const [integratedTool, setIntegratedTool] = useState<IntegratedTool | null>(
     null,
@@ -731,7 +736,7 @@ export default function PracticeWorkspace() {
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
-  const [marketingTab, setMarketingTab] = useState("campaigns");
+  const [marketingTab, setMarketingTab] = useState("results");
   const [moneyMonthIndex, setMoneyMonthIndex] = useState(0);
   const [summaryMonthDate, setSummaryMonthDate] = useState("");
   const [fillHorizonMonths, setFillHorizonMonths] = useState(6);
@@ -1444,9 +1449,7 @@ export default function PracticeWorkspace() {
     const goal = goalSchema.parse({
       id: crypto.randomUUID(),
       name,
-      amount: 0,
-      date: null,
-      basis: "annual",
+      ...linkedGoalFor(name, current, resolved?.goal).initialDraftDefaults,
       ...normalizedPatch,
     });
     setStagedWorkspace({ ...current, goals: [...current.goals, goal] });
@@ -1494,10 +1497,7 @@ export default function PracticeWorkspace() {
     const goal = fundGoalSchema.parse({
       id: crypto.randomUUID(),
       name,
-      amount: 0,
-      date: null,
-      currentBalance: null,
-      balanceDate: null,
+      ...linkedFundGoalFor(name, current, resolved?.goal).initialDraftDefaults,
       ...normalizedPatch,
     });
     setStagedWorkspace({
@@ -2678,6 +2678,8 @@ export default function PracticeWorkspace() {
           { id: null, label: "Long-term plans" },
           { id: "business-goals", label: "Compensation targets" },
           { id: "compensation-model", label: "Compensation model" },
+          { id: "scenarios", label: "Existing scenarios" },
+          { id: "compare", label: "Scenario comparison" },
         ]
       : sandbox
         ? [{ id: null, label: planningEdit ? "Scenario" : "Working copy" }]
@@ -2706,8 +2708,8 @@ export default function PracticeWorkspace() {
           : null;
   const people = selectedPeople;
   const contributorNames = [
-    ...people.map((person) => person.label),
     "Whole Practice",
+    ...people.map((person) => person.label),
   ];
   const selectedContributorName = contributorNames.includes(sharedContributor)
     ? sharedContributor
@@ -2994,19 +2996,17 @@ export default function PracticeWorkspace() {
     </button>
   );
   const activeCurrentGoals = active(workingWorkspace.goals);
-  const correctedGoal = (goal: Workspace["goals"][number]) => ({
+  const correctedGoal = (goal: LinkedPracticeGoal) => ({
     ...goal,
     metric: ({ "owner pay": "ownerDistributionsPretax", "co-owner pay": "coOwnerSalaryPretax", "desired clinicians": "activeClinicalHeadcount" } as Record<string, Workspace["goals"][number]["metric"]>)[goal.name.toLowerCase()] ?? goal.metric,
   });
   const activeFundGoals = active(workingWorkspace.fundGoals ?? []);
   const findGoal = (name: string) => {
-    const goal = activeCurrentGoals.find((goal) => goal.name.toLowerCase() === name.toLowerCase());
+    const goal = linkedGoalFor(name, workingWorkspace, resolved?.goal).goal;
     return goal ? correctedGoal(goal) : undefined;
   };
   const findFundGoal = (name: string) =>
-    activeFundGoals.find(
-      (goal) => goal.name.toLowerCase() === name.toLowerCase(),
-    );
+    linkedFundGoalFor(name, workingWorkspace, resolved?.goal).goal ?? undefined;
   const coreGoalRows = [
     {
       name: "Owner pay",
@@ -3032,7 +3032,7 @@ export default function PracticeWorkspace() {
     },
   ];
   const fundGoalRows = ["Building Fund", "Emergency Reserve", "Growth Fund"];
-  const goalExpected = (goal: Workspace["goals"][number] | undefined) =>
+  const goalExpected = (goal: LinkedPracticeGoal | undefined) =>
     goal
       ? months.find(
           (row) =>
@@ -3041,19 +3041,19 @@ export default function PracticeWorkspace() {
         )
           ?.values[goal.metric]
       : null;
-  const goalTarget = (goal: Workspace["goals"][number] | undefined) =>
+  const goalTarget = (goal: LinkedPracticeGoal | undefined) =>
     goal ? goal.amount / (goal.metric !== "activeClinicalHeadcount" && goal.basis === "annual" ? 12 : 1) : 0;
   const goalUnit = (metric: Workspace["goals"][number]["metric"]) =>
     metric === "sessions" || metric === "activeClinicalHeadcount" ? "number" : "currency";
   const completedGoalStatus = (
-    goal: Workspace["goals"][number] | undefined,
+    goal: LinkedPracticeGoal | undefined,
     expected: number | null | undefined,
     target: number,
   ) => {
     return completedGoalResult(goal, expected).message;
   };
   const completedGoalResult = (
-    goal: Workspace["goals"][number] | undefined,
+    goal: LinkedPracticeGoal | undefined,
     expected: number | null | undefined,
   ) => evaluateCompletedGoal({
     goal,
@@ -3069,15 +3069,30 @@ export default function PracticeWorkspace() {
       values: row.values,
     })),
   });
-  const achievedGoals = activeCurrentGoals.map(correctedGoal).flatMap((goal) => {
+  const evaluatedCurrentGoals = [...activeCurrentGoals.map(correctedGoal), ...coreGoalRows.flatMap((row) => activeCurrentGoals.some((goal) => goal.name.trim().toLowerCase() === row.name.toLowerCase()) ? [] : findGoal(row.name) ? [findGoal(row.name)!] : [])];
+  const achievedGoals = evaluatedCurrentGoals.flatMap((goal) => {
     const result = completedGoalResult(goal, goalExpected(goal));
     return result.status === "met" ? [{ goal, result }] : [];
   });
+  const completedSessionReview = evaluateCompletedGoal({ goal: { metric: "sessions", amount: 1, basis: "monthly" }, workspace: workingWorkspace, context: modelContext ?? context, asOf: today }).date;
+  const completedReviewEnd = [completedSessionReview, ...recordedFinancialPeriods.filter((row) => row.periodStart && daysInclusive(row.periodStart, row.date) >= 12 && daysInclusive(row.periodStart, row.date) <= 16).map((row) => row.date)].filter((date): date is string => !!date).sort().at(-1) ?? null;
+  const achievedFunds = fundGoalRows.flatMap((name) => {
+    const goal = findFundGoal(name);
+    const result = completedFundGoalStatus(goal, completedReviewEnd);
+    return goal && result.met ? [{ goal, result }] : [];
+  });
   const overviewYear = (summaryMonth?.date ?? today).slice(0, 4);
-  const overviewAnnualMonths = forecast({ ...workingWorkspace, settings: { ...workingWorkspace.settings, forecastStart: overviewYear + "-01-01", horizonMonths: 12 } }, modelContext ?? context);
-  const overviewFinancial = overviewFundingSummary(workingWorkspace, overviewAnnualMonths);
+  const overviewAnnualProjection = buildPracticeProjection(moneyFlowWorkspace ?? workingWorkspace, modelContext ?? context, practiceView, today);
+  const overviewAnnualMonths = forecast({ ...overviewAnnualProjection.projectionWorkspace, settings: { ...overviewAnnualProjection.projectionWorkspace.settings, forecastStart: overviewYear + "-01-01", horizonMonths: 12 } }, modelContext ?? context, [], 1, true, practiceView === "actual" ? {
+    baselineWeeklyByClinician: Object.fromEntries(overviewAnnualProjection.clinicianPace.map((person) => [person.id, person.usedWeekly])),
+  } : {});
+  const overviewFinancial = overviewFundingSummary(workingWorkspace, overviewAnnualMonths, resolved?.goal);
   const overviewFlow = overviewClientFlow(localRetentionState.snapshots, localRetentionState.sameDayVisitOverrides, periodRange.start, periodRange.end, today);
-  const fundProjection = (goal: Workspace["fundGoals"][number] | undefined) => {
+  const overviewSessionEvidence = selectedPeriodSessionSummary((modelContext ?? context).sessions, people.map((person) => person.id), {
+    start: periodRange.start.startsWith("0000-") ? (modelContext ?? context).sessions.map((record) => record.start).sort()[0] ?? today : periodRange.start,
+    end: periodRange.end.startsWith("9999-") ? today : periodRange.end,
+  }, importedSessionOverlay?.attendanceCoverage ?? []);
+  const fundProjection = (goal: LinkedFundGoal | undefined) => {
     return fundProjectionSummary(
       goal,
       activeAllocations,
@@ -3120,7 +3135,7 @@ export default function PracticeWorkspace() {
       : null;
 
   return (
-    <div className="practice-theme pw-app" data-appearance="light">
+    <div className="practice-theme pw-app" data-appearance="dark">
       <aside className="pw-rail">
         <div className="pw-brand">
           <span className="pw-brand-mark">EMC</span>
@@ -3141,10 +3156,13 @@ export default function PracticeWorkspace() {
             <Settings2 />
           </button>
         </div>
-        <nav aria-label="Main navigation">
+        <div className="pw-nav-group-label">Today</div>
+        <nav className="pw-today-navigation" aria-label="Practice sections">
+          {sections.map((s, index) => <button key={s.id} aria-current={mode === "practice" && (section === s.id || s.active?.includes(section)) ? "page" : undefined} disabled={saving || sessionEditing} onClick={() => { if (mode !== "practice") navigate("practice"); if (integratedTool) showTool(null); setSection(s.id); }}><span className="pw-nav-number">{String(index + 1).padStart(2, "0")}</span><span>{s.label}</span></button>)}
+        </nav>
+        <nav className="pw-workspace-navigation" aria-label="Main navigation">
           {(
             [
-              { id: "practice", label: "Today", icon: Building2 },
               { id: "goals", label: "Long Term Goals", icon: Flag },
               { id: "sandbox", label: "Sandbox", icon: FlaskConical },
             ] as const
@@ -3164,6 +3182,7 @@ export default function PracticeWorkspace() {
           ))}
         </nav>
         <div className="pw-rail-bottom">
+          <button disabled={saving || sessionEditing} aria-current={mode === "practice" && section === "retention" ? "page" : undefined} onClick={() => { if (mode !== "practice") navigate("practice"); if (integratedTool) showTool(null); setSection("retention"); }}><Upload />Data &amp; imports</button>
           <button
             disabled={saving || sessionEditing}
             onClick={() => {
@@ -3204,7 +3223,7 @@ export default function PracticeWorkspace() {
                 ? "Sandbox"
                 : mode === "goals"
                   ? "Long Term Goals"
-                  : "Today"}
+                  : sections.find((item) => item.id === section)?.label ?? (section === "retention" ? "Data & imports" : section === "documents" ? "Reporting documents" : "Settings")}
             </h1>
           </div>
           <div className="pw-actions">
@@ -3310,14 +3329,15 @@ export default function PracticeWorkspace() {
             )}
           </div>
         </header>
-        {mode === "practice" && !visibleTool && (
-          <div className="pw-view-bar">
+        {mode === "practice" && !visibleTool && ["summary", "money"].includes(section) && (
+          <details className="pw-view-bar">
+            <summary>Projection basis</summary>
             <span>
               {recordedClinicianCount
                 ? `${recordedClinicianCount} of ${viewProjection?.clinicianPace.length ?? 0} clinicians recorded in the last 8 weeks; gaps use desired sessions`
                 : "No sessions recorded in the last 8 weeks; using desired sessions"}
             </span>
-          </div>
+          </details>
         )}
         {error && (
           <div className="pw-error" role="alert">
@@ -3348,7 +3368,7 @@ export default function PracticeWorkspace() {
         )}
         {(mode !== "goals" || !!draft) && (
           <>
-            {(!sandbox || !visibleTool) && (
+            {sandbox && !visibleTool && (
               <nav
                 className="pw-sections"
                 aria-label={sandbox ? "Sandbox sections" : "Practice sections"}
@@ -3489,7 +3509,7 @@ export default function PracticeWorkspace() {
                     note="Team KPIs use recorded/imported performance when available; pay structure remains editable below."
                   />
                   {heading(
-                    "Clinicians & pay",
+                    "Clinical staff",
                     people.length + " clinicians",
                     <>
                       {sandbox ? (
@@ -3555,6 +3575,12 @@ export default function PracticeWorkspace() {
                       const pace = viewProjection?.clinicianPace.find(
                         (item) => item.id === person.id,
                       );
+                      const personRecords = (modelContext ?? context).sessions.filter((record) => record.clinicianId === person.id);
+                      const sessionEvidenceBounds = {
+                        start: periodRange.start.startsWith("0000-") ? personRecords.map((record) => record.start).sort()[0] ?? today : periodRange.start,
+                        end: periodRange.end.startsWith("9999-") ? today : periodRange.end,
+                      };
+                      const sessionEvidence = selectedPeriodSessionSummary(personRecords, [person.id], sessionEvidenceBounds, importedSessionOverlay?.attendanceCoverage ?? []);
                       const importedActivity = clinicianActivityByName.get(
                         normalizeClinicianName(person.label),
                       );
@@ -3657,11 +3683,9 @@ export default function PracticeWorkspace() {
                           <div className="pw-person-kpis">
                             <div>
                               <span>Sessions</span>
-                              <strong>{fmt(pace?.usedWeekly)} / wk</strong>
+                              <strong>{fmt(sessionEvidence.completedWeekly ?? sessionEvidence.calendarWindowWeeklyEstimate)} / wk</strong>
                               <small>
-                                {pace?.recordedWeekly === null
-                                  ? "desired pace"
-                                  : "recent pace"}
+                                {fmt(sessionEvidence.observedCompleted)} recorded visits · {sessionEvidence.coverageComplete ? "recorded pace" : "calendar-window estimate"}
                               </small>
                             </div>
                             <div>
@@ -3675,7 +3699,7 @@ export default function PracticeWorkspace() {
                               </strong>
                               <small>
                                 {importedActivity
-                                  ? `${fmt(importedActivity.initialRetentionDenominator)} mature starts`
+                                  ? `${fmt(importedActivity.initialRetentionDenominator)} evaluated starts; ${fmt(importedActivity.pendingInitialClients)} pending${importedActivity.coverageVerified ? "" : "; observed, coverage unverified"}`
                                   : "no imported clinician data"}
                               </small>
                             </div>
@@ -3697,11 +3721,12 @@ export default function PracticeWorkspace() {
                               <strong>{fmt(consultMetric?.conversionRate, "percent")}</strong>
                               <small>
                                 {consultMetric
-                                  ? `${fmt(consultMetric.converted)} confirmed; ${fmt(consultMetric.candidateConversions)} candidate`
+                                  ? `${fmt(consultMetric.converted)} confirmed; ${fmt(consultMetric.pending)} pending${consultConversionSummary.coverageVerified ? "" : "; observed, coverage unverified"}`
                                   : "no imported PHONE journeys"}
                               </small>
                             </div>
                           </div>
+                          <details className="pw-clinician-operating-details"><summary>Clinician details</summary>
                           <div className="pw-number-grid">
                             <NumberField
                               label={person.label + " session fee"}
@@ -3894,6 +3919,7 @@ export default function PracticeWorkspace() {
                                 </small>
                               )}
                           </footer>
+                          </details>
                         </article>
                       );
                     })}
@@ -4056,13 +4082,13 @@ export default function PracticeWorkspace() {
               )}
               {section === "sessions" && (
                 <>
-                  <SharedPeriodControls
+                  {sessionMetricView !== "sessions" && <SharedPeriodControls
                     period={sharedPeriod}
                     custom={customPeriod}
                     onPeriod={setSharedPeriod}
                     onCustom={setCustomPeriod}
-                    note="Reporting period carries across Sessions, Retention, and Attrition."
-                  />
+                    note=""
+                  />}
                   <div
                     className="pw-segmented"
                     role="tablist"
@@ -4070,7 +4096,7 @@ export default function PracticeWorkspace() {
                   >
                     {(
                       [
-                        ["sessions", "Sessions"],
+                        ["sessions", "Session trends"],
                         ["retention", "Retention"],
                         ["attrition", "Attrition"],
                       ] as const
@@ -4087,7 +4113,7 @@ export default function PracticeWorkspace() {
                   </div>
                   {importedSessionOverlay &&
                     importedSessionOverlay.derivedSessions.length > 0 && (
-                      <p className="pw-note">
+                      <details className="pw-session-import-details"><summary>Import details</summary><p className="pw-note">
                         Saved imports are contributing{" "}
                         {importedSessionOverlay.diagnostic.rawAttendedRows.toLocaleString()}{" "}
                         attended rows,{" "}
@@ -4116,7 +4142,7 @@ export default function PracticeWorkspace() {
                         replaced stale aggregate manual totals for covered
                         dates; uncovered days remain unknown instead of being
                         prorated.
-                      </p>
+                      </p></details>
                     )}
                   {importedSessionOverlay &&
                     (importedSessionOverlay.diagnostic.missingClinicianLabels
@@ -4137,10 +4163,6 @@ export default function PracticeWorkspace() {
                     )}
                   {sessionMetricView === "sessions" ? (
                     <>
-                    <div className="pw-contributor-tabs" role="group" aria-label="Sessions contributor">
-                      {contributorNames.map((name) => <button key={name} aria-pressed={selectedContributorName === name} onClick={() => { setSharedContributor(name); setCompareWholePractice(false); }}>{name}</button>)}
-                      {selectedContributorName !== "Whole Practice" && <button aria-pressed={compareWholePractice} onClick={() => setCompareWholePractice((value) => !value)}>Compare with Whole Practice</button>}
-                    </div>
                     <WorkspaceSessions
                       key={mode + "-" + workspace.settings.teamId}
                       context={context}
@@ -4155,6 +4177,12 @@ export default function PracticeWorkspace() {
                       contributorId={selectedContributor?.id ?? null}
                       compareWholePractice={compareWholePractice && !!selectedContributor}
                       requiredWeeklySessions={requiredContributorWeekly}
+                      attendanceCoverage={importedSessionOverlay?.attendanceCoverage}
+                      attendanceObservedSpans={importedSessionOverlay?.attendanceObservedSpans}
+                      controls={<><SharedPeriodControls period={sharedPeriod} custom={customPeriod} onPeriod={setSharedPeriod} onCustom={setCustomPeriod} note="" /><div className="pw-contributor-tabs" role="group" aria-label="Sessions contributor">
+                        {contributorNames.map((name) => <button key={name} aria-pressed={selectedContributorName === name} onClick={() => { setSharedContributor(name); setCompareWholePractice(false); }}>{name}</button>)}
+                        {selectedContributorName !== "Whole Practice" && <button aria-pressed={compareWholePractice} onClick={() => setCompareWholePractice((value) => !value)}>Compare with Whole Practice</button>}
+                      </div></>}
                       onSaved={async () => {
                         await contextQuery.refetch();
                         void cache.invalidateQueries({
@@ -4252,10 +4280,13 @@ export default function PracticeWorkspace() {
                                 : clientActivityEstimate.initialRetentionRate *
                                   100
                             }
-                            goal={75}
+                            goal={null}
+                            valueLabel="Observed"
                             max={100}
                           />
                           <p className="pw-note">
+                            {(selectedContributorName === "Whole Practice" ? !clientActivityEstimate?.coverageVerified : !contributorActivity?.coverageVerified) && "Observed rate; report coverage is unverified. "}
+                            {fmt(selectedContributorName === "Whole Practice" ? clientActivityEstimate?.immatureClientPairsExcluded : contributorActivity?.pendingInitialClients)} pending starts. {" "}
                             Retention uses three attended treatment sessions,
                             the agreed 28-day initial gap, excludes PHONE
                             consults, and excludes pending immature starts from
@@ -4396,7 +4427,7 @@ export default function PracticeWorkspace() {
                     role="tablist"
                     aria-label="Marketing view"
                   >
-                    {["campaigns", "results"].map((t) => (
+                    {["results", "campaigns"].map((t) => (
                       <button
                         key={t}
                         role="tab"
@@ -4404,8 +4435,8 @@ export default function PracticeWorkspace() {
                         onClick={() => setMarketingTab(t)}
                       >
                         {t === "campaigns"
-                          ? "Campaigns & estimates"
-                          : "Lead flow"}
+                          ? "Leads & campaigns"
+                          : "Consultations"}
                       </button>
                     ))}
                     <button
@@ -4808,9 +4839,11 @@ export default function PracticeWorkspace() {
                               ? null
                               : consultConversionSummary.practice.conversionRate
                           }
-                          goal={80}
+                          goal={null}
+                          valueLabel="Observed"
                           max={100}
                         />
+                        {contributorConsult && !consultConversionSummary.coverageVerified && <p className="pw-note">Observed conversions; report coverage is unverified. {fmt(contributorConsult.pending)} journeys remain pending.</p>}
                         {compareWholePractice && selectedContributorName !== "Whole Practice" && (
                           <div className="pw-comparison" aria-label="Whole Practice conversion comparison">
                             <strong>Whole Practice</strong>
@@ -5792,7 +5825,7 @@ export default function PracticeWorkspace() {
                         {detailButton("transactions", "Recorded expenses")}
                         <button
                           className="pw-text-button"
-                          onClick={() => setSection("documents")}
+                          onClick={() => setSection("retention")}
                         >
                           Import a budget
                           <ChevronRight />
@@ -6925,11 +6958,12 @@ export default function PracticeWorkspace() {
               {section === "summary" && (
                 <>
                   {achievedGoals.map(({ goal, result }) => (
-                    <div className="pw-achievement-alert" role="status" key={goal.id}>
+                    <div className="pw-achievement-alert" role="status" key={goal.id ?? goal.name}>
                       <strong>{goal.name} goal met</strong>
                       <p>{result.message} The goal remains saved until you change it.</p>
                     </div>
                   ))}
+                  {achievedFunds.map(({ goal, result }) => <div className="pw-achievement-alert" role="status" key={"fund:" + goal.name}><strong>{goal.name} goal met</strong><p>{result.message}</p></div>)}
                   <SharedPeriodControls
                     period={sharedPeriod}
                     custom={customPeriod}
@@ -7028,13 +7062,34 @@ export default function PracticeWorkspace() {
                       </div>
                       <button
                         className="pw-button"
-                        onClick={() => setSection("documents")}
+                        onClick={() => setSection("retention")}
                       >
                         Open Imports
                         <ChevronRight />
                       </button>
                     </section>
                   )}
+                  <div className="pw-overview-primary-grid">
+                    <section aria-label="Overview monthly surplus">
+                      <h3>Monthly surplus</h3><p>{monthLabel(summaryMonth?.date ?? today)} · projection</p>
+                      <div className="pw-metric-hero"><strong>{money(summaryMonth?.values.profit)}</strong><span>After clinician pay and practice costs</span></div>
+                      <button className="pw-button" onClick={() => setSection("money")}>Money<ChevronRight /></button>
+                      <details><summary>Details</summary><p>Projected practice profit, not collected cash or owner take-home. Clinical revenue remains business revenue.</p></details>
+                    </section>
+                    <section aria-label="Overview session pace">
+                      <h3>Sessions / week</h3><p>{sharedPeriodLabel(sharedPeriod)} · recorded visits</p>
+                      <div className="pw-metric-hero"><strong>{fmt(overviewSessionEvidence.completedWeekly ?? overviewSessionEvidence.calendarWindowWeeklyEstimate)}</strong><span>{overviewSessionEvidence.coverageComplete ? "Recorded calendar-week pace" : "Calendar-window estimate · coverage unknown"}</span></div>
+                      <p>{fmt(overviewSessionEvidence.observedCompleted)} observed sessions</p>
+                      <button className="pw-button" onClick={() => { setSessionMetricView("sessions"); setSection("sessions"); }}>Sessions<ChevronRight /></button>
+                      <details><summary>Details</summary><p>Observed visits remain visible. Unverified missing dates are not recorded zeros and cannot establish achievement.</p></details>
+                    </section>
+                    <section className="pw-overview-client-flow" aria-label="Overview client growth">
+                      <h3>Client growth</h3><p>{sharedPeriodLabel(sharedPeriod)} · recorded treatment history</p>
+                      {[["New treatment starts", overviewFlow.starts, "starts"], ["Retained-client departures", overviewFlow.departures, "departures"]].map(([label, value, kind]) => <div className="pw-overview-flow-row" key={String(kind)}><span>{label}</span><strong>{fmt(value as number | null)}</strong><div><i className={String(kind)} style={{ width: `${value === null ? 0 : Number(value) / Math.max(1, overviewFlow.starts ?? 0, overviewFlow.departures ?? 0) * 100}%` }} /></div></div>)}
+                      <button className="pw-button" onClick={() => { setSessionMetricView("attrition"); setSection("sessions"); }}>Retention &amp; attrition<ChevronRight /></button>
+                      <details><summary>Details</summary><p>Starts and departures use different maturity cutoffs and are not subtracted into a false net-growth figure. Mature departures require 90 days of covered follow-up after three treatment sessions; later returns are handled separately.</p></details>
+                    </section>
+                  </div>
                   <div className="pw-overview-composition">
                     <section aria-label="Overview financial summary">
                       <h3>Financial summary</h3>
@@ -7062,11 +7117,10 @@ export default function PracticeWorkspace() {
                       {overviewFinancial.missingAmounts > 0 && <p className="pw-note">{overviewFinancial.missingAmounts} funding amounts remain unknown. Known annual subtotal {money(overviewFinancial.knownSubtotal)}.</p>}
                       <details><summary>Funding details</summary><p>Owner distribution target {money(overviewFinancial.ownerAnnual)}; additional co-owner salary need {money(overviewFinancial.salaryGap)} after {money(overviewFinancial.includedSalaryAnnual)} matching gross salary already included in costs; retained profit target {money(overviewFinancial.retainedAnnual)}; projected fund contributions {money(overviewFinancial.fundsAnnual)}. Total fund-balance goals, overhead already deducted, and headcount are not added as recurring costs. This projection cannot establish achievement.</p></details>
                     </section>
-                    <section className="pw-overview-client-flow" aria-label="Overview client growth">
-                      <h3>Client growth</h3><p>{sharedPeriodLabel(sharedPeriod)} · recorded treatment history</p>
-                      {[["New treatment starts", overviewFlow.starts, "starts"], ["Retained-client departures", overviewFlow.departures, "departures"]].map(([label, value, kind]) => <div className="pw-overview-flow-row" key={String(kind)}><span>{label}</span><strong>{fmt(value as number | null)}</strong><div><i className={String(kind)} style={{ width: `${value === null ? 0 : Number(value) / Math.max(1, overviewFlow.starts ?? 0, overviewFlow.departures ?? 0) * 100}%` }} /></div></div>)}
-                      <details><summary>Client flow details</summary><p>Starts are unique clients first observed after imported coverage begins; {overviewFlow.leftCensoredStarts} starts on the coverage boundary are excluded as uncertain. Departures use the mature 90-day ending definition through {overviewFlow.through ?? "unknown coverage"}, after three treatment sessions, with later-return handling. The two counts have different observation cutoffs and are not subtracted into a false net-growth figure.</p></details>
-                    </section>
+                  </div>
+                  <div className="pw-overview-clinical-grid">
+                    <section aria-label="Overview initial retention"><h3>Initial retention</h3><p>Recorded treatment history · {sharedPeriodLabel(sharedPeriod)}</p><div className="pw-metric-hero"><strong>{percent(clientActivityEstimate?.initialRetentionRate)}</strong></div><p>{fmt(clientActivityEstimate?.retainedClientPairs)} retained / {fmt(clientActivityEstimate?.initialRetentionDenominator)} evaluated starts · {fmt(clientActivityEstimate?.immatureClientPairsExcluded)} pending{clientActivityEstimate?.coverageVerified ? "" : " · observed, coverage unverified"}</p><button className="pw-button" onClick={() => { setSessionMetricView("retention"); setSection("sessions"); }}>Retention<ChevronRight /></button><details><summary>Details</summary><p>Three treatment sessions with initial gaps of no more than 28 days. PHONE consultations are excluded.</p></details></section>
+                    <section aria-label="Overview consult conversion"><h3>Consult close rate</h3><p>{sharedPeriodLabel(sharedPeriod)} · one calendar month</p><div className="pw-metric-hero"><strong>{fmt(consultConversionSummary.practice.conversionRate, "percent")}</strong></div><p>{fmt(consultConversionSummary.practice.converted)} treatment starts / {fmt(consultConversionSummary.practice.evaluated)} evaluated journeys · {fmt(consultConversionSummary.practice.pending)} pending{consultConversionSummary.coverageVerified ? "" : " · observed, coverage unverified"}</p><button className="pw-button" onClick={() => { setMarketingTab("results"); setSection("marketing"); }}>Growth<ChevronRight /></button><details><summary>Details</summary><p>The actual closer receives credit; internal referrals do not penalize the referring clinician. Each practice conversion is counted once.</p></details></section>
                   </div>
                   <details className="pw-overview-existing-details"><summary>Forecast and historical details</summary>
                   <div className="pw-summary">
@@ -7724,7 +7778,7 @@ export default function PracticeWorkspace() {
                               <p>{row.caption}</p>
                             </div>
                             <span className="pw-tag">
-                              {goal ? "Saved" : "Blank assumed 0"}
+                              {linkedGoalFor(row.name, workingWorkspace, resolved?.goal).origin === "legacy" ? `Linked: ${resolved?.goal?.name}` : goal ? "Saved" : "Not set"}
                             </span>
                           </div>
                           <div className="pw-edit-grid">
@@ -7997,11 +8051,18 @@ export default function PracticeWorkspace() {
               <div>
                 <h2>Saved scenarios</h2>
                 <p>
-                  {goals.length} saved{" "}
-                  {goals.length === 1 ? "version" : "versions"}
+                {goals.length} Practice workspace {goals.length === 1 ? "version" : "versions"} · {Array.isArray(legacyScenarioQuery.data) ? legacyScenarioQuery.data.length : 0} existing compensation scenarios
                 </p>
               </div>
             </div>
+            <section className="pw-legacy-plans" aria-label="Existing compensation plans">
+              <h3>Existing compensation plans</h3>
+              {legacyScenarioQuery.isError && <p className="pw-error">Existing scenarios could not be loaded. Your saved records have not been changed.</p>}
+              <div className="pw-edit-list">
+                {(Array.isArray(legacyScenarioQuery.data) ? legacyScenarioQuery.data : []).map((scenario) => <article className="pw-edit-item" key={scenario.id}><h3>{scenario.name}</h3><p>{teams.data?.find((team) => team.id === scenario.businessGoalId)?.name ?? "Existing compensation scenario"}</p>{scenario.notes && <p>{scenario.notes}</p>}<button className="pw-text-button" onClick={() => showTool("scenarios")}>Review existing scenario <ChevronRight /></button></article>)}
+              </div>
+              <details><summary>Existing compensation targets</summary>{(teams.data ?? []).map((team) => <div className="pw-overview-total" key={team.id}><span>{team.name}</span><strong>{money(team.ownerPayGoal)} annual owner target · {fmt(team.desiredCliniciansCount)} clinicians</strong></div>)}<button className="pw-text-button" onClick={() => showTool("business-goals")}>Review compensation targets <ChevronRight /></button></details>
+            </section>
             <section className="pw-focused-plans" aria-label="Focused plan options">
               <div className="pw-section-heading">
                 <div>

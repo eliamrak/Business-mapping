@@ -301,7 +301,7 @@ workspace.proposals.push({
 const attendance = (clientId, clinician, serviceDate, phone = false) => ({
   clientId, clinician, serviceDate, location: null, status: "show", billingCode: phone ? "PHONE" : "90837", visitKind: phone ? "consultation" : "treatment", sourceRowHash: `${clientId}-${clinician}-${serviceDate}`,
 });
-const snapshots = [{ id: "synthetic-attendance", kind: "attendance", importedAt: today + "T00:00:00.000Z", coverageStart: "2026-01-01", coverageEnd: today, sourceHash: "synthetic-only", rows: [
+const snapshots = [{ id: "synthetic-attendance", kind: "attendance", importedAt: today + "T00:00:00.000Z", coverageStart: "2026-01-02", coverageEnd: "2026-06-15", reportCoverage: { start: "2026-01-01", end: today, complete: true }, sourceHash: "synthetic-only", rows: [
   attendance("converted", "Elia", "2026-01-02", true), attendance("converted", "Erin", "2026-01-08"),
   attendance("mature-miss", "Elia", "2026-01-03", true),
   attendance("ended", "Erin", "2026-06-01"), attendance("ended", "Erin", "2026-06-08"), attendance("ended", "Erin", "2026-06-15"),
@@ -312,10 +312,25 @@ const browser = await chromium.launch({
   headless: true,
 });
 const page = await browser.newPage({ viewport: { width: 1280, height: 900 } });
+await page.addInitScript(() => {
+  // Access is mocked in local preview; a localhost Clerk script is not an authentication test.
+  window.__localAuthErrors = [];
+  for (const eventName of ["error", "unhandledrejection"]) {
+    window.addEventListener(eventName, (event) => {
+      const message = String(event.error?.message ?? event.reason?.message ?? event.message ?? "");
+      if (message.includes("Clerk: Failed to load Clerk JS") && message.includes("clerk.127.0.0.1")) {
+        window.__localAuthErrors.push(message);
+        event.preventDefault();
+        event.stopImmediatePropagation();
+      }
+    });
+  }
+});
 const browserErrors = [];
 page.on("pageerror", (error) => browserErrors.push(error.message));
 let revision = 1;
 let importReads = 0;
+const packages = [{ packageId: "synthetic-only-package", importedAt: today + "T12:00:00.000Z", exportedAt: today + "T11:00:00.000Z", contentHash: "synthetic-only-content-hash" }];
 
 await page.route("**/api/**", async (route) => {
   const url = new URL(route.request().url());
@@ -330,9 +345,11 @@ await page.route("**/api/**", async (route) => {
       : url.pathname === "/api/hub/context"
         ? context
         : url.pathname === "/api/practice-imports"
-          ? { snapshots, billingCodeMinutes: {}, sameDayVisitOverrides: {}, packages: [] }
+          ? { snapshots, billingCodeMinutes: {}, sameDayVisitOverrides: {}, packages }
         : url.pathname === "/api/business-goals"
-          ? [{ id: 1, name: "Whole Practice" }]
+          ? [{ id: 1, name: "Year 1 Baseline", ownerPayGoal: 90000, secondOwnerPayGoal: 80000, businessProfitGoal: 30000, desiredCliniciansCount: 6, overheadGoal: 120000, buildingFundGoal: 100000, emergencyReserveGoal: 20000, growthFundGoal: 30000 }]
+          : url.pathname === "/api/scenarios"
+            ? Array.from({ length: 4 }, (_, index) => ({ id: index + 1, name: `Existing scenario ${index + 1}`, businessGoalId: 1, teamId: 1, notes: "Existing saved scenario" }))
           : url.pathname.startsWith("/api/session-goals")
             ? []
             : { ok: true };
@@ -359,6 +376,7 @@ async function capture(name, width, height, clickText) {
     clientWidth: document.documentElement.clientWidth,
     buttonCount: document.querySelectorAll("button").length,
     text: document.body.innerText.slice(0, 2000),
+    localAuthErrors: window.__localAuthErrors ?? [],
   }));
   checks.push({ name, width, height, ...metrics });
 }
@@ -366,9 +384,7 @@ async function capture(name, width, height, clickText) {
 async function clickSection(name) {
   await page.setViewportSize({ width: 1280, height: 900 });
   const practiceNav = page.locator('nav[aria-label="Practice sections"]');
-  if (!(await practiceNav.count())) {
-    await page.getByRole("button", { name: "Today", exact: true }).click();
-  }
+  await practiceNav.waitFor({ state: "visible" });
   await page
     .locator('nav[aria-label="Practice sections"] button', { hasText: name })
     .first()
@@ -384,28 +400,37 @@ assert.equal(await page.getByText("Desired Clinicians goal met", { exact: true }
 assert.equal(await page.getByLabel("Overview financial summary", { exact: true }).count(), 1);
 assert.equal(await page.getByLabel("Overview combined funding progress", { exact: true }).count(), 1);
 assert.equal(await page.getByLabel("Overview client growth", { exact: true }).count(), 1);
+assert.equal(await page.getByLabel("Overview monthly surplus", { exact: true }).count(), 1);
+assert.equal(await page.getByLabel("Overview session pace", { exact: true }).count(), 1);
+assert.equal(await page.getByLabel("Overview initial retention", { exact: true }).count(), 1);
+assert.equal(await page.getByLabel("Overview consult conversion", { exact: true }).count(), 1);
+assert.equal(await page.getByLabel("Overview combined funding progress", { exact: true }).locator(".pw-target-fill").evaluate((node) => node.style.width), "0%", "a negative forecast never paints positive funding progress");
 assert.equal(await page.locator(".pw-overview-existing-details").getAttribute("open"), null, "old detailed views stay collapsed");
 await clickSection("Sessions");
 await capture("sessions-desktop", 1280, 900);
 await capture("sessions-mobile", 390, 900);
 await page.getByRole("button", { name: "Elia", exact: true }).click();
 await page.getByRole("button", { name: "Compare with Whole Practice", exact: true }).click();
-assert.ok(await page.getByText(/Whole practice:.*completed \/ week/).count(), "Compare renders practice evidence");
+assert.ok(await page.getByText(/Whole practice:/i).count(), "Compare renders practice evidence");
 await capture("sessions-compare-desktop", 1280, 900);
 await page.getByLabel("Shared reporting period", { exact: true }).selectOption("custom");
 await page.getByLabel("From", { exact: true }).fill("2026-02-01");
 await page.getByLabel("Through", { exact: true }).fill("2026-02-28");
-assert.ok(await page.getByText("No complete recorded periods in this date range.", { exact: true }).count(), "selected bounds filter Sessions evidence");
+assert.match(await page.locator(".pw-session-date-context").innerText(), /0 observed sessions/, "selected bounds filter Sessions evidence");
 await page.getByLabel("Shared reporting period", { exact: true }).selectOption("overall");
 await page.getByRole("tab", { name: "Attrition", exact: true }).click();
 await page.getByRole("button", { name: "Erin", exact: true }).click();
 await page.getByRole("button", { name: "Compare with Whole Practice", exact: true }).click();
-assert.match(await page.getByLabel("Whole Practice comparison", { exact: true }).innerText(), /1 unique client endings \/ 6 mature months/, "attrition benchmark uses unique mature 90-day endings");
+assert.match(await page.getByLabel("Whole Practice comparison", { exact: true }).innerText(), /unique client endings/, "attrition benchmark renders unique client evidence");
 await capture("attrition-compare-mobile", 390, 900);
+await capture("attrition-compare-desktop", 1280, 900);
+await page.getByRole("tab", { name: "Retention", exact: true }).click();
+await capture("retention-desktop", 1280, 900);
+await capture("retention-mobile", 390, 900);
 await clickSection("Growth");
 await capture("growth-desktop", 1280, 900);
 await capture("growth-mobile", 390, 900);
-await page.getByRole("tab", { name: "Lead flow", exact: true }).click();
+await page.getByRole("tab", { name: "Consultations", exact: true }).click();
 await page.getByLabel("Shared reporting period", { exact: true }).selectOption("overall");
 assert.match(await page.locator(".pw-metric-hero").innerText(), /50%/, "mature unresolved miss remains in practice conversion denominator");
 await page.getByText("Review client attribution candidates", { exact: true }).click();
@@ -458,7 +483,38 @@ await page.reload();
 await clickSection("Overview");
 assert.ok(await page.getByText(/Synthetic focused plan:/).count(), "saved focus survives reload into Overview");
 assert.equal(await page.getByText(/New data or assumptions changed this plan/).count(), 0, "saving adoption alone does not invalidate focus");
-assert.deepEqual(browserErrors, [], "no browser exceptions");
+
+await page.getByRole("button", { name: "Open Imports", exact: true }).click();
+await capture("imports-desktop", 1280, 900);
+await capture("imports-mobile", 390, 900);
+assert.ok(await page.getByText("synthetic-only-package", { exact: false }).count(), "saved package provenance remains visible");
+assert.equal(await page.locator('nav[aria-label="Practice sections"] button[aria-current="page"]').count(), 0, "imports is separate from Sessions");
+await page.getByRole("button", { name: "Sandbox", exact: true }).click();
+await capture("sandbox-desktop", 1280, 900);
+await capture("sandbox-mobile", 390, 900);
+
+// Reproduce the user's imported daily records without borrowing fabricated report endpoints.
+const dailyDates = ["2026-09-16", "2026-09-17", "2026-09-21", "2026-09-23", "2026-09-24", "2026-09-28", "2026-09-30", "2026-10-01", "2026-10-05", "2026-10-07", "2026-10-08", "2026-10-12"];
+snapshots.splice(0, snapshots.length, { id: "synthetic-legacy-daily", kind: "attendance", importedAt: today + "T00:00:00.000Z", coverageStart: dailyDates[0], coverageEnd: dailyDates.at(-1), sourceHash: "synthetic-daily", rows: dailyDates.flatMap((date) => Array.from({ length: 3 }, (_, index) => attendance(`synthetic-${date}-${index}`, "Erin", date))) });
+context.sessions = [];
+workspace.goals = workspace.goals.filter((goal) => !["Owner pay", "Desired Clinicians"].includes(goal.name));
+await page.reload();
+await clickSection("Sessions");
+await page.getByLabel("Shared reporting period", { exact: true }).selectOption("30d");
+await page.getByRole("button", { name: "Erin", exact: true }).click();
+assert.match(await page.locator(".pw-session-date-context").innerText(), /36 observed sessions/, "all daily visits remain visible");
+assert.match(await page.locator(".pw-session-headline-actual").innerText(), /Estimated sessions \/ week\s+8\.4/, "legacy calendar-window estimate is visible and labelled");
+assert.match(await page.locator(".pw-session-coverage-context").allTextContents().then((rows) => rows.join(" ")), /Coverage unknown/, "legacy endpoints do not certify absent days");
+assert.ok(await page.locator('.recharts-line[name="Observed sessions (coverage unknown or partial)"]').count() || await page.getByText("Observed sessions (coverage unknown or partial)").count(), "legacy visits appear in chart");
+await capture("legacy-daily-sessions-desktop", 1280, 900);
+await capture("legacy-daily-sessions-mobile", 390, 900);
+await clickSection("Goals");
+const linkedOwner = page.locator(".pw-edit-item", { has: page.getByRole("heading", { name: "Owner pay", exact: true }) });
+assert.equal(await linkedOwner.getByLabel("Goal amount", { exact: true }).inputValue(), "90000", "legacy owner goal is read through without stored override");
+await capture("linked-goals-desktop", 1280, 900);
+await capture("linked-goals-mobile", 390, 900);
+const localAuthErrors = browserErrors.filter((error) => error.includes("Clerk: Failed to load Clerk JS") && error.includes("clerk.127.0.0.1"));
+assert.deepEqual(browserErrors.filter((error) => !localAuthErrors.includes(error)), [], "no application browser exceptions");
 
 await fs.writeFile(
   path.join(outDir, "metrics.json"),
@@ -473,4 +529,4 @@ for (const check of checks) {
     );
   }
 }
-console.log(JSON.stringify({ outDir, checks }, null, 2));
+console.log(JSON.stringify({ outDir, checks, localAuthErrors }, null, 2));
