@@ -863,6 +863,33 @@
 .pw-fund-chart-row > div:first-child span {
   overflow-wrap: anywhere;
 }
+.pw-fund-chart-row {
+  grid-template-columns: minmax(0, 1fr);
+  padding-bottom: 18px;
+  border-bottom: 1px solid #dfe7e1;
+}
+.pw-dated-fund-chart {
+  width: 100%;
+  min-width: 0;
+  height: 240px;
+}
+.pw-overhead-projection i {
+  background: transparent;
+  border-top: 3px dotted #287f98;
+}
+.pw-comparison,
+.pw-focus-alert,
+.pw-achievement-alert {
+  margin: 14px 0;
+  padding: 12px 0;
+  border-top: 2px solid #27824b;
+  color: #26392e;
+}
+.pw-comparison p,
+.pw-focus-alert p,
+.pw-achievement-alert p {
+  margin: 6px 0 0;
+}
 .pw-goal-editor {
   display: grid;
   gap: 18px;

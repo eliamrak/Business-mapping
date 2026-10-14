@@ -109,7 +109,7 @@ export type LocalRetentionWorkspaceState = {
   setPending: Dispatch<SetStateAction<PendingLocalSnapshot | null>>;
 };
 
-export function useLocalRetentionWorkspaceState(): LocalRetentionWorkspaceState {
+export function useLocalRetentionWorkspaceState(enabled = true): LocalRetentionWorkspaceState {
   const [snapshots, setSnapshots] = useState<LocalSnapshot[]>([]);
   const [billingCodeMinutes, setBillingCodeMinutes] =
     useState<BillingCodeMinutes>({});
@@ -123,6 +123,27 @@ export function useLocalRetentionWorkspaceState(): LocalRetentionWorkspaceState 
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   const [pending, setPending] = useState<PendingLocalSnapshot | null>(null);
+
+  useEffect(() => {
+    if (!enabled) return;
+    let cancelled = false;
+    setBusy(true);
+    getStoredHistory()
+      .then((history) => {
+        if (cancelled) return;
+        setSnapshots(history.snapshots);
+        setBillingCodeMinutes(history.billingCodeMinutes);
+        setSameDayVisitOverrides(history.sameDayVisitOverrides ?? {});
+        setStatus(history.snapshots.length
+          ? `Loaded ${history.snapshots.length} saved converted snapshots from practice storage.`
+          : "No converted packages imported yet.");
+      })
+      .catch((cause) => {
+        if (!cancelled) setError(cause instanceof Error ? cause.message : "Saved converted history could not be loaded.");
+      })
+      .finally(() => { if (!cancelled) setBusy(false); });
+    return () => { cancelled = true; };
+  }, [enabled]);
 
   return {
     snapshots,
@@ -218,7 +239,7 @@ export default function LocalRetentionWorkspace({
   workspaceState?: LocalRetentionWorkspaceState;
   today?: string;
 }) {
-  const ownedState = useLocalRetentionWorkspaceState();
+  const ownedState = useLocalRetentionWorkspaceState(!workspaceState);
   const {
     snapshots,
     setSnapshots,
@@ -280,44 +301,6 @@ export default function LocalRetentionWorkspace({
     () => sourceCoverage(snapshots, "billing"),
     [snapshots],
   );
-
-  useEffect(() => {
-    let cancelled = false;
-    setBusy(true);
-    getStoredHistory()
-      .then((history) => {
-        if (cancelled) return;
-        setSnapshots(history.snapshots);
-        setBillingCodeMinutes(history.billingCodeMinutes);
-        setSameDayVisitOverrides(history.sameDayVisitOverrides ?? {});
-        setStatus(
-          history.snapshots.length
-            ? `Loaded ${history.snapshots.length} saved converted snapshots from practice storage.`
-            : "No converted packages imported yet.",
-        );
-      })
-      .catch((cause) => {
-        if (cancelled) return;
-        setError(
-          cause instanceof Error
-            ? cause.message
-            : "Saved converted history could not be loaded.",
-        );
-      })
-      .finally(() => {
-        if (!cancelled) setBusy(false);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [
-    setBillingCodeMinutes,
-    setBusy,
-    setError,
-    setSameDayVisitOverrides,
-    setSnapshots,
-    setStatus,
-  ]);
 
   async function importPackage(file: File | undefined) {
     if (!file) return;

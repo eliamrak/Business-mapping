@@ -17,6 +17,7 @@ import {
   fundGoalSchema,
   consultAttributionOverrideSchema,
   proposalSchema,
+  focusedPlanAdoptionSchema,
   customKpiSchema,
   ruleSchema,
   eventFields,
@@ -96,6 +97,7 @@ export const schemas = {
   fundGoals: fundGoalSchema,
   consultAttributionOverrides: consultAttributionOverrideSchema,
   proposals: proposalSchema,
+  focusedPlanAdoptions: focusedPlanAdoptionSchema,
   kpis: customKpiSchema,
   rules: ruleSchema,
 };
@@ -447,6 +449,7 @@ export const fields: Record<Collection, Field[]> = {
     notes,
   ],
   proposals: [name, notes],
+  focusedPlanAdoptions: [name, ref("proposalId", "Proposal", "proposals"), notes],
   kpis: [
     name,
     { key: "key", label: "Metric key" },
@@ -499,6 +502,7 @@ export const labels: Record<Collection, string> = {
   fundGoals: "Fund goals",
   consultAttributionOverrides: "Consult attribution corrections",
   proposals: "Proposals",
+  focusedPlanAdoptions: "Focused plan adoptions",
   kpis: "Custom KPIs",
   rules: "Decision rules",
 };
@@ -580,6 +584,14 @@ export function newRecord(
       clinicianName: null,
     },
     proposals: { changes: [] },
+    focusedPlanAdoptions: {
+      proposalId: first("proposals"),
+      adoptedAt: new Date().toISOString(),
+      adoptedRevision: 0,
+      focusKpis: ["sessions"],
+      highlights: [],
+      assumptionSignature: "",
+    },
     kpis: {
       key: "",
       left: "revenue",

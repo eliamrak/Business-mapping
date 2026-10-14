@@ -412,6 +412,26 @@ export const proposalSchema = z.object({
   baseline: z.record(z.string(), z.unknown()).nullable().default(null),
 });
 
+export const focusedPlanAdoptionSchema = z
+  .object({
+    ...named,
+    proposalId: id,
+    adoptedAt: z.iso.datetime({ offset: true }),
+    adoptedRevision: z.number().int().min(0).max(Number.MAX_SAFE_INTEGER),
+    focusKpis: z.array(z.string().trim().min(1).max(80)).min(1).max(2),
+    highlights: z.array(z.string().trim().min(1).max(6000)).max(50),
+    assumptionSignature: z.string().min(1).max(200000),
+  })
+  .strict()
+  .superRefine((adoption, ctx) => {
+    if (new Set(adoption.focusKpis).size !== adoption.focusKpis.length)
+      ctx.addIssue({
+        code: "custom",
+        path: ["focusKpis"],
+        message: "Choose each focus KPI once.",
+      });
+  });
+
 export const operations = [
   "add",
   "subtract",
@@ -668,6 +688,7 @@ export const workspaceSchema = z
       .max(5000)
       .default(() => []),
     proposals: z.array(proposalSchema).max(1000),
+    focusedPlanAdoptions: z.array(focusedPlanAdoptionSchema).max(5000).default(() => []),
     kpis: z.array(customKpiSchema).max(1000),
     rules: z.array(ruleSchema).max(1000),
   })
@@ -687,6 +708,10 @@ export const workspaceSchema = z
     }
     const exists = (rows: { id: string }[], value: string | null) =>
       value === null || rows.some((r) => r.id === value);
+    data.focusedPlanAdoptions.forEach((adoption, i) => {
+      if (!exists(data.proposals, adoption.proposalId))
+        issue(["focusedPlanAdoptions", i, "proposalId"], "Choose an existing proposal.");
+    });
     data.categories.forEach((c, i) => {
       if (!exists(data.categories, c.parentId))
         issue(["categories", i, "parentId"], "Parent category not found.");
@@ -1048,6 +1073,7 @@ export type Workspace = z.infer<typeof workspaceSchema>;
 export type Campaign = z.infer<typeof campaignSchema>;
 export type PlanEvent = z.infer<typeof eventSchema>;
 export type Proposal = z.infer<typeof proposalSchema>;
+export type FocusedPlanAdoption = z.infer<typeof focusedPlanAdoptionSchema>;
 export type Rule = z.infer<typeof ruleSchema>;
 export type Period = z.infer<typeof periodSchema>;
 export type StaffTerm = z.infer<typeof staffTermSchema>;
@@ -1071,6 +1097,7 @@ export const collections: Collection[] = [
   "fundGoals",
   "consultAttributionOverrides",
   "proposals",
+  "focusedPlanAdoptions",
   "kpis",
   "rules",
 ];

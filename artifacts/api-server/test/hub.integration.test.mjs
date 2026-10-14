@@ -269,6 +269,44 @@ test("proposal approval is reviewed, atomic, repeat-safe and retains its baselin
     409,
   );
 });
+test("focused-plan adoption persists through ordinary PUT without rewriting approved baselines", async () => {
+  const data = structuredClone(state.data);
+  const approved = structuredClone(data.proposals[0]);
+  const proposal = proposalSchema.parse({ id: randomUUID(), name: "Synthetic focused plan" });
+  data.proposals.push(proposal);
+  const adoption = {
+    id: randomUUID(), name: "Synthetic adoption", archived: false, notes: "", sourceAttachmentId: null,
+    proposalId: proposal.id, adoptedAt: "2026-10-14T00:00:00.000Z", adoptedRevision: state.revision,
+    focusKpis: ["sessions", "profit"], highlights: ["Synthetic selected action"], assumptionSignature: "synthetic-v1",
+  };
+  data.focusedPlanAdoptions.push(adoption);
+  const command = {
+    requestId: randomUUID(), expectedRevision: state.revision, action: "Synthetic adoption", data,
+  };
+  const saved = await call("/hub", command, "PUT");
+  assert.equal(saved.status, 200, JSON.stringify(saved.data));
+  state = saved.data;
+  assert.deepEqual(state.data.focusedPlanAdoptions.at(-1), adoption);
+  assert.deepEqual(state.data.proposals[0], approved);
+  assert.equal(state.data.proposals.at(-1).approvedAt, null);
+  assert.equal(state.data.proposals.at(-1).baseline, null);
+  assert.deepEqual((await call("/hub")).data.data.focusedPlanAdoptions, state.data.focusedPlanAdoptions);
+  assert.deepEqual((await call(`/hub/history/${state.revision}`)).data.data.focusedPlanAdoptions, state.data.focusedPlanAdoptions);
+  assert.equal((await call("/hub", command, "PUT")).data.revision, state.revision);
+  assert.equal((await call("/hub", { ...command, requestId: randomUUID() }, "PUT")).status, 409);
+  for (const index of [0, data.proposals.length - 1]) {
+    const forged = structuredClone(state.data);
+    forged.proposals[index].approvedAt = adoption.adoptedAt;
+    forged.proposals[index].baseline = { synthetic: "forged" };
+    const rejected = await save(forged);
+    assert.equal(rejected.status, 409);
+    assert.match(rejected.data.error, index === 0 ? /approved baseline cannot be rewritten/ : /proposal approval action/);
+  }
+  const removed = structuredClone(state.data);
+  removed.focusedPlanAdoptions = [];
+  assert.equal((await save(removed)).status, 409);
+});
+
 test("CSV and XLSX attachments retain bytes and produce bounded review previews", async () => {
   const data = structuredClone(state.data);
   data.periods.push(

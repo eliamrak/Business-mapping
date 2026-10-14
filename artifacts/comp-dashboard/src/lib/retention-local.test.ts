@@ -1131,6 +1131,112 @@ test("Practice package treats attendance Phone code as consultation evidence", (
   assert.equal(metrics.excludedConsultationShowRows, 1);
 });
 
+test("consult practice denominator includes mature unresolved misses and excludes pending consults", () => {
+  const attendance = importAttendanceCsv(`Client,Clinician,Date of service,Location,Status
+converted,Dr Intake,2026-01-01,Phone,show
+converted,Dr Treatment,2026-01-10,Room A,show
+unknown-miss,Dr Intake,2026-01-02,Phone,show
+unknown-miss,Dr Backup,2026-01-03,Phone,show
+pending,Dr Intake,2026-02-01,Phone,show`).snapshot;
+  for (const row of attendance.rows) {
+    if (row.location === "Phone") row.visitKind = "consultation";
+  }
+  const summary = summarizeConsultConversions(
+    [attendance],
+    {},
+    "2026-01-01",
+    "2026-02-01",
+    "2026-02-06",
+  );
+
+  assert.equal(summary.practice.consultations, 3);
+  assert.equal(summary.practice.converted, 1);
+  assert.equal(summary.practice.missed, 1);
+  assert.equal(summary.practice.pending, 1);
+  assert.equal(summary.practice.needsAttribution, 2);
+  assert.equal(summary.practice.evaluated, 2);
+  assert.equal(summary.practice.conversionRate, 50);
+  assert.equal(
+    summary.journeys.find((row) => row.clientId === "unknown-miss")?.status,
+    "needs_attribution",
+  );
+  const candidate = summary.byClinician.find(
+    (row) => row.clinician === "Dr Treatment",
+  );
+  assert.equal(candidate?.candidateConversions, 1);
+  assert.equal(candidate?.converted, 0);
+  assert.equal(candidate?.evaluated, 0);
+  assert.equal(candidate?.conversionRate, null);
+  assert.ok(summary.byClinician.every((row) => row.missed === 0));
+});
+
+test("sole consult clinician receives missed credit only after explicit manual confirmation", () => {
+  const attendance = importAttendanceCsv(`Client,Clinician,Date of service,Location,Status
+missed,Dr Intake,2026-01-02,Phone,show`).snapshot;
+  attendance.rows[0].visitKind = "consultation";
+  for (const overrides of [
+    [],
+    [{
+      clientId: "missed",
+      outcome: "missed_owner" as const,
+      clinicianName: "Dr Intake",
+      archived: true,
+    }],
+    [{
+      clientId: "missed",
+      outcome: "missed_owner" as const,
+      clinicianName: " ",
+    }],
+    [{
+      clientId: "missed",
+      outcome: "needs_review" as const,
+      clinicianName: "Dr Intake",
+    }],
+    [{
+      clientId: "missed",
+      outcome: "confirmed_closer" as const,
+      clinicianName: "Dr Intake",
+    }],
+  ]) {
+    const summary = summarizeConsultConversions(
+      [attendance],
+      {},
+      "2026-01-01",
+      "2026-01-31",
+      "2026-02-06",
+      overrides,
+    );
+    assert.equal(summary.journeys[0].status, "needs_attribution");
+    assert.equal(summary.journeys[0].creditedClinician, null);
+    assert.equal(
+      summary.journeys[0].attributionSource,
+      overrides[0]?.outcome === "needs_review" ? "manual_needs_review" : "none",
+    );
+    assert.equal(summary.practice.missed, 1);
+    assert.equal(summary.practice.evaluated, 1);
+    assert.equal(summary.practice.conversionRate, 0);
+    assert.equal(summary.byClinician[0].missed, 0);
+    assert.equal(summary.byClinician[0].needsAttribution, 1);
+    assert.equal(summary.byClinician[0].evaluated, 0);
+    assert.equal(summary.byClinician[0].conversionRate, null);
+  }
+  const confirmed = summarizeConsultConversions(
+    [attendance],
+    {},
+    "2026-01-01",
+    "2026-01-31",
+    "2026-02-06",
+    [{ clientId: "missed", outcome: "missed_owner", clinicianName: "Dr Intake" }],
+  );
+  assert.equal(confirmed.journeys[0].status, "missed");
+  assert.equal(confirmed.journeys[0].creditedClinician, "Dr Intake");
+  assert.equal(confirmed.journeys[0].attributionSource, "manual_missed_owner");
+  assert.equal(confirmed.practice.needsAttribution, 0);
+  assert.equal(confirmed.byClinician[0].missed, 1);
+  assert.equal(confirmed.byClinician[0].evaluated, 1);
+  assert.equal(confirmed.byClinician[0].conversionRate, 0);
+});
+
 test("consult conversion separates treatment-start candidates from confirmed closer credit", () => {
   const packageData = packageFixture();
   packageData.collections.attendance.coverageStart = "2026-01-01";
@@ -1221,11 +1327,11 @@ test("consult conversion separates treatment-start candidates from confirmed clo
 
   assert.equal(summary.practice.consultations, 5);
   assert.equal(summary.practice.converted, 2);
-  assert.equal(summary.practice.missed, 1);
+  assert.equal(summary.practice.missed, 2);
   assert.equal(summary.practice.pending, 1);
-  assert.equal(summary.practice.needsAttribution, 3);
-  assert.equal(summary.practice.evaluated, 3);
-  assert.equal(Math.round(summary.practice.conversionRate ?? 0), 67);
+  assert.equal(summary.practice.needsAttribution, 4);
+  assert.equal(summary.practice.evaluated, 4);
+  assert.equal(summary.practice.conversionRate, 50);
   assert.equal(
     summary.byClinician.find((row) => row.clinician === "Dr Closer")
       ?.converted,
@@ -1243,7 +1349,7 @@ test("consult conversion separates treatment-start candidates from confirmed clo
   );
   assert.equal(
     summary.byClinician.find((row) => row.clinician === "Dr Referrer")?.missed,
-    1,
+    0,
   );
   assert.equal(
     summary.journeys.find((row) => row.clientId === "conflict")?.status,
@@ -1291,7 +1397,7 @@ test("consult conversion separates treatment-start candidates from confirmed clo
   assert.equal(
     reviewed.byClinician.find((row) => row.clinician === "Dr Referrer")
       ?.missed,
-    2,
+    1,
   );
 });
 

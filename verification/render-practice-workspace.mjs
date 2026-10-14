@@ -1,6 +1,7 @@
 import { createRequire } from "node:module";
 import fs from "node:fs/promises";
 import path from "node:path";
+import assert from "node:assert/strict";
 
 const playwrightRequire = createRequire(
   "/tmp/local-retention-browser-harness/package.json",
@@ -285,19 +286,49 @@ const context = {
   importedBillingActuals: [],
 };
 
+context.sessions = context.sessions.map((record, index) => ({ ...record, id: index + 1, revision: 1, updatedAt: today + "T00:00:00.000Z" }));
+workspace.goals.push({ id: uuid("901"), name: "Synthetic sessions target", metric: "sessions", amount: 100, basis: "monthly", date: null });
+workspace.consultAttributionOverrides = [];
+workspace.focusedPlanAdoptions = [];
+workspace.fundGoals[0].currentBalance = 100;
+workspace.fundGoals[0].balanceDate = "2026-01-15";
+workspace.proposals.push({
+  id: uuid("902"), name: "Synthetic focused plan", status: "draft", changes: [],
+  baseline: { kind: "practice-goal-v1", savedAt: today + "T00:00:00.000Z", sourceRevision: 1, workspace: { ...structuredClone(workspace), proposals: [] }, context: structuredClone(context) },
+});
+const attendance = (clientId, clinician, serviceDate, phone = false) => ({
+  clientId, clinician, serviceDate, location: null, status: "show", billingCode: phone ? "PHONE" : "90837", visitKind: phone ? "consultation" : "treatment", sourceRowHash: `${clientId}-${clinician}-${serviceDate}`,
+});
+const snapshots = [{ id: "synthetic-attendance", kind: "attendance", importedAt: today + "T00:00:00.000Z", coverageStart: "2026-01-01", coverageEnd: today, sourceHash: "synthetic-only", rows: [
+  attendance("converted", "Elia", "2026-01-02", true), attendance("converted", "Erin", "2026-01-08"),
+  attendance("mature-miss", "Elia", "2026-01-03", true),
+  attendance("ended", "Erin", "2026-06-01"), attendance("ended", "Erin", "2026-06-08"), attendance("ended", "Erin", "2026-06-15"),
+] }];
+
 const browser = await chromium.launch({
   executablePath: browserPath,
   headless: true,
 });
 const page = await browser.newPage({ viewport: { width: 1280, height: 900 } });
+const browserErrors = [];
+page.on("pageerror", (error) => browserErrors.push(error.message));
+let revision = 1;
+let importReads = 0;
 
 await page.route("**/api/**", async (route) => {
   const url = new URL(route.request().url());
+  if (url.pathname === "/api/hub" && ["POST", "PUT"].includes(route.request().method())) {
+    Object.assign(workspace, route.request().postDataJSON().data);
+    revision++;
+  }
+  if (url.pathname === "/api/practice-imports") importReads++;
   const body =
     url.pathname === "/api/hub"
-      ? { revision: 1, data: workspace, updatedAt: "2026-10-14T00:00:00.000Z" }
+      ? { revision, data: workspace, updatedAt: "2026-10-14T00:00:00.000Z" }
       : url.pathname === "/api/hub/context"
         ? context
+        : url.pathname === "/api/practice-imports"
+          ? { snapshots, billingCodeMinutes: {}, sameDayVisitOverrides: {}, packages: [] }
         : url.pathname === "/api/business-goals"
           ? [{ id: 1, name: "Whole Practice" }]
           : url.pathname.startsWith("/api/session-goals")
@@ -345,14 +376,41 @@ async function clickSection(name) {
 await page.goto("http://127.0.0.1:4317/workspace");
 await capture("overview-desktop", 1280, 900);
 await capture("overview-mobile", 390, 900);
+assert.ok(importReads > 0, "saved imports load on fresh Today view");
+assert.ok(await page.getByText("Synthetic sessions target goal met", { exact: true }).count(), "Overview includes completed actual achievement");
 await clickSection("Sessions");
 await capture("sessions-desktop", 1280, 900);
 await capture("sessions-mobile", 390, 900);
+await page.getByRole("button", { name: "Elia", exact: true }).click();
+await page.getByRole("button", { name: "Compare with Whole Practice", exact: true }).click();
+assert.ok(await page.getByText(/Whole practice:.*completed \/ week/).count(), "Compare renders practice evidence");
+await capture("sessions-compare-desktop", 1280, 900);
+await page.getByLabel("Shared reporting period", { exact: true }).selectOption("custom");
+await page.getByLabel("From", { exact: true }).fill("2026-02-01");
+await page.getByLabel("Through", { exact: true }).fill("2026-02-28");
+assert.ok(await page.getByText("No complete recorded periods in this date range.", { exact: true }).count(), "selected bounds filter Sessions evidence");
+await page.getByLabel("Shared reporting period", { exact: true }).selectOption("overall");
+await page.getByRole("tab", { name: "Attrition", exact: true }).click();
+await page.getByRole("button", { name: "Erin", exact: true }).click();
+await page.getByRole("button", { name: "Compare with Whole Practice", exact: true }).click();
+assert.match(await page.getByLabel("Whole Practice comparison", { exact: true }).innerText(), /1 unique client endings \/ 6 mature months/, "attrition benchmark uses unique mature 90-day endings");
+await capture("attrition-compare-mobile", 390, 900);
 await clickSection("Growth");
 await capture("growth-desktop", 1280, 900);
 await capture("growth-mobile", 390, 900);
+await page.getByRole("tab", { name: "Lead flow", exact: true }).click();
+await page.getByLabel("Shared reporting period", { exact: true }).selectOption("overall");
+assert.match(await page.locator(".pw-metric-hero").innerText(), /50%/, "mature unresolved miss remains in practice conversion denominator");
+await page.getByText("Review client attribution candidates", { exact: true }).click();
+await page.getByLabel("Confirmed owner for converted", { exact: true }).selectOption("Erin");
+await page.getByRole("button", { name: "Confirm closer", exact: true }).first().click();
+await capture("consult-attribution-mobile", 390, 900);
+await page.getByRole("button", { name: "Review changes", exact: true }).click();
+await page.getByRole("button", { name: "Save changes", exact: true }).click();
+await page.waitForLoadState("networkidle");
+assert.equal(workspace.consultAttributionOverrides[0].clinicianName, "Erin", "manual closer is persisted");
 await clickSection("Growth");
-await page.locator("button", { hasText: "Rooms" }).first().click();
+await page.getByRole("tab", { name: "Rooms", exact: true }).click();
 await capture("rooms-desktop", 1280, 900);
 await capture("rooms-mobile", 390, 900);
 await clickSection("Money");
@@ -364,10 +422,22 @@ await capture("goals-mobile", 390, 900);
 await clickSection("Team");
 await capture("team-desktop", 1280, 900);
 await capture("team-mobile", 390, 900);
+assert.ok(!(await page.locator(".pw-person-kpis").allTextContents()).join(" ").includes("5000%"), "clinician percentage uses the stored percentage scale");
 await page.setViewportSize({ width: 1280, height: 900 });
-await page.getByRole("button", { name: "Long Term Goals", exact: true }).click();
+await page.getByRole("button", { name: /Long Term Goals/ }).click();
 await capture("long-term-goals-desktop", 1280, 900);
 await capture("long-term-goals-mobile", 390, 900);
+await page.setViewportSize({ width: 1280, height: 900 });
+await page.getByRole("button", { name: "Adopt plan", exact: true }).click();
+await page.waitForLoadState("networkidle");
+assert.equal(workspace.focusedPlanAdoptions.length, 1, "adoption uses focused persistence");
+assert.ok(workspace.focusedPlanAdoptions[0].highlights.some((item) => item.includes("Sessions")), "adoption highlights follow selected Sessions focus");
+assert.equal(workspace.proposals[0].approvedAt ?? null, null, "adoption preserves approval baseline");
+await page.reload();
+await clickSection("Overview");
+assert.ok(await page.getByText(/Synthetic focused plan:/).count(), "saved focus survives reload into Overview");
+assert.equal(await page.getByText(/New data or assumptions changed this plan/).count(), 0, "saving adoption alone does not invalidate focus");
+assert.deepEqual(browserErrors, [], "no browser exceptions");
 
 await fs.writeFile(
   path.join(outDir, "metrics.json"),

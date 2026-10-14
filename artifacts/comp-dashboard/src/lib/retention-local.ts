@@ -1900,9 +1900,7 @@ export function summarizeConsultConversions(
       override?.outcome === "missed_owner" &&
       manualClinician
         ? manualClinician
-        : !converted && !pending && consultClinicians.length === 1 && !override
-          ? consultClinicians[0]
-          : null;
+        : null;
     const attributionIssue = converted
       ? override?.outcome === "needs_review"
         ? "Manual review marked this converted client as unresolved."
@@ -1946,11 +1944,9 @@ export function summarizeConsultConversions(
           ? "manual_needs_review"
           : nonconvertedOwner && override?.outcome === "missed_owner"
             ? "manual_missed_owner"
-            : nonconvertedOwner
-              ? "consult_owner"
-              : treatmentStartClinician
-                ? "treatment_start_candidate"
-                : "none",
+            : treatmentStartClinician
+              ? "treatment_start_candidate"
+              : "none",
     });
   }
   const practice = blankConsultMetric(null);
@@ -1964,7 +1960,7 @@ export function summarizeConsultConversions(
     practice.consultations++;
     if (journey.treatmentDate) practice.converted++;
     else if (journey.status === "pending") practice.pending++;
-    else if (journey.status !== "needs_attribution") practice.missed++;
+    else practice.missed++;
     if (journey.status === "needs_attribution") practice.needsAttribution++;
 
     if (journey.status === "converted" && journey.closerClinician) {

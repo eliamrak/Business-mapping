@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { ApiError } from "@workspace/api-client-react";
+import { CartesianGrid, Legend, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import {
   ArrowDownRight,
   ArrowRight,
@@ -37,6 +38,7 @@ import {
   weeklyGoalFromPeriodDesired,
 } from "@/lib/session-goals";
 import { firstHiringReviewMonth, summarizeHiringReadiness, summarizeLast1099Period, summarizeSessionOverview } from "@/lib/session-overview";
+import { buildSessionTrend, containedSessionRecords, selectedPeriodSessionSummary, type SessionPeriod } from "@/lib/session-trend";
 import SessionImportDialog from "./session-import-dialog";
 import BulkSessionEntry from "./bulk-session-entry";
 
@@ -88,6 +90,10 @@ export default function WorkspaceSessions({
   onPlanHire,
   onOpenCalculations,
   forecastMonths,
+  selectedPeriod,
+  contributorId = null,
+  compareWholePractice = false,
+  requiredWeeklySessions,
 }: {
   context: Context;
   summaryContext?: Context;
@@ -98,6 +104,10 @@ export default function WorkspaceSessions({
   onPlanHire: () => void;
   onOpenCalculations: () => void;
   forecastMonths: ForecastMonth[];
+  selectedPeriod?: SessionPeriod;
+  contributorId?: number | null;
+  compareWholePractice?: boolean;
+  requiredWeeklySessions?: number;
 }) {
   const queryClient = useQueryClient();
   const team = teamId === null ? "unassigned" : String(teamId);
@@ -111,12 +121,15 @@ export default function WorkspaceSessions({
     (clinician) => (clinician.goalId ?? null) === teamId,
   );
   const personIds = new Set(people.map((person) => person.id));
+  const readPeople = people.filter((person) => contributorId === null || person.id === contributorId);
+  const readIds = readPeople.map((person) => person.id);
   const manualRecords = context.sessions.filter((record) =>
     personIds.has(record.clinicianId),
   );
-  const records = (summaryContext ?? context).sessions.filter((record) =>
+  const practiceRecords = (summaryContext ?? context).sessions.filter((record) =>
     personIds.has(record.clinicianId),
   );
+  const records = practiceRecords.filter((record) => readIds.includes(record.clinicianId));
   const periods = useMemo(() => {
     const grouped = new Map<string, Period>();
     for (const record of records) {
@@ -132,7 +145,8 @@ export default function WorkspaceSessions({
     return [...grouped.values()].sort((a, b) => b.end.localeCompare(a.end));
   }, [records]);
   const today = new Date().toLocaleDateString("en-CA");
-  const initial = periods[0] ?? { start: shift(today, -13), end: today };
+  const initial = practiceRecords.reduce<SessionRecord | null>((latest, record) =>
+    !latest || record.end > latest.end ? record : latest, null) ?? { start: shift(today, -13), end: today };
   const [range, setRange] = useState({
     start: initial.start,
     end: initial.end,
@@ -145,9 +159,9 @@ export default function WorkspaceSessions({
   const [message, setMessage] = useState("");
   const [importOpen, setImportOpen] = useState(false);
   const [entryMode, setEntryMode] = useState<"single" | "bulk">(
-    records.length ? "single" : "bulk",
+    practiceRecords.length ? "single" : "bulk",
   );
-  const [entryOpen, setEntryOpen] = useState(!records.length);
+  const [entryOpen, setEntryOpen] = useState(!practiceRecords.length);
   const entryRef = useRef<HTMLDivElement>(null);
   const [bulkState, setBulkState] = useState({ dirty: false, busy: false });
   const [historyRange, setHistoryRange] = useState("4periods");
@@ -339,11 +353,12 @@ export default function WorkspaceSessions({
     }
   }
 
-  const completedPeriods = periods.filter((period) => period.end <= today);
+  const completedPeriods = periods.filter((period) => period.end <= today &&
+    (!selectedPeriod || (period.start >= selectedPeriod.start && period.end <= selectedPeriod.end)));
   const currentFour = completedPeriods.slice(0, 4);
   const previousFour = completedPeriods.slice(4, 8);
   const hiring = summarizeHiringReadiness(
-    people.filter((person) => !excludedFromHire.has(person.id)).map((person) => ({
+    readPeople.filter((person) => !excludedFromHire.has(person.id)).map((person) => ({
       id: person.id,
       goalWeekly: person.sessionsPerWeek,
       records: currentFour.flatMap((period) =>
@@ -363,16 +378,16 @@ export default function WorkspaceSessions({
     ? (Number(projectedReview.slice(0, 4)) - Number(today.slice(0, 4))) * 12 +
       Number(projectedReview.slice(5, 7)) - Number(today.slice(5, 7))
     : null;
-  const bounds = historyRange === "custom"
+  const bounds = selectedPeriod ?? (historyRange === "custom"
     ? customRange
     : historyRange === "all" || historyRange === "4periods"
       ? null
-      : { start: shift(today, 1 - Number(historyRange)), end: today };
+      : { start: shift(today, 1 - Number(historyRange)), end: today });
   const boundsValid = !bounds || dateRangeSchema.safeParse(bounds).success;
-  const filteredPeriods = historyRange === "4periods"
+  const filteredPeriods = !selectedPeriod && historyRange === "4periods"
     ? currentFour
     : periods.filter((period) =>
-      boundsValid && (!bounds || (period.end >= bounds.start && period.start <= bounds.end)),
+      boundsValid && (!bounds || (period.start >= bounds.start && period.end <= bounds.end)),
     );
   const previousBounds = bounds && boundsValid
     ? {
@@ -380,30 +395,39 @@ export default function WorkspaceSessions({
         end: shift(bounds.start, -1),
       }
     : null;
-  const previousOverviewRecords = historyRange === "4periods"
+  const previousOverviewRecords = !selectedPeriod && historyRange === "4periods"
     ? previousFour.flatMap((period) => period.records)
     : previousBounds
-      ? records.filter((record) => record.end >= previousBounds.start && record.end <= previousBounds.end)
+      ? containedSessionRecords(records, readIds, previousBounds)
       : [];
   const recordFor = (period: Period, personId: number) =>
     period.records.find((record) => record.clinicianId === personId);
+  const visibleRecords = filteredPeriods.flatMap((period) => period.records);
+  const chartBounds = bounds ?? {
+    start: filteredPeriods.at(-1)?.start ?? shift(today, -27),
+    end: filteredPeriods[0]?.end ?? today,
+  };
+  const chartData = boundsValid ? buildSessionTrend(
+    !selectedPeriod && historyRange === "4periods"
+      ? practiceRecords.filter((record) => filteredPeriods.some((period) => period.start === record.start && period.end === record.end))
+      : practiceRecords,
+    readIds, people.map((person) => person.id), chartBounds,
+    (date) => readPeople.reduce((sum, person) => sum +
+      (annualGoalFor(person.id, Number(date.slice(0, 4)), annualGoals) ?? person.sessionsPerWeek ?? 0), 0),
+    requiredWeeklySessions,
+  ) : [];
+  const practiceSummary = selectedPeriodSessionSummary(practiceRecords, people.map((person) => person.id), chartBounds);
   const overviewFor = (personId: number) => {
-    const current = (historyRange === "4periods"
-      ? currentFour.flatMap((period) => period.records)
-      : bounds
-        ? boundsValid
-          ? records.filter((record) => record.end >= bounds.start && record.end <= bounds.end)
-          : []
-        : records
-    ).filter((record) => record.clinicianId === personId);
+    const current = visibleRecords.filter((record) => record.clinicianId === personId);
     const previous = previousOverviewRecords.filter((record) => record.clinicianId === personId);
     const summary = summarizeSessionOverview(
       current, previous,
-      people.find((person) => person.id === personId)?.sessionsPerWeek ?? 0,
+      annualGoalFor(personId, Number(chartBounds.end.slice(0, 4)), annualGoals) ??
+        people.find((person) => person.id === personId)?.sessionsPerWeek ?? 0,
     );
     return {
       ...summary,
-      trendWeekly: historyRange === "4periods" && (current.length < 4 || previous.length < 4)
+      trendWeekly: !selectedPeriod && historyRange === "4periods" && (current.length < 4 || previous.length < 4)
         ? null
         : summary.trendWeekly,
     };
@@ -446,7 +470,7 @@ export default function WorkspaceSessions({
       <div className="pw-section-heading">
         <div>
           <h2>Sessions</h2>
-          <p>Biweekly session pace</p>
+          <p>Recorded session pace</p>
         </div>
         <div className="pw-actions">
           {!sandbox && (
@@ -490,10 +514,10 @@ export default function WorkspaceSessions({
 
       <div className="pw-session-overview-heading">
         <div>
-          <h3>Team pace</h3>
+          <h3>{contributorId === null ? "Practice pace" : readPeople[0]?.label ?? "Contributor pace"}</h3>
           <p>{filteredPeriods.length} recorded period{filteredPeriods.length === 1 ? "" : "s"} in view</p>
         </div>
-        <div className="pw-session-range">
+        {!selectedPeriod && <div className="pw-session-range">
           <select
             aria-label="Session date range"
             value={historyRange}
@@ -515,14 +539,39 @@ export default function WorkspaceSessions({
                 onChange={(event) => setCustomRange({ ...customRange, end: event.target.value })} />
             </>
           )}
-        </div>
+        </div>}
       </div>
-      {!!people.length && (
+      <div aria-label="Calendar weekly session trend" style={{ width: "100%", minWidth: 0 }}>
+        <h3>Calendar weekly trend</h3>
+        <p>{shortDate(chartBounds.start)} - {shortDate(chartBounds.end)}. Period rates are shown at period end.</p>
+        <div style={{ width: "100%", height: 300 }}>
+          <ResponsiveContainer width="100%" height="100%">
+            <LineChart data={chartData} margin={{ top: 12, right: 20, bottom: 8, left: 0 }} accessibilityLayer>
+              <CartesianGrid strokeDasharray="3 3" vertical={false} />
+              <XAxis dataKey="date" type="number" scale="time" domain={['dataMin', 'dataMax']}
+                tickFormatter={(date: number) => new Date(date).toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "UTC" })} minTickGap={32} />
+              <YAxis width={44} domain={[0, 'auto']} />
+              <Tooltip labelFormatter={(_, payload) => payload[0]?.payload.label ?? ""}
+                formatter={(number: number) => display(number)} />
+              <Legend />
+              <Line dataKey="completed" name="Recorded calendar week" stroke="#047857" strokeWidth={2} dot={{ r: 4 }} connectNulls={false} isAnimationActive={false} />
+              <Line dataKey="periodRate" name="Recorded period rate / week" stroke="#047857" strokeWidth={0} dot={{ r: 5, strokeWidth: 2, fill: "#047857" }} activeDot={{ r: 6, strokeWidth: 2 }} isAnimationActive={false} />
+              <Line dataKey="capacity" name="Weekly capacity" stroke="#be123c" dot={false} strokeDasharray="6 3" isAnimationActive={false} />
+              {requiredWeeklySessions != null && <Line dataKey="required" name="Required sessions / week" stroke="#27824b" dot={false} strokeDasharray="3 3" isAnimationActive={false} />}
+              {compareWholePractice && <Line dataKey="benchmark" name="Practice recorded calendar week" stroke="#0369a1" dot={{ r: 4 }} connectNulls={false} isAnimationActive={false} />}
+              {compareWholePractice && <Line dataKey="benchmarkPeriodRate" name="Practice period rate / week" stroke="#0369a1" strokeWidth={0} dot={{ r: 5, strokeWidth: 2, fill: "#0369a1" }} isAnimationActive={false} />}
+            </LineChart>
+          </ResponsiveContainer>
+        </div>
+        {!visibleRecords.length && <p className="pw-empty">No complete recorded periods in this date range.</p>}
+        {compareWholePractice && <p>Whole practice: {display(practiceSummary.completedWeekly)} completed / week; {practiceSummary.observedCoverageDays} observed days.</p>}
+      </div>
+      {!!readPeople.length && (
         <div className="pw-session-overview" aria-label="Clinician session pace">
-          {people.map((person, index) => {
+          {readPeople.map((person, index) => {
             const { latest, averageWeekly, goalWeekly, openWeekly, overGoalWeekly, fullness, trendWeekly, count } = overviewFor(person.id);
             const last1099 = summarizeLast1099Period(
-              records.filter((record) => record.clinicianId === person.id),
+              visibleRecords.filter((record) => record.clinicianId === person.id),
               today,
             );
             const trend = trendWeekly == null ? "empty" : trendWeekly > 0 ? "up" : trendWeekly < 0 ? "down" : "flat";
@@ -559,7 +608,8 @@ export default function WorkspaceSessions({
                   </>}</strong>
                   <small>{trendWeekly == null
                     ? "Not enough earlier data"
-                    : historyRange === "4periods" ? "vs previous 4 periods"
+                    : selectedPeriod ? "vs previous date range"
+                      : historyRange === "4periods" ? "vs previous 4 periods"
                       : historyRange === "custom" ? "vs previous date range"
                         : `vs previous ${historyRange} days`}</small>
                 </div>
@@ -620,7 +670,7 @@ export default function WorkspaceSessions({
                 % of desired sessions
               </label>
               <div className="pw-hiring-pulse-people">
-                {people.filter((person) => person.sessionsPerWeek > 0).map((person) => {
+                {readPeople.filter((person) => person.sessionsPerWeek > 0).map((person) => {
                   const assessment = hiring.assessed.find((item) => item.id === person.id);
                   const personalReview = firstHiringReviewMonth(forecastMonths, [person.id], hireThreshold);
                   return <label key={person.id}>
@@ -888,7 +938,7 @@ export default function WorkspaceSessions({
 
       <div className="pw-session-history-heading">
         <div>
-          <h3>Biweekly history</h3>
+          <h3>Recorded period history</h3>
           <p>Select a period to edit its totals</p>
         </div>
       </div>
@@ -897,7 +947,7 @@ export default function WorkspaceSessions({
           <thead>
             <tr>
               <th>Period</th>
-              {people.map((person) => (
+              {readPeople.map((person) => (
                 <th key={person.id}>{person.label}</th>
               ))}
             </tr>
@@ -919,7 +969,7 @@ export default function WorkspaceSessions({
                     <span>to {shortDate(period.end)}</span>
                   </button>
                 </th>
-                {people.map((person) => {
+                {readPeople.map((person) => {
                   const record = recordFor(period, person.id);
                   const desired = record ? comparisonDesiredFor(record) : 0;
                   const fullness = desired
@@ -960,7 +1010,7 @@ export default function WorkspaceSessions({
           {!filteredPeriods.length && (
             <tbody>
               <tr>
-                <td colSpan={people.length + 1} className="pw-empty">
+                <td colSpan={readPeople.length + 1} className="pw-empty">
                   No session totals in this date range.
                 </td>
               </tr>
@@ -970,7 +1020,7 @@ export default function WorkspaceSessions({
             <tfoot>
               <tr>
                 <th>Average / period</th>
-                {people.map((person) => (
+                {readPeople.map((person) => (
                   <td key={person.id}>
                     {display(statsFor(person.id).average)}
                   </td>
@@ -979,7 +1029,7 @@ export default function WorkspaceSessions({
               {columns.desired && (
                 <tr>
                   <th>Average desired</th>
-                  {people.map((person) => (
+                  {readPeople.map((person) => (
                     <td key={person.id}>
                       {display(statsFor(person.id).desired)}
                     </td>
@@ -989,7 +1039,7 @@ export default function WorkspaceSessions({
               {columns.fullness && (
                 <tr>
                   <th>Overall fullness</th>
-                  {people.map((person) => (
+                  {readPeople.map((person) => (
                     <td key={person.id}>
                       {display(statsFor(person.id).fullness, "%")}
                     </td>
@@ -999,7 +1049,7 @@ export default function WorkspaceSessions({
               {columns.weekly && (
                 <tr>
                   <th>Average weekly</th>
-                  {people.map((person) => (
+                  {readPeople.map((person) => (
                     <td key={person.id}>
                       {display(statsFor(person.id).weekly)}
                     </td>
@@ -1009,7 +1059,7 @@ export default function WorkspaceSessions({
               {columns.recent && (
                 <tr>
                   <th>Last 2 months</th>
-                  {people.map((person) => (
+                  {readPeople.map((person) => (
                     <td key={person.id}>
                       {display(statsFor(person.id).recent)}
                     </td>
@@ -1019,7 +1069,7 @@ export default function WorkspaceSessions({
               {columns.recent && columns.fullness && (
                 <tr>
                   <th>Last 2 months fullness</th>
-                  {people.map((person) => (
+                  {readPeople.map((person) => (
                     <td key={person.id}>
                       {display(statsFor(person.id).recentFullness, "%")}
                     </td>

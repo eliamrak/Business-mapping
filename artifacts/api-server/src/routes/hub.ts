@@ -1,4 +1,4 @@
-import { Router } from "express";
+import { Router, type RequestHandler } from "express";
 import { createHash, randomUUID } from "node:crypto";
 import { eq, and, desc, sql } from "drizzle-orm";
 import {
@@ -245,7 +245,7 @@ router.get("/hub/context", async (_req, res) => {
     })),
   });
 });
-router.post("/hub", async (req, res) => {
+const saveWorkspace: RequestHandler = async (req, res) => {
   const parsed = writeSchema.safeParse(req.body);
   if (!parsed.success)
     return res.status(400).json({
@@ -285,6 +285,10 @@ router.post("/hub", async (req, res) => {
         ? workspaceSchema.parse(existing.data)
         : emptyWorkspace();
       protectHistory(previous, command.data);
+      if (command.data.focusedPlanAdoptions.some(
+        (adoption) => adoption.adoptedRevision > command.expectedRevision,
+      ))
+        throw new Error("A focused plan cannot reference a future workspace revision.");
       const clinicians = await tx
         .select({ id: cliniciansTable.id })
         .from(cliniciansTable);
@@ -351,7 +355,8 @@ router.post("/hub", async (req, res) => {
           : "Could not save the workspace.",
     });
   }
-});
+};
+router.route("/hub").post(saveWorkspace).put(saveWorkspace);
 
 router.post("/hub/proposals/:id/approve", async (req, res) => {
   const parsed = z
