@@ -397,6 +397,13 @@ async function clickSection(name) {
     .click();
 }
 
+async function assertContributorComparison(label) {
+  const comparison = page.getByLabel(label, { exact: true });
+  assert.deepEqual(await comparison.locator(".pw-metric-comparison-heading strong").allTextContents(), ["Elia", "Erin", "Whole Practice"], `${label}: all contributors, Whole Practice last`);
+  assert.equal(await comparison.locator(".pw-metric-comparison-track").count(), 3, `${label}: every contributor has the same horizontal structure`);
+  assert.equal(await comparison.locator(".pw-percentage-kpi").count(), 0, `${label}: no circular Compare KPI`);
+}
+
 await page.goto(new URL("/workspace", process.env.PRACTICE_PREVIEW_URL ?? "http://127.0.0.1:4317").href);
 const sectionButtons = page.locator('nav[aria-label="Practice sections"] button');
 await sectionButtons.first().waitFor({ state: "visible" });
@@ -436,8 +443,10 @@ assert.match(await page.locator("h1").innerText(), /Data & imports/, "converted 
 await clickSection("Sessions");
 await page.getByRole("button", { name: "Elia", exact: true }).click();
 await page.getByRole("button", { name: "Compare with Whole Practice", exact: true }).click();
-assert.ok(await page.getByText(/Whole practice:/i).count(), "Compare renders practice evidence");
+await assertContributorComparison("Session metric comparison");
+assert.equal(await page.getByLabel("Calendar weekly session trend", { exact: true }).count(), 0, "Compare replaces line benchmarks with horizontal contributor bars");
 await capture("sessions-compare-desktop", 1280, 900);
+await capture("sessions-compare-mobile", 390, 900);
 await page.getByLabel("Shared reporting period", { exact: true }).selectOption("custom");
 await page.getByLabel("From", { exact: true }).fill("2026-02-01");
 await page.getByLabel("Through", { exact: true }).fill("2026-02-28");
@@ -446,10 +455,22 @@ await page.getByLabel("Shared reporting period", { exact: true }).selectOption("
 await page.getByRole("tab", { name: "Attrition", exact: true }).click();
 await page.getByRole("button", { name: "Erin", exact: true }).click();
 await page.getByRole("button", { name: "Compare with Whole Practice", exact: true }).click();
-assert.match(await page.getByLabel("Whole Practice comparison", { exact: true }).innerText(), /unique client endings/, "attrition benchmark renders unique client evidence");
+await assertContributorComparison("Clinical metric comparison");
+assert.match(await page.getByLabel("Clinical metric comparison", { exact: true }).innerText(), /unique client endings/, "attrition benchmark renders unique client evidence");
+assert.ok(await page.getByText(/Goal unavailable: no defined client-ending target/).isVisible(), "Attrition cannot invent a target");
+assert.equal(await page.locator('.pw-metric-comparison-goal[title^="Goal 8"]').count(), 0, "no fabricated Attrition goal marker");
 await capture("attrition-compare-mobile", 390, 900);
 await capture("attrition-compare-desktop", 1280, 900);
+await page.getByRole("button", { name: "Compare with Whole Practice", exact: true }).click();
+assert.equal(await page.locator(".pw-metric-panel .pw-goal-marker").count(), 0, "individual Attrition has no invented green goal marker");
+assert.ok(await page.getByText(/Goal unavailable: no defined client-ending target/).isVisible());
+await capture("attrition-individual-desktop", 1280, 900);
+await capture("attrition-individual-mobile", 390, 900);
+await page.getByRole("button", { name: "Compare with Whole Practice", exact: true }).click();
 await page.getByRole("tab", { name: "Retention", exact: true }).click();
+await assertContributorComparison("Clinical metric comparison");
+await capture("retention-compare-desktop", 1280, 900);
+await capture("retention-compare-mobile", 390, 900);
 assert.equal(await page.locator(".pw-percentage-kpi").count(), 0, "Compare uses horizontal bars rather than a circular individual KPI");
 await page.getByRole("button", { name: "Compare with Whole Practice", exact: true }).click();
 assert.equal(await page.locator(".pw-percentage-kpi-ring").count(), 1, "individual retention uses a circular KPI");
@@ -462,6 +483,11 @@ await capture("growth-mobile", 390, 900);
 await page.getByRole("tab", { name: "Consultations", exact: true }).click();
 await page.getByLabel("Shared reporting period", { exact: true }).selectOption("overall");
 assert.match(await page.locator(".pw-metric-hero").innerText(), /50%/, "mature unresolved miss remains in practice conversion denominator");
+await page.getByRole("button", { name: "Compare with Whole Practice", exact: true }).click();
+await assertContributorComparison("Consult metric comparison");
+await capture("consult-compare-desktop", 1280, 900);
+await capture("consult-compare-mobile", 390, 900);
+await page.getByRole("button", { name: "Compare with Whole Practice", exact: true }).click();
 await page.getByText("Review client attribution candidates", { exact: true }).click();
 await page.getByLabel("Confirmed owner for converted", { exact: true }).selectOption("Erin");
 await page.getByRole("button", { name: "Confirm closer", exact: true }).first().click();
@@ -519,6 +545,9 @@ await page.getByRole("button", { name: /Long Term Goals/ }).click();
 await capture("long-term-goals-desktop", 1280, 900);
 await capture("long-term-goals-mobile", 390, 900);
 assert.equal(await page.getByLabel("Generated focused alternatives", { exact: true }).locator("article").count(), 3, "three unsaved focused alternatives are generated separately from saved plans");
+const priorityGaps = await page.getByLabel("Generated focused alternatives", { exact: true }).locator("article[data-priority-gap]").evaluateAll((nodes) => nodes.map((node) => Number(node.dataset.priorityGap)));
+assert.ok(priorityGaps.length > 0 && priorityGaps.every((gap, index) => index === 0 || gap <= priorityGaps[index - 1]), "evidenced alternatives are ranked by largest fractional gap first");
+assert.equal(await page.getByLabel("Generated focused alternatives", { exact: true }).getByLabel("Modeled outcomes and changes", { exact: true }).count(), 3, "every alternative exposes modeled monthly outcomes and deltas");
 assert.ok(await page.locator(".pw-tool-tabs button").evaluateAll((nodes) => {
   const rects = nodes.map((node) => node.getBoundingClientRect());
   return rects.every((a, index) => rects.every((b, other) => index === other || a.right <= b.left + 1 || b.right <= a.left + 1 || a.bottom <= b.top + 1 || b.bottom <= a.top + 1));
@@ -599,6 +628,27 @@ assert.equal(await page.getByText("Goal Achieved", { exact: true }).count(), 0, 
 assert.ok(await page.getByText(/\$0.*\$120,000.*0(?:\.0+)?%/).count(), "capital balance progress remains separately visible");
 await capture("capital-only-reality-desktop", 1280, 900);
 await capture("capital-only-reality-mobile", 390, 900);
+
+context.clinicians[1].label = "Elia";
+snapshots.splice(0, snapshots.length, { id: "synthetic-ambiguous", kind: "attendance", importedAt: today + "T00:00:00.000Z", coverageStart: "2026-01-01", coverageEnd: today, reportCoverage: { start: "2026-01-01", end: today, complete: true }, rows: [attendance("ambiguous", "Elia", "2026-01-02", true), attendance("ambiguous", "Elia", "2026-01-09"), attendance("ambiguous", "Elia", "2026-01-16"), attendance("ambiguous", "Elia", "2026-01-23")] });
+await page.reload(); await clickSection("Sessions");
+await page.getByRole("tab", { name: "Retention", exact: true }).click();
+await page.getByLabel("Shared reporting period", { exact: true }).selectOption("overall");
+await page.getByRole("button", { name: "Compare with Whole Practice", exact: true }).click();
+const ambiguousRetention = page.getByLabel("Clinical metric comparison", { exact: true }).locator(".pw-metric-comparison-row");
+assert.deepEqual(await ambiguousRetention.locator(".pw-metric-comparison-heading strong").allTextContents(), ["Elia", "Elia", "Whole Practice"]);
+assert.ok((await ambiguousRetention.locator(".pw-metric-comparison-heading span").allTextContents()).slice(0, 2).every((text) => text.includes("Unknown")), "two IDs sharing a name never receive duplicated imported retention");
+assert.equal(await page.getByText("Unknown: clinician name maps to multiple IDs; resolve the import mapping.", { exact: true }).count(), 2);
+await capture("ambiguous-retention-compare-desktop", 1280, 900);
+await capture("ambiguous-retention-compare-mobile", 390, 900);
+await clickSection("Growth");
+await page.getByRole("tab", { name: "Consultations", exact: true }).click();
+await page.getByLabel("Shared reporting period", { exact: true }).selectOption("overall");
+await page.getByRole("button", { name: "Compare with Whole Practice", exact: true }).click();
+const ambiguousConsults = page.getByLabel("Consult metric comparison", { exact: true }).locator(".pw-metric-comparison-row");
+assert.ok((await ambiguousConsults.locator(".pw-metric-comparison-heading span").allTextContents()).slice(0, 2).every((text) => text.includes("Unknown")), "ambiguous imported closer metrics are withheld");
+await capture("ambiguous-consult-compare-desktop", 1280, 900);
+await capture("ambiguous-consult-compare-mobile", 390, 900);
 const localAuthErrors = browserErrors.filter((error) => error.includes("Clerk: Failed to load Clerk JS") && error.includes("clerk.127.0.0.1"));
 assert.deepEqual(browserErrors.filter((error) => !localAuthErrors.includes(error)), [], "no application browser exceptions");
 

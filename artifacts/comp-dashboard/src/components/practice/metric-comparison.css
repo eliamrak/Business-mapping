@@ -1,0 +1,12 @@
+.pw-metric-comparison { display: grid; gap: 20px; margin: 20px 0; min-width: 0; }
+.pw-metric-comparison-row { min-width: 0; }
+.pw-metric-comparison-heading { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 6px 16px; margin-bottom: 9px; }
+.pw-metric-comparison-heading strong { font-size: 14px; overflow-wrap: anywhere; }
+.pw-metric-comparison-heading span { font-size: 14px; font-variant-numeric: tabular-nums; }
+.pw-metric-comparison-track { position: relative; height: 9px; background: #283139; border-radius: 3px; margin: 5px 3px; }
+.pw-metric-comparison-fill { display: block; height: 100%; background: #9fd8c2; border-radius: 3px; }
+.pw-metric-comparison-marker { position: absolute; top: -4px; width: 2px; height: 17px; background: #f2f4f5; transform: translateX(-50%); }
+.pw-metric-comparison-goal { background: #76dda4; }
+.pw-metric-comparison-capacity { background: #ee8c84; }
+.pw-metric-comparison-row small { display: block; margin-top: 8px; color: #a9b8c1; font-size: 12px; overflow-wrap: anywhere; }
+.pw-metric-comparison-row[data-practice] { border-top: 1px solid #34414b; padding-top: 18px; }

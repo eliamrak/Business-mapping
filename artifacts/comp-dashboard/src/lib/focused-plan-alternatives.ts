@@ -10,6 +10,18 @@ export type FocusedPlanInputs = {
   inPersonPct?: number | null;
 };
 
+export type FocusedPlanPriority = {
+  metric: "sessions" | "profit" | "roomDemandCoverage";
+  basis: string;
+  period: string | null;
+  unit: "sessions" | "currency";
+  base: number | null;
+  target: number | null;
+  shortfall: number | null;
+  /** Fractional shortfall, not a weighted score. Undefined for a zero target. */
+  relativeGap: number | null;
+};
+
 export type FocusedPlanAlternative = {
   id: "session-capacity" | "profit-goal" | "room-fit";
   name: string;
@@ -26,6 +38,9 @@ export type FocusedPlanAlternative = {
   values: Values;
   deltas: Values;
   assumptionSignature: string;
+  priority: FocusedPlanPriority;
+  /** Competition rank: tied gaps share rank; unevidenced options have no rank. */
+  rank: number | null;
 };
 
 const finite = (value: unknown): value is number => typeof value === "number" && Number.isFinite(value);
@@ -34,6 +49,27 @@ const displayNumber = (value: number) => value.toLocaleString("en-US", { maximum
 const displayMoney = (value: number) => value.toLocaleString("en-US", { style: "currency", currency: "USD", minimumFractionDigits: 0, maximumFractionDigits: 2 });
 const measureKeys = ["sessions", "capacity", "revenue", "profit", "roomCapacity", "roomUtilization", "unservedSessions"] as const;
 const unknownValues = (): Values => Object.fromEntries(measureKeys.map((key) => [key, null]));
+
+/** Sort independent copies by evidenced fractional gaps. Ties retain input order. */
+export function rankFocusedPlanAlternatives(options: readonly FocusedPlanAlternative[]): FocusedPlanAlternative[] {
+  const eligible = (option: FocusedPlanAlternative) => option.status === "modeled" && option.forecast !== null
+    && finite(option.priority.base) && finite(option.priority.target) && option.priority.target > 0
+    && nonnegative(option.priority.shortfall) && nonnegative(option.priority.relativeGap);
+  const ranked = structuredClone([...options]).map((option, index) => ({ option, index }));
+  ranked.sort((a, b) => {
+    const aKnown = eligible(a.option), bKnown = eligible(b.option);
+    if (aKnown !== bKnown) return aKnown ? -1 : 1;
+    return (aKnown ? b.option.priority.relativeGap! - a.option.priority.relativeGap! : 0) || a.index - b.index;
+  });
+  let previousGap: number | null = null;
+  let rank: number | null = null;
+  return ranked.map(({ option }, index) => {
+    if (!eligible(option)) return { ...option, rank: null };
+    if (option.priority.relativeGap !== previousGap) rank = index + 1;
+    previousGap = option.priority.relativeGap;
+    return { ...option, rank };
+  });
+}
 
 /** Pure, unsaved hypotheses. Never selects, replaces, or approves saved plans. */
 export function createFocusedPlanAlternatives(
@@ -62,6 +98,28 @@ export function createFocusedPlanAlternatives(
   const modelUnknowns = (month: ForecastMonth | undefined) => month?.warnings.filter((warning) =>
     /missing|unknown|incomplete|unavailable|unverified|not found|choose|must be/i.test(warning),
   ) ?? ["Forecast period is unknown."];
+  const baselineEvidenced = !baselineUnknown && !modelUnknowns(baseline).length;
+  const priorityFor = (id: FocusedPlanAlternative["id"]): FocusedPlanPriority => {
+    const roomDemand = nonnegative(base.sessions) && nonnegative(base.unservedSessions)
+      ? base.sessions + base.unservedSessions : null;
+    const attainableRoomDemand = roomDemand !== null && capacity !== null ? Math.min(roomDemand, capacity) : null;
+    const metric = id === "session-capacity" ? "sessions" : id === "profit-goal" ? "profit" : "roomDemandCoverage";
+    const target = id === "session-capacity" ? capacity : id === "profit-goal"
+      ? nonnegative(profitTarget) ? profitTarget : null
+      : baselineEvidenced && nonnegative(base.roomCapacity) ? attainableRoomDemand : null;
+    const current = id === "session-capacity" ? base.sessions : id === "profit-goal" ? base.profit
+      : target !== null ? baseline?.constraint === "Room capacity" ? base.sessions : target : null;
+    const evidencedBase = baselineEvidenced && finite(current) ? current : null;
+    const shortfall = evidencedBase !== null && target !== null ? Math.max(0, target - evidencedBase) : null;
+    return {
+      metric, unit: metric === "profit" ? "currency" : "sessions", period: baseline?.date ?? null,
+      basis: metric === "sessions" ? "Current modeled sessions versus configured clinician capacity in the first forecast month."
+        : metric === "profit" ? "Current modeled profit versus the resolved monthly profit goal in the first forecast month."
+          : "Clinically attainable demand is min(total current demand, configured clinician capacity). When Room capacity binds, shortfall is max(0, clinically attainable demand - delivered sessions): an upper bound on room-related recovery, not an exact recovery forecast. Otherwise no binding room shortfall is evidenced.",
+      base: evidencedBase, target, shortfall,
+      relativeGap: shortfall !== null && target !== null && target > 0 ? shortfall / target : null,
+    };
+  };
 
   const build = (
     id: FocusedPlanAlternative["id"], name: string, focusKpis: FocusedPlanAlternative["focusKpis"],
@@ -88,6 +146,7 @@ export function createFocusedPlanAlternatives(
       practiceCopy, snapshot: practiceCopy, assumptions,
       unknowns: [...new Set(unknowns)], forecast: rows, values, deltas,
       assumptionSignature: planInputSignature({ id, focusKpis, practiceCopy, input }),
+      priority: priorityFor(id), rank: null,
     };
   };
 
@@ -164,5 +223,5 @@ export function createFocusedPlanAlternatives(
     assumptions.push("Existing room hours, locations, assignments and availability still constrain the forecast; aggregate room fit does not guarantee individual room access.");
     return true;
   });
-  return [sessions, profit, rooms];
+  return rankFocusedPlanAlternatives([sessions, profit, rooms]) as [FocusedPlanAlternative, FocusedPlanAlternative, FocusedPlanAlternative];
 }

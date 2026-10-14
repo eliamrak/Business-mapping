@@ -198,3 +198,11 @@
   .pw-app .pw-session-headline-actual-value { font-size: 44px !important; }
   .pw-app .pw-person-kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
+.pw-plan-priority { display: grid; gap: 6px; padding: 14px 0; border-bottom: 1px solid #34414b; }
+.pw-plan-priority > strong { font-size: 22px; }
+.pw-plan-priority small { color: #a9b8c1; font-size: 12px; overflow-wrap: anywhere; }
+.pw-plan-outcomes { display: grid; gap: 12px; margin: 12px 0; }
+.pw-plan-outcomes > div { display: grid; gap: 5px; min-width: 0; }
+.pw-plan-outcomes dt { font-size: 12px; color: #a9b8c1; }
+.pw-plan-outcomes dd { margin: 0; font-size: 20px; overflow-wrap: anywhere; font-variant-numeric: tabular-nums; }
+.pw-plan-outcomes dd small { display: block; margin-top: 5px; font-size: 12px; color: #a9b8c1; }

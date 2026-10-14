@@ -122,6 +122,8 @@ import Updates from "@/components/hub/updates";
 import { type ViewProps, fmt, monthLabel } from "@/components/hub/views";
 import WorkspaceSessions from "@/components/practice/workspace-sessions";
 import PercentageKpi from "@/components/practice/percentage-kpi";
+import MetricComparison from "@/components/practice/metric-comparison";
+import { hasUniqueClinicianIdentity } from "@/lib/metric-comparison";
 import { selectedPeriodSessionSummary } from "@/lib/session-trend";
 import { monthlySessionObservations } from "@/lib/monthly-session-observations";
 import WorkspaceCalculations from "@/components/practice/workspace-calculations";
@@ -2699,7 +2701,7 @@ export default function PracticeWorkspace() {
     ? sharedContributor
     : "Whole Practice";
   const contributorActivity =
-    selectedContributorName === "Whole Practice"
+    selectedContributorName === "Whole Practice" || !hasUniqueClinicianIdentity(context.clinicians, selectedContributorName)
       ? null
       : clinicianActivityByName.get(
           normalizeClinicianName(selectedContributorName),
@@ -2707,11 +2709,36 @@ export default function PracticeWorkspace() {
   const contributorConsult =
     selectedContributorName === "Whole Practice"
       ? consultConversionSummary.practice
-      : consultConversionSummary.byClinician.find(
+      : !hasUniqueClinicianIdentity(context.clinicians, selectedContributorName) ? null : consultConversionSummary.byClinician.find(
           (row) =>
             normalizeClinicianName(row.clinician ?? "") ===
             normalizeClinicianName(selectedContributorName),
         ) ?? null;
+  const clinicalComparisonRows = people.map((person) => {
+    const unique = hasUniqueClinicianIdentity(context.clinicians, person.label);
+    const row = unique ? clinicianActivityByName.get(normalizeClinicianName(person.label)) : undefined;
+    return { id: String(person.id), label: person.label,
+      value: sessionMetricView === "retention" ? row?.initialRetentionPct : row?.averageClientEndingsPerFullMonth,
+      detail: !unique ? "Unknown: clinician name maps to multiple IDs; resolve the import mapping."
+        : sessionMetricView === "retention"
+        ? `${fmt(row?.retainedClients)} retained / ${fmt(row?.initialRetentionDenominator)} evaluated starts; ${fmt(row?.pendingInitialClients)} pending${row?.coverageVerified ? "" : "; coverage unverified"}`
+        : `${fmt(row?.endingFullMonthClientEnds)} relationship endings / ${fmt(row?.endingFullMonthDenominator)} mature months`,
+    };
+  }).concat([{ id: "practice", label: "Whole Practice",
+    value: sessionMetricView === "retention" ? clientActivityEstimate?.initialRetentionRate == null ? null : clientActivityEstimate.initialRetentionRate * 100 : clientActivityEstimate?.averageClientEndingsPerFullMonth,
+    detail: sessionMetricView === "retention"
+      ? `${fmt(clientActivityEstimate?.retainedClientPairs)} retained / ${fmt(clientActivityEstimate?.initialRetentionDenominator)} evaluated starts; ${fmt(clientActivityEstimate?.immatureClientPairsExcluded)} pending${clientActivityEstimate?.coverageVerified ? "" : "; coverage unverified"}`
+      : `${fmt(clientActivityEstimate?.endingFullMonthClientEnds)} unique client endings / ${fmt(clientActivityEstimate?.endingFullMonthDenominator)} mature months`,
+  }]).map((row) => ({ ...row, practice: row.id === "practice" }));
+  const consultComparisonRows = [...people.map((person) => {
+    const unique = hasUniqueClinicianIdentity(context.clinicians, person.label);
+    const row = unique ? consultConversionSummary.byClinician.find((metric) => normalizeClinicianName(metric.clinician ?? "") === normalizeClinicianName(person.label)) : undefined;
+    return { id: String(person.id), label: person.label, value: row?.conversionRate,
+      detail: unique ? `${fmt(row?.converted)} confirmed closes / ${fmt(row?.evaluated)} evaluated; ${fmt(row?.pending)} pending` : "Unknown: clinician name maps to multiple IDs; resolve the import mapping.",
+    };
+  }), { id: "practice", label: "Whole Practice", value: consultConversionSummary.practice.conversionRate,
+    detail: `${fmt(consultConversionSummary.practice.converted)} treatment starts / ${fmt(consultConversionSummary.practice.evaluated)} evaluated; ${fmt(consultConversionSummary.practice.pending)} pending`,
+  }].map((row) => ({ ...row, practice: row.id === "practice" }));
   const recordedClinicianCount =
     viewProjection?.clinicianPace.filter(
       (person) => person.recordedWeekly !== null,
@@ -3552,15 +3579,16 @@ export default function PracticeWorkspace() {
                         end: periodRange.end.startsWith("9999-") ? today : periodRange.end,
                       };
                       const sessionEvidence = selectedPeriodSessionSummary(personRecords, [person.id], sessionEvidenceBounds, importedSessionOverlay?.attendanceCoverage ?? []);
-                      const importedActivity = clinicianActivityByName.get(
+                      const uniqueIdentity = hasUniqueClinicianIdentity(context.clinicians, person.label);
+                      const importedActivity = uniqueIdentity ? clinicianActivityByName.get(
                         normalizeClinicianName(person.label),
-                      );
+                      ) : undefined;
                       const consultMetric =
-                        consultConversionSummary.byClinician.find(
+                        uniqueIdentity ? consultConversionSummary.byClinician.find(
                           (row) =>
                             normalizeClinicianName(row.clinician ?? "") ===
                             normalizeClinicianName(person.label),
-                        ) ?? null;
+                        ) ?? null : null;
                       const setting = workspace.clinicians.find(
                         (c) =>
                           c.clinicianId === person.id &&
@@ -3652,6 +3680,7 @@ export default function PracticeWorkspace() {
                             )}
                           </header>
                           <div className="pw-person-kpis">
+                            {!uniqueIdentity && <p className="pw-note">Imported clinician metrics are unknown: this name maps to multiple clinician IDs.</p>}
                             <div>
                               <span>Sessions</span>
                               <strong>{fmt(sessionEvidence.completedWeekly ?? sessionEvidence.calendarWindowWeeklyEstimate)} / wk</strong>
@@ -4146,13 +4175,14 @@ export default function PracticeWorkspace() {
                       forecastMonths={months}
                       selectedPeriod={periodRange}
                       contributorId={selectedContributor?.id ?? null}
-                      compareWholePractice={compareWholePractice && !!selectedContributor}
+                      compareWholePractice={compareWholePractice}
                       requiredWeeklySessions={requiredContributorWeekly}
+                      practiceRequiredWeeklySessions={requiredPracticeWeekly}
                       attendanceCoverage={importedSessionOverlay?.attendanceCoverage}
                       attendanceObservedSpans={importedSessionOverlay?.attendanceObservedSpans}
                       controls={<><SharedPeriodControls period={sharedPeriod} custom={customPeriod} onPeriod={setSharedPeriod} onCustom={setCustomPeriod} note="" /><div className="pw-contributor-tabs" role="group" aria-label="Sessions contributor">
-                        {contributorNames.map((name) => <button key={name} aria-pressed={selectedContributorName === name} onClick={() => { setSharedContributor(name); setCompareWholePractice(false); }}>{name}</button>)}
-                        {selectedContributorName !== "Whole Practice" && <button aria-pressed={compareWholePractice} onClick={() => setCompareWholePractice((value) => !value)}>Compare with Whole Practice</button>}
+                        {contributorNames.map((name, index) => <button key={index === 0 ? "practice" : people[index - 1].id} aria-pressed={selectedContributorName === name} onClick={() => { setSharedContributor(name); setCompareWholePractice(false); }}>{name}</button>)}
+                        <button aria-pressed={compareWholePractice} onClick={() => setCompareWholePractice((value) => !value)}>Compare with Whole Practice</button>
                       </div></>}
                       onSaved={async () => {
                         await contextQuery.refetch();
@@ -4188,9 +4218,9 @@ export default function PracticeWorkspace() {
                         role="group"
                         aria-label="Contributor"
                       >
-                        {contributorNames.map((name) => (
+                        {contributorNames.map((name, index) => (
                           <button
-                            key={name}
+                            key={index === 0 ? "practice" : people[index - 1].id}
                             aria-pressed={selectedContributorName === name}
                             onClick={() => {
                               setSharedContributor(name);
@@ -4200,7 +4230,7 @@ export default function PracticeWorkspace() {
                             {name}
                           </button>
                         ))}
-                        {selectedContributorName !== "Whole Practice" && (
+                        {(
                           <button
                             aria-pressed={compareWholePractice}
                             onClick={() =>
@@ -4211,7 +4241,7 @@ export default function PracticeWorkspace() {
                           </button>
                         )}
                       </div>
-                      {sessionMetricView === "retention" ? (
+                      {compareWholePractice ? <MetricComparison rows={clinicalComparisonRows} unit={sessionMetricView === "retention" ? "%" : "endings / month"} percentage={sessionMetricView === "retention"} label="Clinical metric comparison" /> : sessionMetricView === "retention" ? (
                         <>
                           {selectedContributorName !== "Whole Practice" && !compareWholePractice ? <PercentageKpi label="Initial retention" value={contributorActivity?.initialRetentionPct} benchmark={clientActivityEstimate?.initialRetentionRate == null ? null : clientActivityEstimate.initialRetentionRate * 100} observed={`${fmt(contributorActivity?.retainedClients)} retained / ${fmt(contributorActivity?.initialRetentionDenominator)} evaluated starts`} /> : <>
                           <div className="pw-metric-hero">
@@ -4303,10 +4333,11 @@ export default function PracticeWorkspace() {
                                 ? null
                                 : clientActivityEstimate?.averageClientEndingsPerFullMonth
                             }
-                            goal={8}
+                            goal={null}
                             lowerIsBetter
                           />
                           <p className="pw-note">
+                            Goal unavailable: no defined client-ending target or sourced replacement model. {" "}
                             Attrition is lower-is-better, measured as client
                             endings per mature month. Endings require 90 covered
                             days without a later return; later returns remove
@@ -4314,16 +4345,8 @@ export default function PracticeWorkspace() {
                           </p>
                         </>
                       )}
-                      {compareWholePractice && selectedContributorName !== "Whole Practice" && (
-                        <div className="pw-comparison" aria-label="Whole Practice comparison">
-                          <strong>Whole Practice</strong>
-                          {sessionMetricView === "retention" ? (
-                            <><MetricTargetBar value={clientActivityEstimate?.initialRetentionRate == null ? null : clientActivityEstimate.initialRetentionRate * 100} max={100} valueLabel="Whole Practice" /><p>{percent(clientActivityEstimate?.initialRetentionRate)} · {fmt(clientActivityEstimate?.retainedClientPairs)} retained / {fmt(clientActivityEstimate?.initialRetentionDenominator)} mature starts</p></>
-                          ) : (
-                            <p>{fmt(clientActivityEstimate?.averageClientEndingsPerFullMonth)} endings / month · {fmt(clientActivityEstimate?.endingFullMonthClientEnds)} unique client endings / {fmt(clientActivityEstimate?.endingFullMonthDenominator)} mature months</p>
-                          )}
-                        </div>
-                      )}
+                      {!compareWholePractice && selectedContributorName !== "Whole Practice" && !hasUniqueClinicianIdentity(context.clinicians, selectedContributorName) && <p className="pw-note">Imported clinician metrics are unknown: this name maps to multiple clinician IDs.</p>}
+                      {compareWholePractice && sessionMetricView === "attrition" && <p className="pw-note">Goal unavailable: no defined client-ending target or sourced replacement model. Endings require mature 90-day coverage; later returns remove prior endings.</p>}
                     </section>
                   )}
                 </>
@@ -4777,9 +4800,9 @@ export default function PracticeWorkspace() {
                           role="group"
                           aria-label="Consult contributor"
                         >
-                          {contributorNames.map((name) => (
+                          {contributorNames.map((name, index) => (
                             <button
-                              key={name}
+                              key={index === 0 ? "practice" : people[index - 1].id}
                               aria-pressed={selectedContributorName === name}
                               onClick={() => {
                                 setSharedContributor(name);
@@ -4789,7 +4812,7 @@ export default function PracticeWorkspace() {
                               {name}
                             </button>
                           ))}
-                          {selectedContributorName !== "Whole Practice" && (
+                          {(
                             <button
                               aria-pressed={compareWholePractice}
                               onClick={() =>
@@ -4800,7 +4823,7 @@ export default function PracticeWorkspace() {
                             </button>
                           )}
                         </div>
-                        {selectedContributorName !== "Whole Practice" && !compareWholePractice ? <PercentageKpi label="Consult close rate" value={contributorConsult?.conversionRate} benchmark={consultConversionSummary.practice.conversionRate} observed={`${fmt(contributorConsult?.converted)} confirmed closes / ${fmt(contributorConsult?.evaluated)} evaluated`} pending={`${fmt(contributorConsult?.pending)} pending`} /> : <>
+                        {compareWholePractice ? <MetricComparison rows={consultComparisonRows} percentage unit="%" label="Consult metric comparison" /> : selectedContributorName !== "Whole Practice" ? <PercentageKpi label="Consult close rate" value={contributorConsult?.conversionRate} benchmark={consultConversionSummary.practice.conversionRate} observed={`${fmt(contributorConsult?.converted)} confirmed closes / ${fmt(contributorConsult?.evaluated)} evaluated`} pending={`${fmt(contributorConsult?.pending)} pending`} /> : <>
                         <div className="pw-metric-hero">
                           <strong>
                             {fmt(contributorConsult?.conversionRate, "percent")}
@@ -4824,13 +4847,7 @@ export default function PracticeWorkspace() {
                         />
                         </>}
                         {contributorConsult && !consultConversionSummary.coverageVerified && <p className="pw-note">Observed conversions; report coverage is unverified. {fmt(contributorConsult.pending)} journeys remain pending.</p>}
-                        {compareWholePractice && selectedContributorName !== "Whole Practice" && (
-                          <div className="pw-comparison" aria-label="Whole Practice conversion comparison">
-                            <strong>Whole Practice</strong>
-                            <MetricTargetBar value={consultConversionSummary.practice.conversionRate} max={100} valueLabel="Whole Practice" />
-                            <p>{fmt(consultConversionSummary.practice.conversionRate, "percent")} · {fmt(consultConversionSummary.practice.converted)} treatment starts / {fmt(consultConversionSummary.practice.evaluated)} mature or converted journeys; {fmt(consultConversionSummary.practice.pending)} pending</p>
-                          </div>
-                        )}
+                        {!compareWholePractice && selectedContributorName !== "Whole Practice" && !hasUniqueClinicianIdentity(context.clinicians, selectedContributorName) && <p className="pw-note">Imported clinician metrics are unknown: this name maps to multiple clinician IDs.</p>}
                         <div className="pw-number-grid pw-consult-audit">
                           <div>
                             <span>Needs attribution</span>
@@ -8001,9 +8018,22 @@ export default function PracticeWorkspace() {
             <section className="pw-focused-plans" aria-label="Focused plan options">
               <h3>Focused alternatives</h3>
               <div className="pw-focused-plan-grid" aria-label="Generated focused alternatives">
-                {generatedPlanAlternatives.map((option) => <article className="pw-focused-plan" key={option.id}>
-                  <span className="pw-tag">{option.status === "modeled" ? "Modeled draft" : "Inputs needed"}</span>
+                {generatedPlanAlternatives.map((option) => <article className="pw-focused-plan" key={option.id} data-option-id={option.id} data-priority-gap={option.rank === null ? undefined : option.priority.relativeGap}>
+                  <span className="pw-tag">{option.rank === null ? "Unranked" : `Rank ${option.rank}`} · {option.status === "modeled" ? "Modeled draft" : "Inputs needed"}</span>
                   <h4>{option.name}</h4><strong>{option.focusKpis.join(" + ")}</strong>
+                  <div className="pw-plan-priority">
+                    <span>{option.priority.period ? monthLabel(option.priority.period) : "Period unknown"} shortfall</span>
+                    <strong>{option.rank === null || option.priority.relativeGap === null ? "Unknown" : `${fmt(option.priority.relativeGap * 100)}%`}</strong>
+                    <small>{option.priority.basis}</small>
+                    <small>Baseline {option.priority.unit === "currency" ? money(option.priority.base) : fmt(option.priority.base)} / target {option.priority.unit === "currency" ? money(option.priority.target) : fmt(option.priority.target)}</small>
+                  </div>
+                  <dl className="pw-plan-outcomes" aria-label="Modeled outcomes and changes">
+                    {option.focusKpis.map((kpi) => {
+                      const metric = kpi === "Profit" ? "profit" : kpi === "Revenue" ? "revenue" : kpi === "Rooms" ? "roomCapacity" : "sessions";
+                      const format = (value: number | null | undefined) => metric === "profit" || metric === "revenue" ? money(value) : fmt(value);
+                      return <div key={kpi}><dt>{kpi === "Rooms" ? "Room slots" : kpi} / month</dt><dd>{format(option.values[metric])}<small>Change vs Today: {format(option.deltas[metric])}</small></dd></div>;
+                    })}
+                  </dl>
                   <ul className="pw-assumption-list">{[...option.assumptions, ...option.unknowns].map((assumption) => <li key={assumption}>{assumption}</li>)}</ul>
                   <button className="pw-button" disabled={saving} onClick={() => {
                     if (!query.data || (draft && changes.length)) return;

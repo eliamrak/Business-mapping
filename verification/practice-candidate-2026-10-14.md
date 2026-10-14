@@ -34,12 +34,12 @@ Page/prototype changes, access grants, or new infrastructure.
 
 ## Verification
 
-- `corepack pnpm test`: 467 passed, zero failed.
+- `corepack pnpm test`: 479 passed, zero failed.
 - `corepack pnpm run typecheck:libs`: passed.
 - Dashboard and API typechecks: passed.
 - Frontend production build with PORT and BASE_PATH set: passed; existing
   sourcemap, mixed jsPDF import and large-chunk warnings remain.
-- Synthetic isolated Playwright harness: 38 desktop/mobile captures, no horizontal
+- Synthetic isolated Playwright harness: 49 desktop/mobile captures, no horizontal
   overflow or navigation overlap. Checks include keyboard navigation, circular
   retention/practice marker, Compare, staff cost, percentage persistence/reload,
   generated-plan unsaved protection, saved plans, imports and legacy daily visits.
@@ -68,6 +68,40 @@ Independent read-only follow-up review found no issues, with 31 focused tests an
 dashboard/API typechecks passing. The new frozen commit still requires the separate
 auditor's exact-commit confirmation; c1d5e63 audit results do not certify these new
 changes. No deployment was performed.
+
+## Requirement-gap follow-up
+
+The independent review of `34e7868` identified three broader requirement gaps.
+This follow-up removes the fixed Attrition goal of eight: without a defined
+client-ending target or sourced replacement model, the Goal is unavailable and no
+green target marker is drawn, in either individual or Compare views.
+
+Sessions, Retention, Attrition and Consultations now share one horizontal Compare
+renderer. Every selected-team clinician appears before Whole Practice, on a common
+scale for that metric and period. Unknown observations remain unfilled, not zero.
+Sessions uses strict verified weekly pace, not an unverified estimate. Practice
+benchmark, configured capacity and available practice Goal markers remain distinct.
+Name-only clinical imports are withheld where the full roster contains multiple
+distinct clinician IDs with the same normalized name; Compare and individual/Team
+views show mapping ambiguity instead of duplicating a person's imported metrics.
+
+Generated alternatives are ordered by evidenced fractional shortfall relative to
+their defined first-month target, with baseline, target, period and units visible.
+Zero-denominator and unevidenced alternatives remain unranked. Equal gaps share
+rank; unknown options are not assigned invented scores. Each card exposes modeled
+monthly values and deltas versus Today for its one or two focus KPIs. Room priority
+caps demand at clinician capacity and explicitly describes its shortfall as an
+upper bound, not guaranteed recovery. Existing forecast and financial equations
+are unchanged; ranking and presentation do not save or adopt plans automatically.
+
+Independent read-only review found room overattribution and ambiguous-name lookup
+issues during this follow-up. Both were fixed and re-reviewed with no remaining
+findings; 23 focused tests and dashboard typecheck passed independently. The author
+completed 49 fresh synthetic desktop/mobile captures, including all four Compare
+views, individual Attrition, ranked outcomes and duplicate-name withholding.
+
+The new frozen candidate still requires the external reviewer's exact-commit
+check and the user's screen approval. This is not a production-data certification.
 
 ## Limits and release gates
 

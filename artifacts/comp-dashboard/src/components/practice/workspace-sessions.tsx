@@ -42,6 +42,7 @@ import { firstHiringReviewMonth, observedBiweeklySessionRecords, summarizeHiring
 import { buildSessionTrend, containedSessionRecords, selectedPeriodSessionSummary, type SessionAttendanceCoverage, type SessionPeriod } from "@/lib/session-trend";
 import SessionImportDialog from "./session-import-dialog";
 import BulkSessionEntry from "./bulk-session-entry";
+import MetricComparison from "./metric-comparison";
 
 type Draft = {
   completed: string;
@@ -96,6 +97,7 @@ export default function WorkspaceSessions({
   contributorId = null,
   compareWholePractice = false,
   requiredWeeklySessions,
+  practiceRequiredWeeklySessions,
   attendanceCoverage = [],
   attendanceObservedSpans = [],
   controls,
@@ -114,6 +116,7 @@ export default function WorkspaceSessions({
   contributorId?: number | null;
   compareWholePractice?: boolean;
   requiredWeeklySessions?: number;
+  practiceRequiredWeeklySessions?: number;
   attendanceCoverage?: SessionAttendanceCoverage[];
   attendanceObservedSpans?: ImportedAttendanceObservedSpan[];
   controls?: ReactNode;
@@ -434,7 +437,17 @@ export default function WorkspaceSessions({
   ) : [];
   const practiceSummary = selectedPeriodSessionSummary(practiceRecords, people.map((person) => person.id), chartBounds, attendanceCoverage);
   const selectedSummary = selectedPeriodSessionSummary(records, readIds, chartBounds, attendanceCoverage);
-  const comparisonAvailable = compareWholePractice && selectedSummary.coverageComplete === true && practiceSummary.coverageComplete === true;
+  const comparisonRows = [...people.map((person) => {
+    const summary = selectedPeriodSessionSummary(practiceRecords, [person.id], chartBounds, attendanceCoverage);
+    return { id: String(person.id), label: person.label, value: summary.completedWeekly,
+      capacity: annualGoalFor(person.id, Number(chartBounds.end.slice(0, 4)), annualGoals) ?? person.sessionsPerWeek,
+      detail: `${display(summary.observedCompleted ?? null)} observed sessions; ${summary.coverageComplete ? `${summary.observedCoverageDays} covered days` : "coverage unknown; verified weekly pace unknown"}`,
+    };
+  }), { id: "practice", label: "Whole Practice", value: practiceSummary.completedWeekly,
+    capacity: people.reduce((sum, person) => sum + (annualGoalFor(person.id, Number(chartBounds.end.slice(0, 4)), annualGoals) ?? person.sessionsPerWeek ?? 0), 0),
+    goal: practiceRequiredWeeklySessions,
+    detail: `${display(practiceSummary.observedCompleted ?? null)} observed sessions; ${practiceSummary.coverageComplete ? `${practiceSummary.observedCoverageDays} covered days` : "coverage unknown; verified weekly pace unknown"}`,
+  }].map((row) => ({ ...row, practice: row.id === "practice" }));
   const selectedGoal = readPeople.reduce((sum, person) => sum + (annualGoalFor(person.id, Number(chartBounds.end.slice(0, 4)), annualGoals) ?? person.sessionsPerWeek ?? 0), 0);
   const requiredPace = requiredWeeklySessions != null && Number.isFinite(requiredWeeklySessions) ? requiredWeeklySessions : null;
   const capacityColor = requiredPace !== null && requiredPace > selectedGoal ? "#ee8c84" : "#f2f4f5";
@@ -586,7 +599,7 @@ export default function WorkspaceSessions({
           {requiredPace !== null && <span className="pw-session-progress-marker pw-session-progress-required" title={`Goal ${display(requiredPace)}`} style={{ left: progressPosition(requiredPace), backgroundColor: "#76dda4" }} />}
         </div>
       </div>
-      <div className="pw-session-chart" aria-label="Calendar weekly session trend" style={{ width: "100%", minWidth: 0 }}>
+      {compareWholePractice ? <MetricComparison rows={comparisonRows} unit="sessions / week" label="Session metric comparison" /> : <div className="pw-session-chart" aria-label="Calendar weekly session trend" style={{ width: "100%", minWidth: 0 }}>
         <div style={{ width: "100%", height: 229 }}>
           <ResponsiveContainer width="100%" height="100%">
             <LineChart data={chartData} margin={{ top: 12, right: 20, bottom: 8, left: 0 }} accessibilityLayer>
@@ -602,14 +615,11 @@ export default function WorkspaceSessions({
               {chartData.some((point) => point.periodRate !== null) && <Line dataKey="periodRate" name="Period pace" stroke="#9fd8c2" strokeWidth={0} dot={{ r: 4, strokeWidth: 2, fill: "#9fd8c2" }} activeDot={{ r: 5, strokeWidth: 2 }} isAnimationActive={false} />}
               <Line dataKey="capacity" name="Capacity" stroke={capacityColor} dot={false} strokeDasharray="6 3" isAnimationActive={false} />
               {requiredPace !== null && <Line dataKey="required" name="Goal" stroke="#76dda4" dot={false} strokeDasharray="3 3" isAnimationActive={false} />}
-              {comparisonAvailable && chartData.some((point) => point.benchmark !== null) && <Line dataKey="benchmark" name="Practice sessions" stroke="#84b9db" dot={{ r: 3 }} connectNulls={false} isAnimationActive={false} />}
-              {comparisonAvailable && chartData.some((point) => point.benchmarkPeriodRate !== null) && <Line dataKey="benchmarkPeriodRate" name="Practice period pace" stroke="#84b9db" strokeWidth={0} dot={{ r: 4, strokeWidth: 2, fill: "#84b9db" }} isAnimationActive={false} />}
             </LineChart>
           </ResponsiveContainer>
         </div>
         {!visibleRecords.length && !chartData.some((point) => point.completed !== null || point.observedCompleted !== null) && <p className="pw-empty">No complete recorded periods in this date range.</p>}
-        {comparisonAvailable && <p>Whole practice: {display(practiceSummary.completedWeekly)} completed / week; {display(practiceSummary.observedCompleted ?? null)} observed sessions; {practiceSummary.observedCoverageDays} covered days.</p>}
-      </div>
+      </div>}
       {!!readPeople.length && (
         <details className="pw-session-clinician-details">
           <summary>Clinician details</summary>
