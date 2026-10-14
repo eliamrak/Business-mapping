@@ -39,6 +39,8 @@ import {
   observed,
   observedSeries,
   workspaceSchema,
+  goalSchema,
+  fundGoalSchema,
   budgetSchema,
   categorySchema,
   roomSchema,
@@ -183,17 +185,16 @@ type Section =
   | "budgets"
   | "money"
   | "summary"
+  | "current-goals"
   | "settings"
   | "documents";
-const sections: { id: Section; label: string }[] = [
-  { id: "clinicians", label: "Clinicians & pay" },
-  { id: "sessions", label: "Sessions" },
-  { id: "retention", label: "Retention" },
-  { id: "marketing", label: "Marketing" },
-  { id: "rooms", label: "Rooms" },
-  { id: "budgets", label: "Budgets" },
-  { id: "money", label: "Money flow" },
-  { id: "summary", label: "Summary" },
+const sections: { id: Section; label: string; active?: Section[] }[] = [
+  { id: "summary", label: "Overview" },
+  { id: "sessions", label: "Sessions", active: ["sessions", "retention"] },
+  { id: "clinicians", label: "Team" },
+  { id: "money", label: "Money" },
+  { id: "marketing", label: "Growth", active: ["marketing", "rooms"] },
+  { id: "current-goals", label: "Goals" },
 ];
 const transferableSections = new Set<Section>([
   "clinicians",
@@ -1068,6 +1069,113 @@ export default function PracticeWorkspace() {
       return { ...current, settings: { ...current.settings, ...patch } };
     });
     setStagedLabels((prior) => ({ ...prior, settings: label }));
+    setReviewStaged(false);
+  }
+  function stageGoalPatch(
+    id: string,
+    patch: Partial<Workspace["goals"][number]>,
+    label: string,
+  ) {
+    if (!workspace) return;
+    setStagedWorkspace((prior) => {
+      const current = prior ?? workspace;
+      return {
+        ...current,
+        goals: current.goals.map((goal) =>
+          goal.id === id ? { ...goal, ...patch } : goal,
+        ),
+      };
+    });
+    setStagedLabels((prior) => ({ ...prior, ["goals:" + id]: label }));
+    setReviewStaged(false);
+  }
+  function stageNamedGoal(
+    name: string,
+    metric: Workspace["goals"][number]["metric"],
+    patch: Partial<Workspace["goals"][number]>,
+  ) {
+    if (!workspace) return;
+    const current = stagedWorkspace ?? workspace;
+    const normalizedPatch = {
+      ...patch,
+      ...(patch.date !== undefined
+        ? { date: patch.date || `${today.slice(0, 4)}-12-31` }
+        : {}),
+    };
+    const existing = current.goals.find(
+      (goal) => !goal.archived && goal.name.toLowerCase() === name.toLowerCase(),
+    );
+    if (existing) {
+      stageGoalPatch(existing.id, normalizedPatch, name);
+      return;
+    }
+    const goal = goalSchema.parse({
+      id: crypto.randomUUID(),
+      name,
+      metric,
+      amount: 0,
+      date: `${today.slice(0, 4)}-12-31`,
+      basis: "annual",
+      ...normalizedPatch,
+    });
+    setStagedWorkspace({ ...current, goals: [...current.goals, goal] });
+    setStagedLabels((prior) => ({ ...prior, ["goals:" + goal.id]: name }));
+    setReviewStaged(false);
+  }
+  function stageFundGoalPatch(
+    id: string,
+    patch: Partial<Workspace["fundGoals"][number]>,
+    label: string,
+  ) {
+    if (!workspace) return;
+    setStagedWorkspace((prior) => {
+      const current = prior ?? workspace;
+      return {
+        ...current,
+        fundGoals: (current.fundGoals ?? []).map((goal) =>
+          goal.id === id ? { ...goal, ...patch } : goal,
+        ),
+      };
+    });
+    setStagedLabels((prior) => ({ ...prior, ["fundGoals:" + id]: label }));
+    setReviewStaged(false);
+  }
+  function stageNamedFundGoal(
+    name: string,
+    patch: Partial<Workspace["fundGoals"][number]>,
+  ) {
+    if (!workspace) return;
+    const current = stagedWorkspace ?? workspace;
+    const normalizedPatch = {
+      ...patch,
+      ...(patch.date !== undefined
+        ? { date: patch.date || `${today.slice(0, 4)}-12-31` }
+        : {}),
+      ...(patch.balanceDate !== undefined
+        ? { balanceDate: patch.balanceDate || null }
+        : {}),
+    };
+    const existing = (current.fundGoals ?? []).find(
+      (goal) => !goal.archived && goal.name.toLowerCase() === name.toLowerCase(),
+    );
+    if (existing) {
+      stageFundGoalPatch(existing.id, normalizedPatch, name);
+      return;
+    }
+    const goal = fundGoalSchema.parse({
+      id: crypto.randomUUID(),
+      name,
+      amount: 0,
+      date: `${today.slice(0, 4)}-12-31`,
+      currentBalance: null,
+      balanceDate: null,
+      ...normalizedPatch,
+    });
+    setStagedWorkspace({
+      ...current,
+      fundGoals: [...(current.fundGoals ?? []), goal],
+    });
+    setStagedLabels((prior) => ({ ...prior, ["fundGoals:" + goal.id]: name }));
     setReviewStaged(false);
   }
   function stageFunnelPatch(
@@ -2013,7 +2121,7 @@ export default function PracticeWorkspace() {
       pendingSandboxModel.current = null;
       setDraftStart(copyPractice(draft.workspace, draft.context));
       setSandboxDialog(false);
-      setMessage("Sandbox model saved. Today and Planning are unchanged.");
+      setMessage("Sandbox model saved. Today and Long Term Goals are unchanged.");
     } catch (e) {
       setError(errorText(e));
     }
@@ -2034,7 +2142,7 @@ export default function PracticeWorkspace() {
       next !== draftMode
     ) {
       setError(
-        "Save this scenario to Planning or discard its changes before opening another workspace.",
+        "Save this scenario to Long Term Goals or discard its changes before opening another workspace.",
       );
       return;
     }
@@ -2152,7 +2260,7 @@ export default function PracticeWorkspace() {
       setTransferOpen(false);
       setTransferFile(null);
       setMessage(
-        `${transferSection} copied into ${mode === "practice" ? "Today" : mode === "goals" ? "Planning" : "Sandbox"}.`,
+        `${transferSection} copied into ${mode === "practice" ? "Today" : mode === "goals" ? "Long Term Goals" : "Sandbox"}.`,
       );
     } catch (e) {
       setError(errorText(e));
@@ -2179,7 +2287,7 @@ export default function PracticeWorkspace() {
   const toolTabs: ToolTab[] =
     mode === "goals" && !draft
       ? [
-          { id: null, label: "Scenarios" },
+          { id: null, label: "Long-term plans" },
           { id: "business-goals", label: "Compensation targets" },
           { id: "compensation-model", label: "Compensation model" },
         ]
@@ -2187,13 +2295,13 @@ export default function PracticeWorkspace() {
         ? [{ id: null, label: planningEdit ? "Scenario" : "Working copy" }]
         : section === "clinicians"
           ? [
-              { id: null, label: "Clinicians" },
-              { id: "team", label: "Team details" },
+              { id: null, label: "Clinician KPIs" },
+              { id: "team", label: "Pay structure" },
               { id: "impact", label: "Pay comparison" },
             ]
           : section === "summary"
             ? [
-                { id: null, label: "Summary" },
+                { id: null, label: "Overview" },
                 { id: "reality", label: "Compensation baseline" },
               ]
             : [];
@@ -2206,7 +2314,7 @@ export default function PracticeWorkspace() {
       : visibleTool === "scenarios" || visibleTool === "compare"
         ? "Saved compensation scenarios are separate from this working copy. Editing them will not change Today."
         : visibleTool === "compensation-model"
-          ? "Changes to this compensation model save to its linked team and business goal. Use Sandbox to test changes without saving them to the plan."
+          ? "Changes to this compensation model save to its linked team and business goal. Use Sandbox to test changes without saving them to Long Term Goals."
           : null;
   const people = selectedPeople;
   const recordedClinicianCount =
@@ -2318,6 +2426,55 @@ export default function PracticeWorkspace() {
       <ChevronRight />
     </button>
   );
+  const activeCurrentGoals = active(workingWorkspace.goals);
+  const activeFundGoals = active(workingWorkspace.fundGoals ?? []);
+  const findGoal = (name: string) =>
+    activeCurrentGoals.find(
+      (goal) => goal.name.toLowerCase() === name.toLowerCase(),
+    );
+  const findFundGoal = (name: string) =>
+    activeFundGoals.find(
+      (goal) => goal.name.toLowerCase() === name.toLowerCase(),
+    );
+  const coreGoalRows = [
+    {
+      name: "Owner pay",
+      metric: "familyTakeHome" as const,
+      caption:
+        "Pre-tax owner distribution target. Owner clinical revenue remains business revenue.",
+    },
+    {
+      name: "Co-owner pay",
+      metric: "familyTakeHome" as const,
+      caption:
+        "Pre-tax salary target for Erin; payroll taxes and take-home stay in Money.",
+    },
+    {
+      name: "Business Profit",
+      metric: "profit" as const,
+      caption: "Operating profit goal after payroll and practice costs.",
+    },
+    {
+      name: "Desired Clinicians",
+      metric: "sessions" as const,
+      caption: "Capacity proxy until a dedicated headcount metric exists.",
+    },
+  ];
+  const fundGoalRows = ["Building Fund", "Emergency Reserve", "Growth Fund"];
+  const goalExpected = (goal: Workspace["goals"][number] | undefined) =>
+    goal
+      ? months.find((row) => row.date.slice(0, 7) === goal.date.slice(0, 7))
+          ?.values[goal.metric]
+      : null;
+  const goalTarget = (goal: Workspace["goals"][number] | undefined) =>
+    goal ? goal.amount / (goal.basis === "annual" ? 12 : 1) : 0;
+  const goalUnit = (metric: Workspace["goals"][number]["metric"]) =>
+    metric === "sessions" ? "number" : "currency";
+  const practiceRevenueForOverhead =
+    moneyValues.revenue && moneyValues.revenue > 0
+      ? (workingWorkspace.settings.overheadFloorMonthly / moneyValues.revenue) *
+        100
+      : null;
 
   return (
     <div className="practice-theme pw-app" data-appearance="light">
@@ -2345,7 +2502,7 @@ export default function PracticeWorkspace() {
           {(
             [
               { id: "practice", label: "Today", icon: Building2 },
-              { id: "goals", label: "Planning", icon: Flag },
+              { id: "goals", label: "Long Term Goals", icon: Flag },
               { id: "sandbox", label: "Sandbox", icon: FlaskConical },
             ] as const
           ).map((item) => (
@@ -2396,14 +2553,14 @@ export default function PracticeWorkspace() {
               {mode === "sandbox"
                 ? "Independent model"
                 : mode === "goals"
-                  ? "Your scenarios"
+                  ? "Future scenarios"
                   : "Current business"}
             </div>
             <h1>
               {mode === "sandbox"
                 ? "Sandbox"
                 : mode === "goals"
-                  ? "Planning"
+                  ? "Long Term Goals"
                   : "Today"}
             </h1>
           </div>
@@ -2468,7 +2625,7 @@ export default function PracticeWorkspace() {
                           setError("");
                         }}
                       >
-                        <Flag /> Copy to Planning
+                        <Flag /> Copy to Long Term Goals
                       </button>
                     </>
                   )}
@@ -2556,7 +2713,11 @@ export default function PracticeWorkspace() {
                 {sections.map((s) => (
                   <button
                     key={s.id}
-                    aria-current={section === s.id ? "page" : undefined}
+                    aria-current={
+                      section === s.id || s.active?.includes(section)
+                        ? "page"
+                        : undefined
+                    }
                     disabled={saving || sessionEditing}
                     onClick={() => {
                       if (integratedTool) showTool(null);
@@ -5759,7 +5920,7 @@ export default function PracticeWorkspace() {
                                 className="pw-button"
                                 onClick={startPlanning}
                               >
-                                Open Planning
+                                Open Long Term Goals
                               </button>
                             </section>
                           )}
@@ -6105,6 +6266,229 @@ export default function PracticeWorkspace() {
                       <ChevronRight />
                     </button>
                     {detailButton("goals", "Metric targets")}
+                  </div>
+                </>
+              )}
+              {section === "current-goals" && (
+                <>
+                  {heading(
+                    "Current goals",
+                    "Editable monthly or annual targets for Today. Blank amounts are treated as zero until you enter them.",
+                    <button
+                      className="pw-button"
+                      onClick={() => setSection("money")}
+                    >
+                      Open Money
+                      <ChevronRight />
+                    </button>,
+                  )}
+                  <div className="pw-goal-editor">
+                    {coreGoalRows.map((row) => {
+                      const goal = findGoal(row.name);
+                      const expected = goalExpected(goal);
+                      const target = goalTarget(goal);
+                      const unit = goalUnit(row.metric);
+                      return (
+                        <section className="pw-edit-item" key={row.name}>
+                          <div className="pw-edit-item-heading">
+                            <div>
+                              <h3>{row.name}</h3>
+                              <p>{row.caption}</p>
+                            </div>
+                            <span className="pw-tag">
+                              {goal ? "Saved" : "Blank assumed 0"}
+                            </span>
+                          </div>
+                          <div className="pw-edit-grid">
+                            <DraftField
+                              label="Goal amount"
+                              type="number"
+                              value={goal?.amount ?? 0}
+                              onChange={(value) =>
+                                stageNamedGoal(row.name, row.metric, {
+                                  amount: optionalNumber(value) ?? 0,
+                                })
+                              }
+                            />
+                            <label className="pw-draft-field">
+                              <span>Basis</span>
+                              <select
+                                aria-label={`${row.name} basis`}
+                                value={goal?.basis ?? "annual"}
+                                onChange={(event) =>
+                                  stageNamedGoal(row.name, row.metric, {
+                                    basis: event.target
+                                      .value as Workspace["goals"][number]["basis"],
+                                  })
+                                }
+                              >
+                                <option value="monthly">Monthly</option>
+                                <option value="annual">Annual</option>
+                              </select>
+                            </label>
+                            <DraftField
+                              label="Target date"
+                              type="date"
+                              value={goal?.date ?? `${today.slice(0, 4)}-12-31`}
+                              onChange={(value) =>
+                                stageNamedGoal(row.name, row.metric, {
+                                  date: value,
+                                })
+                              }
+                            />
+                          </div>
+                          <div className="pw-progress-comparison">
+                            <div>
+                              <span>Current monthly equivalent</span>
+                              <strong>{fmt(expected, unit)}</strong>
+                            </div>
+                            <div>
+                              <span>Goal line</span>
+                              <strong>{fmt(target, unit)}</strong>
+                            </div>
+                            <progress
+                              value={Math.max(0, expected ?? 0)}
+                              max={target || 1}
+                            />
+                          </div>
+                        </section>
+                      );
+                    })}
+                    <section className="pw-edit-item">
+                      <div className="pw-edit-item-heading">
+                        <div>
+                          <h3>Overhead</h3>
+                          <p>
+                            Keep dollars fixed or manage percent-of-revenue
+                            expenses in Money; this shows the calculated
+                            equivalent for the selected month.
+                          </p>
+                        </div>
+                      </div>
+                      <div className="pw-edit-grid">
+                        <DraftField
+                          label="Fixed monthly overhead"
+                          type="number"
+                          value={workingWorkspace.settings.overheadFloorMonthly}
+                          onChange={(value) =>
+                            stageSettings(
+                              {
+                                overheadFloorMonthly:
+                                  optionalNumber(value) ?? 0,
+                                overheadMode: "baseline",
+                              },
+                              "Overhead goal",
+                            )
+                          }
+                        />
+                        <label className="pw-draft-field">
+                          <span>Basis</span>
+                          <select
+                            aria-label="Overhead basis"
+                            value={workingWorkspace.settings.overheadMode}
+                            onChange={(event) =>
+                              stageSettings(
+                                {
+                                  overheadMode: event.target
+                                    .value as Workspace["settings"]["overheadMode"],
+                                },
+                                "Overhead basis",
+                              )
+                            }
+                          >
+                            <option value="baseline">Fixed dollars</option>
+                            <option value="detailed">Entered expenses</option>
+                          </select>
+                        </label>
+                        <div className="pw-readout">
+                          <span>Calculated equivalent</span>
+                          <strong>
+                            {practiceRevenueForOverhead === null
+                              ? "Waiting for revenue"
+                              : `${practiceRevenueForOverhead.toFixed(1)}%`}
+                          </strong>
+                        </div>
+                      </div>
+                    </section>
+                    <section className="pw-edit-item">
+                      <div className="pw-edit-item-heading">
+                        <div>
+                          <h3>Funds</h3>
+                          <p>
+                            Total-balance goals stay distinct from monthly
+                            Profit First contribution shares. Blank balances
+                            are assumed $0 until entered.
+                          </p>
+                        </div>
+                        <button
+                          className="pw-button"
+                          onClick={() => setSection("money")}
+                        >
+                          Edit contributions
+                        </button>
+                      </div>
+                      <div className="pw-goal-fund-grid">
+                        {fundGoalRows.map((name) => {
+                          const goal = findFundGoal(name);
+                          return (
+                            <div className="pw-goal-fund" key={name}>
+                              <strong>{name}</strong>
+                              <DraftField
+                                label={`${name} total goal`}
+                                type="number"
+                                value={goal?.amount ?? 0}
+                                onChange={(value) =>
+                                  stageNamedFundGoal(name, {
+                                    amount: optionalNumber(value) ?? 0,
+                                  })
+                                }
+                              />
+                              <DraftField
+                                label="Target date"
+                                type="date"
+                                value={
+                                  goal?.date ?? `${today.slice(0, 4)}-12-31`
+                                }
+                                onChange={(value) =>
+                                  stageNamedFundGoal(name, { date: value })
+                                }
+                              />
+                              <DraftField
+                                label="Current balance"
+                                type="number"
+                                value={goal?.currentBalance ?? ""}
+                                onChange={(value) =>
+                                  stageNamedFundGoal(name, {
+                                    currentBalance: optionalNumber(value) ?? null,
+                                  })
+                                }
+                              />
+                              <DraftField
+                                label="Balance date"
+                                type="date"
+                                value={goal?.balanceDate ?? ""}
+                                onChange={(value) =>
+                                  stageNamedFundGoal(name, {
+                                    balanceDate: value,
+                                  })
+                                }
+                              />
+                              <small>
+                                Current recorded balance:{" "}
+                                {fmt(goal?.currentBalance ?? 0, "currency")}
+                                {goal?.balanceDate
+                                  ? ` as of ${goal.balanceDate}`
+                                  : " when blank"}
+                              </small>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </section>
+                  </div>
+                  <div className="pw-secondary-links">
+                    {detailButton("goals", "All metric targets")}
+                    {detailButton("allocations", "Fund contribution records")}
                   </div>
                 </>
               )}
@@ -6472,7 +6856,7 @@ export default function PracticeWorkspace() {
           <DialogHeader>
             <DialogTitle>Move section data</DialogTitle>
             <DialogDescription>
-              Export a section here, then import it in Today, Planning, or
+              Export a section here, then import it in Today, Long Term Goals, or
               Sandbox. Import replaces only the selected section. Recorded
               sessions and clinician records cannot be replaced in Today.
             </DialogDescription>
@@ -6531,7 +6915,7 @@ export default function PracticeWorkspace() {
                 {mode === "practice"
                   ? "Today"
                   : mode === "goals"
-                    ? "this Planning scenario"
+                    ? "this Long Term Goals scenario"
                     : "Sandbox"}
                 . Other sections stay as they are.
               </span>
@@ -6570,7 +6954,7 @@ export default function PracticeWorkspace() {
           <DialogHeader>
             <DialogTitle>Compensation reports</DialogTitle>
             <DialogDescription>
-              Reports use saved compensation records, not unsaved Planning or
+              Reports use saved compensation records, not unsaved Long Term Goals or
               Sandbox changes.
             </DialogDescription>
           </DialogHeader>
@@ -6638,7 +7022,7 @@ export default function PracticeWorkspace() {
               <DialogTitle>{detail.replaceAll("_", " ")}</DialogTitle>
               <DialogDescription>
                 {planningEdit
-                  ? "Planning settings"
+                  ? "Long Term Goals settings"
                   : sandbox
                     ? "Sandbox settings"
                     : "Today settings"}
@@ -6656,7 +7040,7 @@ export default function PracticeWorkspace() {
           <DialogHeader>
             <DialogTitle>Saved Sandbox models</DialogTitle>
             <DialogDescription>
-              Independent models stay separate from Today and Planning.
+              Independent models stay separate from Today and Long Term Goals.
             </DialogDescription>
           </DialogHeader>
           {sandboxModels.length ? (
@@ -6708,7 +7092,7 @@ export default function PracticeWorkspace() {
           <DialogHeader>
             <DialogTitle>Save Sandbox model</DialogTitle>
             <DialogDescription>
-              This keeps a copy in Sandbox. Today and Planning stay unchanged.
+              This keeps a copy in Sandbox. Today and Long Term Goals stay unchanged.
             </DialogDescription>
           </DialogHeader>
           <form
@@ -6759,7 +7143,7 @@ export default function PracticeWorkspace() {
         >
           <DialogHeader>
             <DialogTitle>
-              {planningEdit ? "Save scenario" : "Send model to Planning"}
+              {planningEdit ? "Save scenario" : "Send model to Long Term Goals"}
             </DialogTitle>
             <DialogDescription>Today stays unchanged.</DialogDescription>
           </DialogHeader>

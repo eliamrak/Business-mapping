@@ -371,6 +371,13 @@ export const goalSchema = z.object({
   date: dateSchema,
   basis: z.enum(["monthly", "annual"]).default("monthly"),
 });
+export const fundGoalSchema = z.object({
+  ...named,
+  amount: money,
+  date: dateSchema,
+  currentBalance: money.nullable().default(null),
+  balanceDate: dateSchema.nullable().default(null),
+});
 export const proposalSchema = z.object({
   ...named,
   status: z
@@ -647,6 +654,7 @@ export const workspaceSchema = z
     hiring: z.array(hiringSchema).max(2000),
     events: z.array(eventSchema).max(5000),
     goals: z.array(goalSchema).max(2000),
+    fundGoals: z.array(fundGoalSchema).max(2000).default(() => []),
     proposals: z.array(proposalSchema).max(1000),
     kpis: z.array(customKpiSchema).max(1000),
     rules: z.array(ruleSchema).max(1000),
@@ -1048,6 +1056,7 @@ export const collections: Collection[] = [
   "hiring",
   "events",
   "goals",
+  "fundGoals",
   "proposals",
   "kpis",
   "rules",

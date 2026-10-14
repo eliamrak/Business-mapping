@@ -9,6 +9,10 @@ import Entry from "./entry";
 const basePath = import.meta.env.BASE_URL.replace(/\/$/, "");
 
 export default function Access({ children }: { children: ReactNode }) {
+  if (import.meta.env.DEV && import.meta.env.VITE_LOCAL_PREVIEW === "true") {
+    return <>{children}</>;
+  }
+
   const { isLoaded, isSignedIn } = useAuth();
   const me = useQuery({
     queryKey: ["auth-me"],
