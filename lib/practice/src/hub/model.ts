@@ -368,13 +368,13 @@ export const goalSchema = z.object({
   ...named,
   metric: z.enum(["sessions", "revenue", "profit", "familyTakeHome"]),
   amount: money,
-  date: dateSchema,
+  date: dateSchema.nullish().default(null),
   basis: z.enum(["monthly", "annual"]).default("monthly"),
 });
 export const fundGoalSchema = z.object({
   ...named,
   amount: money,
-  date: dateSchema,
+  date: dateSchema.nullish().default(null),
   currentBalance: money.nullable().default(null),
   balanceDate: dateSchema.nullable().default(null),
 });

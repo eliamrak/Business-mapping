@@ -275,8 +275,9 @@ export function Overview(props: ViewProps) {
               {workspace.goals
                 .filter((g) => !g.archived)
                 .map((g) => {
+                  const goalMonth = g.date ?? f.date;
                   const expected = months.find(
-                      (m) => m.date.slice(0, 7) === g.date.slice(0, 7),
+                      (m) => m.date.slice(0, 7) === goalMonth.slice(0, 7),
                     )?.values[g.metric],
                     target = g.amount / (g.basis === "annual" ? 12 : 1);
                   return (
@@ -284,7 +285,10 @@ export function Overview(props: ViewProps) {
                       <div>
                         <strong>{g.name}</strong>
                         <small>
-                          {monthLabel(monthDate(g.date))} / monthly equivalent
+                          {g.date
+                            ? monthLabel(monthDate(g.date))
+                            : "No target date"}{" "}
+                          / monthly equivalent
                         </small>
                       </div>
                       <span>

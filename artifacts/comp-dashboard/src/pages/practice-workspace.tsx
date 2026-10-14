@@ -241,6 +241,11 @@ const periodLabel = (start: string, end: string) => {
     });
   return `${short(start)} - ${short(end)}, ${end.slice(0, 4)}`;
 };
+const addMonths = (date: string, months: number) => {
+  const d = new Date(date.slice(0, 7) + "-01T12:00:00Z");
+  d.setUTCMonth(d.getUTCMonth() + months);
+  return d.toISOString().slice(0, 10);
+};
 const roomHours = (room: Workspace["rooms"][number]) =>
   room.blocks.length
     ? room.blocks.reduce(
@@ -456,7 +461,7 @@ export default function PracticeWorkspace() {
   );
   const [exportOpen, setExportOpen] = useState(false);
   const [practiceView] = useState<PracticeView>("actual");
-  const [section, setSection] = useState<Section>("clinicians");
+  const [section, setSection] = useState<Section>("summary");
   const localRetentionState = useLocalRetentionWorkspaceState();
   const [draft, setDraft] = useState<PracticeCopy | null>(null);
   const [draftMode, setDraftMode] = useState<"goals" | "sandbox" | null>(null);
@@ -1098,9 +1103,7 @@ export default function PracticeWorkspace() {
     const current = stagedWorkspace ?? workspace;
     const normalizedPatch = {
       ...patch,
-      ...(patch.date !== undefined
-        ? { date: patch.date || `${today.slice(0, 4)}-12-31` }
-        : {}),
+      ...(patch.date !== undefined ? { date: patch.date || null } : {}),
     };
     const existing = current.goals.find(
       (goal) => !goal.archived && goal.name.toLowerCase() === name.toLowerCase(),
@@ -1114,7 +1117,7 @@ export default function PracticeWorkspace() {
       name,
       metric,
       amount: 0,
-      date: `${today.slice(0, 4)}-12-31`,
+      date: null,
       basis: "annual",
       ...normalizedPatch,
     });
@@ -1148,9 +1151,7 @@ export default function PracticeWorkspace() {
     const current = stagedWorkspace ?? workspace;
     const normalizedPatch = {
       ...patch,
-      ...(patch.date !== undefined
-        ? { date: patch.date || `${today.slice(0, 4)}-12-31` }
-        : {}),
+      ...(patch.date !== undefined ? { date: patch.date || null } : {}),
       ...(patch.balanceDate !== undefined
         ? { balanceDate: patch.balanceDate || null }
         : {}),
@@ -1166,7 +1167,7 @@ export default function PracticeWorkspace() {
       id: crypto.randomUUID(),
       name,
       amount: 0,
-      date: `${today.slice(0, 4)}-12-31`,
+      date: null,
       currentBalance: null,
       balanceDate: null,
       ...normalizedPatch,
@@ -2347,6 +2348,18 @@ export default function PracticeWorkspace() {
   const otherBusinessIncome =
     beforeOwnerPay - (moneyValues.revenue ?? 0) + operatingCosts;
   const activeAllocations = active(workspace.allocations);
+  const importAttentionCount =
+    localRetentionState.snapshots.length +
+    (importedSessionOverlay?.diagnostic.manualImportConflictCount ?? 0) +
+    (importedSessionOverlay?.diagnostic.missingClinicianLabels.length ?? 0) +
+    (importedSessionOverlay?.diagnostic.ambiguousClinicianLabels.length ?? 0);
+  const recordedOverheadValues = recordedFinancialPeriods
+    .map((row) => row.values.overhead)
+    .filter((value): value is number => value !== null && value !== undefined);
+  const recordedOverheadAverage = recordedOverheadValues.length
+    ? recordedOverheadValues.reduce((sum, value) => sum + value, 0) /
+      recordedOverheadValues.length
+    : null;
   const familyDistributionPct = activeAllocations
     .filter(
       (allocation) =>
@@ -2382,6 +2395,38 @@ export default function PracticeWorkspace() {
     baselineOperatingPlan,
     operatingPlan,
   );
+  const focusedPlans = [
+    {
+      name: "Fill session capacity",
+      focus: "Sessions + lead flow",
+      reason:
+        operatingPlan?.leadsNeeded === null
+          ? "Add recent lead totals so the app can size the client pipeline."
+          : `Current plan needs ${fmt(operatingPlan?.leadsNeeded)} leads / month to fill open caseload.`,
+      action: "Review sessions and Growth before adopting.",
+      target: "sessions" as Section,
+    },
+    {
+      name: "Protect owner pay",
+      focus: "Profit + take-home",
+      reason:
+        operatingPlan?.profitGap && operatingPlan.profitGap > 0
+          ? `${money(operatingPlan.profitGap)} monthly gap remains against the selected profit target.`
+          : "Use this to keep owner/co-owner goals visible while changing one lever at a time.",
+      action: "Model revisions in a scenario; do not apply automatically.",
+      target: "current-goals" as Section,
+    },
+    {
+      name: "Match rooms to demand",
+      focus: "Rooms + in-person capacity",
+      reason:
+        summaryMonth?.constraint === "Room capacity"
+          ? "Room capacity is the current limiting factor."
+          : "Keep room limits visible before adding demand or clinician capacity.",
+      action: "Check room capacity, assignments, and telehealth assumptions.",
+      target: "rooms" as Section,
+    },
+  ];
   const table = (collection: Collection) => (
     <RecordTable
       collection={collection}
@@ -2463,13 +2508,76 @@ export default function PracticeWorkspace() {
   const fundGoalRows = ["Building Fund", "Emergency Reserve", "Growth Fund"];
   const goalExpected = (goal: Workspace["goals"][number] | undefined) =>
     goal
-      ? months.find((row) => row.date.slice(0, 7) === goal.date.slice(0, 7))
+      ? months.find(
+          (row) =>
+            row.date.slice(0, 7) ===
+            (goal.date ?? summaryMonth?.date ?? row.date).slice(0, 7),
+        )
           ?.values[goal.metric]
       : null;
   const goalTarget = (goal: Workspace["goals"][number] | undefined) =>
     goal ? goal.amount / (goal.basis === "annual" ? 12 : 1) : 0;
   const goalUnit = (metric: Workspace["goals"][number]["metric"]) =>
     metric === "sessions" ? "number" : "currency";
+  const completedGoalStatus = (
+    goal: Workspace["goals"][number] | undefined,
+    expected: number | null | undefined,
+    target: number,
+  ) => {
+    if (!goal || target <= 0) return "No target entered yet.";
+    if (expected === null || expected === undefined)
+      return "Waiting for a completed period.";
+    if (expected < target)
+      return "Guide only; keep goal until manually changed.";
+    const latest =
+      goal.metric === "sessions"
+        ? actualPaceSeries.at(-1)
+        : recordedFinancialPeriods[0]
+          ? {
+              date: recordedFinancialPeriods[0].date,
+              value: recordedFinancialPeriods[0].values[goal.metric] ?? null,
+            }
+          : null;
+    return latest?.value !== null && latest?.value !== undefined
+      ? `Met after completed period ending ${latest.date}.`
+      : "Projected as met; waiting for a completed period.";
+  };
+  const allocationForFund = (name: string) => {
+    const lower = name.toLowerCase();
+    return activeAllocations.find((allocation) =>
+      allocation.name.toLowerCase().includes(lower.replace(" fund", "")),
+    );
+  };
+  const fundProjection = (goal: Workspace["fundGoals"][number] | undefined) => {
+    if (!goal) return null;
+    const current = goal.currentBalance ?? 0;
+    const remaining = Math.max(0, goal.amount - current);
+    const allocation = allocationForFund(goal.name);
+    if (!allocation || !moneyMonth || remaining <= 0)
+      return { current, remaining, contribution: null, eta: null };
+    const sameKindTotal = activeAllocations
+      .filter((item) => item.kind === allocation.kind)
+      .reduce((sum, item) => sum + item.percent, 0);
+    const kindAmount =
+      allocation.kind === "tax"
+        ? moneyValues.taxReserve
+        : allocation.kind === "distribution"
+          ? moneyValues.distributions
+          : allocation.kind === "retained"
+            ? moneyValues.retainedCash
+            : moneyValues.reserves;
+    const contribution =
+      kindAmount !== null &&
+      kindAmount !== undefined &&
+      sameKindTotal > 0
+        ? (kindAmount * allocation.percent) / sameKindTotal
+        : null;
+    const eta =
+      contribution && contribution > 0
+        ? addMonths(moneyMonth.date, Math.ceil(remaining / contribution))
+        : null;
+    return { current, remaining, contribution, eta };
+  };
   const practiceRevenueForOverhead =
     moneyValues.revenue && moneyValues.revenue > 0
       ? (workingWorkspace.settings.overheadFloorMonthly / moneyValues.revenue) *
@@ -2988,6 +3096,43 @@ export default function PracticeWorkspace() {
                               </button>
                             )}
                           </header>
+                          <div className="pw-person-kpis">
+                            <div>
+                              <span>Sessions</span>
+                              <strong>{fmt(pace?.usedWeekly)} / wk</strong>
+                              <small>
+                                {pace?.recordedWeekly === null
+                                  ? "desired pace"
+                                  : "recent pace"}
+                              </small>
+                            </div>
+                            <div>
+                              <span>Retention</span>
+                              <strong>
+                                {clientActivityEstimate?.initialRetentionRate ===
+                                null
+                                  ? "--"
+                                  : percent(
+                                      clientActivityEstimate?.initialRetentionRate,
+                                    )}
+                              </strong>
+                              <small>practice cohort</small>
+                            </div>
+                            <div>
+                              <span>Attrition</span>
+                              <strong>
+                                {fmt(
+                                  clientActivityEstimate?.estimatedClientsLeavingPerMonth,
+                                )}
+                              </strong>
+                              <small>clients / month</small>
+                            </div>
+                            <div>
+                              <span>Consults</span>
+                              <strong>{fmt(projected?.consultations)}</strong>
+                              <small>selected month</small>
+                            </div>
+                          </div>
                           <div className="pw-number-grid">
                             <NumberField
                               label={person.label + " session fee"}
@@ -5649,6 +5794,32 @@ export default function PracticeWorkspace() {
                       </label>
                     </div>,
                   )}
+                  {mode === "practice" && practiceView === "actual" && (
+                    <section className="pw-import-attention">
+                      <div>
+                        <span className="pw-tag">
+                          <Upload /> Imports
+                        </span>
+                        <strong>
+                          {localRetentionState.snapshots.length
+                            ? `${localRetentionState.snapshots.length} converted snapshot${localRetentionState.snapshots.length === 1 ? "" : "s"} loaded`
+                            : "No converted snapshots loaded"}
+                        </strong>
+                        <small>
+                          {importAttentionCount
+                            ? "Review imported coverage, mapping, overlap, and same-day exceptions before relying on clinical metrics."
+                            : "Import review stays separate from manual session entry and forecast assumptions."}
+                        </small>
+                      </div>
+                      <button
+                        className="pw-button"
+                        onClick={() => setSection("documents")}
+                      >
+                        Open Imports
+                        <ChevronRight />
+                      </button>
+                    </section>
+                  )}
                   <div className="pw-summary">
                     {metrics.map((m) => (
                       <div key={m.key}>
@@ -6327,9 +6498,9 @@ export default function PracticeWorkspace() {
                               </select>
                             </label>
                             <DraftField
-                              label="Target date"
+                              label="Target date (optional)"
                               type="date"
-                              value={goal?.date ?? `${today.slice(0, 4)}-12-31`}
+                              value={goal?.date ?? ""}
                               onChange={(value) =>
                                 stageNamedGoal(row.name, row.metric, {
                                   date: value,
@@ -6350,6 +6521,9 @@ export default function PracticeWorkspace() {
                               value={Math.max(0, expected ?? 0)}
                               max={target || 1}
                             />
+                            <small>
+                              {completedGoalStatus(goal, expected, target)}
+                            </small>
                           </div>
                         </section>
                       );
@@ -6408,6 +6582,16 @@ export default function PracticeWorkspace() {
                               : `${practiceRevenueForOverhead.toFixed(1)}%`}
                           </strong>
                         </div>
+                        <div className="pw-readout">
+                          <span>Recorded monthly average</span>
+                          <strong>{money(recordedOverheadAverage)}</strong>
+                        </div>
+                        <div className="pw-readout">
+                          <span>Latest recorded overhead</span>
+                          <strong>
+                            {money(recordedOverheadValues[0] ?? null)}
+                          </strong>
+                        </div>
                       </div>
                     </section>
                     <section className="pw-edit-item">
@@ -6430,6 +6614,7 @@ export default function PracticeWorkspace() {
                       <div className="pw-goal-fund-grid">
                         {fundGoalRows.map((name) => {
                           const goal = findFundGoal(name);
+                          const projection = fundProjection(goal);
                           return (
                             <div className="pw-goal-fund" key={name}>
                               <strong>{name}</strong>
@@ -6444,11 +6629,9 @@ export default function PracticeWorkspace() {
                                 }
                               />
                               <DraftField
-                                label="Target date"
+                                label="Target date (optional)"
                                 type="date"
-                                value={
-                                  goal?.date ?? `${today.slice(0, 4)}-12-31`
-                                }
+                                value={goal?.date ?? ""}
                                 onChange={(value) =>
                                   stageNamedFundGoal(name, { date: value })
                                 }
@@ -6480,6 +6663,16 @@ export default function PracticeWorkspace() {
                                   ? ` as of ${goal.balanceDate}`
                                   : " when blank"}
                               </small>
+                              <small>
+                                Dotted projection:{" "}
+                                {projection?.contribution === null
+                                  ? "add a matching monthly contribution in Money"
+                                  : projection?.eta
+                                    ? `${money(projection.contribution)} / month reaches the target around ${monthLabel(projection.eta)}`
+                                    : projection
+                                      ? "target already funded or no remaining gap"
+                                      : "waiting for a target"}
+                              </small>
                             </div>
                           );
                         })}
@@ -6510,9 +6703,9 @@ export default function PracticeWorkspace() {
                 <>
                   <button
                     className="pw-text-button"
-                    onClick={() => setSection("budgets")}
+                    onClick={() => setSection("summary")}
                   >
-                    Back to budgets
+                    Back to Overview
                   </button>
                   <Updates {...props} theme="light" />
                 </>
@@ -6542,6 +6735,42 @@ export default function PracticeWorkspace() {
                 </p>
               </div>
             </div>
+            <section className="pw-focused-plans" aria-label="Focused plan options">
+              <div className="pw-section-heading">
+                <div>
+                  <h3>Three focused plan options</h3>
+                  <p>
+                    Each holds other assumptions steady and proposes one or two
+                    KPIs to review. Nothing is adopted automatically.
+                  </p>
+                </div>
+              </div>
+              <div className="pw-focused-plan-grid">
+                {focusedPlans.map((plan, index) => (
+                  <article className="pw-focused-plan" key={plan.name}>
+                    <span className="pw-tag">Option {index + 1}</span>
+                    <h4>{plan.name}</h4>
+                    <strong>{plan.focus}</strong>
+                    <p>{plan.reason}</p>
+                    <small>{plan.action}</small>
+                    <button
+                      className="pw-button"
+                      onClick={() => {
+                        setMode("practice");
+                        setSection(plan.target);
+                      }}
+                    >
+                      Review inputs
+                      <ChevronRight />
+                    </button>
+                  </article>
+                ))}
+              </div>
+              <p className="pw-note">
+                Adoption stays manual: save a scenario, review its changes, then
+                apply or revise it after the operating impact is visible.
+              </p>
+            </section>
             {!goals.length ? (
               <div className="pw-empty pw-goal-empty">
                 <Flag />

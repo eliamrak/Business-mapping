@@ -579,6 +579,55 @@
   display: grid;
   gap: 18px;
 }
+.pw-import-attention {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  align-items: center;
+  padding: 14px;
+  border: 1px solid #dfe7e1;
+  border-radius: 7px;
+  background: #fbfcfb;
+  margin-bottom: 16px;
+}
+.pw-import-attention > div {
+  display: grid;
+  gap: 5px;
+}
+.pw-import-attention strong {
+  font-size: 16px;
+}
+.pw-import-attention small,
+.pw-progress-comparison small {
+  color: #66766b;
+}
+.pw-focused-plans {
+  display: grid;
+  gap: 14px;
+  margin-bottom: 18px;
+}
+.pw-focused-plan-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+.pw-focused-plan {
+  display: grid;
+  gap: 9px;
+  padding: 14px;
+  border: 1px solid #dfe7e1;
+  border-radius: 7px;
+  background: #fbfcfb;
+}
+.pw-focused-plan h4 {
+  margin: 0;
+  font-size: 17px;
+}
+.pw-focused-plan p,
+.pw-focused-plan small {
+  margin: 0;
+  color: #66766b;
+}
 .pw-progress-comparison {
   display: grid;
   grid-template-columns: minmax(130px, 1fr) minmax(130px, 1fr);
@@ -605,6 +654,9 @@
   width: 100%;
   height: 9px;
   accent-color: #386f50;
+}
+.pw-progress-comparison small {
+  grid-column: 1 / -1;
 }
 .pw-readout {
   display: grid;
@@ -726,6 +778,34 @@
 .pw-person:nth-child(3n + 3) .pw-avatar {
   background: #f2e9e8;
   color: #96655f;
+}
+.pw-person-kpis {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+  padding: 12px 20px 0;
+}
+.pw-person-kpis > div {
+  min-width: 0;
+  border: 1px solid #e1e8e2;
+  border-radius: 6px;
+  background: #f8fbf9;
+  padding: 9px 10px;
+}
+.pw-person-kpis span,
+.pw-person-kpis small {
+  display: block;
+  color: #66766b;
+  font-size: 10px;
+  line-height: 1.35;
+}
+.pw-person-kpis strong {
+  display: block;
+  margin: 3px 0 1px;
+  color: #26392e;
+  font-size: 15px;
+  line-height: 1.2;
+  overflow-wrap: anywhere;
 }
 .pw-number-grid {
   display: grid;
@@ -3462,6 +3542,9 @@
   }
 }
 @media (max-width: 760px) {
+  .pw-person-kpis {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
   .pw-session-overview-heading {
     align-items: stretch;
   }
@@ -3586,6 +3669,13 @@
   }
   .pw-rail nav button svg {
     display: none;
+  }
+  .pw-import-attention {
+    align-items: stretch;
+    flex-direction: column;
+  }
+  .pw-focused-plan-grid {
+    grid-template-columns: 1fr;
   }
   .pw-rail-bottom {
     display: none;

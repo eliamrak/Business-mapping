@@ -145,8 +145,12 @@ export function conditionResult(
     } else if (c.compareTo === "goal") {
       const goals = workspace.goals
         .filter((g) => !g.archived && g.metric === c.metric)
-        .sort((a, b) => a.date.localeCompare(b.date));
-      const goal = goals.find((g) => g.date >= series[at].date) ?? goals.at(-1);
+        .sort((a, b) =>
+          (a.date ?? "9999-12-31").localeCompare(b.date ?? "9999-12-31"),
+        );
+      const goal =
+        goals.find((g) => g.date === null || g.date >= series[at].date) ??
+        goals.at(-1);
       target = goal ? goal.amount / (goal.basis === "annual" ? 12 : 1) : null;
       if (target !== null && series[at].periodStart)
         target *= monthlyFraction(series[at].periodStart!, series[at].date);
