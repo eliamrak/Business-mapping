@@ -648,6 +648,8 @@ export const settingsSchema = z.object({
   overheadFloorMonthly: money.default(0),
   overheadFloorOverride: z.boolean().default(false),
   overheadMode: z.enum(["baseline", "detailed"]).default("baseline"),
+  overheadGoalBasis: z.enum(["fixed_dollars", "fixed_percent"]).optional(),
+  overheadGoalPercent: percent.optional(),
   collectionDelayMonths: z.number().int().min(0).max(12).default(0),
   openingReceivables: money.default(0),
   openingCash: z.number().finite().min(-1e10).max(1e10).default(0),
@@ -671,6 +673,16 @@ export const settingsSchema = z.object({
   defaultInPersonPct: percent.default(100),
   weeksPerYear: z.number().min(1).max(52.1786).default(48),
   goalSearch: goalSearchSchema.nullable().default(null),
+}).superRefine((settings, ctx) => {
+  if (
+    settings.overheadGoalBasis === "fixed_percent" &&
+    settings.overheadGoalPercent === undefined
+  )
+    ctx.addIssue({
+      code: "custom",
+      path: ["overheadGoalPercent"],
+      message: "Enter an overhead percentage.",
+    });
 });
 
 export const workspaceSchema = z

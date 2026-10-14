@@ -24,7 +24,7 @@ const code = stripTypeScriptTypes(original.slice(original.indexOf("\n") + 1));
 const baseline = await import(
   `data:text/javascript;base64,${Buffer.from(code).toString("base64")}`
 );
-test("original compensation implementation remains identical across 864 input combinations", () => {
+test("compensation preserves legacy parity except unreachable positive caps with zero-fee sessions", () => {
   for (const classification of ["w2", "1099", 1099, "owner", "other", ""])
     for (const sessionRate of [0, 100, 175])
       for (const sessionsPerWeek of [0, 10, 35, 60])
@@ -48,10 +48,14 @@ test("original compensation implementation remains identical across 864 input co
               nonClinicalHoursPerWeek: 2,
               nonClinicalHourlyRate: 25,
             };
-            assert.deepEqual(
-              calculateClinicianMetrics(input),
-              baseline.calculateClinicianMetrics(input),
-            );
+            const expected = baseline.calculateClinicianMetrics(input);
+            // Known corrected edge: a positive cap cannot be reached by zero-fee sessions.
+            // Only the pre/post session allocation differs; all monetary fields retain parity.
+            if (capEnabled && capAmount > 0 && sessionRate === 0) {
+              expected.preCapSessions = expected.annualSessions;
+              expected.postCapSessions = 0;
+            }
+            assert.deepEqual(calculateClinicianMetrics(input), expected);
           }
 });
 test("original staff salary/hourly calculations and aggregate costs are unchanged", () => {
@@ -79,7 +83,7 @@ test("original staff salary/hourly calculations and aggregate costs are unchange
         );
       }
 });
-test("original business goal and reality outputs are preserved", () => {
+test("business goal and reality retain parity except capital balances incorrectly counted as annual flows", () => {
   const goal = {
     ownerPayGoal: 100000,
     secondOwnerPayGoal: 70000,
@@ -90,10 +94,14 @@ test("original business goal and reality outputs are preserved", () => {
     growthFundGoal: 3000,
     desiredCliniciansCount: 5,
   };
-  assert.deepEqual(
-    calculateBusinessGoalOutputs(goal),
-    baseline.calculateBusinessGoalOutputs(goal),
-  );
+  const recurringGoal = { ...goal, buildingFundGoal: 0, emergencyReserveGoal: 0, growthFundGoal: 0 };
+  // Known corrected bug: accumulated fund targets are capital balances, not
+  // recurring annual contributions. All recurring goal outputs retain parity.
+  assert.equal(baseline.calculateBusinessGoalOutputs(goal).totalAnnualBusinessNeed, 358000);
+  assert.equal(calculateBusinessGoalOutputs(goal).totalAnnualBusinessNeed, 340000,
+    "Exclude 18000 of capital targets from recurring annual need without rewriting stored goals");
+  assert.deepEqual(calculateBusinessGoalOutputs(goal), baseline.calculateBusinessGoalOutputs(recurringGoal));
+  assert.equal(goal.buildingFundGoal + goal.emergencyReserveGoal + goal.growthFundGoal, 18000);
   const reality = {
     currentCliniciansCount: 4,
     currentAvgSessionRate: 150,
@@ -106,8 +114,13 @@ test("original business goal and reality outputs are preserved", () => {
     currentBuildingFund: 2000,
     currentCashReserve: 4000,
   };
-  assert.deepEqual(
-    calculateCurrentRealityGap(reality as never, goal as never),
-    baseline.calculateCurrentRealityGap(reality, goal),
-  );
+  // Apply the same correction to achieved flows: 6000 of accumulated savings
+  // cannot satisfy annual income goals. Production and all other logic match.
+  const recurringReality = { ...reality, currentBuildingFund: 0, currentCashReserve: 0 };
+  const correctedGap = calculateCurrentRealityGap(reality as never, goal as never)!;
+  assert.equal(baseline.calculateCurrentRealityGap(reality, goal).gapToGoal, 162000);
+  assert.equal(correctedGap.gapToGoal, 150000,
+    "Recurring goal 340000 minus recurring achieved 190000 excludes capital on both sides");
+  assert.deepEqual(correctedGap, baseline.calculateCurrentRealityGap(recurringReality, recurringGoal));
+  assert.equal(reality.currentBuildingFund + reality.currentCashReserve, 6000);
 });

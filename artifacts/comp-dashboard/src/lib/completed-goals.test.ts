@@ -29,6 +29,32 @@ function fixture(): CompletedGoalInput {
   };
 }
 
+test("negative imported visit IDs require explicit provider coverage to establish achievement", () => {
+  const input = fixture();
+  input.goal!.amount = 20;
+  input.asOf = "2026-01-14";
+  input.context.clinicians = [{ id: 1, goalId: null }];
+  input.context.sessions = Array.from({ length: 14 }, (_, index) => ({
+    id: -index - 1, clinicianId: 1,
+    start: `2026-01-${String(index + 1).padStart(2, "0")}`,
+    end: `2026-01-${String(index + 1).padStart(2, "0")}`, completed: 1,
+  }));
+  assert.equal(evaluateCompletedGoal(input).status, "insufficient");
+  input.attendanceCoverage = [];
+  assert.equal(evaluateCompletedGoal(input).status, "insufficient");
+  input.attendanceCoverage = [{ clinicianId: 1, start: "2026-01-01", end: "2026-01-14" }];
+  assert.equal(evaluateCompletedGoal(input).status, "met");
+  assert.equal(evaluateCompletedGoal(input).value, 30.4375);
+  input.context.sessions.push({ ...input.context.sessions[0] });
+  assert.equal(evaluateCompletedGoal(input).status, "insufficient");
+  input.context.sessions.pop();
+  input.context.clinicians.push({ id: 2, goalId: null });
+  assert.equal(evaluateCompletedGoal(input).status, "insufficient");
+  input.context.clinicians.pop();
+  input.attendanceCoverage = [{ clinicianId: 1, start: "2026-01-02", end: "2026-01-14" }];
+  assert.equal(evaluateCompletedGoal(input).status, "insufficient");
+});
+
 test("future high session counts cannot complete a goal", () => {
   const input = fixture();
   input.asOf = "2026-10-13";
@@ -413,6 +439,7 @@ test("older and newer partial-team imports preserve the previously completed dai
     [snapshot],
     null,
   ).context;
+  input.attendanceCoverage = [1, 2].map(clinicianId => ({ clinicianId, start: "2026-10-01", end: "2026-10-14" }));
   const before = evaluateCompletedGoal(input);
   assert.equal(before.status, "met");
   assert.equal(before.value, 60.875);

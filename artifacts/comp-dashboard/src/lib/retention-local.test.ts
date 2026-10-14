@@ -101,6 +101,49 @@ const packageFixture = () =>
     ),
   );
 
+test("case-variant clinician labels share retention identity and preserve the first display label", () => {
+  const attendance = attendanceSnapshot(`Client,Clinician,Date of service,Location,Status
+synthetic-client,Synthetic Clinician,2026-01-02,Room A,show
+synthetic-client,synthetic clinician,2026-01-09,Room A,show
+synthetic-client,  SYNTHETIC   CLINICIAN  ,2026-01-16,Room A,show`, "2026-01-01", "2026-05-31");
+  const billing = importBillingCsv(`Date of Service,Client,Clinician,Total Fee,Billing Code
+2026-01-02,synthetic-client,synthetic clinician,100,90837
+2026-01-09,synthetic-client,Synthetic Clinician,100,90837`).snapshot;
+  const before = JSON.stringify([attendance, billing]);
+  const metrics = buildLocalRetentionMetrics([attendance, billing], {}, {}, 28, "2026-05-31");
+  assert.equal(metrics.attendanceByClinician.length, 1);
+  assert.equal(metrics.attendanceByClinician[0].clinician, "Synthetic Clinician");
+  assert.equal(metrics.attendanceByClinician[0].shows, 3);
+  assert.equal(metrics.attendanceByClinician[0].uniqueActiveClients, 1);
+  assert.equal(metrics.attendanceByClinician[0].retainedClients, 1);
+  assert.equal(metrics.clientActivityByClinician.length, 1);
+  assert.equal(metrics.clientActivityByClinician[0].clinician, "Synthetic Clinician");
+  assert.equal(metrics.clientActivityByClinician[0].initialRetentionPct, 100);
+  assert.equal(metrics.billingByClinician.length, 1);
+  assert.equal(metrics.billingByClinician[0].clinician, "Synthetic Clinician");
+  assert.equal(metrics.billingByClinician[0].totalFeesCharged, 200);
+  assert.equal(JSON.stringify([attendance, billing]), before);
+});
+
+test("coverage unions case variants but keeps distinct clinicians as separate required identities", () => {
+  const first = attendanceSnapshot(`Client,Clinician,Date of service,Location,Status
+synthetic-client,Synthetic Clinician,2026-01-02,Room A,show`, "2026-01-01", "2026-01-07");
+  const later = attendanceSnapshot(`Client,Clinician,Date of service,Location,Status
+synthetic-client,synthetic clinician,2026-01-09,Room A,show
+synthetic-client,synthetic clinician,2026-01-16,Room A,show`, "2026-01-08", "2026-05-31");
+  const metrics = buildLocalRetentionMetrics([first, later], {}, {}, 28, "2026-05-31");
+  assert.equal(metrics.clientActivityByClinician.length, 1);
+  assert.equal(metrics.clientActivityByClinician[0].coverageVerified, true);
+  assert.equal(metrics.clientActivityByClinician[0].initialRetentionPct, 100);
+  assert.equal(metrics.clientActivityByClinician[0].endingFullMonthClientEnds, 1);
+  const other = attendanceSnapshot(`Client,Clinician,Date of service,Location,Status
+synthetic-client,Synthetic Clinician II,2026-01-16,Room B,show`, "2026-01-16", "2026-01-16");
+  const distinct = buildLocalRetentionMetrics([first, later, other], {}, {}, 28, "2026-05-31");
+  assert.equal(distinct.attendanceByClinician.length, 2);
+  assert.equal(distinct.clientActivityByClinician.find(row => row.clinician === "Synthetic Clinician II")?.initialRetentionPct, null);
+  assert.equal(distinct.coverageVerified, false);
+});
+
 test("local imports keep billing and attendance as separate fact tables", () => {
   const attendance = importAttendanceCsv(
     attendanceCsv,
@@ -413,6 +456,31 @@ CID-slow,Dr Moss,2026-02-10,Room B,show`,
       ["Dr Moss", 0, 2, 0],
     ],
   );
+});
+
+test("ending monthly denominators require selected full mature months, exact events keep selected dates", () => {
+  const attendance = attendanceSnapshot(`Client,Clinician,Date of service,Location,Status
+CID-ended,Dr Lane,2026-01-15,Room A,show
+CID-ended,Dr Lane,2026-01-29,Room A,show
+CID-ended,Dr Lane,2026-02-10,Room A,show`, "2026-01-01", "2026-05-31");
+  const estimate = (start: string, end: string, asOf = "2026-05-31") =>
+    estimateLocalClientActivity([attendance], {}, 56, 56, 28, asOf, 90, start, end)!;
+  const partial = estimate("2026-02-15", "2026-02-28");
+  assert.deepEqual(partial.endingEvents, []);
+  assert.equal(partial.endingFullMonthDenominator, 0);
+  assert.equal(partial.endingFullMonthClientEnds, 0);
+  assert.equal(partial.averageClientEndingsPerFullMonth, null);
+  const exact = estimate("2026-02-10", "2026-02-28");
+  assert.deepEqual(exact.endingEvents, [{ clientId: "CID-ended", date: "2026-02-10" }]);
+  assert.equal(exact.endingFullMonthDenominator, 0);
+  const full = estimate("2026-02-01", "2026-02-28");
+  assert.equal(full.endingFullMonthDenominator, 1);
+  assert.equal(full.averageClientEndingsPerFullMonth, 1);
+  assert.equal(estimate("2026-02-01", "2026-02-28", "2026-05-28").endingFullMonthDenominator, 0);
+  assert.equal(estimate("2026-02-01", "2026-02-28", "2026-05-29").endingFullMonthDenominator, 1);
+  attendance.rows.push({ ...attendance.rows[0], serviceDate: "2026-05-20", sourceRowHash: "later-return" });
+  assert.deepEqual(estimate("2026-02-01", "2026-02-28").endingEvents, []);
+  assert.equal(estimate("2026-02-01", "2026-02-28").averageClientEndingsPerFullMonth, 0);
 });
 
 test("client ending estimate assigns final sessions after 90 covered days", () => {

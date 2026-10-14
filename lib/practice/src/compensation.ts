@@ -29,7 +29,7 @@ export function calculateClinicianMetrics(input: ClinicianMetricsInput) {
     const practiceRevPerSession =
       (input.sessionRate || 0) * ((input.preCapPracticeSplit || 0) / 100);
     const sessionsToCapPrecalc =
-      practiceRevPerSession > 0 ? input.capAmount / practiceRevPerSession : 0;
+      practiceRevPerSession > 0 ? input.capAmount / practiceRevPerSession : annualSessions;
     const sessionsToCAP = Math.min(annualSessions, sessionsToCapPrecalc);
     preCapSessions = Math.min(annualSessions, sessionsToCAP);
     postCapSessions = Math.max(0, annualSessions - sessionsToCAP);

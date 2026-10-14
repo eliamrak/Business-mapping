@@ -1,0 +1,143 @@
+.pw-percentage-kpi {
+  --pw-percentage-color: #9fd8c2;
+  --pw-percentage-track: #3b454b;
+  --pw-percentage-practice: #f2f4f5;
+  --pw-percentage-goal: #76dda4;
+  --pw-percentage-capacity: #b9c2c8;
+  display: grid;
+  justify-items: center;
+  gap: 10px;
+  min-width: 0;
+  margin: 0;
+  color: inherit;
+  letter-spacing: 0;
+  text-align: center;
+}
+
+.pw-percentage-kpi-label {
+  max-width: 100%;
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+}
+
+.pw-percentage-kpi-ring {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 120px;
+  max-width: 100%;
+  aspect-ratio: 1;
+  isolation: isolate;
+}
+
+.pw-percentage-kpi-ring::before {
+  position: absolute;
+  inset: 4px;
+  border-radius: 50%;
+  background: conic-gradient(var(--pw-percentage-color) var(--pw-percentage-angle), var(--pw-percentage-track) 0);
+  mask: radial-gradient(farthest-side, transparent calc(100% - 8px), #000 calc(100% - 7px));
+  content: "";
+}
+
+.pw-percentage-kpi-ring[data-state="unknown"]::before {
+  background: var(--pw-percentage-track);
+}
+
+.pw-percentage-kpi-value {
+  max-width: calc(100% - 36px);
+  color: var(--pw-percentage-color);
+  font-size: 27px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+}
+
+.pw-percentage-kpi-ring[data-state="unknown"] .pw-percentage-kpi-value {
+  color: inherit;
+}
+
+.pw-percentage-kpi-marker {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.pw-percentage-kpi-marker::before {
+  position: absolute;
+  top: 0;
+  left: calc(50% - 1.5px);
+  width: 3px;
+  height: 16px;
+  border-radius: 1px;
+  background: var(--pw-percentage-practice);
+  box-shadow: 0 0 0 1px #12171d;
+  content: "";
+}
+
+.pw-percentage-kpi-marker-goal::before {
+  top: 3px;
+  height: 10px;
+  background: var(--pw-percentage-goal);
+}
+
+.pw-percentage-kpi-marker-capacity::before {
+  top: 4px;
+  height: 8px;
+  background: var(--pw-percentage-capacity);
+}
+
+.pw-percentage-kpi-legend,
+.pw-percentage-kpi-context {
+  display: grid;
+  gap: 4px;
+  max-width: 100%;
+  font-size: 11px;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+
+.pw-percentage-kpi-legend > span {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+
+.pw-percentage-kpi-key {
+  display: inline-block;
+  width: 3px;
+  height: 10px;
+  flex-shrink: 0;
+  background: var(--pw-percentage-practice);
+}
+
+.pw-percentage-kpi-key-goal { background: var(--pw-percentage-goal); }
+.pw-percentage-kpi-key-capacity { background: var(--pw-percentage-capacity); }
+.pw-percentage-kpi-context { opacity: 0.8; }
+.pw-percentage-kpi-details { min-width: 0; max-width: 100%; }
+
+.pw-percentage-kpi-sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+}
+
+@media (forced-colors: active) {
+  .pw-percentage-kpi-ring::before {
+    background: Canvas;
+    border: 8px solid GrayText;
+    mask: none;
+  }
+  .pw-percentage-kpi-value { color: CanvasText; }
+  .pw-percentage-kpi-marker::before,
+  .pw-percentage-kpi-key { background: CanvasText; }
+}

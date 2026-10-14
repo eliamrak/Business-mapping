@@ -667,6 +667,7 @@ test("named savings funds are allocations after profit, not business costs", () 
       id: randomUUID(),
       name: "Your distribution",
       kind: "distribution",
+      household: true,
       percent: 25,
       start: "2026-01-01",
     }),

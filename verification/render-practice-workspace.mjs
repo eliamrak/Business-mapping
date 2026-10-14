@@ -254,7 +254,7 @@ const context = {
       nonClinicalHourlyRate: 0,
     },
   ],
-  staff: [],
+  staff: [{ id: 71, goalId: 1, label: "Synthetic coordinator", role: "Coordinator", annualSalary: 12000, hoursPerWeek: 0, hourlyRate: 0, weeksPerYear: 52, classification: "w2", w2EmployerFicaPct: 0, futaSutaPct: 0, workersCompPct: 0, otherEmployerBurdenPct: 0 }],
   sessions: [
     {
       clinicianId: 1,
@@ -377,6 +377,12 @@ async function capture(name, width, height, clickText) {
     buttonCount: document.querySelectorAll("button").length,
     text: document.body.innerText.slice(0, 2000),
     localAuthErrors: window.__localAuthErrors ?? [],
+    topNavigation: (() => {
+      const nav = document.querySelector(".pw-top-navigation").getBoundingClientRect();
+      const main = document.querySelector(".pw-main").getBoundingClientRect();
+      const controls = [...document.querySelectorAll(".pw-top-navigation nav button, .pw-top-navigation .pw-rail-bottom button, .pw-top-navigation .pw-rail-bottom a")].map((node) => node.getBoundingClientRect()).filter((rect) => rect.width > 0 && rect.height > 0);
+      return nav.left >= 0 && nav.right <= innerWidth + 1 && nav.width >= innerWidth - 1 && nav.bottom <= main.top + 1 && controls.every((a, index) => a.left >= 0 && a.right <= innerWidth + 1 && controls.every((b, other) => index === other || a.right <= b.left + 1 || b.right <= a.left + 1 || a.bottom <= b.top + 1 || b.bottom <= a.top + 1));
+    })(),
   }));
   checks.push({ name, width, height, ...metrics });
 }
@@ -392,10 +398,24 @@ async function clickSection(name) {
 }
 
 await page.goto(new URL("/workspace", process.env.PRACTICE_PREVIEW_URL ?? "http://127.0.0.1:4317").href);
+const sectionButtons = page.locator('nav[aria-label="Practice sections"] button');
+await sectionButtons.first().waitFor({ state: "visible" });
+assert.deepEqual(await sectionButtons.locator("span:last-child").allTextContents(), ["Overview", "Sessions", "Team", "Money", "Growth", "Goals"], "top navigation preserves section names and order");
+assert.deepEqual(await page.locator(".pw-workspace-navigation button > span").allTextContents(), ["Today", "Long Term Goals", "Sandbox"], "separate workspaces retain their grouping and order");
+await sectionButtons.first().focus();
+await page.keyboard.press("Tab");
+assert.ok(await sectionButtons.nth(1).evaluate((node) => node === document.activeElement), "Tab reaches Sessions from Overview");
+await page.keyboard.press("Enter");
+assert.equal(await page.locator("h1").innerText(), "Sessions", "Enter activates the focused top destination");
+await page.keyboard.press("Tab");
+assert.ok(await sectionButtons.nth(2).evaluate((node) => node === document.activeElement), "Tab continues to Team in established order");
+await page.keyboard.press("Space");
+assert.equal(await page.locator("h1").innerText(), "Team", "Space activates the focused top destination");
+await clickSection("Overview");
 await capture("overview-desktop", 1280, 900);
 await capture("overview-mobile", 390, 900);
 assert.ok(importReads > 0, "saved imports load on fresh Today view");
-assert.ok(await page.getByText("Synthetic sessions target goal met", { exact: true }).count(), "Overview includes completed actual achievement");
+assert.equal(await page.getByText("Synthetic sessions target goal met", { exact: true }).count(), 0, "visit dates without full reporting coverage cannot establish goal achievement");
 assert.equal(await page.getByText("Desired Clinicians goal met", { exact: true }).count(), 0, "sessions cannot meet a headcount target");
 assert.equal(await page.getByLabel("Overview financial summary", { exact: true }).count(), 1);
 assert.equal(await page.getByLabel("Overview combined funding progress", { exact: true }).count(), 1);
@@ -430,6 +450,10 @@ assert.match(await page.getByLabel("Whole Practice comparison", { exact: true })
 await capture("attrition-compare-mobile", 390, 900);
 await capture("attrition-compare-desktop", 1280, 900);
 await page.getByRole("tab", { name: "Retention", exact: true }).click();
+assert.equal(await page.locator(".pw-percentage-kpi").count(), 0, "Compare uses horizontal bars rather than a circular individual KPI");
+await page.getByRole("button", { name: "Compare with Whole Practice", exact: true }).click();
+assert.equal(await page.locator(".pw-percentage-kpi-ring").count(), 1, "individual retention uses a circular KPI");
+assert.ok(await page.locator(".pw-percentage-kpi-marker-practice").count(), "individual retention retains the radial practice benchmark");
 await capture("retention-desktop", 1280, 900);
 await capture("retention-mobile", 390, 900);
 await clickSection("Growth");
@@ -473,14 +497,28 @@ await page.getByRole("button", { name: "Review changes", exact: true }).click();
 await page.getByRole("button", { name: "Save changes", exact: true }).click();
 await page.waitForLoadState("networkidle");
 assert.equal(workspace.goals.find((goal) => goal.name === "Desired Clinicians").metric, "activeClinicalHeadcount", "editing persists corrected goal binding");
+await page.getByRole("radio", { name: "Fixed percentage", exact: true }).check();
+await page.getByLabel("Percentage of revenue", { exact: true }).fill("20");
+await page.getByLabel("Percentage of revenue", { exact: true }).blur();
+await page.getByRole("button", { name: "Review changes", exact: true }).click();
+await page.getByRole("button", { name: "Save changes", exact: true }).click();
+await page.waitForLoadState("networkidle");
+assert.equal(workspace.settings.overheadGoalBasis, "fixed_percent", "selected percentage basis is persisted");
+assert.equal(workspace.settings.overheadGoalPercent, 20, "percentage value is persisted without replacing the chosen form");
+await page.reload(); await clickSection("Goals");
+assert.equal(await page.getByLabel("Percentage of revenue", { exact: true }).inputValue(), "20", "fixed percentage survives reload");
+await capture("overhead-percent-desktop", 1280, 900);
+await capture("overhead-percent-mobile", 390, 900);
 await clickSection("Team");
 await capture("team-desktop", 1280, 900);
 await capture("team-mobile", 390, 900);
+assert.match(await page.getByLabel("Nonclinical staff", { exact: true }).innerText(), /Synthetic coordinator[\s\S]*\$1,000/, "normal Team shows finite monthly nonclinical practice cost");
 assert.ok(!(await page.locator(".pw-person-kpis").allTextContents()).join(" ").includes("5000%"), "clinician percentage uses the stored percentage scale");
 await page.setViewportSize({ width: 1280, height: 900 });
 await page.getByRole("button", { name: /Long Term Goals/ }).click();
 await capture("long-term-goals-desktop", 1280, 900);
 await capture("long-term-goals-mobile", 390, 900);
+assert.equal(await page.getByLabel("Generated focused alternatives", { exact: true }).locator("article").count(), 3, "three unsaved focused alternatives are generated separately from saved plans");
 assert.ok(await page.locator(".pw-tool-tabs button").evaluateAll((nodes) => {
   const rects = nodes.map((node) => node.getBoundingClientRect());
   return rects.every((a, index) => rects.every((b, other) => index === other || a.right <= b.left + 1 || b.right <= a.left + 1 || a.bottom <= b.top + 1 || b.bottom <= a.top + 1));
@@ -495,6 +533,17 @@ await page.reload();
 await clickSection("Overview");
 assert.ok(await page.getByText(/Synthetic focused plan:/).count(), "saved focus survives reload into Overview");
 assert.equal(await page.getByText(/New data or assumptions changed this plan/).count(), 0, "saving adoption alone does not invalidate focus");
+
+await page.getByRole("button", { name: /Long Term Goals/ }).click();
+const savedPlanIds = workspace.proposals.map((plan) => plan.id);
+await page.getByLabel("Generated focused alternatives", { exact: true }).locator("article").first().getByRole("button", { name: "Review model", exact: true }).click();
+await page.getByRole("button", { name: "Sandbox", exact: true }).click();
+assert.ok(await page.getByText("Save this scenario to Long Term Goals or discard its changes before opening another workspace.", { exact: true }).isVisible(), "unsaved generated alternatives cannot be silently replaced");
+assert.deepEqual(workspace.proposals.map((plan) => plan.id), savedPlanIds, "opening an alternative never writes or replaces saved plans");
+await page.getByRole("button", { name: "Discard scenario edits", exact: true }).click();
+await page.getByRole("button", { name: "Discard changes", exact: true }).click();
+await page.getByRole("button", { name: "Today", exact: true }).click();
+await clickSection("Overview");
 
 await page.getByRole("button", { name: "Open Imports", exact: true }).click();
 await capture("imports-desktop", 1280, 900);
@@ -548,6 +597,7 @@ await fs.writeFile(
 await browser.close();
 
 for (const check of checks) {
+  assert.ok(check.topNavigation, `${check.name}: navigation stays above content without overlapping destinations`);
   if (check.scrollWidth > check.clientWidth + 1) {
     throw new Error(
       `${check.name} overflows horizontally: ${check.scrollWidth} > ${check.clientWidth}`,

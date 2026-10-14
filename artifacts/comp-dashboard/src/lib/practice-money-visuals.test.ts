@@ -12,6 +12,23 @@ import {
   periodOverheadSummary,
 } from "./practice-money-visuals.ts";
 
+test("named retained funds use their own share, not all retained cash", () => {
+  const workspace = emptyWorkspace("2026-01-01");
+  const allocation = { id: "growth", name: "Growth Fund", kind: "retained" as const, percent: 20, start: "2026-01-01", end: null, archived: false, household: false, notes: "", sourceAttachmentId: null };
+  const result = fundProjectionSummary({ name: "Growth Fund", amount: 800, currentBalance: 0, balanceDate: "2026-01-01" }, [allocation], { retainedCash: 400, taxReserve: 0, reserves: 0, distributions: 0 } as ForecastMonth["values"], "2026-01-01")!;
+  assert.equal(result.contribution, 80);
+  assert.equal(result.eta, "2026-11-01");
+  assert.equal(result.trajectory.at(-1)?.balance, 800);
+  assert.equal(workspace.allocations.length, 0);
+});
+test("fund projections weight allocation dates and keep unknown cash basis unknown", () => {
+  const allocation = { id: "growth", name: "Growth Fund", kind: "retained" as const, percent: 20, start: "2026-01-16", end: "2026-01-31", archived: false, household: false, notes: "", sourceAttachmentId: null };
+  const goal = { name: "Growth Fund", amount: 800, currentBalance: 0, balanceDate: "2026-01-01" };
+  const result = fundProjectionSummary(goal, [allocation], { retainedCash: 400, taxReserve: 0, reserves: 0, distributions: 0 } as ForecastMonth["values"], "2026-01-01")!;
+  assert.equal(result.contribution, 400 * 20 * 16 / 31 / 100);
+  assert.equal(fundProjectionSummary(goal, [allocation], { retainedCash: 400 } as ForecastMonth["values"], "2026-01-01")?.contribution, null);
+});
+
 const month = (date: string, overhead: number | null): ForecastMonth =>
   ({
     date,
@@ -487,6 +504,18 @@ test("dated balance anchors ETA and actual/projected trajectory independently of
       (text) => text.includes("100") && text.includes("monthly"),
     ),
   );
+});
+
+test("fund projections never precede the allocation effective start", () => {
+  const workspace = projectionFixture(0, "2026-01-01");
+  workspace.fundGoals[0].amount = 1000;
+  workspace.allocations[0].start = "2027-01-01";
+  const result = fundProjectionSummary(workspace.fundGoals[0], workspace.allocations, { reserves: 100 } as ForecastMonth["values"], "2027-01-01")!;
+  assert.equal(result.eta, "2027-11-01");
+  assert.equal(result.projectionStartDate, "2027-01-01");
+  assert.deepEqual(result.trajectory.slice(0, 2), [{ date: "2026-01-01", balance: 0, kind: "actual" }, { date: "2027-01-01", balance: 0, kind: "projected" }]);
+  workspace.allocations[0].end = "2027-01-31";
+  assert.equal(fundProjectionSummary(workspace.fundGoals[0], workspace.allocations, { reserves: 100 } as ForecastMonth["values"], "2027-01-01")!.eta, null, "a dated ending cannot become a perpetual contribution");
 });
 
 test("blank balance is an explicit zero assumption, never an actual dated balance", () => {

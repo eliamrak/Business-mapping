@@ -19,6 +19,21 @@ export type GoalPace = {
 
 const monthIndex = (date: string) =>
   Number(date.slice(0, 4)) * 12 + Number(date.slice(5, 7)) - 1;
+const elapsedCalendarMonths = (start: string, end: string) => {
+  const anchor = new Date(`${start}T12:00:00Z`);
+  const finish = Date.parse(`${end}T12:00:00Z`);
+  const anniversary = (count: number) => {
+    const date = new Date(Date.UTC(anchor.getUTCFullYear(), anchor.getUTCMonth() + count, 1, 12));
+    const lastDay = new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth() + 1, 0)).getUTCDate();
+    date.setUTCDate(Math.min(anchor.getUTCDate(), lastDay));
+    return date.getTime();
+  };
+  let months = monthIndex(end) - monthIndex(start);
+  if (anniversary(months) > finish) months--;
+  const lower = anniversary(months);
+  // Fractional months use the interval between UTC, month-end-clamped anniversaries.
+  return months + (finish - lower) / (anniversary(months + 1) - lower);
+};
 const addMonths = (date: string, count: number) => {
   const d = new Date(date.slice(0, 7) + "-01T12:00:00Z");
   d.setUTCMonth(d.getUTCMonth() + count);
@@ -38,10 +53,11 @@ export function calculateGoalPace(
       .map((point) => [point.date.slice(0, 7), point.value]),
   );
   const targetPoint = [...plan].reverse().find((point) => point.value !== null);
-  const rows = actuals
+  const rows = [...new Map(actuals
     .filter(
       (point): point is { date: string; value: number } => point.value !== null,
     )
+    .map((point) => [point.date, point] as const)).values()]
     .sort((a, b) => a.date.localeCompare(b.date))
     .map((point) => {
       const goal = planned.get(point.date.slice(0, 7)) ?? null;
@@ -61,19 +77,20 @@ export function calculateGoalPace(
     monthIndex(targetPoint.date) - monthIndex(latest.date),
   );
   const recent = rows.slice(-4);
+  const positions = recent.map(row => elapsedCalendarMonths(recent[0].date, row.date));
   let slope: number | null = null;
   if (recent.length >= 2) {
     const xMean =
-      recent.reduce((sum, _, index) => sum + index, 0) / recent.length;
+      positions.reduce((sum, position) => sum + position, 0) / recent.length;
     const yMean =
       recent.reduce((sum, row) => sum + row.actual, 0) / recent.length;
     const denominator = recent.reduce(
-      (sum, _, index) => sum + (index - xMean) ** 2,
+      (sum, _, index) => sum + (positions[index] - xMean) ** 2,
       0,
     );
     slope = denominator
       ? recent.reduce(
-          (sum, row, index) => sum + (index - xMean) * (row.actual - yMean),
+          (sum, row, index) => sum + (positions[index] - xMean) * (row.actual - yMean),
           0,
         ) / denominator
       : null;

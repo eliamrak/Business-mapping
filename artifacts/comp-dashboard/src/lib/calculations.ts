@@ -3,15 +3,30 @@ import type { BusinessGoal, Clinician, CurrentReality, ScenarioClinician, StaffM
 export { calculateClinicianMetrics, calculateStaffMemberCost, calculateTotalStaffCost } from "@workspace/practice/compensation";
 export type { ClinicianMetricsInput, StaffCostInput } from "@workspace/practice/compensation";
 
-export function calculateBusinessGoalOutputs(goal: Partial<BusinessGoal>) {
+export type RecurringFundContribution = {
+  fund: "buildingFundGoal" | "emergencyReserveGoal" | "growthFundGoal";
+  amount: number;
+  basis: "monthly" | "annual";
+  source: string;
+};
+
+function annualFundContributions(contributions: readonly RecurringFundContribution[]) {
+  return contributions.reduce((total, contribution) => {
+    if (!contribution.source.trim() || !Number.isFinite(contribution.amount) || contribution.amount < 0)
+      throw new Error("Recurring fund contributions require a nonnegative amount and an explicit source.");
+    if (contribution.basis !== "monthly" && contribution.basis !== "annual")
+      throw new Error("Recurring fund contributions require a monthly or annual basis.");
+    return total + contribution.amount * (contribution.basis === "monthly" ? 12 : 1);
+  }, 0);
+}
+
+export function calculateBusinessGoalOutputs(goal: Partial<BusinessGoal>, recurringContributions: readonly RecurringFundContribution[] = []) {
   const totalAnnualBusinessNeed = 
     (goal.ownerPayGoal || 0) + 
     (goal.secondOwnerPayGoal || 0) + 
     (goal.annualOverheadGoal || 0) + 
-    (goal.businessProfitGoal || 0) + 
-    (goal.buildingFundGoal || 0) + 
-    (goal.emergencyReserveGoal || 0) + 
-    (goal.growthFundGoal || 0);
+    (goal.businessProfitGoal || 0) +
+    annualFundContributions(recurringContributions);
 
   const desiredCliniciansCount = goal.desiredCliniciansCount || 1;
   const requiredNetPerClinician = desiredCliniciansCount > 0 ? totalAnnualBusinessNeed / desiredCliniciansCount : 0;
@@ -27,7 +42,10 @@ export function calculateBusinessGoalOutputs(goal: Partial<BusinessGoal>) {
   };
 }
 
-export function calculateCurrentRealityGap(current: CurrentReality | undefined, goal: BusinessGoal | undefined) {
+export function calculateCurrentRealityGap(current: CurrentReality | undefined, goal: BusinessGoal | undefined, recurring: {
+  goalContributions?: readonly RecurringFundContribution[];
+  currentContributions?: readonly RecurringFundContribution[];
+} = {}) {
   if (!current) return null;
 
   // Estimated gross production across the whole team
@@ -43,23 +61,20 @@ export function calculateCurrentRealityGap(current: CurrentReality | undefined, 
       ? (current.currentBusinessProfit || 0) / current.currentCliniciansCount
       : 0;
 
-  // "Currently achieved" = sum of all components that map to a business goal line item:
-  // owner pay, second owner pay, overhead, profit, building fund, and cash reserve
-  // (cash reserve is treated as the emergency reserve equivalent)
+  // Compare annual recurring flows on both sides; accumulated capital is not income.
   const currentTotalAchieved =
     (current.currentOwnerPay || 0) +
     (current.currentSecondOwnerPay || 0) +
     (current.currentAnnualOverhead || 0) +
     (current.currentBusinessProfit || 0) +
-    (current.currentBuildingFund || 0) +
-    (current.currentCashReserve || 0);
+    annualFundContributions(recurring.currentContributions ?? []);
 
   let gapToGoal = 0;
   let gapPerClinician = 0;
   let percentAchieved = 0;
 
   if (goal) {
-    const goalOutputs = calculateBusinessGoalOutputs(goal);
+    const goalOutputs = calculateBusinessGoalOutputs(goal, recurring.goalContributions);
     gapToGoal = goalOutputs.totalAnnualBusinessNeed - currentTotalAchieved;
     gapPerClinician =
       (goal.desiredCliniciansCount || 1) > 0

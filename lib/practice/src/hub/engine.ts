@@ -41,6 +41,20 @@ export type Context = {
   sessions: SessionRecord[];
   importedBillingActuals?: ImportedBillingActual[];
 };
+
+export function overheadGoalAllowance(
+  settings: Workspace["settings"],
+  revenue: number,
+  monthFraction = 1,
+): number | null {
+  if (settings.overheadGoalBasis === "fixed_percent")
+    return settings.overheadGoalPercent === undefined
+      ? null
+      : (revenue * settings.overheadGoalPercent) / 100;
+  if (settings.overheadGoalBasis === "fixed_dollars")
+    return settings.overheadFloorMonthly * monthFraction;
+  return null;
+}
 export function staffMemberAt(
   workspace: Workspace,
   member: Staff,
@@ -173,6 +187,31 @@ const activeDays = (
       record.end && record.end < end ? record.end : end,
     ),
   );
+
+export function cashAllocationsForRange(
+  allocations: Workspace["allocations"],
+  positiveSurplus: number,
+  start: string,
+  end: string,
+) {
+  const days = daysInclusive(start, end);
+  const buckets = allocations
+    .filter((bucket) => active(bucket, start, end))
+    .map((bucket) => ({
+      ...bucket,
+      amount: (Math.max(0, positiveSurplus) * bucket.percent / 100) *
+        activeDays(bucket, start, end) / days,
+    }));
+  const maxDailyPercent = datesIn(start, end).reduce(
+    (maximum, date) => Math.max(
+      maximum,
+      buckets.filter((bucket) => active(bucket, date, date))
+        .reduce((sum, bucket) => sum + bucket.percent, 0),
+    ),
+    0,
+  );
+  return { buckets, configured: buckets.length > 0, maxDailyPercent };
+}
 
 function activeClinicalHeadcountAt(
   workspace: Workspace,
@@ -1375,12 +1414,10 @@ export function forecast(
         detailedOverhead += amount;
       }
     }
-    overhead += Math.max(
-      0,
-      (setting.overheadFloorMonthly * days) /
-        daysInclusive(monthDate(start), monthEnd(start)) -
-        detailedOverhead,
-    );
+    const monthFraction = days / daysInclusive(monthDate(start), monthEnd(start));
+    const overheadAllowance = overheadGoalAllowance(setting, revenue, monthFraction) ??
+      (setting.overheadFloorMonthly * days) / daysInclusive(monthDate(start), monthEnd(start));
+    overhead += Math.max(0, overheadAllowance - detailedOverhead);
     const oneTime = events
       .filter((e) => e.enabled && e.date >= start && e.date <= end)
       .reduce((n, e) => n + e.oneTimeCost, 0);
@@ -1430,27 +1467,27 @@ export function forecast(
       ownerPayroll -
       ownerBurden;
     const basis = Math.max(0, cashProfit);
-    const buckets = workspace.allocations.filter((a) => active(a, start, end));
-    const configured = buckets.length > 0;
-    const bucketPct = buckets.reduce((n, b) => n + b.percent, 0);
-    if (bucketPct > 100)
+    const { buckets, configured, maxDailyPercent } = cashAllocationsForRange(
+      workspace.allocations, basis, start, end,
+    );
+    if (maxDailyPercent > 100)
       warnings.push(
         "Active cash allocations exceed 100%; distributions are capped at available cash.",
       );
     let taxReserve = configured
       ? buckets
           .filter((b) => b.kind === "tax")
-          .reduce((n, b) => n + (b.percent / 100) * basis, 0)
+          .reduce((n, b) => n + b.amount, 0)
       : (basis * setting.taxPct) / 100;
     let reserves = configured
       ? buckets
           .filter((b) => b.kind === "reserve")
-          .reduce((n, b) => n + (b.percent / 100) * basis, 0)
+          .reduce((n, b) => n + b.amount, 0)
       : (basis * setting.reservePct) / 100;
     let distributions = configured
       ? buckets
           .filter((b) => b.kind === "distribution")
-          .reduce((n, b) => n + (b.percent / 100) * basis, 0)
+          .reduce((n, b) => n + b.amount, 0)
       : (basis * setting.distributionPct) / 100;
     taxReserve += explicitTax;
     reserves += explicitReserves;
@@ -1463,34 +1500,22 @@ export function forecast(
     const ownerDistributionBuckets = buckets.filter(
       (bucket) => bucket.kind === "distribution" && bucket.household,
     );
-    const distributionPctTotal = buckets
+    const distributionAmountTotal = buckets
       .filter((bucket) => bucket.kind === "distribution")
-      .reduce((sum, bucket) => sum + bucket.percent, 0);
+      .reduce((sum, bucket) => sum + bucket.amount, 0);
     const ownerDistributionsPretax =
       ownerDistributionBuckets.length > 0
         ? distributions *
           (ratio(
             ownerDistributionBuckets.reduce(
-              (sum, bucket) => sum + bucket.percent,
+              (sum, bucket) => sum + bucket.amount,
               0,
             ),
-            distributionPctTotal,
+            distributionAmountTotal,
           ) ?? 0)
         : null;
     const familyDistribution =
-      settings.familyW2ClinicianId !== null
-        ? distributions
-        : configured
-          ? distributions *
-            (ratio(
-              buckets
-                .filter((b) => b.kind === "distribution" && b.household)
-                .reduce((n, b) => n + b.percent, 0),
-              buckets
-                .filter((b) => b.kind === "distribution")
-                .reduce((n, b) => n + b.percent, 0),
-            ) ?? 0)
-          : distributions;
+      configured ? ownerDistributionsPretax ?? 0 : distributions;
     const familyTakeHome =
       settings.familyW2ClinicianId !== null
         ? estimateW2NetPay(familyGrossPay, settings.estimatedIncomeTaxPct).net +
@@ -1604,7 +1629,9 @@ export function forecast(
       clinicianPay:
         "Existing compensation function with annual cap progression, effective terms and non-clinical pay; configured salary/hourly/session overrides apply.",
       overhead:
-        "Operating budget lines plus any remaining compensation-plan overhead allowance, one-time events and hire support. Marketing and staff payroll are separate.",
+        setting.overheadGoalBasis === "fixed_percent"
+          ? `Operating budget lines count toward the fixed ${setting.overheadGoalPercent}% of matching-period billed clinical revenue allowance; one-time events and hire support are additional. Marketing and staff payroll are separate.`
+          : "Operating budget lines plus any remaining compensation-plan overhead allowance, one-time events and hire support. Marketing and staff payroll are separate.",
       profit:
         "Billed session income + other income - clinician pay - employer burden - staff cost - overhead - marketing - fees - owner payroll/burden.",
       familyTakeHome:
@@ -1817,6 +1844,13 @@ export function observed(
     owner = sum("ownerPay"),
     distribution = sum("distributions"),
     ownerClinical = sum("ownerClinicalPay");
+  const ownerDistribution = sum("ownerDistributionsPretax");
+  const householdAttributionRequired =
+    periods.some((period) => period.ownerDistributionsPretax !== null) ||
+    workspace.allocations.some((bucket) => active(bucket, start, end));
+  const familyDistribution = householdAttributionRequired
+    ? ownerDistribution ?? (distribution === 0 ? 0 : null)
+    : distribution;
   const profit = [
     revenue,
     pay,
@@ -1837,7 +1871,7 @@ export function observed(
         context,
         end,
       ),
-      ownerDistributionsPretax: sum("ownerDistributionsPretax"),
+      ownerDistributionsPretax: ownerDistribution,
       coOwnerSalaryPretax: sum("coOwnerSalaryPretax"),
       capacity: sessions.desired,
       utilization: sessions.utilization,
@@ -1882,10 +1916,10 @@ export function observed(
           : null,
       familyTakeHome:
         owner !== null &&
-        distribution !== null &&
+        familyDistribution !== null &&
         (!workspace.settings.includeOwnerClinical || ownerClinical !== null)
           ? owner +
-            distribution +
+            familyDistribution +
             (workspace.settings.includeOwnerClinical ? ownerClinical! : 0)
           : null,
     },

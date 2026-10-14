@@ -2,6 +2,9 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
   campaignSchema,
+  budgetSchema,
+  categorySchema,
+  clinicianSettingSchema,
   emptyWorkspace,
   forecast,
   type Context,
@@ -57,7 +60,7 @@ test("operating plan connects selected-period sessions, money, and monthly lead 
     start: "2026-09-01",
   }));
   const month = forecast(workspace, context)[0];
-  const summary = summarizeOperatingPlan(workspace, month)!;
+  const summary = summarizeOperatingPlan(workspace, month, 6, "2026-09-01", context)!;
 
   assert.ok((summary.weeklySessions ?? 0) > 16);
   assert.equal(summary.sessionsPerClientMonth, 4);
@@ -65,7 +68,8 @@ test("operating plan connects selected-period sessions, money, and monthly lead 
   assert.equal(summary.activeClients, summary.sessions! / 4);
   assert.ok(Math.abs((summary.leadToClientRate ?? 0) - 0.2) < 1e-9);
   assert.ok(summary.leadsNeeded !== null && summary.leadsNeeded > 0);
-  assert.ok(summary.sessionsToCloseGap !== null && summary.sessionsToCloseGap > 0);
+  assert.equal(summary.sessionsToCloseGap, null);
+  assert.match(summary.warnings.join(" "), /cannot be reached within configured/);
   assert.equal(summary.fillHorizonMonths, 6);
   assert.equal(summary.fillClients, (summary.sessionCapacity! - summary.sessions!) / 4 / 6);
   const slowerFill = summarizeOperatingPlan(workspace, month, 12)!;
@@ -78,6 +82,112 @@ test("operating plan connects selected-period sessions, money, and monthly lead 
   assert.ok(Math.abs(summary.estimatedRevenue! + summary.otherIncome! -
     summary.clinicianCompensation - summary.operatingExpense - summary.estimatedProfit!) < 0.001);
   assert.equal(summary.leadRateSource, "campaign");
+});
+
+function salaryFixture() {
+  const workspace = emptyWorkspace("2026-11-01");
+  Object.assign(workspace.settings, {
+    teamId: 7, forecastStart: "2026-11-01", horizonMonths: 1,
+    baselineMode: "manual", baselineWeeklySessions: 7,
+    baselineRetentionPct: 100, defaultInPersonPct: 0,
+    organicClientsPerMonth: 0, sessionsPerClientMonth: 2, attendancePct: 100,
+    targetProfitMonthly: 3000, overheadMode: "detailed",
+  });
+  const people: Context = {
+    clinicians: [{ ...clinician, sessionRate: 100, weeksWorkedPerYear: 52.1786 }],
+    staff: [], sessions: [],
+  };
+  workspace.clinicians.push(clinicianSettingSchema.parse({
+    id: crypto.randomUUID(), clinicianId: 1, start: "2026-01-01",
+    desiredWeeklySessions: 20, inPersonPct: 0,
+    payMode: "salary", payAmount: 12000,
+  }));
+  return { workspace, context: people };
+}
+
+test("fixed monthly salary is paid once: 30 sessions at 100 need 10 extra to move profit from 2000 to 3000", () => {
+  const source = salaryFixture(), before = structuredClone(source);
+  const month = forecast(source.workspace, source.context, [], 1, false)[0];
+  assert.ok(Math.abs(month.values.sessions! - 30) < 1e-8);
+  assert.ok(Math.abs(month.values.profit! - 2000) < 1e-8);
+  const summary = summarizeOperatingPlan(source.workspace, month, 6, "2026-11-01", source.context)!;
+  assert.equal(summary.sessionsToCloseGap, 10);
+  assert.ok(Math.abs(summary.contributionPerSession! - 100) < 1e-7);
+  assert.deepEqual(source, before);
+});
+
+test("incremental engine includes per-session compensation, employer burden, fees and variable budgets", () => {
+  const source = salaryFixture();
+  source.workspace.clinicians[0].payMode = "per_session";
+  source.workspace.clinicians[0].payAmount = 25;
+  source.context.clinicians[0].classification = "w2";
+  source.context.clinicians[0].w2EmployerFicaPct = 10;
+  source.workspace.settings.processingPct = 2;
+  const category = categorySchema.parse({ id: crypto.randomUUID(), name: "Session supplies", kind: "expense" });
+  source.workspace.categories.push(category);
+  source.workspace.budgets.push(budgetSchema.parse({
+    id: crypto.randomUUID(), name: "Supplies", categoryId: category.id,
+    start: "2026-01-01", amount: 10, cadence: "per_session",
+  }));
+  const month = forecast(source.workspace, source.context, [], 1, false)[0];
+  source.workspace.settings.targetProfitMonthly = month.values.profit! + 605;
+  const summary = summarizeOperatingPlan(source.workspace, month, 6, "2026-11-01", source.context)!;
+  assert.ok(Math.abs(summary.contributionPerSession! - 60.5) < 1e-7);
+  assert.equal(summary.sessionsToCloseGap, 10);
+});
+
+test("incremental engine crosses a split cap rather than extrapolating the current marginal share", () => {
+  const source = salaryFixture();
+  source.workspace.clinicians[0].payMode = "existing_split";
+  source.workspace.clinicians[0].openingCapContribution = 0;
+  Object.assign(source.context.clinicians[0], { capEnabled: true, capAmount: 1400, postCapClinicianSplit: 80, postCapPracticeSplit: 20 });
+  source.workspace.settings.targetProfitMonthly = 1600;
+  const month = forecast(source.workspace, source.context, [], 1, false)[0];
+  assert.ok(Math.abs(month.values.profit! - 1200) < 1e-8);
+  const summary = summarizeOperatingPlan(source.workspace, month, 6, "2026-11-01", source.context)!;
+  assert.ok(Math.abs(summary.contributionPerSession! - 40) < 1e-7);
+  assert.equal(summary.sessionsToCloseGap, 15);
+});
+
+test("selected-month inversion preserves preceding months' cap earnings", () => {
+  const source = salaryFixture();
+  source.workspace.settings.forecastStart = "2026-10-01";
+  source.workspace.settings.horizonMonths = 2;
+  source.workspace.clinicians[0].payMode = "existing_split";
+  source.workspace.clinicians[0].openingCapContribution = 0;
+  Object.assign(source.context.clinicians[0], { capEnabled: true, capAmount: 1400, postCapClinicianSplit: 80, postCapPracticeSplit: 20 });
+  const month = forecast(source.workspace, source.context, [], 1, false)[1];
+  source.workspace.settings.targetProfitMonthly = month.values.profit! + 200;
+  const summary = summarizeOperatingPlan(source.workspace, month, 6, "2026-11-01", source.context)!;
+  assert.ok(Math.abs(summary.contributionPerSession! - 20) < 1e-7);
+  assert.equal(summary.sessionsToCloseGap, 10);
+});
+
+test("zero gap needs zero sessions; missing context and unreachable capacity cannot fabricate a requirement", () => {
+  const source = salaryFixture();
+  const month = forecast(source.workspace, source.context, [], 1, false)[0];
+  const unknown = summarizeOperatingPlan(source.workspace, month)!;
+  assert.equal(unknown.sessionsToCloseGap, null);
+  assert.equal(unknown.contributionPerSession, null);
+  assert.match(unknown.warnings.join(" "), /requires clinician context/);
+  source.workspace.settings.targetProfitMonthly = 0;
+  assert.equal(summarizeOperatingPlan(source.workspace, month)!.sessionsToCloseGap, 0);
+  source.workspace.settings.targetProfitMonthly = 1000000;
+  const unreachable = summarizeOperatingPlan(source.workspace, month, 6, "2026-11-01", source.context)!;
+  assert.equal(unreachable.sessionsToCloseGap, null);
+  assert.match(unreachable.warnings.join(" "), /configured clinician and room capacity/);
+});
+
+test("a fixed hourly roster cost also stays fixed for incremental sessions", () => {
+  const source = salaryFixture();
+  source.workspace.clinicians[0].payMode = "hourly";
+  source.workspace.clinicians[0].payAmount = 20;
+  source.workspace.clinicians[0].paidHoursPerWeek = 10;
+  const month = forecast(source.workspace, source.context, [], 1, false)[0];
+  source.workspace.settings.targetProfitMonthly = month.values.profit! + 1000;
+  const summary = summarizeOperatingPlan(source.workspace, month, 6, "2026-11-01", source.context)!;
+  assert.equal(summary.sessionsToCloseGap, 10);
+  assert.ok(Math.abs(summary.contributionPerSession! - 100) < 1e-7);
 });
 
 test("operating plan keeps lead requirements unknown when conversion assumptions are missing", () => {

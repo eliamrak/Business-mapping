@@ -576,14 +576,14 @@ export default function WorkspaceSessions({
           <span>Capacity</span><strong className="pw-session-headline-secondary-value" style={{ color: capacityColor, fontSize: 32 }}>{display(selectedGoal)}</strong>
         </div>
         <div className="pw-session-headline-required">
-          <span>Required</span><strong className="pw-session-headline-secondary-value" style={{ color: "#76dda4", fontSize: 32 }}>{display(requiredPace)}</strong>
+          <span>Goal</span><strong className="pw-session-headline-secondary-value" style={{ color: "#76dda4", fontSize: 32 }}>{display(requiredPace)}</strong>
         </div>
       </div>
       <div className="pw-session-progress" aria-label="Weekly pace against capacity and required sessions">
         <div className="pw-session-progress-track">
           {selectedSummary.coverageComplete && <span className="pw-session-progress-fill" style={{ width: progressPosition(selectedSummary.completedWeekly ?? 0), backgroundColor: "#9fd8c2" }} />}
           <span className="pw-session-progress-marker pw-session-progress-capacity" title={`Capacity ${display(selectedGoal)}`} style={{ left: progressPosition(selectedGoal), backgroundColor: capacityColor }} />
-          {requiredPace !== null && <span className="pw-session-progress-marker pw-session-progress-required" title={`Required ${display(requiredPace)}`} style={{ left: progressPosition(requiredPace), backgroundColor: "#76dda4" }} />}
+          {requiredPace !== null && <span className="pw-session-progress-marker pw-session-progress-required" title={`Goal ${display(requiredPace)}`} style={{ left: progressPosition(requiredPace), backgroundColor: "#76dda4" }} />}
         </div>
       </div>
       <div className="pw-session-chart" aria-label="Calendar weekly session trend" style={{ width: "100%", minWidth: 0 }}>
@@ -601,7 +601,7 @@ export default function WorkspaceSessions({
               {chartData.some((point) => point.observedCompleted !== null) && <Line dataKey="observedCompleted" name="Observed sessions (coverage unknown or partial)" stroke="#9fd8c2" strokeWidth={0} dot={{ r: 4, fill: "#12171d", strokeWidth: 2 }} isAnimationActive={false} />}
               {chartData.some((point) => point.periodRate !== null) && <Line dataKey="periodRate" name="Period pace" stroke="#9fd8c2" strokeWidth={0} dot={{ r: 4, strokeWidth: 2, fill: "#9fd8c2" }} activeDot={{ r: 5, strokeWidth: 2 }} isAnimationActive={false} />}
               <Line dataKey="capacity" name="Capacity" stroke={capacityColor} dot={false} strokeDasharray="6 3" isAnimationActive={false} />
-              {requiredPace !== null && <Line dataKey="required" name="Required" stroke="#76dda4" dot={false} strokeDasharray="3 3" isAnimationActive={false} />}
+              {requiredPace !== null && <Line dataKey="required" name="Goal" stroke="#76dda4" dot={false} strokeDasharray="3 3" isAnimationActive={false} />}
               {comparisonAvailable && chartData.some((point) => point.benchmark !== null) && <Line dataKey="benchmark" name="Practice sessions" stroke="#84b9db" dot={{ r: 3 }} connectNulls={false} isAnimationActive={false} />}
               {comparisonAvailable && chartData.some((point) => point.benchmarkPeriodRate !== null) && <Line dataKey="benchmarkPeriodRate" name="Practice period pace" stroke="#84b9db" strokeWidth={0} dot={{ r: 4, strokeWidth: 2, fill: "#84b9db" }} isAnimationActive={false} />}
             </LineChart>

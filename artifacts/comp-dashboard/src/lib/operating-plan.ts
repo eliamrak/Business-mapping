@@ -1,4 +1,4 @@
-import type { ForecastMonth, Workspace } from "@workspace/practice/hub";
+import { datedValue, eventSchema, forecast, monthEnd, type Context, type ForecastMonth, type Workspace } from "@workspace/practice/hub";
 
 export type OperatingPlanSummary = {
   month: string;
@@ -130,11 +130,93 @@ function campaignRates(workspace: Workspace, month: ForecastMonth) {
   };
 }
 
+function incrementalSessionNeed(workspace: Workspace, month: ForecastMonth, context: Context | undefined, gap: number | null) {
+  const unknown = (warning: string) => ({ contribution: null, sessions: null, warnings: [warning] });
+  if (gap === 0) return { contribution: null, sessions: 0, warnings: [] };
+  if (gap === null) return unknown("Incremental session need is unknown because current profit is unavailable.");
+  if (!context) return unknown("Incremental session need requires clinician context to model fixed pay, variable costs and cap transitions.");
+  const index = (Number(month.date.slice(0, 4)) - Number(workspace.settings.forecastStart.slice(0, 4))) * 12
+    + Number(month.date.slice(5, 7)) - Number(workspace.settings.forecastStart.slice(5, 7));
+  if (index < 0 || index >= 60 || !month.date.endsWith("-01"))
+    return unknown("Incremental session need requires a complete month within the configured forecast.");
+  const copy = structuredClone({ workspace, context });
+  copy.workspace.settings.horizonMonths = index + 1;
+  const evaluateBase = () => forecast(copy.workspace, copy.context, [], 1, false)[index];
+  const base = evaluateBase();
+  const numeric = (value: unknown): value is number => typeof value === "number" && Number.isFinite(value);
+  if (!base || !numeric(base.values.sessions) || !numeric(base.values.profit) || !numeric(base.values.capacity)
+    || !numeric(month.values.sessions) || !numeric(month.values.profit)
+    || Math.abs(base.values.sessions - month.values.sessions) > 1e-6
+    || Math.abs(base.values.profit - month.values.profit) > 1e-6)
+    return unknown("Selected-month totals do not reconcile with the supplied forecast context; incremental economics are unknown.");
+  if (base.warnings.some((warning) => /missing|unknown|incomplete|unavailable|unverified|not found|choose|must be/i.test(warning)))
+    return unknown("Forecast inputs are incomplete; fallback assumptions cannot establish incremental session need.");
+  const unit = workspace.settings.sessionsPerClientMonth * workspace.settings.attendancePct / 100;
+  if (!numeric(unit) || unit <= 0)
+    return unknown("A positive configured sessions-per-client and attendance assumption is needed to test incremental demand.");
+  const end = monthEnd(month.date);
+  const days = monthDays(month.date);
+  const organicAtEnd = datedValue(workspace.settings.organicClientsPerMonth,
+    workspace.events.filter((event) => event.enabled && event.field === "assumption.organic")
+      .map((event) => ({ date: event.date, end: event.end, value: event.value })), end, end);
+  let eventId = "00000000-0000-4000-8000-000000000000";
+  for (let suffix = 1; workspace.events.some((event) => event.id === eventId); suffix++)
+    eventId = `00000000-0000-4000-8000-${String(suffix).padStart(12, "0")}`;
+  const evaluate = (addedDemand: number) => {
+    // A transient end-of-month acquisition adjustment changes this month's demand
+    // while retaining all preceding months, including earned cap contributions.
+    // The engine averages organic assumptions across days, hence the days factor.
+    const event = eventSchema.safeParse({
+      id: eventId, name: "Incremental session calculation", date: end, end,
+      field: "assumption.organic", value: organicAtEnd + addedDemand * days / unit,
+    });
+    if (!event.success) return undefined;
+    return forecast(copy.workspace, copy.context, [event.data], 1, false)[index];
+  };
+  const first = evaluate(1);
+  if (!numeric(first?.values.sessions) || !numeric(first?.values.profit))
+    return unknown("Incremental forecast values are unavailable.");
+  const firstSessions = first.values.sessions - base.values.sessions;
+  const contribution = firstSessions > 1e-8 ? (first.values.profit - base.values.profit) / firstSessions : null;
+  if (base.values.capacity <= base.values.sessions + 1e-8)
+    return { contribution, sessions: null, warnings: ["The profit goal cannot be tested above current clinician capacity."] };
+  const target = base.values.profit + gap;
+  let low = 0, high = Math.max(1, base.values.capacity - base.values.sessions);
+  let upper = evaluate(high);
+  if (!upper) return unknown("Incremental demand exceeds the supported forecast input range.");
+  // Extra demand is bounded by engine capacity. A plateau cannot establish an
+  // uncapped requirement, so report unknown rather than extrapolating average cost.
+  for (let step = 0; step < 12 && numeric(upper.values.profit) && upper.values.profit < target - 1e-8; step++) {
+    const next = evaluate(high * 2);
+    if (!next || !numeric(next.values.profit) || next.values.profit < upper.values.profit - 1e-8)
+      return unknown("Incremental profit decreases or becomes unavailable; a session minimum cannot be established.");
+    if (numeric(next.values.sessions) && numeric(upper.values.sessions)
+      && Math.abs(next.values.sessions - upper.values.sessions) < 1e-8
+      && Math.abs(next.values.profit - upper.values.profit) < 1e-8) break;
+    high *= 2;
+    upper = next;
+  }
+  if (!numeric(upper.values.profit) || !numeric(upper.values.sessions)) return unknown("Incremental forecast values are unavailable.");
+  if (upper.values.profit < target - 1e-8)
+    return { contribution, sessions: null, warnings: ["The profit goal cannot be reached within configured clinician and room capacity."] };
+  for (let step = 0; step < 32; step++) {
+    const middle = (low + high) / 2;
+    const candidate = evaluate(middle);
+    if (!candidate || !numeric(candidate.values.profit) || !numeric(candidate.values.sessions)) return unknown("Incremental forecast values are unavailable.");
+    if (candidate.values.profit + 1e-8 >= target) { high = middle; upper = candidate; }
+    else low = middle;
+  }
+  const delivered = upper.values.sessions;
+  if (!numeric(delivered)) return unknown("Incremental forecast session volume is unavailable.");
+  return { contribution, sessions: Math.ceil(Math.max(0, delivered - base.values.sessions) - 1e-7), warnings: [] };
+}
+
 export function summarizeOperatingPlan(
   workspace: Workspace,
   month: ForecastMonth | undefined,
   fillHorizonMonths = 6,
   asOf = new Date().toISOString().slice(0, 10),
+  context?: Context,
 ): OperatingPlanSummary | null {
   if (!month) return null;
   const values = month.values;
@@ -153,14 +235,9 @@ export function summarizeOperatingPlan(
     ? null : estimatedProfit - estimatedRevenue + clinicianCompensation + operatingExpense;
   const targetProfit = workspace.settings.targetProfitMonthly;
   const profitGap = estimatedProfit === null ? null : Math.max(0, targetProfit - estimatedProfit);
-  const contributionPerSession =
-    estimatedRevenue === null
-      ? null
-      : ratio(estimatedRevenue - clinicianCompensation - (values.fees ?? 0), sessions);
-  const sessionsToCloseGap =
-    profitGap !== null && contributionPerSession && contributionPerSession > 0
-      ? Math.ceil(profitGap / contributionPerSession)
-      : null;
+  const incremental = incrementalSessionNeed(workspace, month, context, profitGap);
+  const contributionPerSession = incremental.contribution;
+  const sessionsToCloseGap = incremental.sessions;
   const sessionsPerClientMonth = workspace.settings.sessionsPerClientMonth;
   const activeClients =
     sessions !== null && sessionsPerClientMonth > 0 ? sessions / sessionsPerClientMonth : null;
@@ -197,7 +274,7 @@ export function summarizeOperatingPlan(
       ? Math.ceil(consultsNeeded * consultAttendanceRate)
       : null;
 
-  const warnings = [];
+  const warnings = [...incremental.warnings];
   if (estimatedRevenue === null) warnings.push("Estimated revenue needs session volume and rates.");
   if (leadToClientRate === null) warnings.push("Lead requirements need campaign assumptions or recorded lead/client results.");
   if (leadToClientRate === 0) warnings.push("Recorded results show no booked clients from leads; leads needed cannot be estimated from a zero conversion rate.");

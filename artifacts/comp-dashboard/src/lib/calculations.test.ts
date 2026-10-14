@@ -55,6 +55,23 @@ test("cap transition preserves compensation and practice revenue", () => {
     result.annualProduction,
   );
 });
+test("positive practice cap is unreachable with zero pre-cap practice share", () => {
+  const result = calculateClinicianMetrics({ ...input, classification: "1099",
+    sessionsPerWeek: 2, weeksWorkedPerYear: 50, capEnabled: true, capAmount: 1000,
+    preCapClinicianSplit: 100, preCapPracticeSplit: 0,
+    postCapClinicianSplit: 70, postCapPracticeSplit: 30,
+  });
+  assert.equal(result.preCapSessions, 100);
+  assert.equal(result.postCapSessions, 0);
+  assert.equal(result.sessionsToCAP, 100);
+  assert.equal(result.clinicianCompensation, 10000);
+  assert.equal(result.practiceGrossRevenue, 0);
+  const zeroCap = calculateClinicianMetrics({ ...input, capEnabled: true, capAmount: 0 });
+  assert.equal(zeroCap.preCapSessions, 1000);
+  assert.equal(zeroCap.postCapSessions, 0);
+  assert.equal(zeroCap.clinicianCompensation, 60000);
+});
+
 test("1099 and owner do not add employer burden", () => {
   for (const classification of ["1099", "owner"]) {
     const result = calculateClinicianMetrics({ ...input, classification });
@@ -108,4 +125,59 @@ test("goal solving and absence of current reality retain current results", () =>
   assert.equal(outputs.requiredNetPerClinician, 60000);
   assert.equal(outputs.requiredMonthlyNetPerClinician, 5000);
   assert.equal(calculateCurrentRealityGap(undefined, undefined), null);
+});
+
+test("fund balance goals never become recurring annual or monthly business need", () => {
+  const goal = {
+    ownerPayGoal: 120000, annualOverheadGoal: 60000, businessProfitGoal: 24000,
+    buildingFundGoal: 120000, emergencyReserveGoal: 30000, growthFundGoal: 50000,
+    desiredCliniciansCount: 4,
+  };
+  const before = structuredClone(goal);
+  const output = calculateBusinessGoalOutputs(goal);
+  assert.equal(output.totalAnnualBusinessNeed, 204000);
+  assert.equal(output.requiredMonthlyBusinessNeed, 17000);
+  assert.equal(output.requiredNetPerClinician, 51000);
+  assert.equal(calculateBusinessGoalOutputs({ buildingFundGoal: 120000 }).totalAnnualBusinessNeed, 0);
+  assert.deepEqual(goal, before);
+});
+
+test("recurring fund contributions require distinct sourced amounts and a known period basis", () => {
+  const goal = { buildingFundGoal: 120000, businessProfitGoal: 12000 };
+  const contributions = [
+    { fund: "buildingFundGoal" as const, amount: 1000, basis: "monthly" as const, source: "Approved annual savings budget" },
+    { fund: "emergencyReserveGoal" as const, amount: 3000, basis: "annual" as const, source: "Annual recurring reserve allocation" },
+  ];
+  const before = structuredClone({ goal, contributions });
+  assert.equal(calculateBusinessGoalOutputs(goal, contributions).totalAnnualBusinessNeed, 27000);
+  assert.deepEqual({ goal, contributions }, before);
+  for (const amount of [-1, NaN, Infinity])
+    assert.throws(() => calculateBusinessGoalOutputs(goal, [{ ...contributions[0], amount }]), /explicit source/);
+  assert.throws(() => calculateBusinessGoalOutputs(goal, [{ ...contributions[0], source: " " }]), /explicit source/);
+  assert.equal(calculateBusinessGoalOutputs(goal, [{ ...contributions[0], amount: 0 }]).totalAnnualBusinessNeed, 12000);
+});
+
+test("current savings balances do not masquerade as recurring goal achievement", () => {
+  const current = {
+    currentCliniciansCount: 2, currentAvgSessionRate: 100,
+    currentAvgSessionsPerWeek: 20, currentAvgWeeksWorkedPerYear: 48,
+    currentOwnerPay: 60000, currentSecondOwnerPay: 0,
+    currentAnnualOverhead: 24000, currentBusinessProfit: 12000,
+    currentBuildingFund: 120000, currentCashReserve: 30000,
+  };
+  const goal = {
+    ownerPayGoal: 72000, secondOwnerPayGoal: 0, annualOverheadGoal: 24000,
+    businessProfitGoal: 24000, buildingFundGoal: 120000,
+    emergencyReserveGoal: 30000, growthFundGoal: 0, desiredCliniciansCount: 2,
+  };
+  const before = structuredClone({ current, goal });
+  const gap = calculateCurrentRealityGap(current as never, goal as never)!;
+  assert.equal(gap.gapToGoal, 24000);
+  assert.equal(gap.gapPerClinician, 12000);
+  assert.equal(gap.percentAchieved, 80);
+  assert.deepEqual({ current, goal }, before);
+  const contribution = { fund: "buildingFundGoal" as const, amount: 1000, basis: "monthly" as const, source: "Recurring contribution budget" };
+  assert.equal(calculateCurrentRealityGap(current as never, goal as never, {
+    goalContributions: [contribution], currentContributions: [{ ...contribution, amount: 500 }],
+  })!.gapToGoal, 30000);
 });

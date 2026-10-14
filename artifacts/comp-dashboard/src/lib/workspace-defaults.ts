@@ -86,6 +86,7 @@ export function resolveWorkspaceDefaults(
   };
 
   const inheritOverhead =
+    workspace.settings.overheadGoalBasis === undefined &&
     workspace.settings.overheadMode === "baseline" &&
     !workspace.settings.overheadFloorOverride &&
     (goal?.annualOverheadGoal ?? 0) > 0;
@@ -93,7 +94,7 @@ export function resolveWorkspaceDefaults(
     ...workspace,
     settings: {
       ...workspace.settings,
-      overheadFloorMonthly: workspace.settings.overheadMode === "detailed"
+      overheadFloorMonthly: workspace.settings.overheadMode === "detailed" && workspace.settings.overheadGoalBasis === undefined
         ? 0
         : inheritOverhead
           ? Math.max(workspace.settings.overheadFloorMonthly, (goal?.annualOverheadGoal ?? 0) / 12)

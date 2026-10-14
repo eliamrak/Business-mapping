@@ -1,4 +1,5 @@
 import type { ForecastMonth, Workspace } from "@workspace/practice/hub";
+import { daysInclusive } from "@workspace/practice";
 
 export type OverheadUnknownReason =
   | "cross-month-period"
@@ -296,7 +297,7 @@ export function fundProjectionSummary(
   const current = goal.currentBalance ?? 0;
   const remaining = Math.max(0, goal.amount - current);
   const anchorDate = goal.balanceDate ?? null;
-  const projectionStartDate = anchorDate ?? monthDate ?? null;
+  let projectionStartDate = anchorDate ?? monthDate ?? null;
   const assumptions: string[] = [];
   if (balanceWasBlank)
     assumptions.push("The blank current balance is assumed to be 0.");
@@ -310,12 +311,26 @@ export function fundProjectionSummary(
     );
   }
   const lower = goal.name.toLowerCase().replace(" fund", "");
-  const allocation = allocations.find((item) =>
+  const effectivePercent = (item: Workspace["allocations"][number]) => {
+    if (item.archived) return 0;
+    if (!monthDate) return item.percent;
+    const start = monthDate.slice(0, 7) + "-01";
+    const end = calendarMonthEnd(start);
+    const from = item.start > start ? item.start : start;
+    const through = item.end && item.end < end ? item.end : end;
+    return from > through ? 0 : item.percent * daysInclusive(from, through) / daysInclusive(start, end);
+  };
+  const candidates = allocations.filter((item) => effectivePercent(item) > 0 &&
     item.name.toLowerCase().includes(lower),
   );
+  const allocation = candidates.length === 1 ? candidates[0] : undefined;
+  if (allocation && projectionStartDate && allocation.start > projectionStartDate) {
+    projectionStartDate = allocation.start;
+    assumptions.push("Projection contributions begin at the allocation start; no earlier contribution is assumed.");
+  }
   const sameKindTotal = allocations
     .filter((item) => item.kind === allocation?.kind)
-    .reduce((sum, item) => sum + item.percent, 0);
+    .reduce((sum, item) => sum + effectivePercent(item), 0);
   const kindAmount =
     allocation?.kind === "tax"
       ? monthlyValues.taxReserve
@@ -324,17 +339,22 @@ export function fundProjectionSummary(
         : allocation?.kind === "retained"
           ? monthlyValues.retainedCash
           : monthlyValues.reserves;
-  const contribution =
+  const cashParts = [monthlyValues.retainedCash, monthlyValues.taxReserve, monthlyValues.reserves, monthlyValues.distributions];
+  const cashBasis = cashParts.every((value) => typeof value === "number" && Number.isFinite(value))
+    ? Math.max(0, cashParts.reduce<number>((sum, value) => sum + value!, 0)) : null;
+  const contribution = allocation?.kind === "retained"
+    ? remaining > 0 && cashBasis !== null ? cashBasis * effectivePercent(allocation) / 100 : null
+    :
     allocation &&
     remaining > 0 &&
     kindAmount !== null &&
     kindAmount !== undefined &&
     sameKindTotal > 0
-      ? (kindAmount * allocation.percent) / sameKindTotal
+      ? (kindAmount * effectivePercent(allocation)) / sameKindTotal
       : null;
   const monthsToGoal =
-    contribution !== null && contribution > 0
-      ? Math.ceil(remaining / contribution)
+    contribution !== null && contribution > 0 && !allocation?.end
+      ? Math.ceil(remaining / contribution - 1e-9)
       : null;
   const eta =
     projectionStartDate && monthsToGoal !== null
@@ -352,16 +372,19 @@ export function fundProjectionSummary(
     assumptions.push(
       `Assumes a constant monthly contribution of ${contribution} from the supplied forecast values and allocation percentages, with no withdrawals, interest, or investment returns.`,
     );
+    if (allocation?.end) assumptions.push("The allocation has an effective end date; a constant ongoing contribution and goal ETA cannot be established from this month alone.");
   }
   const trajectory: FundTrajectoryPoint[] = projectionStartDate
     ? [
         {
-          date: projectionStartDate,
+          date: anchorDate ?? projectionStartDate,
           balance: current,
           kind: anchorDate && !balanceWasBlank ? "actual" : "projected",
         },
       ]
     : [];
+  if (projectionStartDate && anchorDate && projectionStartDate > anchorDate)
+    trajectory.push({ date: projectionStartDate, balance: current, kind: "projected" });
   // Keep chart data bounded even when a small contribution puts the ETA far away.
   const trajectoryTruncated =
     projectionStartDate !== null && monthsToGoal !== null && monthsToGoal > 120;

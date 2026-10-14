@@ -486,6 +486,16 @@ function phoneOnlyConsultKeys(snapshots: LocalSnapshot[]) {
   );
 }
 
+function consultAttendanceClassifier(snapshots: LocalSnapshot[]) {
+  const consultKeys = phoneOnlyConsultKeys(snapshots);
+  return (
+    row: Pick<
+      AttendanceRow,
+      "billingCode" | "clientId" | "clinician" | "serviceDate" | "visitKind"
+    >,
+  ) => isPhoneConsultAttendanceRow(row) || consultKeys.has(factGroupKey(row));
+}
+
 export function isPhoneOnlyConsultAttendanceRow(
   row: Pick<
     AttendanceRow,
@@ -493,20 +503,15 @@ export function isPhoneOnlyConsultAttendanceRow(
   >,
   snapshots: LocalSnapshot[],
 ) {
-  return (
-    isPhoneConsultAttendanceRow(row) ||
-    phoneOnlyConsultKeys(snapshots).has(factGroupKey(row))
-  );
+  return consultAttendanceClassifier(snapshots)(row);
 }
 
 export function treatmentAttendanceRows(snapshots: LocalSnapshot[]) {
-  const consultKeys = phoneOnlyConsultKeys(snapshots);
+  const isConsult = consultAttendanceClassifier(snapshots);
   return snapshots.flatMap((snapshot) =>
     snapshot.kind === "attendance"
       ? snapshot.rows.filter(
-          (row) =>
-            !isPhoneConsultAttendanceRow(row) &&
-            !consultKeys.has(factGroupKey(row)),
+          (row) => !isConsult(row),
         )
       : [],
   );
@@ -1224,7 +1229,7 @@ function verifiedAttendanceIntervals(
   if (clinician === undefined) {
     const clinicians = new Set(snapshots.flatMap((snapshot) =>
       snapshot.kind === "attendance"
-        ? snapshot.rows.filter((row) => row.serviceDate <= asOfDate).map((row) => row.clinician)
+        ? snapshot.rows.filter((row) => row.serviceDate <= asOfDate).map((row) => normalizeClinician(row.clinician))
         : [],
     ));
     // Practice-wide absence needs reports for every observed clinician, including transfers.
@@ -1244,7 +1249,7 @@ function verifiedAttendanceIntervals(
   const intervals: DateInterval[] = [];
   for (const snapshot of snapshots) {
     if (snapshot.kind !== "attendance" || !snapshot.rows.length) continue;
-    if (!snapshot.rows.some((row) => row.clinician === clinician)) continue;
+    if (!snapshot.rows.some((row) => normalizeClinician(row.clinician) === normalizeClinician(clinician))) continue;
     const dates = snapshot.rows.map((row) => row.serviceDate).sort();
     try {
       const proof = validateReportCoverage(
@@ -1516,8 +1521,8 @@ function estimateObservedClientEndings(
     endingObservationCutoff >= coverageStart
       ? monthsBetween(coverageStart, endingObservationCutoff).filter(
           (month) =>
-            monthEnd(month) >= eventStart &&
-            monthStart(month) <= eventEnd &&
+            monthStart(month) >= eventStart &&
+            monthEnd(month) <= eventEnd &&
             monthEnd(month) <= endingObservationCutoff &&
             intervalCoversRange(
               coverageIntervals,
@@ -1875,6 +1880,7 @@ export function summarizeConsultConversions(
   attributionOverrides: ConsultAttributionOverrideInput[] = [],
 ): ConsultConversionSummary {
   const coverageIntervals = verifiedAttendanceIntervals(snapshots, asOfDate);
+  const isConsult = consultAttendanceClassifier(snapshots);
   const overridesByClient = new Map(
     attributionOverrides
       .filter((override) => !override.archived)
@@ -1887,7 +1893,7 @@ export function summarizeConsultConversions(
             (row) =>
               row.status === "show" &&
               row.serviceDate <= asOfDate &&
-              isPhoneConsultAttendanceRow(row),
+              isConsult(row),
           )
         : [],
     )
@@ -2123,10 +2129,16 @@ export function buildLocalRetentionMetrics(
     .sort();
   const coverageStart = allDates[0] ?? null;
   const coverageEnd = allDates[allDates.length - 1] ?? null;
+  const displayLabels = new Map<string, string>();
+  for (const row of [...attendance, ...billing]) {
+    const key = normalizeClinician(row.clinician);
+    if (!displayLabels.has(key)) displayLabels.set(key, row.clinician.trim().replace(/\s+/g, " "));
+  }
   const billingByClinician = new Map<string, ClinicianBillingMetric>();
   for (const row of treatmentBilling) {
-    const metric = billingByClinician.get(row.clinician) ?? {
-      clinician: row.clinician,
+    const clinicianKey = normalizeClinician(row.clinician);
+    const metric = billingByClinician.get(clinicianKey) ?? {
+      clinician: displayLabels.get(clinicianKey)!,
       billedRows: 0,
       totalFeesCharged: 0,
       configuredMinuteRows: 0,
@@ -2143,13 +2155,14 @@ export function buildLocalRetentionMetrics(
       metric.estimatedBillingHours =
         (metric.estimatedBillingHours ?? 0) + configuredMinutes / 60;
     }
-    billingByClinician.set(row.clinician, metric);
+    billingByClinician.set(clinicianKey, metric);
   }
   const attendanceByClinician = new Map<string, ClinicianAttendanceMetric>();
   const showDatesByClinicianClient = new Map<string, string[]>();
   for (const row of treatmentAttendance) {
-    const metric = attendanceByClinician.get(row.clinician) ?? {
-      clinician: row.clinician,
+    const clinicianKey = normalizeClinician(row.clinician);
+    const metric = attendanceByClinician.get(clinicianKey) ?? {
+      clinician: displayLabels.get(clinicianKey)!,
       shows: 0,
       clientCancelled: 0,
       noShows: 0,
@@ -2164,13 +2177,14 @@ export function buildLocalRetentionMetrics(
     } else if (row.status === "cancelled") metric.clientCancelled++;
     else if (row.status === "no show") metric.noShows++;
     else metric.clinicianCancelled++;
-    attendanceByClinician.set(row.clinician, metric);
+    attendanceByClinician.set(clinicianKey, metric);
   }
   for (const row of derivedShows) {
-    const metric = attendanceByClinician.get(row.clinician);
+    const clinicianKey = normalizeClinician(row.clinician);
+    const metric = attendanceByClinician.get(clinicianKey);
     if (!metric) continue;
     metric.shows++;
-    const key = `${row.clinician}\u0000${row.clientId}`;
+    const key = `${clinicianKey}\u0000${row.clientId}`;
     showDatesByClinicianClient.set(key, [
       ...(showDatesByClinicianClient.get(key) ?? []),
       row.serviceDate,
@@ -2203,7 +2217,7 @@ export function buildLocalRetentionMetrics(
     clinicianDates.set(clientId, sorted);
     clinicianClientDates.set(clinician, clinicianDates);
     const activity = clientActivityByClinician.get(clinician) ?? {
-      clinician,
+      clinician: metric.clinician,
       coverageVerified: false,
       initialRetentionGapDays: followUpDays,
       retainedClients: 0,

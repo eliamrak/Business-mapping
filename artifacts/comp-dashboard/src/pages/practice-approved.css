@@ -128,6 +128,31 @@
 @media (max-width: 900px) {
   .pw-app .pw-goal-editor { grid-template-columns: minmax(0, 1fr); }
 }
+
+/* Keep the established navigation groups above the unchanged content surface. */
+.pw-app { grid-template-columns: minmax(0, 1fr); }
+.pw-app .pw-top-navigation { position: static; width: 100%; height: auto; padding: 16px 32px; display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px 20px; border-right: 0; border-bottom: 1px solid #303842; }
+.pw-app .pw-top-navigation .pw-brand,
+.pw-app .pw-top-navigation .pw-workspace-navigation,
+.pw-app .pw-top-navigation .pw-nav-group-label,
+.pw-app .pw-top-navigation .pw-today-navigation,
+.pw-app .pw-top-navigation .pw-rail-bottom { grid-column: 1 / -1; }
+.pw-app .pw-top-navigation .pw-nav-group-label { padding: 0; }
+.pw-app .pw-top-navigation nav,
+.pw-app .pw-top-navigation .pw-rail-bottom { display: flex; flex-direction: row; flex-wrap: wrap; align-items: center; gap: 4px 8px; }
+.pw-app .pw-top-navigation .pw-workspace-navigation,
+.pw-app .pw-top-navigation .pw-rail-bottom { margin: 0; padding: 12px 0 0; border-top: 1px solid #303842; }
+.pw-app .pw-top-navigation .pw-rail-bottom { justify-content: flex-start; }
+.pw-app .pw-top-navigation button,
+.pw-app .pw-top-navigation a { flex: 0 1 auto; width: auto; min-height: 44px; padding: 9px 12px; gap: 8px; font-size: 13px; white-space: normal; overflow-wrap: anywhere; }
+.pw-app .pw-top-navigation button:focus-visible,
+.pw-app .pw-top-navigation a:focus-visible { outline: 2px solid #9fd8c2; outline-offset: 2px; }
+@media (max-width: 760px) {
+  .pw-app .pw-top-navigation { grid-template-columns: minmax(0, 1fr); padding: 16px 18px; gap: 8px; }
+  .pw-app .pw-top-navigation .pw-workspace-navigation,
+  .pw-app .pw-top-navigation .pw-rail-bottom { grid-column: 1; }
+  .pw-app .pw-top-navigation .pw-rail-bottom { justify-content: flex-start; }
+}
 @media (max-width: 760px) {
   .pw-app { grid-template-columns: minmax(0, 1fr); }
   .pw-app .pw-rail { width: 100%; height: auto; position: static; padding: 16px; gap: 12px; border-right: 0; border-bottom: 1px solid #303842; }

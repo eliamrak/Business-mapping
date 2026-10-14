@@ -5,6 +5,8 @@ import {
 } from "../compensation.ts";
 import {
   forecast,
+  cashAllocationsForRange,
+  overheadGoalAllowance,
   budgetAmount,
   monthEnd,
   staffMemberAt,
@@ -473,7 +475,33 @@ export function monthFlow(
     },
     context,
   )[0];
-  const overhead = (forecastMonth?.values.overhead ?? 0) * fraction;
+  let overhead = (forecastMonth?.values.overhead ?? 0) * fraction;
+  const goalAllowance = overheadGoalAllowance(workspace.settings, revenue, fraction);
+  if (goalAllowance !== null && forecastMonth) {
+    const forecastRevenue = forecastMonth.values.revenue ?? 0;
+    const forecastSessions = forecastMonth.values.sessions ?? 0;
+    let detailedFullMonth = 0;
+    let detailedMatchingPeriod = 0;
+    for (const budget of workspace.budgets) {
+      const kind = workspace.categories.find((category) => category.id === budget.categoryId)?.kind;
+      if (kind && ["income", "tax", "reserve", "owner", "marketing"].includes(kind))
+        continue;
+      const amount = forecastMonth.budgetLines?.[budget.id] ?? 0;
+      detailedFullMonth += amount;
+      const unitBudget = { ...budget, amount: 1 };
+      const fullMonthUnits = budgetAmount(unitBudget, start, end, forecastSessions, forecastRevenue);
+      const matchingUnits = budgetAmount(unitBudget, start, through, sessions, revenue);
+      detailedMatchingPeriod += fullMonthUnits > 0
+        ? amount * matchingUnits / fullMonthUnits
+        : budget.planningOnly ? 0 : budgetAmount(budget, start, through, sessions, revenue);
+    }
+    const fullMonthAllowance = overheadGoalAllowance(workspace.settings, forecastRevenue) ?? 0;
+    const additionalCosts = Math.max(
+      0,
+      (forecastMonth.values.overhead ?? 0) - Math.max(detailedFullMonth, fullMonthAllowance),
+    );
+    overhead = Math.max(detailedMatchingPeriod, goalAllowance) + additionalCosts * fraction;
+  }
   const marketing = (forecastMonth?.values.marketing ?? 0) * fraction;
   const otherIncome = workspace.budgets
     .filter((budget) =>
@@ -510,18 +538,15 @@ export function monthFlow(
     legacyOwnerPayroll -
     legacyOwnerBurden;
   const positive = Math.max(0, profit);
-  const buckets = workspace.allocations.filter(
-    (bucket) =>
-      !bucket.archived &&
-      bucket.start <= through &&
-      (!bucket.end || bucket.end >= start),
+  const { buckets, configured } = cashAllocationsForRange(
+    workspace.allocations, positive, start, through,
   );
-  const allocations = buckets.length
+  const allocations = configured
     ? buckets.map((bucket) => ({
         id: bucket.id,
         name: bucket.name,
         kind: bucket.kind,
-        amount: (positive * bucket.percent) / 100,
+        amount: bucket.amount,
       }))
     : [
         {
@@ -546,6 +571,11 @@ export function monthFlow(
   const distribution = allocations
     .filter((bucket) => bucket.kind === "distribution")
     .reduce((sum, bucket) => sum + bucket.amount, 0);
+  const familyDistribution = configured
+    ? buckets
+        .filter((bucket) => bucket.kind === "distribution" && bucket.household)
+        .reduce((sum, bucket) => sum + bucket.amount, 0)
+    : distribution;
   const retained =
     profit - allocations.reduce((sum, bucket) => sum + bucket.amount, 0);
   const netPay = estimateW2NetPay(
@@ -576,6 +606,6 @@ export function monthFlow(
     estimatedEmployeePayrollTax: netPay.employeePayrollTax,
     estimatedAdditionalWithholding: netPay.additionalWithholding,
     estimatedNetPay: familyId === null ? null : netPay.net,
-    familyTakeHome: familyId === null ? null : netPay.net + distribution,
+    familyTakeHome: familyId === null ? null : netPay.net + familyDistribution,
   };
 }

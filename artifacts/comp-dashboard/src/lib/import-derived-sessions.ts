@@ -36,6 +36,8 @@ export type ImportedSessionOverlay = {
   importedBillingActuals: ImportedBillingActual[];
   attendanceCoverage: SessionAttendanceCoverage[];
   coveredZeroSessions: SessionRecord[];
+  /** Original aggregates whose uncovered portion cannot be allocated independently. */
+  conflictedManualSessions: Array<SessionRecord & { status: "unknown" }>;
   attendanceObservedSpans: ImportedAttendanceObservedSpan[];
   diagnostic: ImportedSessionDiagnostic;
 };
@@ -63,7 +65,16 @@ const rangeFullyCovered = (
   ranges: Array<{ start: string; end: string }>,
   start: string,
   end: string,
-) => ranges.some((range) => range.start <= start && range.end >= end);
+) => {
+  let nextDate = start;
+  for (const range of [...ranges].sort((a, b) => a.start.localeCompare(b.start))) {
+    if (range.end < nextDate) continue;
+    if (range.start > nextDate) return false;
+    if (range.end >= end) return true;
+    nextDate = new Date(Date.parse(`${range.end}T12:00:00Z`) + 86400000).toISOString().slice(0, 10);
+  }
+  return false;
+};
 
 const rangeCoveredAtAll = (
   ranges: Array<{ start: string; end: string }>,
@@ -100,7 +111,6 @@ export function buildImportedSessionOverlay(
   const ambiguousBillingClinicianLabels = new Set<string>();
   const seenAttendanceRows = new Set<string>();
   const seenBillingRows = new Set<string>();
-  const attendanceCoverage: Array<{ start: string; end: string }> = [];
   const scopedAttendanceCoverage: SessionAttendanceCoverage[] = [];
   const attendanceObservedSpans: ImportedAttendanceObservedSpan[] = [];
   const attendedByClinicianDate = new Map<
@@ -113,10 +123,6 @@ export function buildImportedSessionOverlay(
 
   for (const snapshot of snapshots) {
     if (snapshot.kind !== "attendance") continue;
-    attendanceCoverage.push({
-      start: snapshot.coverageStart,
-      end: snapshot.coverageEnd,
-    });
     const mappedIds = new Set(snapshot.rows.flatMap((row) => {
       const matches = cliniciansByLabel.get(normalizeLabel(row.clinician)) ?? [];
       return matches.length === 1 ? [matches[0].id] : [];
@@ -207,7 +213,7 @@ export function buildImportedSessionOverlay(
   let manualImportOverrideCount = 0;
   let manualImportConflictCount = 0;
   const replacedManualIds = new Set<number>();
-  const overlappedManualIds = new Set<number>();
+  const conflictedManualSessions: ImportedSessionOverlay["conflictedManualSessions"] = [];
   const attended = [...attendedByClinicianDate.values()].sort(
     (a, b) => a.date.localeCompare(b.date) || a.clinicianId - b.clinicianId,
   );
@@ -234,38 +240,23 @@ export function buildImportedSessionOverlay(
       if (grouped) grouped.visits += visits;
     }
   }
-  for (const item of attended) {
-    const overlappingManual = context.sessions.filter(
-      (record) =>
-        record.clinicianId === item.clinicianId &&
-        rangesOverlap(record, { start: item.date, end: item.date }),
-    );
-    if (overlappingManual.length) {
-      for (const record of overlappingManual) {
-        if (!overlappedManualIds.has(record.id)) {
-          manualOverlapCount++;
-          overlappedManualIds.add(record.id);
-        }
-      }
-      const fullyCovered = overlappingManual.every((record) =>
-        rangeFullyCovered(scopedAttendanceCoverage.filter((range) => range.clinicianId === record.clinicianId), record.start, record.end),
-      );
-      const coveredAtAll = overlappingManual.every((record) =>
-        rangeCoveredAtAll(attendanceCoverage, record.start, record.end),
-      );
-      if (coveredAtAll) {
-        for (const record of overlappingManual) {
-          if (!replacedManualIds.has(record.id)) {
-            manualImportOverrideCount += record.completed;
-            if (!fullyCovered) manualImportConflictCount += item.visits;
-          }
-          replacedManualIds.add(record.id);
-        }
-      } else {
-        manualImportConflictCount += item.visits;
-        continue;
-      }
+  for (const record of context.sessions) {
+    const coverage = scopedAttendanceCoverage.filter(range => range.clinicianId === record.clinicianId);
+    const overlappingVisits = attended.filter(item => item.clinicianId === record.clinicianId &&
+      rangesOverlap(record, { start: item.date, end: item.date }));
+    if (!overlappingVisits.length && !rangeCoveredAtAll(coverage, record.start, record.end)) continue;
+    manualOverlapCount++;
+    replacedManualIds.add(record.id);
+    if (rangeFullyCovered(coverage, record.start, record.end)) {
+      manualImportOverrideCount += record.completed;
+    } else {
+      conflictedManualSessions.push({ ...record, status: "unknown" });
     }
+  }
+  manualImportConflictCount = attended.filter(item => conflictedManualSessions.some(record =>
+    record.clinicianId === item.clinicianId && rangesOverlap(record, { start: item.date, end: item.date })
+  )).reduce((sum, item) => sum + item.visits, 0);
+  for (const item of attended) {
     const completed = item.visits;
     if (!completed) continue;
     derivedSessions.push({
@@ -317,6 +308,7 @@ export function buildImportedSessionOverlay(
     derivedSessions,
     attendanceCoverage: scopedAttendanceCoverage,
     coveredZeroSessions,
+    conflictedManualSessions,
     attendanceObservedSpans,
     importedBillingActuals: billingActuals,
     diagnostic: {

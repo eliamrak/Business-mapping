@@ -25,6 +25,8 @@ export type CompletedGoalInput = {
   context: {
     clinicians: { id: number; goalId?: number | null; roleType?: string }[];
     sessions: {
+      /** Negative IDs identify imported visit/zero facts, not complete manual ranges. */
+      id?: number;
       clinicianId: number;
       start: string;
       end: string;
@@ -36,6 +38,8 @@ export type CompletedGoalInput = {
   expected?: number | null;
   /** Explicit actual provenance and start/end are required; monthly reports are insufficient. */
   financialObservations?: FinancialGoalObservation[];
+  /** Verified complete attendance-report ranges, scoped to individual clinicians. */
+  attendanceCoverage?: { clinicianId: number; start: string; end: string }[];
 };
 export type CompletedGoalResult = {
   status: "met" | "waiting" | "insufficient" | "no-target";
@@ -187,6 +191,13 @@ export function evaluateCompletedGoal(
         coveredPeople++;
         const required = new Set(requiredDays);
         const coverage = new Set<string>();
+        const factDates = new Set<string>();
+        for (const proof of input.attendanceCoverage ?? []) {
+          if (proof.clinicianId !== person.id || !validRange(proof)) continue;
+          for (const date of requiredDays) {
+            if (date >= proof.start && date <= proof.end) coverage.add(date);
+          }
+        }
         const records = rows.filter(
           (row) =>
             row.clinicianId === person.id &&
@@ -207,8 +218,9 @@ export function evaluateCompletedGoal(
             break;
           }
           for (const date of datesIn(row)) {
-            if (!required.has(date) || coverage.has(date)) complete = false;
-            coverage.add(date);
+            if (!required.has(date) || factDates.has(date)) complete = false;
+            factDates.add(date);
+            if (row.id === undefined || row.id >= 0) coverage.add(date);
           }
           value += row.completed;
         }

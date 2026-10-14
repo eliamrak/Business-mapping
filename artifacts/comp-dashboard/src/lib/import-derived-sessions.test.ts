@@ -203,6 +203,70 @@ test("legacy observed spans never certify gaps or a daily import hiring window",
   assert.equal(summarizeSessionOverview(overlay.context.sessions, [], 20).averageWeekly, null);
 });
 
+test("independent audit: January 1-14 manual 40 plus January 7 import stays unknown", () => {
+  const manual = { ...record(1, "2026-01-01", "2026-01-14", 40), sourceAttachmentId: 123 };
+  const fallback = { ...record(1, "2026-01-15", "2026-01-28", 20), id: 12 };
+  const source = context([manual, fallback]);
+  const before = JSON.stringify(source);
+  const overlay = buildImportedSessionOverlay(source, [attendanceSnapshot([{
+    clientId: "synthetic-client", clinician: "Dr Lane", serviceDate: "2026-01-07",
+    location: "Synthetic Room", status: "show", sourceRowHash: "synthetic-row",
+  }])], 7);
+  assert.deepEqual(overlay.conflictedManualSessions, [{ ...manual, status: "unknown" }]);
+  assert.equal(overlay.context.sessions.reduce((sum, row) => sum + row.completed, 0), 21);
+  assert.ok(overlay.context.sessions.includes(fallback));
+  assert.equal(overlay.diagnostic.manualImportOverrideCount, 0);
+  assert.equal(overlay.diagnostic.manualImportConflictCount, 1);
+  assert.equal(JSON.stringify(source), before);
+  assert.deepEqual(overlay.attendanceCoverage, []);
+});
+
+test("independent audit exact one-day import exposes original 40 without summing 41", () => {
+  const manual = record(1, "2026-01-01", "2026-01-14", 40);
+  const snapshot = attendanceSnapshot([{
+    clientId: "synthetic-client", clinician: "Dr Lane", serviceDate: "2026-01-07",
+    location: "Synthetic Room", status: "show", sourceRowHash: "synthetic-row",
+  }]);
+  const overlay = buildImportedSessionOverlay(context([manual]), [snapshot], 7);
+  assert.deepEqual(overlay.conflictedManualSessions, [{ ...manual, status: "unknown" }]);
+  assert.equal(overlay.context.sessions.reduce((sum, row) => sum + row.completed, 0), 1);
+  assert.equal(overlay.context.sessions.filter(row => row.id >= 0).length, 0);
+  assert.equal(selectedPeriodSessionSummary(overlay.context.sessions, [1], manual, overlay.attendanceCoverage).completedWeekly, null);
+});
+
+test("adjacent verified reports replace aggregates including visit-free dates; gaps stay unknown", () => {
+  const manual = record(1, "2026-01-01", "2026-01-14", 40);
+  const proof = (start: string, end: string, status: "show" | "cancelled" = "show"): LocalSnapshot => ({
+    ...attendanceSnapshot([{
+      clientId: start, clinician: "Dr Lane", serviceDate: start, location: "Room A",
+      status, sourceRowHash: start,
+    }]),
+    reportCoverage: { start, end, complete: true },
+  });
+  const complete = buildImportedSessionOverlay(context([manual]), [proof("2026-01-01", "2026-01-07"), proof("2026-01-08", "2026-01-14")], 7);
+  assert.deepEqual(complete.conflictedManualSessions, []);
+  assert.equal(complete.diagnostic.manualImportOverrideCount, 40);
+  assert.equal(complete.context.sessions.reduce((sum, row) => sum + row.completed, 0), 2);
+  const gap = buildImportedSessionOverlay(context([manual]), [proof("2026-01-01", "2026-01-06"), proof("2026-01-08", "2026-01-14")], 7);
+  assert.equal(gap.conflictedManualSessions.length, 1);
+  assert.equal(gap.diagnostic.manualImportOverrideCount, 0);
+  const zero = buildImportedSessionOverlay(context([manual]), [proof("2026-01-01", "2026-01-14", "cancelled")], 7);
+  assert.deepEqual(zero.conflictedManualSessions, []);
+  assert.equal(zero.coveredZeroSessions.length, 14);
+  assert.equal(zero.context.sessions.reduce((sum, row) => sum + row.completed, 0), 0);
+});
+
+test("unmapped or other-clinician imports cannot displace manual fallback", () => {
+  const manual = record(1, "2026-01-01", "2026-01-14", 40);
+  const snapshot = attendanceSnapshot([{
+    clientId: "other", clinician: "Dr Moss", serviceDate: "2026-01-07",
+    location: "Room A", status: "show", sourceRowHash: "other",
+  }]);
+  const overlay = buildImportedSessionOverlay(context([manual]), [snapshot], 7);
+  assert.ok(overlay.context.sessions.includes(manual));
+  assert.deepEqual(overlay.conflictedManualSessions, []);
+});
+
 test("imports derive attended sessions from show rows without using billed no-shows", () => {
   const overlay = buildImportedSessionOverlay(
     context(),
@@ -267,7 +331,7 @@ test("repeated snapshots do not duplicate derived sessions", () => {
   assert.equal(overlay.derivedSessions[0].completed, 1);
 });
 
-test("partial import overlap uses exact imported facts and drops stale aggregate manual totals", () => {
+test("partial import overlap uses exact imports and preserves manual conflict evidence", () => {
   const overlay = buildImportedSessionOverlay(
     context([record(1, "2026-10-01", "2026-10-14", 12)]),
     [
@@ -300,7 +364,9 @@ test("partial import overlap uses exact imported facts and drops stale aggregate
   );
   assert.equal(overlay.diagnostic.manualImportConflictCount, 1);
   assert.equal(overlay.diagnostic.manualOverlapCount, 1);
-  assert.equal(overlay.diagnostic.manualImportOverrideCount, 12);
+  assert.equal(overlay.diagnostic.manualImportOverrideCount, 0);
+  assert.equal(overlay.conflictedManualSessions[0].completed, 12);
+  assert.equal(overlay.conflictedManualSessions[0].status, "unknown");
   assert.equal(
     overlay.context.sessions.some((item) => item.id === 11),
     false,
@@ -311,7 +377,7 @@ test("complete imported attendance coverage replaces overlapping manual actuals 
   const overlay = buildImportedSessionOverlay(
     context([record(1, "2026-10-01", "2026-10-14", 12)]),
     [
-      attendanceSnapshot([
+      { ...attendanceSnapshot([
         {
           clientId: "client-a",
           clinician: "Dr Lane",
@@ -328,7 +394,7 @@ test("complete imported attendance coverage replaces overlapping manual actuals 
           status: "show",
           sourceRowHash: "a2",
         },
-      ]),
+      ]), reportCoverage: { start: "2026-10-01", end: "2026-10-14", complete: true } },
     ],
     7,
   );
