@@ -6723,12 +6723,14 @@ export default function PracticeWorkspace() {
                               </small>
                               <small>
                                 Dotted projection:{" "}
-                                {projection?.contribution === null
+                                {projection && projection.remaining <= 0
+                                  ? "target already funded or no remaining gap"
+                                  : projection?.contribution === null
                                   ? "add a matching monthly contribution in Money"
                                   : projection?.eta
                                     ? `${money(projection.contribution)} / month reaches the target around ${monthLabel(projection.eta)}`
                                     : projection
-                                      ? "target already funded or no remaining gap"
+                                      ? "waiting for a positive monthly contribution"
                                       : "waiting for a target"}
                               </small>
                             </div>
