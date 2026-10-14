@@ -60,6 +60,8 @@ The default Mac module locator is `/tmp/local-retention-browser-harness/package.
 
 The Sessions tools now distinguish `Import biweekly session totals` from `Converted attendance & billing imports`; the latter routes to Data & imports. The browser regression verifies both the explicit label and converted-history navigation.
 
+Independent render follow-up corrected four visual blockers: mobile Long Term Goals tabs now wrap without label overlap; upload/backup/billing-code/diagnostic surfaces use readable dark contrast in Today and Sandbox; mobile Money bridge uses two columns so amounts fit; Rooms displays its proper title. The same harness now asserts tab rectangle separation, import surface/heading colors in both workspaces, currency text fit, two-column bridge layout and the Rooms title. These fixes do not change data or calculation logic.
+
 The complete Postgres/API integration suite was not runnable because no disposable loopback database and isolated test API were configured. Those tests were not pointed at production.
 
 Follow-up isolated initialization confirmed the host blocker: all 32 macOS System V shared-memory IDs are allocated (`kern.sysv.shmmni=32`). Both default initialization and supported mmap configuration fail at the required 56-byte `shmget` marker. No kernel limits, shared-memory allocations or other servers were changed. Docker, Podman and Colima are unavailable. Migration 008 still needs an independently provisioned disposable database test.

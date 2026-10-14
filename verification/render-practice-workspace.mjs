@@ -450,9 +450,12 @@ await clickSection("Growth");
 await page.getByRole("tab", { name: "Rooms", exact: true }).click();
 await capture("rooms-desktop", 1280, 900);
 await capture("rooms-mobile", 390, 900);
+assert.equal(await page.locator("h1").innerText(), "Rooms", "room view has its own title rather than Settings");
 await clickSection("Money");
 await capture("money-desktop", 1280, 900);
 await capture("money-mobile", 390, 900);
+assert.equal(await page.locator(".pw-money-bridge").evaluate((node) => getComputedStyle(node).gridTemplateColumns.split(" ").length), 2, "mobile money bridge uses two columns");
+assert.ok(await page.locator(".pw-bridge-step strong").evaluateAll((nodes) => nodes.every((node) => node.scrollWidth <= node.clientWidth + 1)), "mobile currency amounts fit their containers");
 assert.match(await page.locator(".pw-money-bridge").innerText(), /Other practice costs/);
 const bridgeBreakdown = page.getByLabel("Money bridge cost breakdown", { exact: true });
 await bridgeBreakdown.locator("summary").click();
@@ -478,6 +481,10 @@ await page.setViewportSize({ width: 1280, height: 900 });
 await page.getByRole("button", { name: /Long Term Goals/ }).click();
 await capture("long-term-goals-desktop", 1280, 900);
 await capture("long-term-goals-mobile", 390, 900);
+assert.ok(await page.locator(".pw-tool-tabs button").evaluateAll((nodes) => {
+  const rects = nodes.map((node) => node.getBoundingClientRect());
+  return rects.every((a, index) => rects.every((b, other) => index === other || a.right <= b.left + 1 || b.right <= a.left + 1 || a.bottom <= b.top + 1 || b.bottom <= a.top + 1));
+}), "mobile Long Term Goal tab labels do not overlap");
 await page.setViewportSize({ width: 1280, height: 900 });
 await page.getByRole("button", { name: "Adopt plan", exact: true }).click();
 await page.waitForLoadState("networkidle");
@@ -492,11 +499,17 @@ assert.equal(await page.getByText(/New data or assumptions changed this plan/).c
 await page.getByRole("button", { name: "Open Imports", exact: true }).click();
 await capture("imports-desktop", 1280, 900);
 await capture("imports-mobile", 390, 900);
+const assertImportContrast = async () => {
+  assert.ok(await page.locator(".pw-local-import-grid > section, .pw-billing-codes, .pw-local-tables > section").evaluateAll((nodes) => nodes.length > 0 && nodes.every((node) => getComputedStyle(node).backgroundColor === "rgb(18, 23, 29)")), "import surfaces use the dark panel background");
+  assert.ok(await page.locator(".pw-local-import-grid h3, .pw-billing-codes h3, .pw-local-tables h3").evaluateAll((nodes) => nodes.length > 0 && nodes.every((node) => getComputedStyle(node).color === "rgb(242, 244, 245)")), "import headings retain readable contrast");
+};
+await assertImportContrast();
 assert.ok(await page.getByText("synthetic-only-package", { exact: false }).count(), "saved package provenance remains visible");
 assert.equal(await page.locator('nav[aria-label="Practice sections"] button[aria-current="page"]').count(), 0, "imports is separate from Sessions");
 await page.getByRole("button", { name: "Sandbox", exact: true }).click();
 await capture("sandbox-desktop", 1280, 900);
 await capture("sandbox-mobile", 390, 900);
+await assertImportContrast();
 
 // Reproduce the user's imported daily records without borrowing fabricated report endpoints.
 const dailyDates = ["2026-09-16", "2026-09-17", "2026-09-21", "2026-09-23", "2026-09-24", "2026-09-28", "2026-09-30", "2026-10-01", "2026-10-05", "2026-10-07", "2026-10-08", "2026-10-12"];

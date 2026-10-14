@@ -46,6 +46,17 @@
 .pw-app .pw-overview-client-flow { grid-column: 1 / -1; }
 .pw-app .pw-goal-editor { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 18px; }
 .pw-app .pw-person-kpis > div { border: 0; background: transparent; padding: 0; }
+.pw-app .pw-tool-tabs button { flex-shrink: 0; }
+.pw-app .pw-local-import-grid > section,
+.pw-app .pw-billing-codes,
+.pw-app .pw-local-tables > section { background: #12171d; color: #f2f4f5; border-color: #303842; }
+.pw-app .pw-local-import-grid h3,
+.pw-app .pw-billing-codes h3,
+.pw-app .pw-local-tables h3 { color: #f2f4f5; }
+.pw-app .pw-local-import-grid input,
+.pw-app .pw-code-entry input,
+.pw-app .pw-backup-actions input { background: #19232b; color: #f2f4f5; border-color: #52616d; }
+.pw-app .pw-local-import-grid input::file-selector-button { background: #344d4b; color: #f2f4f5; border: 1px solid #52616d; border-radius: 4px; padding: 5px 8px; margin-right: 8px; }
 .pw-app .pw-clinicians { grid-template-columns: minmax(0, 1fr); }
 .pw-app .pw-person-kpis { grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 20px; }
 .pw-app details.pw-view-bar { display: block; font-size: 11px; }
@@ -135,6 +146,10 @@
   .pw-app .pw-today-navigation button { flex: 1 0 auto; }
   .pw-app .pw-content { padding: 18px; }
   .pw-app .pw-view-bar { padding: 0 18px 16px; }
+  .pw-app .pw-tool-tabs { flex-wrap: wrap; overflow: visible; gap: 4px; padding: 0 18px; }
+  .pw-app .pw-tool-tabs button { flex: 0 1 auto; max-width: 100%; min-height: 44px; white-space: normal; overflow-wrap: anywhere; text-align: left; }
+  .pw-app .pw-money-bridge { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .pw-app .pw-bridge-step strong { overflow-wrap: anywhere; }
   .pw-app h1:not(.pw-integrated-tool *) { font-size: 29px; }
   .pw-app .pw-overview-composition { grid-template-columns: minmax(0, 1fr); }
   .pw-app .pw-overview-primary-grid,

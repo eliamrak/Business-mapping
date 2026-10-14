@@ -3223,7 +3223,7 @@ export default function PracticeWorkspace() {
                 ? "Sandbox"
                 : mode === "goals"
                   ? "Long Term Goals"
-                  : sections.find((item) => item.id === section)?.label ?? (section === "retention" ? "Data & imports" : section === "documents" ? "Reporting documents" : "Settings")}
+                  : sections.find((item) => item.id === section)?.label ?? (section === "rooms" ? "Rooms" : section === "retention" ? "Data & imports" : section === "documents" ? "Reporting documents" : "Settings")}
             </h1>
           </div>
           <div className="pw-actions">
