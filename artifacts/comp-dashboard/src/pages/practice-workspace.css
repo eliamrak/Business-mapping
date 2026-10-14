@@ -890,6 +890,32 @@
 .pw-achievement-alert p {
   margin: 6px 0 0;
 }
+.pw-overview-composition { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 28px; margin: 24px 0; }
+.pw-overview-composition section { min-width: 0; border-top: 1px solid #dfe7e1; padding-top: 18px; }
+.pw-overview-composition h3 { font-size: 18px; margin: 0 0 8px; }
+.pw-overview-composition p { color: #66766b; font-size: 12px; line-height: 1.5; }
+.pw-overview-composition details { margin-top: 16px; }
+.pw-overview-bridge { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; margin: 20px 0; }
+.pw-overview-bridge > div { min-width: 0; text-align: center; font-size: 11px; }
+.pw-overview-bridge strong { display: block; font-size: 13px; overflow-wrap: anywhere; }
+.pw-overview-bridge-plot { height: 140px; position: relative; border-bottom: 1px solid #9baba0; margin: 10px 0; }
+.pw-overview-bridge-plot i { display: block; position: absolute; width: 72%; left: 14%; background: #35808b; }
+.pw-overview-bridge-plot .deduction { background: #96a69c; }
+.pw-overview-bridge-plot .profit { background: #347d51; }
+.pw-overview-total { display: flex; justify-content: space-between; gap: 12px; margin: 12px 0; font-size: 13px; }
+.pw-overview-client-flow { grid-column: 1 / -1; }
+.pw-overview-flow-row { display: grid; grid-template-columns: minmax(140px, 1fr) 50px minmax(100px, 2fr); gap: 14px; align-items: center; margin: 16px 0; font-size: 13px; }
+.pw-overview-flow-row > div { background: #e7eee9; height: 18px; }
+.pw-overview-flow-row i { height: 100%; display: block; background: #347d51; }
+.pw-overview-flow-row .departures { background: #b35462; }
+.pw-overview-existing-details > summary { padding: 16px 0; cursor: pointer; font-size: 14px; }
+@media (max-width: 700px) {
+  .pw-overview-composition { grid-template-columns: minmax(0, 1fr); gap: 24px; }
+  .pw-overview-flow-row { grid-template-columns: minmax(0, 1fr) 40px; }
+  .pw-overview-flow-row > div { grid-column: 1 / -1; }
+  .pw-overview-bridge { gap: 6px; }
+  .pw-overview-bridge strong { font-size: 12px; }
+}
 .pw-goal-editor {
   display: grid;
   gap: 18px;

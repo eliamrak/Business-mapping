@@ -127,6 +127,8 @@ export type LocalRetentionMetrics = {
 };
 
 export type LocalClientActivityEstimate = {
+  endingEvents: { clientId: string; date: string }[];
+  endingEventCoverageComplete: boolean;
   coverageStart: string;
   coverageEnd: string;
   inactivityDays: number;
@@ -541,7 +543,7 @@ function resolvedVisitCount(
   return rows.length ? 1 : 0;
 }
 
-function derivedShowVisits(
+export function derivedShowVisits(
   snapshots: LocalSnapshot[],
   overrides: SameDayVisitOverrides = {},
 ) {
@@ -1451,6 +1453,7 @@ function estimateObservedClientEndings(
   eventStart = coverageStart,
   eventEnd = coverageEnd,
 ) {
+  const endingEvents: { clientId: string; date: string }[] = [];
   const endingObservationCutoff = addDays(coverageEnd, -endingGapDays);
   const monthlyRows = new Map<
     string,
@@ -1505,7 +1508,7 @@ function estimateObservedClientEndings(
         }
       : null;
   let endingLeftCensoredEstablishedClients = 0;
-  for (const datesForClient of showDatesByClient.values()) {
+  for (const [clientId, datesForClient] of showDatesByClient) {
     const dates = [...new Set(datesForClient)].sort();
     if (dates.length < 3) continue;
     if (dates[0] === coverageStart) endingLeftCensoredEstablishedClients++;
@@ -1524,6 +1527,8 @@ function estimateObservedClientEndings(
     )
       continue;
     const endingMonth = finalTreatmentDate.slice(0, 7);
+    if (finalTreatmentDate >= eventStart && finalTreatmentDate <= eventEnd)
+      endingEvents.push({ clientId, date: finalTreatmentDate });
     const row = monthlyRows.get(endingMonth);
     if (row) row.endedClients++;
     else if (
@@ -1545,7 +1550,11 @@ function estimateObservedClientEndings(
     .slice(-6)
     .reduce((sum, row) => sum + row.endedClients, 0);
   const latestFullMonth = monthlyEndedClients.at(-1) ?? null;
+  const observedEventStart = eventStart > coverageStart ? eventStart : coverageStart;
+  const observedEventEnd = eventEnd < endingObservationCutoff ? eventEnd : endingObservationCutoff;
   return {
+    endingEvents,
+    endingEventCoverageComplete: observedEventStart <= observedEventEnd && intervalCoversRange(coverageIntervals, observedEventStart, addDays(observedEventEnd, endingGapDays)),
     endingGapDays,
     endingObservationCutoff,
     endingCoverageEnd: coverageEnd,

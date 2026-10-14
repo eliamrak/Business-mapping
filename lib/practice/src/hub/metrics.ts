@@ -1,5 +1,11 @@
 export const metrics = [
   ["sessions", "Completed sessions", "number", "Practice"],
+  [
+    "activeClinicalHeadcount",
+    "Active clinical headcount",
+    "number",
+    "Practice",
+  ],
   ["capacity", "Session capacity", "number", "Practice"],
   ["utilization", "Clinician utilization", "percent", "Practice"],
   ["unservedSessions", "Unserved demand", "number", "Practice"],
@@ -28,6 +34,13 @@ export const metrics = [
   ["taxReserve", "Tax allocation", "currency", "Cash"],
   ["reserves", "Reserve allocation", "currency", "Cash"],
   ["distributions", "Owner distributions", "currency", "Family"],
+  [
+    "ownerDistributionsPretax",
+    "Owner distributions before personal tax",
+    "currency",
+    "Family",
+  ],
+  ["coOwnerSalaryPretax", "Co-owner gross salary", "currency", "Family"],
   ["retainedCash", "Available cash change", "currency", "Cash"],
   ["cash", "Available cash balance", "currency", "Cash"],
   ["familyTakeHome", "Family pay from practice", "currency", "Family"],

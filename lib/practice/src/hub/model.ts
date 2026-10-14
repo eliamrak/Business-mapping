@@ -256,6 +256,8 @@ export const periodSchema = z.object({
   staffPay: money.nullable().default(null),
   ownerPay: money.nullable().default(null),
   ownerClinicalPay: money.nullable().default(null),
+  ownerDistributionsPretax: money.nullable().default(null),
+  coOwnerSalaryPretax: money.nullable().default(null),
   distributions: money.nullable().default(null),
   taxes: money.nullable().default(null),
   reserves: money.nullable().default(null),
@@ -366,7 +368,15 @@ export const eventSchema = z
   });
 export const goalSchema = z.object({
   ...named,
-  metric: z.enum(["sessions", "revenue", "profit", "familyTakeHome"]),
+  metric: z.enum([
+    "sessions",
+    "revenue",
+    "profit",
+    "familyTakeHome",
+    "activeClinicalHeadcount",
+    "ownerDistributionsPretax",
+    "coOwnerSalaryPretax",
+  ]),
   amount: money,
   date: dateSchema.nullish().default(null),
   basis: z.enum(["monthly", "annual"]).default("monthly"),

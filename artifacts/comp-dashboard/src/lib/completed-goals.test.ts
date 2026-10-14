@@ -456,3 +456,124 @@ test("older and newer partial-team imports preserve the previously completed dai
     30,
   );
 });
+
+test("headcount uses one dated clinician, not 100 sessions or an annual amount divided by 12", () => {
+  const input = fixture();
+  input.context.clinicians = [input.context.clinicians[0]];
+  input.context.sessions = [{ ...input.context.sessions[0], completed: 100 }];
+  input.workspace.clinicians.push({
+    clinicianId: 1,
+    start: "2026-10-01",
+    end: null,
+    status: "active",
+  } as CompletedGoalInput["workspace"]["clinicians"][number]);
+  input.goal = {
+    metric: "activeClinicalHeadcount",
+    amount: 10,
+    basis: "annual",
+  };
+  const result = evaluateCompletedGoal(input);
+  assert.equal(result.status, "waiting");
+  assert.equal(result.value, 1);
+  assert.equal(result.target, 10);
+});
+
+test("headcount needs full-team actual coverage and explicit active dates", () => {
+  const input = fixture();
+  input.goal = {
+    metric: "activeClinicalHeadcount",
+    amount: 1,
+    basis: "monthly",
+  };
+  assert.equal(evaluateCompletedGoal(input).status, "insufficient");
+  input.workspace.clinicians = input.context.clinicians.map(
+    (person) =>
+      ({
+        clinicianId: person.id,
+        start: "2026-10-01",
+        end: null,
+        status: "active",
+      }) as CompletedGoalInput["workspace"]["clinicians"][number],
+  );
+  input.context.sessions.pop();
+  assert.equal(evaluateCompletedGoal(input).status, "insufficient");
+});
+
+test("headcount counts the selected active clinical team at period end, including the owner", () => {
+  const input = fixture();
+  input.goal = {
+    metric: "activeClinicalHeadcount",
+    amount: 2,
+    basis: "monthly",
+  };
+  input.workspace.clinicians = input.context.clinicians.map(
+    (person) =>
+      ({
+        clinicianId: person.id,
+        start: "2026-10-01",
+        end: null,
+        status: "active",
+      }) as CompletedGoalInput["workspace"]["clinicians"][number],
+  );
+  input.context.clinicians[0].roleType = "owner";
+  input.context.clinicians.push({ id: 3, goalId: 7 });
+  assert.equal(evaluateCompletedGoal(input).status, "met");
+  assert.equal(evaluateCompletedGoal(input).value, 2);
+  input.workspace.clinicians[1].end = "2026-10-07";
+  input.context.sessions[1].end = "2026-10-07";
+  assert.equal(evaluateCompletedGoal(input).value, 1);
+  assert.equal(evaluateCompletedGoal(input).status, "waiting");
+});
+
+test("owner distribution and co-owner salary goals use independent matching pre-tax actuals", () => {
+  const input = fixture();
+  input.financialObservations = [
+    {
+      start: "2026-10-01",
+      end: "2026-10-14",
+      source: "actual",
+      basis: "period",
+      values: {
+        ownerDistributionsPretax: 100,
+        coOwnerSalaryPretax: 10,
+        familyTakeHome: 10000,
+      },
+    },
+  ];
+  input.goal = {
+    metric: "ownerDistributionsPretax",
+    amount: 100,
+    basis: "monthly",
+  };
+  assert.equal(evaluateCompletedGoal(input).status, "met");
+  input.goal.metric = "coOwnerSalaryPretax";
+  assert.equal(evaluateCompletedGoal(input).status, "waiting");
+  assert.equal(evaluateCompletedGoal(input).value, (10 / 14) * 30.4375);
+  input.financialObservations[0].values.ownerDistributionsPretax = 10;
+  input.financialObservations[0].values.coOwnerSalaryPretax = 100;
+  assert.equal(evaluateCompletedGoal(input).status, "met");
+  input.goal.metric = "ownerDistributionsPretax";
+  assert.equal(evaluateCompletedGoal(input).status, "waiting");
+});
+
+test("unknown individual pre-tax actuals are insufficient despite household income or forecast", () => {
+  const input = fixture();
+  input.expected = 10000;
+  input.financialObservations = [
+    {
+      start: "2026-10-01",
+      end: "2026-10-14",
+      source: "actual",
+      basis: "period",
+      values: { familyTakeHome: 10000, ownerDistributionsPretax: null },
+    },
+  ];
+  for (const metric of [
+    "ownerDistributionsPretax",
+    "coOwnerSalaryPretax",
+  ] as const) {
+    input.goal = { metric, amount: 100, basis: "monthly" };
+    assert.equal(evaluateCompletedGoal(input).status, "insufficient");
+    assert.equal(evaluateCompletedGoal(input).value, null);
+  }
+});

@@ -98,6 +98,7 @@ export type ForecastMonth = {
   budgetLines?: Record<string, number>;
   budgetValues?: Values;
   forecastValues?: Values;
+  goalMeasureDaily?: Record<string, Values>;
   trace: Record<string, string>;
   warnings: string[];
   constraint: string;
@@ -172,6 +173,26 @@ const activeDays = (
       record.end && record.end < end ? record.end : end,
     ),
   );
+
+function activeClinicalHeadcountAt(
+  workspace: Workspace,
+  context: Context,
+  date: string,
+) {
+  return context.clinicians.filter((clinician) => {
+    const selected =
+      workspace.settings.teamId === null
+        ? clinician.goalId == null
+        : clinician.goalId === workspace.settings.teamId;
+    const setting = workspace.clinicians.find(
+      (entry) => entry.clinicianId === clinician.id,
+    );
+    return (
+      selected &&
+      (!setting || (setting.status === "active" && active(setting, date, date)))
+    );
+  }).length;
+}
 
 const datesIn = (start: string, end: string) =>
   Array.from({ length: Math.max(0, daysInclusive(start, end)) }, (_, i) =>
@@ -1186,6 +1207,20 @@ export function forecast(
       employerBurden = 0,
       ownerClinicalPay = 0,
       familyGrossPay = 0;
+    let coOwnerSalaryPretax: number | null = null;
+    const goalMeasureDaily: Record<string, Values> = Object.fromEntries(
+      datesIn(start, end).map((date) => [
+        date,
+        {
+          activeClinicalHeadcount: activeClinicalHeadcountAt(
+            workspace,
+            context,
+            date,
+          ),
+          coOwnerSalaryPretax: null,
+        },
+      ]),
+    );
     const clinicianValues: Record<string, Values> = {};
     for (const c of people) {
       const count = allocation.assigned.get(c.instance) ?? 0;
@@ -1224,6 +1259,15 @@ export function forecast(
               : day.mode === "per_session"
                 ? day.amount * dayCount
                 : calculated.clinicianCompensation;
+        if (
+          c.id === settings.familyW2ClinicianId &&
+          c.instance === String(c.id) &&
+          day.mode === "salary"
+        ) {
+          const salary = day.amount / 12 / days;
+          coOwnerSalaryPretax = (coOwnerSalaryPretax ?? 0) + salary;
+          goalMeasureDaily[day.date].coOwnerSalaryPretax = salary;
+        }
         const importedFee =
           c.instance === String(c.id)
             ? importedBilling.get(c.id)?.get(day.date)
@@ -1416,6 +1460,23 @@ export function forecast(
     );
     const retainedCash = cashProfit - taxReserve - reserves - distributions;
     cash += retainedCash;
+    const ownerDistributionBuckets = buckets.filter(
+      (bucket) => bucket.kind === "distribution" && bucket.household,
+    );
+    const distributionPctTotal = buckets
+      .filter((bucket) => bucket.kind === "distribution")
+      .reduce((sum, bucket) => sum + bucket.percent, 0);
+    const ownerDistributionsPretax =
+      ownerDistributionBuckets.length > 0
+        ? distributions *
+          (ratio(
+            ownerDistributionBuckets.reduce(
+              (sum, bucket) => sum + bucket.percent,
+              0,
+            ),
+            distributionPctTotal,
+          ) ?? 0)
+        : null;
     const familyDistribution =
       settings.familyW2ClinicianId !== null
         ? distributions
@@ -1446,6 +1507,13 @@ export function forecast(
       workspace,
       {
         sessions,
+        activeClinicalHeadcount: activeClinicalHeadcountAt(
+          workspace,
+          context,
+          end,
+        ),
+        ownerDistributionsPretax,
+        coOwnerSalaryPretax,
         capacity,
         utilization: utilization === null ? null : utilization * 100,
         unservedSessions: Math.max(0, demand - sessions),
@@ -1523,6 +1591,12 @@ export function forecast(
               ? "Client demand"
               : "Balanced";
     const trace: Record<string, string> = {
+      activeClinicalHeadcount:
+        "Selected-team clinical roster count at period end, including owners. Dated active status is required when configured; planning records and simulated hire instances are excluded.",
+      ownerDistributionsPretax:
+        "Cash distributions attributable to household-marked owner distribution allocations, before personal income tax. Excludes clinical compensation and salary; missing owner allocation attribution remains unknown.",
+      coOwnerSalaryPretax:
+        "Fixed gross salary for settings.familyW2ClinicianId only, using active dates and effective salary-mode terms. Excludes split/hourly/session compensation and personal tax estimates; absent salary attribution remains unknown.",
       sessions: `Demand ${demand.toFixed(1)} allocated across clinician capacity ${capacity.toFixed(1)}, capped by assigned rooms and locations (usable capacity ${Number.isFinite(roomLimit) ? roomLimit.toFixed(1) : "unverified / telehealth"}). Telehealth consumes a room only where configured. Historical baseline is retained separately from new-client cohorts.`,
       revenue:
         "Billed session income from imported charged fees where available, otherwise clinician sessions x effective session rate. Not collected cash.",
@@ -1618,6 +1692,7 @@ export function forecast(
     results.push({
       date: start,
       values,
+      goalMeasureDaily,
       clinicians: clinicianValues,
       channels,
       budgetLines,
@@ -1757,6 +1832,13 @@ export function observed(
     workspace,
     {
       sessions: sessions.completed,
+      activeClinicalHeadcount: activeClinicalHeadcountAt(
+        workspace,
+        context,
+        end,
+      ),
+      ownerDistributionsPretax: sum("ownerDistributionsPretax"),
+      coOwnerSalaryPretax: sum("coOwnerSalaryPretax"),
       capacity: sessions.desired,
       utilization: sessions.utilization,
       revenue,
@@ -1882,6 +1964,9 @@ export function forecastForPeriods(
 ): Values {
   const keys = [
     "sessions",
+    "activeClinicalHeadcount",
+    "ownerDistributionsPretax",
+    "coOwnerSalaryPretax",
     "capacity",
     "revenue",
     "collections",
@@ -1927,6 +2012,34 @@ export function forecastForPeriods(
         : null,
     ]),
   );
+  const end = periods.reduce(
+    (latest, period) => (period.end > latest ? period.end : latest),
+    periods[0].end,
+  );
+  const lastMonth = months.find(
+    (month) => month.date <= end && monthEnd(month.date) >= end,
+  );
+  result.activeClinicalHeadcount = covered
+    ? (lastMonth?.goalMeasureDaily?.[end]?.activeClinicalHeadcount ??
+      lastMonth?.values.activeClinicalHeadcount ??
+      null)
+    : null;
+  if (
+    covered &&
+    slices.every((slice) => slice.m.goalMeasureDaily !== undefined)
+  ) {
+    const dailySalary = periods
+      .flatMap((period) => datesIn(period.start, period.end))
+      .map(
+        (date) =>
+          months.find(
+            (month) => month.date <= date && monthEnd(month.date) >= date,
+          )?.goalMeasureDaily?.[date]?.coOwnerSalaryPretax ?? null,
+      );
+    result.coOwnerSalaryPretax = dailySalary.every((salary) => salary === null)
+      ? null
+      : dailySalary.reduce<number>((sum, salary) => sum + (salary ?? 0), 0);
+  }
   result.utilization =
     result.sessions != null && result.capacity
       ? (result.sessions / result.capacity) * 100

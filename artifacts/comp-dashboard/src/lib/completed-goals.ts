@@ -3,8 +3,14 @@ import type { Workspace } from "@workspace/practice/hub";
 
 export type CompletedGoal = Pick<
   Workspace["goals"][number],
-  "metric" | "amount" | "basis"
->;
+  "amount" | "basis"
+> & {
+  metric:
+    | Workspace["goals"][number]["metric"]
+    | "activeClinicalHeadcount"
+    | "ownerDistributionsPretax"
+    | "coOwnerSalaryPretax";
+};
 export type FinancialGoalObservation = {
   date?: string;
   start?: string;
@@ -17,7 +23,7 @@ export type CompletedGoalInput = {
   goal?: CompletedGoal | null;
   workspace: Pick<Workspace, "settings" | "clinicians">;
   context: {
-    clinicians: { id: number; goalId?: number | null }[];
+    clinicians: { id: number; goalId?: number | null; roleType?: string }[];
     sessions: {
       clinicianId: number;
       start: string;
@@ -35,7 +41,7 @@ export type CompletedGoalResult = {
   status: "met" | "waiting" | "insufficient" | "no-target";
   date: string | null;
   periodStart: string | null;
-  /** Actual and target are both monthly equivalents, including for annual goals. */
+  /** Actual/target are monthly equivalents, except headcount is an unscaled count. */
   value: number | null;
   target: number | null;
   forecastMet: boolean;
@@ -96,9 +102,10 @@ export function evaluateCompletedGoal(
   input: CompletedGoalInput,
 ): CompletedGoalResult {
   const { goal, workspace, context, asOf, expected } = input;
+  const headcount = goal?.metric === "activeClinicalHeadcount";
   const target =
     goal && Number.isFinite(goal.amount) && goal.amount > 0
-      ? goal.amount / (goal.basis === "annual" ? 12 : 1)
+      ? goal.amount / (!headcount && goal.basis === "annual" ? 12 : 1)
       : null;
   const base = {
     date: null,
@@ -124,7 +131,7 @@ export function evaluateCompletedGoal(
     );
 
   let actual: (SessionPeriod & { value: number }) | undefined;
-  if (goal.metric === "sessions") {
+  if (goal.metric === "sessions" || headcount) {
     const people = context.clinicians.filter(
       (person) => (person.goalId ?? null) === workspace.settings.teamId,
     );
@@ -136,12 +143,17 @@ export function evaluateCompletedGoal(
     let incomplete = false;
     for (const period of periods.filter((period) => period.end <= asOf)) {
       let value = 0;
+      let activeAtEnd = 0;
       let coveredPeople = 0;
       let complete = true;
       for (const person of people) {
         const settings = workspace.clinicians.filter(
           (row) => row.clinicianId === person.id,
         );
+        if (headcount && !settings.length) {
+          complete = false;
+          break;
+        }
         if (
           settings.some(
             (row) =>
@@ -151,6 +163,15 @@ export function evaluateCompletedGoal(
           complete = false;
           break;
         }
+        if (
+          settings.some(
+            (row) =>
+              row.status === "active" &&
+              row.start <= period.end &&
+              (!row.end || row.end >= period.end),
+          )
+        )
+          activeAtEnd++;
         // With no activity dates, every selected clinician is required for the entire period.
         const requiredDays = datesIn(period).filter(
           (date) =>
@@ -196,8 +217,9 @@ export function evaluateCompletedGoal(
       if (complete && coveredPeople > 0) {
         actual = {
           ...period,
-          value:
-            (value / daysInclusive(period.start, period.end)) * monthlyDays,
+          value: headcount
+            ? activeAtEnd
+            : (value / daysInclusive(period.start, period.end)) * monthlyDays,
         };
         break;
       }
@@ -207,7 +229,9 @@ export function evaluateCompletedGoal(
       if (!people.length || !rows.length || incomplete || !periods.length)
         return result(
           "insufficient",
-          "Insufficient session data: a completed biweekly period needs full selected-team coverage on every active day.",
+          headcount
+            ? "Insufficient headcount data: explicit clinician active dates and a completed biweekly period with full selected-team actual coverage are required."
+            : "Insufficient session data: a completed biweekly period needs full selected-team coverage on every active day.",
         );
       return result(
         "waiting",

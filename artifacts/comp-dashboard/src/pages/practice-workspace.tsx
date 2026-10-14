@@ -106,6 +106,7 @@ import {
 } from "@/lib/practice-money-visuals";
 import { evaluateCompletedGoal } from "@/lib/completed-goals";
 import { planRevisionSignature, planFocusHighlights } from "@/lib/plan-focus";
+import { overviewClientFlow, overviewFundingSummary } from "@/lib/practice-overview";
 import { newRecord } from "@/components/hub/config";
 import RecordEditor from "@/components/hub/record-editor";
 import RecordTable from "@/components/hub/record-table";
@@ -607,6 +608,7 @@ function MetricTargetBar({
   limit,
   lowerIsBetter = false,
   max,
+  valueLabel = "Recorded",
 }: {
   value: number | null | undefined;
   goal?: number | null;
@@ -614,6 +616,7 @@ function MetricTargetBar({
   limit?: number | null;
   lowerIsBetter?: boolean;
   max?: number;
+  valueLabel?: string;
 }) {
   const finiteValues = [value, goal, benchmark, limit].filter(
     (item): item is number => item !== null && item !== undefined && item >= 0,
@@ -624,7 +627,7 @@ function MetricTargetBar({
   return (
     <div
       className={`pw-target-bar ${lowerIsBetter ? "pw-lower-better" : ""}`}
-      aria-label="Actual, goal, benchmark, and capacity comparison"
+      aria-label={`${valueLabel}, goal, benchmark, and capacity comparison`}
     >
       <div className="pw-target-track">
         {pct(value) !== null && (
@@ -648,7 +651,7 @@ function MetricTargetBar({
       </div>
       <div className="pw-marker-legend">
         <span>
-          <i className="pw-actual-key" /> Recorded
+          <i className="pw-actual-key" /> {valueLabel}
         </span>
         {benchmark !== null && benchmark !== undefined && (
           <span>
@@ -1427,6 +1430,7 @@ export default function PracticeWorkspace() {
     const current = stagedWorkspace ?? workspace;
     const normalizedPatch = {
       ...patch,
+      metric,
       ...(patch.date !== undefined ? { date: patch.date || null } : {}),
     };
     const existing = current.goals.find(
@@ -1439,7 +1443,6 @@ export default function PracticeWorkspace() {
     const goal = goalSchema.parse({
       id: crypto.randomUUID(),
       name,
-      metric,
       amount: 0,
       date: null,
       basis: "annual",
@@ -2989,11 +2992,15 @@ export default function PracticeWorkspace() {
     </button>
   );
   const activeCurrentGoals = active(workingWorkspace.goals);
+  const correctedGoal = (goal: Workspace["goals"][number]) => ({
+    ...goal,
+    metric: ({ "owner pay": "ownerDistributionsPretax", "co-owner pay": "coOwnerSalaryPretax", "desired clinicians": "activeClinicalHeadcount" } as Record<string, Workspace["goals"][number]["metric"]>)[goal.name.toLowerCase()] ?? goal.metric,
+  });
   const activeFundGoals = active(workingWorkspace.fundGoals ?? []);
-  const findGoal = (name: string) =>
-    activeCurrentGoals.find(
-      (goal) => goal.name.toLowerCase() === name.toLowerCase(),
-    );
+  const findGoal = (name: string) => {
+    const goal = activeCurrentGoals.find((goal) => goal.name.toLowerCase() === name.toLowerCase());
+    return goal ? correctedGoal(goal) : undefined;
+  };
   const findFundGoal = (name: string) =>
     activeFundGoals.find(
       (goal) => goal.name.toLowerCase() === name.toLowerCase(),
@@ -3001,13 +3008,13 @@ export default function PracticeWorkspace() {
   const coreGoalRows = [
     {
       name: "Owner pay",
-      metric: "familyTakeHome" as const,
+      metric: "ownerDistributionsPretax" as const,
       caption:
         "Pre-tax owner distribution target. Owner clinical revenue remains business revenue.",
     },
     {
       name: "Co-owner pay",
-      metric: "familyTakeHome" as const,
+      metric: "coOwnerSalaryPretax" as const,
       caption:
         "Pre-tax salary target for Erin; payroll taxes and take-home stay in Money.",
     },
@@ -3018,8 +3025,8 @@ export default function PracticeWorkspace() {
     },
     {
       name: "Desired Clinicians",
-      metric: "sessions" as const,
-      caption: "Capacity proxy until a dedicated headcount metric exists.",
+      metric: "activeClinicalHeadcount" as const,
+      caption: "Active clinical headcount, including clinical owners.",
     },
   ];
   const fundGoalRows = ["Building Fund", "Emergency Reserve", "Growth Fund"];
@@ -3033,9 +3040,9 @@ export default function PracticeWorkspace() {
           ?.values[goal.metric]
       : null;
   const goalTarget = (goal: Workspace["goals"][number] | undefined) =>
-    goal ? goal.amount / (goal.basis === "annual" ? 12 : 1) : 0;
+    goal ? goal.amount / (goal.metric !== "activeClinicalHeadcount" && goal.basis === "annual" ? 12 : 1) : 0;
   const goalUnit = (metric: Workspace["goals"][number]["metric"]) =>
-    metric === "sessions" ? "number" : "currency";
+    metric === "sessions" || metric === "activeClinicalHeadcount" ? "number" : "currency";
   const completedGoalStatus = (
     goal: Workspace["goals"][number] | undefined,
     expected: number | null | undefined,
@@ -3060,10 +3067,14 @@ export default function PracticeWorkspace() {
       values: row.values,
     })),
   });
-  const achievedGoals = activeCurrentGoals.flatMap((goal) => {
+  const achievedGoals = activeCurrentGoals.map(correctedGoal).flatMap((goal) => {
     const result = completedGoalResult(goal, goalExpected(goal));
     return result.status === "met" ? [{ goal, result }] : [];
   });
+  const overviewYear = (summaryMonth?.date ?? today).slice(0, 4);
+  const overviewAnnualMonths = forecast({ ...workingWorkspace, settings: { ...workingWorkspace.settings, forecastStart: overviewYear + "-01-01", horizonMonths: 12 } }, modelContext ?? context);
+  const overviewFinancial = overviewFundingSummary(workingWorkspace, overviewAnnualMonths);
+  const overviewFlow = overviewClientFlow(localRetentionState.snapshots, localRetentionState.sameDayVisitOverrides, periodRange.start, periodRange.end, today);
   const fundProjection = (goal: Workspace["fundGoals"][number] | undefined) => {
     return fundProjectionSummary(
       goal,
@@ -7018,6 +7029,40 @@ export default function PracticeWorkspace() {
                       </button>
                     </section>
                   )}
+                  <div className="pw-overview-composition">
+                    <section aria-label="Overview financial summary">
+                      <h3>Financial summary</h3>
+                      <p>{overviewYear} · full-year projection · billed revenue, not collected cash</p>
+                      <div className="pw-overview-bridge" role="img" aria-label="Projected annual income less clinician compensation and operating costs leaves practice profit">
+                        {[
+                          { label: "Income", value: overviewFinancial.income !== null && overviewFinancial.adjustments !== null ? overviewFinancial.income + overviewFinancial.adjustments : null, bottom: 0, kind: "income" },
+                          { label: "Clinician pay", value: overviewFinancial.clinicianPay === null ? null : -overviewFinancial.clinicianPay, bottom: overviewFinancial.income === null || overviewFinancial.adjustments === null || overviewFinancial.clinicianPay === null ? 0 : overviewFinancial.income + overviewFinancial.adjustments - overviewFinancial.clinicianPay, kind: "deduction" },
+                          { label: "Other practice costs", value: overviewFinancial.otherCosts === null ? null : -overviewFinancial.otherCosts, bottom: Math.max(0, overviewFinancial.profit ?? 0), kind: "deduction" },
+                          { label: "Practice profit", value: overviewFinancial.profit, bottom: 0, kind: "profit" },
+                        ].map((step) => {
+                          const scale = Math.max(1, Math.abs((overviewFinancial.income ?? 0) + (overviewFinancial.adjustments ?? 0)), Math.abs(overviewFinancial.profit ?? 0));
+                          return <div key={step.label}><strong>{money(step.value)}</strong><div className="pw-overview-bridge-plot"><i className={step.kind} style={{ height: `${Math.min(100, Math.abs(step.value ?? 0) / scale * 100)}%`, bottom: `${Math.max(0, Math.min(100, step.bottom / scale * 100))}%` }} /></div><span>{step.label}</span></div>;
+                        })}
+                      </div>
+                      <details><summary>Financial details</summary><p>Clinical revenue {money(overviewFinancial.income)}; other income or adjustments {money(overviewFinancial.adjustments)}. Other costs include employer burden, staff, overhead, marketing, processing fees and separate owner payroll. Owner distributions are funding needs after profit; owner clinical revenue stays in the business.</p></details>
+                    </section>
+                    <section aria-label="Overview combined funding progress">
+                      <h3>Projected goal progress</h3>
+                      <p>{overviewYear} · projected finish against current funding needs</p>
+                      <div className="pw-metric-hero"><strong>{overviewFinancial.target !== null && overviewFinancial.target > 0 && overviewFinancial.profit !== null ? fmt(overviewFinancial.profit / overviewFinancial.target * 100, "percent") : "--"}</strong><span>Projected finish {money(overviewFinancial.profit)}</span></div>
+                      <MetricTargetBar value={overviewFinancial.profit} goal={overviewFinancial.target} valueLabel="Projected finish" />
+                      <div className="pw-overview-total"><span>Combined annual funding target</span><strong>{money(overviewFinancial.target)}</strong></div>
+                      <div className="pw-overview-total"><span>Projected surplus / gap</span><strong>{money(overviewFinancial.target === null || overviewFinancial.profit === null ? null : overviewFinancial.profit - overviewFinancial.target)}</strong></div>
+                      {overviewFinancial.missingAmounts > 0 && <p className="pw-note">{overviewFinancial.missingAmounts} funding amounts remain unknown. Known annual subtotal {money(overviewFinancial.knownSubtotal)}.</p>}
+                      <details><summary>Funding details</summary><p>Owner distribution target {money(overviewFinancial.ownerAnnual)}; additional co-owner salary need {money(overviewFinancial.salaryGap)} after {money(overviewFinancial.includedSalaryAnnual)} matching gross salary already included in costs; retained profit target {money(overviewFinancial.retainedAnnual)}; projected fund contributions {money(overviewFinancial.fundsAnnual)}. Total fund-balance goals, overhead already deducted, and headcount are not added as recurring costs. This projection cannot establish achievement.</p></details>
+                    </section>
+                    <section className="pw-overview-client-flow" aria-label="Overview client growth">
+                      <h3>Client growth</h3><p>{sharedPeriodLabel(sharedPeriod)} · recorded treatment history</p>
+                      {[["New treatment starts", overviewFlow.starts, "starts"], ["Retained-client departures", overviewFlow.departures, "departures"]].map(([label, value, kind]) => <div className="pw-overview-flow-row" key={String(kind)}><span>{label}</span><strong>{fmt(value as number | null)}</strong><div><i className={String(kind)} style={{ width: `${value === null ? 0 : Number(value) / Math.max(1, overviewFlow.starts ?? 0, overviewFlow.departures ?? 0) * 100}%` }} /></div></div>)}
+                      <details><summary>Client flow details</summary><p>Starts are unique clients first observed after imported coverage begins; {overviewFlow.leftCensoredStarts} starts on the coverage boundary are excluded as uncertain. Departures use the mature 90-day ending definition through {overviewFlow.through ?? "unknown coverage"}, after three treatment sessions, with later-return handling. The two counts have different observation cutoffs and are not subtracted into a false net-growth figure.</p></details>
+                    </section>
+                  </div>
+                  <details className="pw-overview-existing-details"><summary>Forecast and historical details</summary>
                   <div className="pw-summary">
                     {metrics.map((m) => (
                       <div key={m.key}>
@@ -7636,6 +7681,7 @@ export default function PracticeWorkspace() {
                     </button>
                     {detailButton("goals", "Metric targets")}
                   </div>
+                  </details>
                 </>
               )}
               {section === "current-goals" && (
@@ -7661,7 +7707,7 @@ export default function PracticeWorkspace() {
                   <div className="pw-goal-editor">
                     {coreGoalRows.map((row) => {
                       const goal = findGoal(row.name);
-                      const expected = goalExpected(goal);
+                      const expected = goalExpected(goal) ?? summaryMonth?.values[row.metric];
                       const target = goalTarget(goal);
                       const unit = goalUnit(row.metric);
                       return (
@@ -7686,7 +7732,7 @@ export default function PracticeWorkspace() {
                                 })
                               }
                             />
-                            <label className="pw-draft-field">
+                            {row.metric !== "activeClinicalHeadcount" && <label className="pw-draft-field">
                               <span>Basis</span>
                               <select
                                 aria-label={`${row.name} basis`}
@@ -7701,7 +7747,7 @@ export default function PracticeWorkspace() {
                                 <option value="monthly">Monthly</option>
                                 <option value="annual">Annual</option>
                               </select>
-                            </label>
+                            </label>}
                             <DraftField
                               label="Target date (optional)"
                               type="date"
@@ -7715,7 +7761,7 @@ export default function PracticeWorkspace() {
                           </div>
                           <div className="pw-progress-comparison">
                             <div>
-                              <span>Current monthly equivalent</span>
+                              <span>{row.metric === "activeClinicalHeadcount" ? "Active clinical headcount" : "Current monthly pre-tax measure"}</span>
                               <strong>{fmt(expected, unit)}</strong>
                             </div>
                             <div>
@@ -7724,14 +7770,10 @@ export default function PracticeWorkspace() {
                             </div>
                             <MetricTargetBar
                               value={expected ?? null}
+                              valueLabel="Projected"
                               goal={target || null}
                               benchmark={
-                                row.metric === "profit"
-                                  ? recordedFinancialPeriods[0]?.values.profit
-                                  : row.metric === "familyTakeHome"
-                                    ? recordedFinancialPeriods[0]?.values
-                                        .familyTakeHome
-                                    : months[0]?.values.sessions
+                                recordedFinancialPeriods[0]?.values[row.metric]
                               }
                             />
                             <small>
