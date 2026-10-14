@@ -1471,7 +1471,7 @@ export function estimateLocalClientActivity(
   returnMaturityDays = 56,
   initialRetentionGapDays = 28,
   asOfDate = "9999-12-31",
-  endingGapDays = 105,
+  endingGapDays = 90,
 ): LocalClientActivityEstimate | null {
   const shows = derivedShowVisits(snapshots, sameDayVisitOverrides)
     .filter((row) => row.serviceDate <= asOfDate)
