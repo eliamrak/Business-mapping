@@ -90,6 +90,7 @@ export default function WorkspaceSessions({
   onEditingChange,
   onPlanHire,
   onOpenCalculations,
+  onOpenConvertedImports,
   forecastMonths,
   selectedPeriod,
   contributorId = null,
@@ -107,6 +108,7 @@ export default function WorkspaceSessions({
   onEditingChange: (editing: boolean) => void;
   onPlanHire: () => void;
   onOpenCalculations: () => void;
+  onOpenConvertedImports?: () => void;
   forecastMonths: ForecastMonth[];
   selectedPeriod?: SessionPeriod;
   contributorId?: number | null;
@@ -496,7 +498,12 @@ export default function WorkspaceSessions({
               disabled={dirty || busy || bulkState.dirty || bulkState.busy}
               onClick={() => setImportOpen(true)}
             >
-              <Upload /> Upload file
+              <Upload /> Import biweekly session totals
+            </button>
+          )}
+          {!sandbox && onOpenConvertedImports && (
+            <button className="pw-button" disabled={dirty || busy || bulkState.dirty || bulkState.busy} onClick={onOpenConvertedImports}>
+              <Upload /> Converted attendance &amp; billing imports
             </button>
           )}
           <details className="pw-menu">

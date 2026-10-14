@@ -4172,6 +4172,7 @@ export default function PracticeWorkspace() {
                       onEditingChange={setSessionEditing}
                       onPlanHire={startPlanning}
                       onOpenCalculations={openRetentionCalculations}
+                      onOpenConvertedImports={() => setSection("retention")}
                       forecastMonths={months}
                       selectedPeriod={periodRange}
                       contributorId={selectedContributor?.id ?? null}

@@ -34,7 +34,37 @@ Application reads and legacy package writes remain compatible before migration. 
 
 ## Remaining Gates
 
+### Independent Browser Reproduction
+
+Requires a terminal executor with Node, Corepack/pnpm, an existing Playwright installation and an existing Chromium binary. It does not require the in-app Browser plugin or a production login. Run from the exact candidate checkout:
+
+```bash
+PORT=4317 BASE_PATH=/ VITE_LOCAL_PREVIEW=true corepack pnpm --filter @workspace/comp-dashboard run dev
+```
+
+In a second terminal, the same Mac environment can run:
+
+```bash
+node verification/render-practice-workspace.mjs
+```
+
+Other executors can supply their own existing paths and unused preview port:
+
+```bash
+PRACTICE_PLAYWRIGHT_PACKAGE=/absolute/path/to/package.json PRACTICE_CHROMIUM_PATH=/absolute/path/to/chromium PRACTICE_PREVIEW_URL=http://127.0.0.1:4317 PRACTICE_RENDER_OUTPUT=/tmp/practice-independent-render node verification/render-practice-workspace.mjs
+```
+
+The package path must resolve an installed `playwright` module. The harness launches an isolated headless Chromium process, intercepts all `/api/` requests with synthetic fixtures, exercises controls and saves fresh screenshots and `metrics.json`. It never loads user cookies or browser profiles and never submits production writes. Non-authentication browser exceptions, failed assertions and horizontal overflow fail the process. Local preview's narrowly recognized localhost Clerk error is separately recorded, not evidence of authenticated production health.
+
+The default Mac module locator is `/tmp/local-retention-browser-harness/package.json`; the binary is `/Users/eliam/Library/Caches/ms-playwright/chromium_headless_shell-1234/chrome-headless-shell-mac-arm64/chrome-headless-shell`. A reviewer without terminal/process execution cannot independently reproduce this harness merely by reading the author's screenshots; that remains a review capability blocker.
+
+The Sessions tools now distinguish `Import biweekly session totals` from `Converted attendance & billing imports`; the latter routes to Data & imports. The browser regression verifies both the explicit label and converted-history navigation.
+
 The complete Postgres/API integration suite was not runnable because no disposable loopback database and isolated test API were configured. Those tests were not pointed at production.
+
+Follow-up isolated initialization confirmed the host blocker: all 32 macOS System V shared-memory IDs are allocated (`kern.sysv.shmmni=32`). Both default initialization and supported mmap configuration fail at the required 56-byte `shmget` marker. No kernel limits, shared-memory allocations or other servers were changed. Docker, Podman and Colima are unavailable. Migration 008 still needs an independently provisioned disposable database test.
+
+Read-only Replit app search by production URL and Compensation returned no editable matches in this executor's connection. No supported authenticated browser execution route was exposed. Production import freshness was therefore not independently reconciled here; no cookies, secrets or credentials were extracted.
 
 The parent must obtain an independent exact-SHA full-check PASS, run migration/integration checks in the existing authorized environment, and reconcile the authenticated account's real data. Deployment and post-deployment desktop/mobile/native-wrapper verification remain separate gates. Prior acceptance is withdrawn; this document is not a release approval.
 

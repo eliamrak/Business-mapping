@@ -4,13 +4,13 @@ import path from "node:path";
 import assert from "node:assert/strict";
 
 const playwrightRequire = createRequire(
-  "/tmp/local-retention-browser-harness/package.json",
+  process.env.PRACTICE_PLAYWRIGHT_PACKAGE ?? "/tmp/local-retention-browser-harness/package.json",
 );
 const { chromium } = playwrightRequire("playwright");
 
-const browserPath =
+const browserPath = process.env.PRACTICE_CHROMIUM_PATH ??
   "/Users/eliam/Library/Caches/ms-playwright/chromium_headless_shell-1234/chrome-headless-shell-mac-arm64/chrome-headless-shell";
-const outDir = path.resolve("verification/practice-workspace-render");
+const outDir = path.resolve(process.env.PRACTICE_RENDER_OUTPUT ?? "verification/practice-workspace-render");
 await fs.mkdir(outDir, { recursive: true });
 
 const uuid = (suffix) => `00000000-0000-4000-8000-${suffix.padStart(12, "0")}`;
@@ -391,7 +391,7 @@ async function clickSection(name) {
     .click();
 }
 
-await page.goto("http://127.0.0.1:4317/workspace");
+await page.goto(new URL("/workspace", process.env.PRACTICE_PREVIEW_URL ?? "http://127.0.0.1:4317").href);
 await capture("overview-desktop", 1280, 900);
 await capture("overview-mobile", 390, 900);
 assert.ok(importReads > 0, "saved imports load on fresh Today view");
@@ -409,6 +409,11 @@ assert.equal(await page.locator(".pw-overview-existing-details").getAttribute("o
 await clickSection("Sessions");
 await capture("sessions-desktop", 1280, 900);
 await capture("sessions-mobile", 390, 900);
+await page.locator(".pw-session-tools > summary").click();
+assert.ok(await page.getByRole("button", { name: "Import biweekly session totals", exact: true }).isVisible(), "legacy import action names its biweekly totals format");
+await page.getByRole("button", { name: "Converted attendance & billing imports", exact: true }).click();
+assert.match(await page.locator("h1").innerText(), /Data & imports/, "converted imports route to saved clinical history");
+await clickSection("Sessions");
 await page.getByRole("button", { name: "Elia", exact: true }).click();
 await page.getByRole("button", { name: "Compare with Whole Practice", exact: true }).click();
 assert.ok(await page.getByText(/Whole practice:/i).count(), "Compare renders practice evidence");

@@ -184,7 +184,7 @@ export default function SessionImportDialog({
     <Dialog open onOpenChange={(open) => { if (!open && !busy) onClose(); }}>
       <DialogContent className="practice-theme pw-import-dialog" data-appearance="light">
         <DialogHeader>
-          <DialogTitle>Import session history</DialogTitle>
+          <DialogTitle>Import biweekly session totals</DialogTitle>
           <DialogDescription>Review biweekly totals before they become recorded sessions.</DialogDescription>
         </DialogHeader>
         <div className="pw-import-body">
