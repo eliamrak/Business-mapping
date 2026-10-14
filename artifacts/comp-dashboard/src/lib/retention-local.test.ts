@@ -25,6 +25,7 @@ import {
   replaceOverlappingSnapshots,
   localDerivedVisitDetail,
   sameDayVisitKey,
+  summarizeConsultConversions,
 } from "./retention-local.ts";
 
 const attendanceCsv = `Client,Clinician,Date of service,Location,Status
@@ -1044,6 +1045,105 @@ test("Practice package treats attendance Phone code as consultation evidence", (
   assert.equal(metrics.rawShowRows, 3);
   assert.equal(metrics.derivedShowVisits, 2);
   assert.equal(metrics.excludedConsultationShowRows, 1);
+});
+
+test("consult conversion credits actual closer and protects internal referrers", () => {
+  const packageData = packageFixture();
+  packageData.collections.attendance.coverageStart = "2026-01-01";
+  packageData.collections.attendance.coverageEnd = "2026-01-20";
+  packageData.collections.attendance.rows = [
+    {
+      clientId: "converted-referral",
+      clinician: "Dr Referrer",
+      serviceDate: "2026-01-01",
+      location: "Phone",
+      status: "show",
+      billingCode: "PHONE",
+      visitKind: "consultation",
+    },
+    {
+      clientId: "converted-referral",
+      clinician: "Dr Closer",
+      serviceDate: "2026-01-15",
+      location: "Room A",
+      status: "show",
+    },
+    {
+      clientId: "missed",
+      clinician: "Dr Referrer",
+      serviceDate: "2026-01-02",
+      location: "Phone",
+      status: "show",
+      billingCode: "PHONE",
+    },
+    {
+      clientId: "pending",
+      clinician: "Dr Pending",
+      serviceDate: "2026-01-20",
+      location: "Phone",
+      status: "show",
+      billingCode: "PHONE",
+    },
+    {
+      clientId: "conflict",
+      clinician: "Dr Intake",
+      serviceDate: "2026-01-03",
+      location: "Phone",
+      status: "show",
+      visitKind: "consultation",
+    },
+    {
+      clientId: "conflict",
+      clinician: "Dr A",
+      serviceDate: "2026-01-10",
+      location: "Room A",
+      status: "show",
+    },
+    {
+      clientId: "conflict",
+      clinician: "Dr B",
+      serviceDate: "2026-01-10",
+      location: "Room B",
+      status: "show",
+    },
+  ];
+  packageData.collections.attendance.rowCount =
+    packageData.collections.attendance.rows.length;
+  const parsed = importLocalPackage(packageData);
+
+  const summary = summarizeConsultConversions(
+    parsed.snapshots,
+    {},
+    "2026-01-01",
+    "2026-01-31",
+    "2026-02-03",
+  );
+
+  assert.equal(summary.practice.consultations, 4);
+  assert.equal(summary.practice.converted, 1);
+  assert.equal(summary.practice.missed, 1);
+  assert.equal(summary.practice.pending, 1);
+  assert.equal(summary.practice.needsAttribution, 1);
+  assert.equal(summary.practice.evaluated, 2);
+  assert.equal(summary.practice.conversionRate, 50);
+  assert.equal(
+    summary.byClinician.find((row) => row.clinician === "Dr Closer")
+      ?.converted,
+    1,
+  );
+  assert.equal(
+    summary.byClinician.find((row) => row.clinician === "Dr Referrer")
+      ?.internalReferralsProtected,
+    1,
+  );
+  assert.equal(
+    summary.byClinician.find((row) => row.clinician === "Dr Referrer")?.missed,
+    1,
+  );
+  assert.equal(
+    summary.journeys.find((row) => row.clientId === "conflict")?.status,
+    "needs_attribution",
+  );
 });
 
 test("billing-code duration lookup normalizes whitespace and case", () => {

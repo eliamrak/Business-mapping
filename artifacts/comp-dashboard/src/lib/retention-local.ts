@@ -226,6 +226,46 @@ export type LocalVisitReconciliation = {
   rows: LocalVisitReconciliationRow[];
 };
 
+export type ConsultJourneyStatus =
+  | "converted"
+  | "missed"
+  | "pending"
+  | "needs_attribution";
+
+export type ConsultJourney = {
+  clientId: string;
+  consultDate: string;
+  deadline: string;
+  status: ConsultJourneyStatus;
+  consultClinicians: string[];
+  closerClinician: string | null;
+  creditedClinician: string | null;
+  treatmentDate: string | null;
+  attributionIssue: string | null;
+};
+
+export type ConsultConversionMetric = {
+  clinician: string | null;
+  consultations: number;
+  converted: number;
+  missed: number;
+  pending: number;
+  needsAttribution: number;
+  internalReferralsProtected: number;
+  evaluated: number;
+  conversionRate: number | null;
+};
+
+export type ConsultConversionSummary = {
+  periodStart: string;
+  periodEnd: string;
+  asOfDate: string;
+  window: "one_calendar_month";
+  practice: ConsultConversionMetric;
+  byClinician: ConsultConversionMetric[];
+  journeys: ConsultJourney[];
+};
+
 export type LocalImportResult<T extends LocalFactKind> = {
   snapshot: Extract<LocalSnapshot, { kind: T }>;
   warnings: string[];
@@ -1118,6 +1158,13 @@ function addDays(date: string, days: number) {
     .slice(0, 10);
 }
 
+function addCalendarMonth(date: string) {
+  const [year, month, day] = date.split("-").map(Number);
+  const endOfTargetMonth = new Date(Date.UTC(year, month + 1, 0)).getUTCDate();
+  const targetDay = Math.min(day, endOfTargetMonth);
+  return new Date(Date.UTC(year, month, targetDay)).toISOString().slice(0, 10);
+}
+
 function daysBetweenInclusive(start: string, end: string) {
   return (
     Math.floor(
@@ -1697,6 +1744,186 @@ export function estimateLocalClientActivity(
           eligibleInactivityMonths.length
         : null,
     ...clientEndings,
+  };
+}
+
+const blankConsultMetric = (clinician: string | null): ConsultConversionMetric => ({
+  clinician,
+  consultations: 0,
+  converted: 0,
+  missed: 0,
+  pending: 0,
+  needsAttribution: 0,
+  internalReferralsProtected: 0,
+  evaluated: 0,
+  conversionRate: null,
+});
+
+const finishConsultMetric = (
+  metric: ConsultConversionMetric,
+): ConsultConversionMetric => {
+  const evaluated = metric.converted + metric.missed;
+  return {
+    ...metric,
+    evaluated,
+    conversionRate: evaluated > 0 ? (metric.converted / evaluated) * 100 : null,
+  };
+};
+
+export function summarizeConsultConversions(
+  snapshots: LocalSnapshot[],
+  sameDayVisitOverrides: SameDayVisitOverrides = {},
+  periodStart = "0000-01-01",
+  periodEnd = "9999-12-31",
+  asOfDate = "9999-12-31",
+): ConsultConversionSummary {
+  const consultRows = snapshots
+    .flatMap((snapshot) =>
+      snapshot.kind === "attendance"
+        ? snapshot.rows.filter(
+            (row) =>
+              row.status === "show" &&
+              row.serviceDate <= asOfDate &&
+              isPhoneConsultAttendanceRow(row),
+          )
+        : [],
+    )
+    .sort(
+      (a, b) =>
+        a.clientId.localeCompare(b.clientId) ||
+        a.serviceDate.localeCompare(b.serviceDate) ||
+        a.clinician.localeCompare(b.clinician),
+    );
+  const treatmentShows = derivedShowVisits(snapshots, sameDayVisitOverrides)
+    .filter((row) => row.serviceDate <= asOfDate)
+    .sort(
+      (a, b) =>
+        a.clientId.localeCompare(b.clientId) ||
+        a.serviceDate.localeCompare(b.serviceDate) ||
+        a.clinician.localeCompare(b.clinician),
+    );
+  const consultsByClient = new Map<string, AttendanceRow[]>();
+  for (const row of consultRows) {
+    consultsByClient.set(row.clientId, [
+      ...(consultsByClient.get(row.clientId) ?? []),
+      row,
+    ]);
+  }
+  const treatmentsByClient = new Map<string, AttendanceRow[]>();
+  for (const row of treatmentShows) {
+    treatmentsByClient.set(row.clientId, [
+      ...(treatmentsByClient.get(row.clientId) ?? []),
+      row,
+    ]);
+  }
+  const journeys: ConsultJourney[] = [];
+  for (const [clientId, rows] of consultsByClient) {
+    const sortedConsults = [...rows].sort((a, b) =>
+      a.serviceDate.localeCompare(b.serviceDate),
+    );
+    const firstConsult = sortedConsults[0];
+    if (
+      !firstConsult ||
+      firstConsult.serviceDate < periodStart ||
+      firstConsult.serviceDate > periodEnd
+    )
+      continue;
+    const consultDate = firstConsult.serviceDate;
+    const deadline = addCalendarMonth(consultDate);
+    const windowConsults = sortedConsults.filter(
+      (row) => row.serviceDate >= consultDate && row.serviceDate <= deadline,
+    );
+    const consultClinicians = [
+      ...new Set(windowConsults.map((row) => row.clinician).filter(Boolean)),
+    ].sort();
+    const treatments = (treatmentsByClient.get(clientId) ?? []).filter(
+      (row) => row.serviceDate >= consultDate && row.serviceDate <= deadline,
+    );
+    const firstTreatmentDate = treatments[0]?.serviceDate ?? null;
+    const firstTreatmentRows = firstTreatmentDate
+      ? treatments.filter((row) => row.serviceDate === firstTreatmentDate)
+      : [];
+    const treatmentClinicians = [
+      ...new Set(firstTreatmentRows.map((row) => row.clinician).filter(Boolean)),
+    ].sort();
+    const converted = firstTreatmentRows.length > 0;
+    const pending = !converted && asOfDate < deadline;
+    const attributionIssue = converted
+      ? treatmentClinicians.length === 0
+        ? "Converted client is missing a closer."
+        : treatmentClinicians.length > 1
+          ? "Converted client has conflicting same-day closers."
+          : null
+      : null;
+    const closerClinician =
+      converted && treatmentClinicians.length === 1 ? treatmentClinicians[0] : null;
+    journeys.push({
+      clientId,
+      consultDate,
+      deadline,
+      status: converted
+        ? attributionIssue
+          ? "needs_attribution"
+          : "converted"
+        : pending
+          ? "pending"
+          : "missed",
+      consultClinicians,
+      closerClinician,
+      creditedClinician: converted ? closerClinician : consultClinicians.at(-1) ?? null,
+      treatmentDate: firstTreatmentDate,
+      attributionIssue,
+    });
+  }
+  const practice = blankConsultMetric(null);
+  const byClinician = new Map<string, ConsultConversionMetric>();
+  const clinicianMetric = (name: string) => {
+    const metric = byClinician.get(name) ?? blankConsultMetric(name);
+    byClinician.set(name, metric);
+    return metric;
+  };
+  for (const journey of journeys) {
+    practice.consultations++;
+    if (journey.status === "converted") practice.converted++;
+    else if (journey.status === "pending") practice.pending++;
+    else if (journey.status === "needs_attribution") practice.needsAttribution++;
+    else practice.missed++;
+
+    if (journey.status === "converted" && journey.closerClinician) {
+      const metric = clinicianMetric(journey.closerClinician);
+      metric.consultations++;
+      metric.converted++;
+      for (const clinician of journey.consultClinicians) {
+        if (clinician !== journey.closerClinician)
+          clinicianMetric(clinician).internalReferralsProtected++;
+      }
+      continue;
+    }
+    if (journey.status === "needs_attribution") {
+      for (const clinician of journey.consultClinicians) {
+        const metric = clinicianMetric(clinician);
+        metric.consultations++;
+        metric.needsAttribution++;
+      }
+      continue;
+    }
+    const owner = journey.creditedClinician;
+    if (!owner) continue;
+    const metric = clinicianMetric(owner);
+    metric.consultations++;
+    if (journey.status === "pending") metric.pending++;
+    else metric.missed++;
+  }
+  return {
+    periodStart,
+    periodEnd,
+    asOfDate,
+    window: "one_calendar_month",
+    practice: finishConsultMetric(practice),
+    byClinician: [...byClinician.values()]
+      .map(finishConsultMetric)
+      .sort((a, b) => (a.clinician ?? "").localeCompare(b.clinician ?? "")),
+    journeys,
   };
 }
 
