@@ -186,6 +186,7 @@ test("partial import overlap uses exact imported facts and drops stale aggregate
     ["2026-10-07", "2026-10-15"],
   );
   assert.equal(overlay.diagnostic.manualImportConflictCount, 1);
+  assert.equal(overlay.diagnostic.manualOverlapCount, 1);
   assert.equal(overlay.diagnostic.manualImportOverrideCount, 12);
   assert.equal(
     overlay.context.sessions.some((item) => item.id === 11),
@@ -220,6 +221,7 @@ test("complete imported attendance coverage replaces overlapping manual actuals 
   );
 
   assert.equal(overlay.derivedSessions.length, 2);
+  assert.equal(overlay.diagnostic.manualOverlapCount, 1);
   assert.equal(overlay.diagnostic.manualImportOverrideCount, 12);
   assert.equal(
     overlay.context.sessions.some((item) => item.id === 11),
@@ -445,6 +447,40 @@ test("Phone-only meet-and-greet rows do not derive treatment sessions or fees", 
   assert.equal(overlay.diagnostic.rawAttendedRows, 1);
   assert.equal(overlay.diagnostic.billedRows, 1);
   assert.equal(overlay.diagnostic.billedFees, 150);
+});
+
+test("attendance Phone billing code alone does not derive treatment sessions", () => {
+  const overlay = buildImportedSessionOverlay(
+    context(),
+    [
+      attendanceSnapshot([
+        {
+          clientId: "client-phone",
+          clinician: "Dr Lane",
+          serviceDate: "2026-10-01",
+          location: "Room A",
+          status: "show",
+          billingCode: " PHONE ",
+          sourceRowHash: "a-phone",
+        },
+        {
+          clientId: "client-treatment",
+          clinician: "Dr Lane",
+          serviceDate: "2026-10-02",
+          location: "Room A",
+          status: "show",
+          sourceRowHash: "a-treatment",
+        },
+      ]),
+    ],
+    7,
+  );
+
+  assert.deepEqual(
+    overlay.derivedSessions.map((item) => [item.start, item.completed]),
+    [["2026-10-02", 1]],
+  );
+  assert.equal(overlay.diagnostic.rawAttendedRows, 1);
 });
 
 test("missing and ambiguous clinician mappings exclude imported rows", () => {

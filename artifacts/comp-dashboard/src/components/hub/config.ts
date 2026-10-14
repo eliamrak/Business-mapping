@@ -259,7 +259,7 @@ export const fields: Record<Collection, Field[]> = {
       ]),
       advanced: true,
     },
-    n("revenuePerSession", "Collected revenue per session ($)", {
+    n("revenuePerSession", "Billed session income per session ($)", {
       optional: true,
       advanced: true,
     }),

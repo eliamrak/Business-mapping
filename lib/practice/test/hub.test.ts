@@ -67,22 +67,53 @@ test("shared forecast reconciles revenue, compensation, burden and profit", () =
 test("lead flow supports clinician rows and organic sources without duplicate totals", () => {
   const w = setup();
   const campaign = campaignSchema.parse({
-    id: id(), name: "Google Ads", source: "Google", start,
-    method: "cpl", monthlySpend: 100,
+    id: id(),
+    name: "Google Ads",
+    source: "Google",
+    start,
+    method: "cpl",
+    monthlySpend: 100,
   });
   const period = periodSchema.parse({
-    id: id(), name: "January", start, end: "2026-01-31", status: "finalized",
-    revenue: 0, expensesComplete: true, funnelComplete: true,
+    id: id(),
+    name: "January",
+    start,
+    end: "2026-01-31",
+    status: "finalized",
+    revenue: 0,
+    expensesComplete: true,
+    funnelComplete: true,
   });
   w.campaigns.push(campaign);
   w.periods.push(period);
-  const result = (campaignId: string | null, clinicianId: number | null, sourceName = "") => funnelSchema.parse({
-    id: id(), campaignId, clinicianId, sourceName, periodId: period.id,
-    spend: 0, leads: 10, scheduled: 5, attended: 4, clients: 2, firstSessions: 2,
-  });
-  w.funnels.push(result(campaign.id, 1), result(campaign.id, 2), result(null, 1, "Referrals"));
+  const result = (
+    campaignId: string | null,
+    clinicianId: number | null,
+    sourceName = "",
+  ) =>
+    funnelSchema.parse({
+      id: id(),
+      campaignId,
+      clinicianId,
+      sourceName,
+      periodId: period.id,
+      spend: 0,
+      leads: 10,
+      scheduled: 5,
+      attended: 4,
+      clients: 2,
+      firstSessions: 2,
+    });
+  w.funnels.push(
+    result(campaign.id, 1),
+    result(campaign.id, 2),
+    result(null, 1, "Referrals"),
+  );
   const parsed = workspaceSchema.safeParse(w);
-  assert.ok(parsed.success, parsed.error?.issues.map((issue) => issue.message).join("; "));
+  assert.ok(
+    parsed.success,
+    parsed.error?.issues.map((issue) => issue.message).join("; "),
+  );
   const values = observed(w, context, start, "2026-01-31").values;
   assert.equal(values.leads, 30);
   assert.equal(values.clients, 6);
@@ -94,18 +125,37 @@ test("lead flow supports clinician rows and organic sources without duplicate to
 });
 test("practice-wide lead totals cannot be mixed with source or clinician breakdowns", () => {
   const w = setup();
-  const period = periodSchema.parse({ id: id(), name: "January", start, end: "2026-01-31" });
+  const period = periodSchema.parse({
+    id: id(),
+    name: "January",
+    start,
+    end: "2026-01-31",
+  });
   w.periods.push(period);
   const practiceTotal = funnelSchema.parse({
-    id: id(), scope: "practice", periodId: period.id, campaignId: null,
-    clinicianId: null, sourceName: "", spend: null, leads: 20,
-    scheduled: null, attended: 10, clients: 7, firstSessions: null,
+    id: id(),
+    scope: "practice",
+    periodId: period.id,
+    campaignId: null,
+    clinicianId: null,
+    sourceName: "",
+    spend: null,
+    leads: 20,
+    scheduled: null,
+    attended: 10,
+    clients: 7,
+    firstSessions: null,
   });
   w.funnels.push(practiceTotal);
   assert.equal(workspaceSchema.safeParse(w).success, true);
-  w.funnels.push(funnelSchema.parse({
-    ...practiceTotal, id: id(), scope: "source", sourceName: "Google",
-  }));
+  w.funnels.push(
+    funnelSchema.parse({
+      ...practiceTotal,
+      id: id(),
+      scope: "source",
+      sourceName: "Google",
+    }),
+  );
   assert.equal(workspaceSchema.safeParse(w).success, false);
   w.funnels.pop();
   w.funnels[0] = { ...practiceTotal, clinicianId: 1 };
@@ -179,21 +229,32 @@ test("campaign estimates stay unavailable when optional form inputs are blank", 
   assert.equal(blank.consultations, null);
   assert.equal(blank.clients, null);
   assert.equal(blank.spend, 0);
-  assert.ok(blank.warnings.some((warning) => warning.includes("choose an estimate method")));
+  assert.ok(
+    blank.warnings.some((warning) =>
+      warning.includes("choose an estimate method"),
+    ),
+  );
 
-  const partial = estimateCampaign({
-    ...c,
-    method: "cpl",
-    monthlySpend: 850,
-    cpl: 50,
-    consultationPct: 80,
-    attendancePct: null,
-    closePct: 50,
-  }, w);
+  const partial = estimateCampaign(
+    {
+      ...c,
+      method: "cpl",
+      monthlySpend: 850,
+      cpl: 50,
+      consultationPct: 80,
+      attendancePct: null,
+      closePct: 50,
+    },
+    w,
+  );
   close(partial.leads, 17);
   assert.equal(partial.clients, null);
   assert.equal(partial.consultations, 13.6);
-  assert.ok(partial.warnings.some((warning) => warning.includes("conversion rates are incomplete")));
+  assert.ok(
+    partial.warnings.some((warning) =>
+      warning.includes("conversion rates are incomplete"),
+    ),
+  );
 });
 
 test("campaigns with spend but no start date are excluded with a forecast warning", () => {
@@ -388,7 +449,7 @@ test("processing charges percentage plus fixed fee on estimated successful payme
   const partial = forecast(w, context)[0].values;
   close(
     partial.fees,
-    partial.revenue! * 0.0315 + partial.sessions! * 0.5 * 0.3,
+    partial.revenue! * 0.5 * 0.0315 + partial.sessions! * 0.5 * 0.3,
   );
   w.settings.collectionDelayMonths = 1;
   w.settings.openingReceivables = 100;
@@ -404,6 +465,27 @@ test("cash collection delays remain distinct from earned revenue", () => {
   close(m[0].values.collections, 1000);
   close(m[1].values.collections, m[0].values.revenue!);
   assert.notEqual(m[0].values.cash, m[0].values.profit);
+});
+test("billed session income stays separate from estimated collections", () => {
+  const w = setup();
+  w.settings.collectionPct = 50;
+  const projected = forecast(w, context)[0].values;
+  close(projected.revenue, ((20 * 31) / 7) * 100);
+  close(projected.collections, projected.revenue! * 0.5);
+
+  const imported = forecast(w, {
+    ...context,
+    importedBillingActuals: [
+      {
+        clinicianId: 1,
+        serviceDate: start,
+        totalFeeCharged: 150,
+        sourceRowHash: "synthetic-billing",
+      },
+    ],
+  })[0].values;
+  close(imported.revenue, projected.revenue! - (20 / 7) * 100 + 150);
+  close(imported.collections, imported.revenue! * 0.5);
 });
 test("owner cash waterfall reconciles without double-counting reserves or distributions", () => {
   const w = setup();

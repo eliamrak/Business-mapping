@@ -9,7 +9,7 @@ export const metrics = [
   ["leads", "Leads", "number", "Growth"],
   ["clients", "New clients", "number", "Growth"],
   ["consultations", "Consultations", "number", "Growth"],
-  ["revenue", "Earned revenue", "currency", "Finances"],
+  ["revenue", "Billed session income", "currency", "Finances"],
   ["collections", "Cash collections", "currency", "Finances"],
   ["clinicianPay", "Clinician compensation", "currency", "Finances"],
   ["employerBurden", "Employer burden", "currency", "Finances"],

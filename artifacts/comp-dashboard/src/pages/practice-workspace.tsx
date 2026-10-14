@@ -4644,7 +4644,7 @@ export default function PracticeWorkspace() {
                       <div className="pw-money-ytd-grid">
                         {(
                           [
-                            ["Earned revenue", moneyYtd?.values.revenue],
+                            ["Billed session income", moneyYtd?.values.revenue],
                             ["Operating overhead", moneyYtd?.values.overhead],
                             ["Marketing", moneyYtd?.values.marketing],
                             ["Operating profit", moneyYtd?.values.profit],
@@ -4703,8 +4703,10 @@ export default function PracticeWorkspace() {
                       <div className="pw-money-group-label">Income</div>
                       <div className="pw-money-row pw-money-positive">
                         <div>
-                          <strong>Earned revenue</strong>
-                          <span>Sessions delivered during the month</span>
+                          <strong>Billed session income</strong>
+                          <span>
+                            Imported charged fees or projected sessions x rate
+                          </span>
                         </div>
                         <button
                           className="pw-text-button"
@@ -4889,7 +4891,8 @@ export default function PracticeWorkspace() {
                     <summary>Collection exceptions</summary>
                     <p>
                       Most practices can leave these at 100% and no delay. The
-                      paid portion also affects estimated earned revenue.
+                      paid portion affects estimated collections and cash, not
+                      billed session income.
                     </p>
                     <div className="pw-edit-grid">
                       <DraftField
@@ -5236,7 +5239,7 @@ export default function PracticeWorkspace() {
                             <thead>
                               <tr>
                                 <th>Period</th>
-                                <th>Earned revenue</th>
+                                <th>Billed session income</th>
                                 <th>Clinician pay</th>
                                 <th>Overhead</th>
                                 <th>Profit</th>

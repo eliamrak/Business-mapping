@@ -159,6 +159,7 @@ export function buildImportedSessionOverlay(
   let manualImportOverrideCount = 0;
   let manualImportConflictCount = 0;
   const replacedManualIds = new Set<number>();
+  const overlappedManualIds = new Set<number>();
   const attended = [...attendedByClinicianDate.values()].sort(
     (a, b) => a.date.localeCompare(b.date) || a.clinicianId - b.clinicianId,
   );
@@ -192,6 +193,12 @@ export function buildImportedSessionOverlay(
         rangesOverlap(record, { start: item.date, end: item.date }),
     );
     if (overlappingManual.length) {
+      for (const record of overlappingManual) {
+        if (!overlappedManualIds.has(record.id)) {
+          manualOverlapCount++;
+          overlappedManualIds.add(record.id);
+        }
+      }
       const fullyCovered = overlappingManual.every((record) =>
         rangeFullyCovered(attendanceCoverage, record.start, record.end),
       );

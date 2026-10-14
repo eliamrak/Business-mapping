@@ -2,26 +2,57 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import {
-  emptyWorkspace, workspaceSchema, clinicianSettingSchema,
-  familyPaycheckSchema, allocationSchema, termSchema, staffTermSchema,
-  periodSchema, monthFlow, forecast, staffMemberAt, staffCostForRange,
-  additionalWithholdingPctFromNet, semiMonthlyChecksThrough, type Context,
+  emptyWorkspace,
+  workspaceSchema,
+  clinicianSettingSchema,
+  familyPaycheckSchema,
+  allocationSchema,
+  termSchema,
+  staffTermSchema,
+  periodSchema,
+  monthFlow,
+  forecast,
+  staffMemberAt,
+  staffCostForRange,
+  additionalWithholdingPctFromNet,
+  semiMonthlyChecksThrough,
+  type Context,
 } from "../src/hub/index.ts";
 
 const wife = {
-  id: 1, label: "W2 owner", goalId: null, sessionRate: 150,
-  sessionsPerWeek: 20, weeksWorkedPerYear: 52.1786,
-  capEnabled: false, capAmount: 0,
-  preCapClinicianSplit: 60, preCapPracticeSplit: 40,
-  postCapClinicianSplit: 60, postCapPracticeSplit: 40,
-  classification: "w2", w2EmployerFicaPct: 7.65,
-  futaSutaPct: 1, workersCompPct: 0.5, otherEmployerBurdenPct: 0.85,
+  id: 1,
+  label: "W2 owner",
+  goalId: null,
+  sessionRate: 150,
+  sessionsPerWeek: 20,
+  weeksWorkedPerYear: 52.1786,
+  capEnabled: false,
+  capAmount: 0,
+  preCapClinicianSplit: 60,
+  preCapPracticeSplit: 40,
+  postCapClinicianSplit: 60,
+  postCapPracticeSplit: 40,
+  classification: "w2",
+  w2EmployerFicaPct: 7.65,
+  futaSutaPct: 1,
+  workersCompPct: 0.5,
+  otherEmployerBurdenPct: 0.85,
 };
 const record = (start: string, end: string, completed: number) => ({
-  id: 1, revision: 1, updatedAt: "2026-02-11T00:00:00Z",
-  clinicianId: 1, start, end, completed, desired: 20,
-  cancelled: null, noShow: null, scheduled: null,
-  inPerson: null, telehealth: null, sourceAttachmentId: null,
+  id: 1,
+  revision: 1,
+  updatedAt: "2026-02-11T00:00:00Z",
+  clinicianId: 1,
+  start,
+  end,
+  completed,
+  desired: 20,
+  cancelled: null,
+  noShow: null,
+  scheduled: null,
+  inPerson: null,
+  telehealth: null,
+  sourceAttachmentId: null,
 });
 const setup = () => {
   const workspace = emptyWorkspace("2026-01-15");
@@ -29,15 +60,23 @@ const setup = () => {
   workspace.settings.baselineMode = "manual";
   workspace.settings.baselineWeeklySessions = 20;
   workspace.settings.defaultInPersonPct = 0;
-  workspace.clinicians.push(clinicianSettingSchema.parse({
-    id: randomUUID(), clinicianId: 1, start: "2026-01-01",
-    desiredWeeklySessions: 20, payMode: "salary", payAmount: 120000,
-    expectedSessionRevenue: 80,
-  }));
+  workspace.clinicians.push(
+    clinicianSettingSchema.parse({
+      id: randomUUID(),
+      clinicianId: 1,
+      start: "2026-01-01",
+      desiredWeeklySessions: 20,
+      payMode: "salary",
+      payAmount: 120000,
+      expectedSessionRevenue: 80,
+    }),
+  );
   return workspace;
 };
 const context = (sessions: Context["sessions"]): Context => ({
-  clinicians: [wife], staff: [], sessions,
+  clinicians: [wife],
+  staff: [],
+  sessions,
 });
 const staff = (classification = "w2", goalId: number | null = null) => ({
   id: 1,
@@ -54,19 +93,35 @@ const staff = (classification = "w2", goalId: number | null = null) => ({
   otherEmployerBurdenPct: 0.85,
 });
 const close = (actual: number | null, expected: number) =>
-  assert.ok(actual !== null && Math.abs(actual - expected) < 0.01, `${actual} != ${expected}`);
+  assert.ok(
+    actual !== null && Math.abs(actual - expected) < 0.01,
+    `${actual} != ${expected}`,
+  );
 
 test("W2 salary estimates net family pay without using recorded deposits", () => {
   const workspace = setup();
-  workspace.familyPaychecks.push(familyPaycheckSchema.parse({
-    id: randomUUID(), clinicianId: 1, date: "2026-01-09", netAmount: 2000,
-  }));
-  const flow = monthFlow(workspace, context([record("2026-01-01", "2026-01-15", 20)]), "2026-01-01", "2026-01-15");
+  workspace.familyPaychecks.push(
+    familyPaycheckSchema.parse({
+      id: randomUUID(),
+      clinicianId: 1,
+      date: "2026-01-09",
+      netAmount: 2000,
+    }),
+  );
+  const flow = monthFlow(
+    workspace,
+    context([record("2026-01-01", "2026-01-15", 20)]),
+    "2026-01-01",
+    "2026-01-15",
+  );
   assert.equal(flow.through, "2026-01-15");
   close(flow.revenue, 1600);
   close(flow.familyGrossPay, 120000 / 24);
   close(flow.familyEmployerBurden, flow.familyGrossPay * 0.1);
-  close(flow.profit, 1600 - flow.familyGrossPay - flow.familyEmployerBurden - flow.processing);
+  close(
+    flow.profit,
+    1600 - flow.familyGrossPay - flow.familyEmployerBurden - flow.processing,
+  );
   assert.equal(flow.distribution, 0);
   close(flow.estimatedEmployeePayrollTax, flow.familyGrossPay * 0.0765);
   close(flow.estimatedAdditionalWithholding, flow.familyGrossPay * 0.15);
@@ -116,7 +171,10 @@ test("full-month projection uses recorded sessions through data date and paces t
   assert.equal(flow.basisLabel, "Projection");
   assert.equal(flow.through, "2026-10-31");
   assert.equal(flow.sessionDataThrough, "2026-10-07");
-  assert.equal(flow.paceSource, "recent 56-day average blended with desired weekly pace for missing days");
+  assert.equal(
+    flow.paceSource,
+    "recent 56-day average blended with desired weekly pace for missing days",
+  );
   assert.equal(flow.paceLookbackStart, "2026-08-19");
   close(flow.sessions, 80);
   close(flow.revenue, 6400);
@@ -133,7 +191,7 @@ test("full-month projection backfills later actuals without double counting", ()
     { fullMonthProjection: true },
   );
   const usedWeekly = 18.5;
-  const expectedSessions = 28 + usedWeekly / 7 * 17;
+  const expectedSessions = 28 + (usedWeekly / 7) * 17;
   close(flow.sessions, expectedSessions);
   close(flow.revenue, expectedSessions * 80);
   assert.equal(flow.sessionDataThrough, "2026-10-14");
@@ -149,7 +207,7 @@ test("full-month projection clips cross-month records to service dates in the se
     { fullMonthProjection: true },
   );
   const usedWeekly = 16.75;
-  const expectedSessions = 7 + usedWeekly / 7 * 24;
+  const expectedSessions = 7 + (usedWeekly / 7) * 24;
   assert.equal(flow.splitPeriods, true);
   assert.equal(flow.sessionDataThrough, "2026-10-07");
   close(flow.sessions, expectedSessions);
@@ -158,18 +216,17 @@ test("full-month projection clips cross-month records to service dates in the se
 
 test("full-month projection can fall back to desired weekly pace with no session records", () => {
   const workspace = setup();
-  const flow = monthFlow(
-    workspace,
-    context([]),
-    "2026-10-01",
-    "2026-10-13",
-    { fullMonthProjection: true },
-  );
-  const expectedSessions = 20 / 7 * 31;
+  const flow = monthFlow(workspace, context([]), "2026-10-01", "2026-10-13", {
+    fullMonthProjection: true,
+  });
+  const expectedSessions = (20 / 7) * 31;
   assert.equal(flow.basisLabel, "Projection");
   assert.equal(flow.through, "2026-10-31");
   assert.equal(flow.sessionDataThrough, null);
-  assert.equal(flow.paceSource, "desired weekly pace fallback until session averages exist");
+  assert.equal(
+    flow.paceSource,
+    "desired weekly pace fallback until session averages exist",
+  );
   close(flow.sessions, expectedSessions);
   close(flow.revenue, expectedSessions * 80);
   close(flow.familyGrossPay, 120000 / 12);
@@ -213,7 +270,7 @@ test("support staff pay follows scheduled payroll even when session data is miss
     "2026-01-01",
     "2026-01-15",
   );
-  close(flow.staffPay, 48000 * 1.1 / 24);
+  close(flow.staffPay, (48000 * 1.1) / 24);
   assert.equal(flow.revenue, null);
   assert.equal(flow.profit, null);
 });
@@ -244,14 +301,14 @@ test("support staff W2 pay uses semi-monthly checks and hourly burden once", () 
     "2026-01-01",
     "2026-01-15",
   );
-  close(first.staffPay, 25 * 40 * 52 * 1.1 / 24);
+  close(first.staffPay, (25 * 40 * 52 * 1.1) / 24);
   const second = monthFlow(
     workspace,
     { clinicians: [wife], staff: [hourly], sessions: [] },
     "2026-01-01",
     "2026-01-31",
   );
-  close(second.staffPay, 25 * 40 * 52 * 1.1 / 12);
+  close(second.staffPay, (25 * 40 * 52 * 1.1) / 12);
 });
 
 test("support staff scheduled payroll does not accrue before the payday", () => {
@@ -274,13 +331,15 @@ test("default staff pay changes apply across one selected year only", () => {
     hoursPerWeek: 10,
     weeksPerYear: 48,
   };
-  workspace.staffTerms.push(staffTermSchema.parse({
-    id: randomUUID(),
-    staffMemberId: hourly.id,
-    effectiveDate: "2026-01-01",
-    end: "2026-12-31",
-    hourlyRate: 16,
-  }));
+  workspace.staffTerms.push(
+    staffTermSchema.parse({
+      id: randomUUID(),
+      staffMemberId: hourly.id,
+      effectiveDate: "2026-01-01",
+      end: "2026-12-31",
+      hourlyRate: 16,
+    }),
+  );
   const january = monthFlow(
     workspace,
     { clinicians: [wife], staff: [hourly], sessions: [] },
@@ -299,9 +358,9 @@ test("default staff pay changes apply across one selected year only", () => {
     "2027-01-01",
     "2027-01-31",
   );
-  close(january.staffPay, 16 * 10 * 48 * 1.1 / 12);
-  close(october.staffPay, 16 * 10 * 48 * 1.1 / 12);
-  close(nextYear.staffPay, 18 * 10 * 48 * 1.1 / 12);
+  close(january.staffPay, (16 * 10 * 48 * 1.1) / 12);
+  close(october.staffPay, (16 * 10 * 48 * 1.1) / 12);
+  close(nextYear.staffPay, (18 * 10 * 48 * 1.1) / 12);
 });
 
 test("staff pay terms reject backwards ranges and duplicate scopes", () => {
@@ -349,12 +408,14 @@ test("date-specific staff pay changes require an explicit boundary and isolate e
     id: 2,
     label: "Peer",
   };
-  workspace.staffTerms.push(staffTermSchema.parse({
-    id: randomUUID(),
-    staffMemberId: hourly.id,
-    effectiveDate: "2026-10-01",
-    hourlyRate: 16,
-  }));
+  workspace.staffTerms.push(
+    staffTermSchema.parse({
+      id: randomUUID(),
+      staffMemberId: hourly.id,
+      effectiveDate: "2026-10-01",
+      hourlyRate: 16,
+    }),
+  );
   const september = monthFlow(
     workspace,
     { clinicians: [wife], staff: [hourly, peer], sessions: [] },
@@ -367,8 +428,8 @@ test("date-specific staff pay changes require an explicit boundary and isolate e
     "2026-10-01",
     "2026-10-31",
   );
-  close(september.staffPay, (18 + 18) * 10 * 48 * 1.1 / 12);
-  close(october.staffPay, (16 + 18) * 10 * 48 * 1.1 / 12);
+  close(september.staffPay, ((18 + 18) * 10 * 48 * 1.1) / 12);
+  close(october.staffPay, ((16 + 18) * 10 * 48 * 1.1) / 12);
 });
 
 test("explicit same-date staff term overrides annual baseline deterministically", () => {
@@ -427,7 +488,7 @@ test("staff pay terms accumulate partial later changes", () => {
   assert.equal(effective.hoursPerWeek, 12);
   close(
     staffCostForRange(workspace, hourly, "2026-10-01", "2026-10-31"),
-    16 * 12 * 48 * 1.1 / 12,
+    (16 * 12 * 48 * 1.1) / 12,
   );
 });
 
@@ -440,22 +501,27 @@ test("staff pay terms prorate midmonth boundaries consistently", () => {
     hoursPerWeek: 10,
     weeksPerYear: 48,
   };
-  workspace.staffTerms.push(staffTermSchema.parse({
-    id: randomUUID(),
-    staffMemberId: hourly.id,
-    effectiveDate: "2026-10-16",
-    hourlyRate: 16,
-  }));
+  workspace.staffTerms.push(
+    staffTermSchema.parse({
+      id: randomUUID(),
+      staffMemberId: hourly.id,
+      effectiveDate: "2026-10-16",
+      hourlyRate: 16,
+    }),
+  );
   const expected =
-    (18 * 10 * 48 * 1.1 / 12 / 31 * 15) +
-    (16 * 10 * 48 * 1.1 / 12 / 31 * 16);
+    ((18 * 10 * 48 * 1.1) / 12 / 31) * 15 +
+    ((16 * 10 * 48 * 1.1) / 12 / 31) * 16;
   close(
     staffCostForRange(workspace, hourly, "2026-10-01", "2026-10-31"),
     expected,
   );
   close(
-    forecast(workspace, { clinicians: [wife], staff: [hourly], sessions: [] })[9]
-      .values.staffCost,
+    forecast(workspace, {
+      clinicians: [wife],
+      staff: [hourly],
+      sessions: [],
+    })[9].values.staffCost,
     expected,
   );
 });
@@ -469,15 +535,16 @@ test("scheduled staff payroll prorates effective rates over the paycheck service
     hoursPerWeek: 10,
     weeksPerYear: 48,
   };
-  workspace.staffTerms.push(staffTermSchema.parse({
-    id: randomUUID(),
-    staffMemberId: hourly.id,
-    effectiveDate: "2026-10-08",
-    hourlyRate: 16,
-  }));
+  workspace.staffTerms.push(
+    staffTermSchema.parse({
+      id: randomUUID(),
+      staffMemberId: hourly.id,
+      effectiveDate: "2026-10-08",
+      hourlyRate: 16,
+    }),
+  );
   const expected =
-    (18 * 10 * 48 * 1.1 / 24 / 15 * 7) +
-    (16 * 10 * 48 * 1.1 / 24 / 15 * 8);
+    ((18 * 10 * 48 * 1.1) / 24 / 15) * 7 + ((16 * 10 * 48 * 1.1) / 24 / 15) * 8;
   close(
     monthFlow(
       workspace,
@@ -491,27 +558,31 @@ test("scheduled staff payroll prorates effective rates over the paycheck service
 
 test("recorded staff payroll stays actual while modeled months recalculate", () => {
   const workspace = setup();
-  workspace.periods.push(periodSchema.parse({
-    id: randomUUID(),
-    name: "January actuals",
-    start: "2026-01-01",
-    end: "2026-01-31",
-    status: "finalized",
-    revenue: 5000,
-    earnedRevenue: 5000,
-    clinicianPay: 1000,
-    employerBurden: 100,
-    staffPay: 1234,
-    ownerPay: 0,
-    expensesComplete: true,
-  }));
-  workspace.staffTerms.push(staffTermSchema.parse({
-    id: randomUUID(),
-    staffMemberId: 1,
-    effectiveDate: "2026-01-01",
-    end: "2026-12-31",
-    hourlyRate: 16,
-  }));
+  workspace.periods.push(
+    periodSchema.parse({
+      id: randomUUID(),
+      name: "January actuals",
+      start: "2026-01-01",
+      end: "2026-01-31",
+      status: "finalized",
+      revenue: 5000,
+      earnedRevenue: 5000,
+      clinicianPay: 1000,
+      employerBurden: 100,
+      staffPay: 1234,
+      ownerPay: 0,
+      expensesComplete: true,
+    }),
+  );
+  workspace.staffTerms.push(
+    staffTermSchema.parse({
+      id: randomUUID(),
+      staffMemberId: 1,
+      effectiveDate: "2026-01-01",
+      end: "2026-12-31",
+      hourlyRate: 16,
+    }),
+  );
   const hourly = {
     ...staff(),
     annualSalary: null,
@@ -519,10 +590,14 @@ test("recorded staff payroll stays actual while modeled months recalculate", () 
     hoursPerWeek: 10,
     weeksPerYear: 48,
   };
-  const months = forecast(workspace, { clinicians: [wife], staff: [hourly], sessions: [] });
+  const months = forecast(workspace, {
+    clinicians: [wife],
+    staff: [hourly],
+    sessions: [],
+  });
   close(workspace.periods[0].staffPay, 1234);
-  close(months[0].values.staffCost, 16 * 10 * 48 * 1.1 / 12);
-  close(months[1].values.staffCost, 16 * 10 * 48 * 1.1 / 12);
+  close(months[0].values.staffCost, (16 * 10 * 48 * 1.1) / 12);
+  close(months[1].values.staffCost, (16 * 10 * 48 * 1.1) / 12);
 });
 
 test("support staff 1099 pay follows biweekly Thursdays including three-check months", () => {
@@ -541,7 +616,7 @@ test("support staff 1099 pay follows biweekly Thursdays including three-check mo
     "2026-12-01",
     "2026-12-31",
   );
-  close(december.staffPay, 52000 / 26 * 3);
+  close(december.staffPay, (52000 / 26) * 3);
   const july = monthFlow(
     workspace,
     { clinicians: [wife], staff: [contractor], sessions: [] },
@@ -557,25 +632,57 @@ test("the forecast uses expected average revenue without changing fixed W2 salar
   const listed = structuredClone(workspace);
   listed.clinicians[0].expectedSessionRevenue = null;
   const original = forecast(listed, context([]))[0].values;
-  close(modeled.revenue, (original.revenue ?? 0) * 80 / 150);
+  close(modeled.revenue, ((original.revenue ?? 0) * 80) / 150);
   close(modeled.clinicianPay, original.clinicianPay ?? 0);
-  close(modeled.familyTakeHome, 120000 / 12 * (1 - 0.0765 - 0.15));
+  close(modeled.familyTakeHome, (120000 / 12) * (1 - 0.0765 - 0.15));
 });
 
 test("named savings funds are allocations after profit, not business costs", () => {
   const workspace = setup();
   workspace.clinicians[0].payAmount = 0;
-  workspace.familyPaychecks.push(familyPaycheckSchema.parse({
-    id: randomUUID(), clinicianId: 1, date: "2026-01-09", netAmount: 2000,
-  }));
-  workspace.allocations.push(
-    allocationSchema.parse({ id: randomUUID(), name: "Tax fund", kind: "tax", percent: 20, start: "2026-01-01" }),
-    allocationSchema.parse({ id: randomUUID(), name: "Furniture fund", kind: "reserve", percent: 15, start: "2026-01-01" }),
-    allocationSchema.parse({ id: randomUUID(), name: "Your distribution", kind: "distribution", percent: 25, start: "2026-01-01" }),
+  workspace.familyPaychecks.push(
+    familyPaycheckSchema.parse({
+      id: randomUUID(),
+      clinicianId: 1,
+      date: "2026-01-09",
+      netAmount: 2000,
+    }),
   );
-  const flow = monthFlow(workspace, context([record("2026-01-01", "2026-01-14", 20)]), "2026-01-01", "2026-01-15");
+  workspace.allocations.push(
+    allocationSchema.parse({
+      id: randomUUID(),
+      name: "Tax fund",
+      kind: "tax",
+      percent: 20,
+      start: "2026-01-01",
+    }),
+    allocationSchema.parse({
+      id: randomUUID(),
+      name: "Furniture fund",
+      kind: "reserve",
+      percent: 15,
+      start: "2026-01-01",
+    }),
+    allocationSchema.parse({
+      id: randomUUID(),
+      name: "Your distribution",
+      kind: "distribution",
+      percent: 25,
+      start: "2026-01-01",
+    }),
+  );
+  const flow = monthFlow(
+    workspace,
+    context([record("2026-01-01", "2026-01-14", 20)]),
+    "2026-01-01",
+    "2026-01-15",
+  );
   close(flow.profit, 1600);
-  close(flow.allocations.find((item) => item.name === "Furniture fund")?.amount ?? null, 240);
+  close(
+    flow.allocations.find((item) => item.name === "Furniture fund")?.amount ??
+      null,
+    240,
+  );
   close(flow.distribution, 400);
   close(flow.retained, 640);
   close(flow.familyTakeHome, 400);
@@ -588,36 +695,54 @@ test("income-tax assumption changes net pay, not business profit", () => {
   workspace.settings.estimatedIncomeTaxPct = 20;
   const adjusted = monthFlow(workspace, data, "2026-01-01", "2026-01-15");
   close(adjusted.profit, original.profit!);
-  close(adjusted.familyTakeHome, original.familyTakeHome! - original.familyGrossPay * 0.05);
+  close(
+    adjusted.familyTakeHome,
+    original.familyTakeHome! - original.familyGrossPay * 0.05,
+  );
   const modeled = forecast(workspace, context([]))[0].values;
-  close(modeled.familyTakeHome, 120000 / 12 * (1 - 0.0765 - 0.20));
+  close(modeled.familyTakeHome, (120000 / 12) * (1 - 0.0765 - 0.2));
 });
 
 test("month-to-date processing uses the existing successful-payment assumption", () => {
   const workspace = setup();
   workspace.settings.collectionPct = 75;
   workspace.settings.processingPct = 3.15;
-  workspace.settings.processingFixedPerTransaction = 0.30;
+  workspace.settings.processingFixedPerTransaction = 0.3;
   workspace.settings.processingTransactionsPerSession = 1;
-  const flow = monthFlow(workspace, context([record("2026-01-01", "2026-01-14", 20)]), "2026-01-01", "2026-01-15");
-  close(flow.revenue, 1200);
-  close(flow.processing, 1200 * 0.0315 + 20 * 0.75 * 0.30);
+  const flow = monthFlow(
+    workspace,
+    context([record("2026-01-01", "2026-01-14", 20)]),
+    "2026-01-01",
+    "2026-01-15",
+  );
+  close(flow.revenue, 1600);
+  close(flow.processing, 1600 * 0.75 * 0.0315 + 20 * 0.75 * 0.3);
 });
 
 test("planned clinicians remain outside Today's operating totals", () => {
   const workspace = setup();
   workspace.clinicians[0].status = "planned";
-  const flow = monthFlow(workspace, context([record("2026-01-01", "2026-01-14", 20)]), "2026-01-01", "2026-01-15");
+  const flow = monthFlow(
+    workspace,
+    context([record("2026-01-01", "2026-01-14", 20)]),
+    "2026-01-01",
+    "2026-01-15",
+  );
   close(flow.revenue, 0);
   close(flow.clinicianPay, 0);
 });
 
 test("month-to-date pay uses the clinician setup active in the selected month", () => {
   const workspace = setup();
-  workspace.terms.push(termSchema.parse({
-    id: randomUUID(), clinicianId: 1, effectiveDate: "2026-02-01",
-    payMode: "salary", payAmount: 60000,
-  }));
+  workspace.terms.push(
+    termSchema.parse({
+      id: randomUUID(),
+      clinicianId: 1,
+      effectiveDate: "2026-02-01",
+      payMode: "salary",
+      payAmount: 60000,
+    }),
+  );
   const data = context([
     record("2026-01-01", "2026-01-15", 20),
     { ...record("2026-02-01", "2026-02-15", 20), id: 2 },
@@ -630,10 +755,16 @@ test("month-to-date pay uses the clinician setup active in the selected month", 
 
 test("dated terms change revenue and salary on their effective day", () => {
   const workspace = setup();
-  workspace.terms.push(termSchema.parse({
-    id: randomUUID(), clinicianId: 1, effectiveDate: "2026-01-16",
-    payMode: "salary", payAmount: 60000, expectedSessionRevenue: 100,
-  }));
+  workspace.terms.push(
+    termSchema.parse({
+      id: randomUUID(),
+      clinicianId: 1,
+      effectiveDate: "2026-01-16",
+      payMode: "salary",
+      payAmount: 60000,
+      expectedSessionRevenue: 100,
+    }),
+  );
   const flow = monthFlow(
     workspace,
     context([record("2026-01-01", "2026-01-30", 30)]),
@@ -646,34 +777,49 @@ test("dated terms change revenue and salary on their effective day", () => {
 
 test("dated pay changes reload without creating a second operating profile", () => {
   const workspace = setup();
-  workspace.terms.push(termSchema.parse({
-    id: randomUUID(), clinicianId: 1, effectiveDate: "2026-02-01",
-    payMode: "per_session", payAmount: 85,
-  }));
+  workspace.terms.push(
+    termSchema.parse({
+      id: randomUUID(),
+      clinicianId: 1,
+      effectiveDate: "2026-02-01",
+      payMode: "per_session",
+      payAmount: 85,
+    }),
+  );
   const restored = workspaceSchema.parse(JSON.parse(JSON.stringify(workspace)));
   assert.equal(restored.clinicians.length, 1);
   assert.equal(restored.terms.length, 1);
   const duplicate = structuredClone(workspace);
-  duplicate.clinicians.push(clinicianSettingSchema.parse({
-    id: randomUUID(), clinicianId: 1, start: "2026-02-01",
-    desiredWeeklySessions: 20,
-  }));
+  duplicate.clinicians.push(
+    clinicianSettingSchema.parse({
+      id: randomUUID(),
+      clinicianId: 1,
+      start: "2026-02-01",
+      desiredWeeklySessions: 20,
+    }),
+  );
   assert.equal(workspaceSchema.safeParse(duplicate).success, false);
 });
 
 test("dated hourly terms carry their own paid-hours assumption", () => {
   const workspace = setup();
-  workspace.terms.push(termSchema.parse({
-    id: randomUUID(), clinicianId: 1, effectiveDate: "2026-01-16",
-    payMode: "hourly", payAmount: 100, paidHoursPerWeek: 14,
-  }));
+  workspace.terms.push(
+    termSchema.parse({
+      id: randomUUID(),
+      clinicianId: 1,
+      effectiveDate: "2026-01-16",
+      payMode: "hourly",
+      payAmount: 100,
+      paidHoursPerWeek: 14,
+    }),
+  );
   const flow = monthFlow(
     workspace,
     context([record("2026-01-01", "2026-01-30", 30)]),
     "2026-01-01",
     "2026-01-30",
   );
-  close(flow.familyGrossPay, 120000 / 24 + 100 * 14 / 7 * 15);
+  close(flow.familyGrossPay, 120000 / 24 + ((100 * 14) / 7) * 15);
 });
 
 test("a known net paycheck calibrates withholding and two scheduled checks", () => {
@@ -683,11 +829,27 @@ test("a known net paycheck calibrates withholding and two scheduled checks", () 
   assert.ok(additionalPct !== null);
   workspace.settings.estimatedIncomeTaxPct = additionalPct;
   close(additionalPct, 19.245466666666662);
-  assert.equal(semiMonthlyChecksThrough("2026-02-01", "2026-02-27", "2026-02-01"), 1);
-  assert.equal(semiMonthlyChecksThrough("2026-02-01", "2026-02-28", "2026-02-01"), 2);
-  const beforeFirst = monthFlow(workspace, context([record("2026-09-01", "2026-09-14", 20)]), "2026-09-01", "2026-09-14");
+  assert.equal(
+    semiMonthlyChecksThrough("2026-02-01", "2026-02-27", "2026-02-01"),
+    1,
+  );
+  assert.equal(
+    semiMonthlyChecksThrough("2026-02-01", "2026-02-28", "2026-02-01"),
+    2,
+  );
+  const beforeFirst = monthFlow(
+    workspace,
+    context([record("2026-09-01", "2026-09-14", 20)]),
+    "2026-09-01",
+    "2026-09-14",
+  );
   close(beforeFirst.familyGrossPay, 0);
-  const first = monthFlow(workspace, context([record("2026-09-01", "2026-09-23", 20)]), "2026-09-01", "2026-09-28");
+  const first = monthFlow(
+    workspace,
+    context([record("2026-09-01", "2026-09-23", 20)]),
+    "2026-09-01",
+    "2026-09-28",
+  );
   close(first.familyGrossPay, 3750);
   close(first.estimatedEmployeePayrollTax, 286.875);
   close(first.estimatedAdditionalWithholding, 721.705);
@@ -695,7 +857,12 @@ test("a known net paycheck calibrates withholding and two scheduled checks", () 
   close(first.employerBurden, 375);
   close(first.profit, first.revenue! - 3750 - 375 - first.processing);
   close(first.familyTakeHome, 2741.42);
-  const full = monthFlow(workspace, context([record("2026-09-01", "2026-09-30", 20)]), "2026-09-01", "2026-09-30");
+  const full = monthFlow(
+    workspace,
+    context([record("2026-09-01", "2026-09-30", 20)]),
+    "2026-09-01",
+    "2026-09-30",
+  );
   close(full.familyGrossPay, 7500);
   close(full.estimatedNetPay, 5482.84);
   close(forecast(workspace, context([]))[0].values.familyTakeHome, 5482.84);
@@ -706,21 +873,33 @@ test("1099 salary follows the Thursday biweekly calendar anchored back to Januar
   const contractor = { ...wife, classification: "1099" };
   const janFirst = monthFlow(
     workspace,
-    { clinicians: [contractor], staff: [], sessions: [record("2026-01-01", "2026-01-01", 1)] },
+    {
+      clinicians: [contractor],
+      staff: [],
+      sessions: [record("2026-01-01", "2026-01-01", 1)],
+    },
     "2026-01-01",
     "2026-01-01",
   );
   close(janFirst.clinicianPay, 0);
   const oneCheck = monthFlow(
     workspace,
-    { clinicians: [contractor], staff: [], sessions: [record("2026-01-01", "2026-01-28", 20)] },
+    {
+      clinicians: [contractor],
+      staff: [],
+      sessions: [record("2026-01-01", "2026-01-28", 20)],
+    },
     "2026-01-01",
     "2026-01-28",
   );
   close(oneCheck.clinicianPay, 120000 / 26);
   const twoChecks = monthFlow(
     workspace,
-    { clinicians: [contractor], staff: [], sessions: [record("2026-01-01", "2026-01-29", 20)] },
+    {
+      clinicians: [contractor],
+      staff: [],
+      sessions: [record("2026-01-01", "2026-01-29", 20)],
+    },
     "2026-01-01",
     "2026-01-29",
   );
@@ -734,21 +913,33 @@ test("1099 per-session pay lands on the next anchored Thursday paycheck", () => 
   const contractor = { ...wife, classification: "1099" };
   const beforePayday = monthFlow(
     workspace,
-    { clinicians: [contractor], staff: [], sessions: [record("2026-09-10", "2026-09-23", 14)] },
+    {
+      clinicians: [contractor],
+      staff: [],
+      sessions: [record("2026-09-10", "2026-09-23", 14)],
+    },
     "2026-09-01",
     "2026-09-23",
   );
   close(beforePayday.clinicianPay, 0);
   const septemberPayday = monthFlow(
     workspace,
-    { clinicians: [contractor], staff: [], sessions: [record("2026-09-10", "2026-09-23", 14)] },
+    {
+      clinicians: [contractor],
+      staff: [],
+      sessions: [record("2026-09-10", "2026-09-23", 14)],
+    },
     "2026-09-01",
     "2026-09-24",
   );
   close(septemberPayday.clinicianPay, 1400);
   const octoberPayday = monthFlow(
     workspace,
-    { clinicians: [contractor], staff: [], sessions: [record("2026-09-24", "2026-10-07", 14)] },
+    {
+      clinicians: [contractor],
+      staff: [],
+      sessions: [record("2026-09-24", "2026-10-07", 14)],
+    },
     "2026-10-01",
     "2026-10-08",
   );
@@ -762,12 +953,19 @@ test("1099 per-session pay without an operating profile includes the full prior-
   const contractor = { ...wife, classification: "1099" };
   const octoberPayday = monthFlow(
     workspace,
-    { clinicians: [contractor], staff: [], sessions: [record("2026-09-24", "2026-10-07", 14)] },
+    {
+      clinicians: [contractor],
+      staff: [],
+      sessions: [record("2026-09-24", "2026-10-07", 14)],
+    },
     "2026-10-01",
     "2026-10-08",
   );
   close(octoberPayday.sessions, 7);
-  close(octoberPayday.clinicianPay, 14 * contractor.preCapClinicianSplit / 100 * contractor.sessionRate);
+  close(
+    octoberPayday.clinicianPay,
+    ((14 * contractor.preCapClinicianSplit) / 100) * contractor.sessionRate,
+  );
 });
 
 test("1099 per-session pay honors an explicit operating profile start date", () => {
@@ -778,7 +976,11 @@ test("1099 per-session pay honors an explicit operating profile start date", () 
   const contractor = { ...wife, classification: "1099" };
   const octoberPayday = monthFlow(
     workspace,
-    { clinicians: [contractor], staff: [], sessions: [record("2026-09-24", "2026-10-07", 14)] },
+    {
+      clinicians: [contractor],
+      staff: [],
+      sessions: [record("2026-09-24", "2026-10-07", 14)],
+    },
     "2026-10-01",
     "2026-10-08",
   );
@@ -787,8 +989,20 @@ test("1099 per-session pay honors an explicit operating profile start date", () 
 });
 
 test("semi-monthly pay uses the 30th instead of waiting for a 31st", () => {
-  assert.equal(semiMonthlyChecksThrough("2026-01-01", "2026-01-29", "2026-01-01"), 1);
-  assert.equal(semiMonthlyChecksThrough("2026-01-01", "2026-01-30", "2026-01-01"), 2);
-  assert.equal(semiMonthlyChecksThrough("2026-01-01", "2026-01-31", "2026-01-01"), 2);
-  assert.equal(semiMonthlyChecksThrough("2026-02-01", "2026-02-28", "2026-02-01"), 2);
+  assert.equal(
+    semiMonthlyChecksThrough("2026-01-01", "2026-01-29", "2026-01-01"),
+    1,
+  );
+  assert.equal(
+    semiMonthlyChecksThrough("2026-01-01", "2026-01-30", "2026-01-01"),
+    2,
+  );
+  assert.equal(
+    semiMonthlyChecksThrough("2026-01-01", "2026-01-31", "2026-01-01"),
+    2,
+  );
+  assert.equal(
+    semiMonthlyChecksThrough("2026-02-01", "2026-02-28", "2026-02-01"),
+    2,
+  );
 });

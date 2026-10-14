@@ -373,10 +373,7 @@ CID-consult,Dr Lane,2026-03-01,Room A,show`,
   assert.equal(estimate.endingObservationCutoff, "2026-03-16");
   assert.equal(estimate.endingCoverageEnd, "2026-06-14");
   assert.deepEqual(
-    estimate.monthlyEndedClients.map((row) => [
-      row.month,
-      row.endedClients,
-    ]),
+    estimate.monthlyEndedClients.map((row) => [row.month, row.endedClients]),
     [
       ["2026-01", 1],
       ["2026-02", 0],
@@ -454,10 +451,7 @@ CID-gap,Dr Lane,2026-05-29,Room A,show`,
 
   assert.equal(estimate.endingObservationCutoff, "2026-06-02");
   assert.deepEqual(
-    estimate.monthlyEndedClients.map((row) => [
-      row.month,
-      row.endedClients,
-    ]),
+    estimate.monthlyEndedClients.map((row) => [row.month, row.endedClients]),
     [["2026-05", 1]],
   );
   assert.deepEqual(estimate.partialEndingMonth, {
@@ -943,11 +937,7 @@ CID-future,Dr Lane,2026-02-10,Room B,show`,
     {},
     "2026-01-31",
   );
-  const sameDayReview = buildSameDayShowReview(
-    [attendance],
-    {},
-    "2026-01-31",
-  );
+  const sameDayReview = buildSameDayShowReview([attendance], {}, "2026-01-31");
 
   assert.equal(reconciliation.matchedVisits, 1);
   assert.deepEqual(
@@ -1030,6 +1020,48 @@ test("Practice package accepts coordinated optional consultation metadata", () =
     leaked.collections.billing.rows[0].appointmentTime = "09:00";
     importLocalPackage(leaked);
   }, /unsupported fields: appointmentTime/);
+});
+
+test("Practice package treats attendance Phone code as consultation evidence", () => {
+  const packageData = packageFixture();
+  packageData.collections.attendance.rows[0].billingCode = " PHONE ";
+  delete packageData.collections.attendance.rows[0].visitKind;
+  packageData.collections.billing.rows =
+    packageData.collections.billing.rows.filter(
+      (row: { clientId: string }) =>
+        row.clientId !== packageData.collections.attendance.rows[0].clientId,
+    );
+  packageData.collections.billing.rowCount =
+    packageData.collections.billing.rows.length;
+  packageData.collections.billing.coverageStart = "2026-10-02";
+  const parsed = importLocalPackage(packageData);
+  const metrics = buildLocalRetentionMetrics(
+    parsed.snapshots,
+    parsed.billingCodeMinutes,
+  );
+
+  assert.equal(parsed.snapshots[0].rows[0].billingCode, "PHONE");
+  assert.equal(metrics.rawShowRows, 3);
+  assert.equal(metrics.derivedShowVisits, 2);
+  assert.equal(metrics.excludedConsultationShowRows, 1);
+});
+
+test("billing-code duration lookup normalizes whitespace and case", () => {
+  const packageData = packageFixture();
+  packageData.billingCodeMinutes = { "90837": 60, abc: 15 };
+  packageData.collections.billing.rows[0].billingCode = " 90837 ";
+  packageData.collections.billing.rows[1].billingCode = "90837";
+  packageData.collections.billing.rows[2].billingCode = " ABC ";
+  const parsed = importLocalPackage(packageData);
+  const metrics = buildLocalRetentionMetrics(
+    parsed.snapshots,
+    parsed.billingCodeMinutes,
+  );
+
+  assert.equal(parsed.snapshots[1].rows[0].billingCode, "90837");
+  assert.deepEqual(parsed.billingCodeMinutes, { "90837": 60, abc: 15 });
+  assert.equal(metrics.billingByClinician[0].configuredMinuteRows, 3);
+  assert.equal(metrics.billingByClinician[0].estimatedBillingHours, 2.25);
 });
 
 test("Practice package rejects malformed coverage, counts, fees and identity fields", () => {

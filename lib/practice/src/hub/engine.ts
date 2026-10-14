@@ -218,8 +218,11 @@ export function estimateCampaign(
   const campaignSpend = c.monthlySpend ?? 0;
   const otherCost = c.otherMonthlyCost ?? 0;
   const conversion =
-    c.consultationPct !== null && c.attendancePct !== null && c.closePct !== null
-      ? ((((c.consultationPct / 100) * c.attendancePct) / 100) * c.closePct) / 100
+    c.consultationPct !== null &&
+    c.attendancePct !== null &&
+    c.closePct !== null
+      ? ((((c.consultationPct / 100) * c.attendancePct) / 100) * c.closePct) /
+        100
       : null;
   let leads: number | null = null,
     clients: number | null = null;
@@ -235,7 +238,10 @@ export function estimateCampaign(
   }
   if (c.method === "cac") {
     clients = c.cac === null ? null : ratio(campaignSpend, c.cac);
-    leads = conversion !== null && conversion > 0 && clients !== null ? clients / conversion : null;
+    leads =
+      conversion !== null && conversion > 0 && clients !== null
+        ? clients / conversion
+        : null;
     if (!c.cac) warnings.push(`${campaignName}: CAC must be positive.`);
     if (conversion === null)
       warnings.push(`${campaignName}: conversion rates are incomplete.`);
@@ -306,7 +312,10 @@ export function estimateCampaign(
   }
   return {
     leads,
-    consultations: leads === null || c.consultationPct === null ? null : (leads * c.consultationPct) / 100,
+    consultations:
+      leads === null || c.consultationPct === null
+        ? null
+        : (leads * c.consultationPct) / 100,
     clients: clients === null ? null : clients * (1 - c.overlapPct / 100),
     spend: campaignSpend + otherCost,
     warnings,
@@ -651,15 +660,18 @@ export function forecast(
         if (estimate.clients !== null)
           acquiredClients += (estimate.clients / days) * demandMultiplier;
         attended =
-          attended === null || estimate.consultations === null || daily.attendancePct === null
+          attended === null ||
+          estimate.consultations === null ||
+          daily.attendancePct === null
             ? null
             : attended +
               ((estimate.consultations * daily.attendancePct) / 100 / days) *
                 demandMultiplier;
         adSpend += (daily.monthlySpend ?? 0) / days;
-        f.clients = f.clients === null || estimate.clients === null
-          ? null
-          : f.clients + (estimate.clients / days) * demandMultiplier;
+        f.clients =
+          f.clients === null || estimate.clients === null
+            ? null
+            : f.clients + (estimate.clients / days) * demandMultiplier;
         f.spend += estimate.spend / days;
         f.leads =
           f.leads === null || estimate.leads === null
@@ -806,20 +818,24 @@ export function forecast(
             c.op?.payMode ??
             "existing_split";
           const listedRate = datedValue(c.sessionRate, rates, date, date);
-          const expectedTermRate = [...terms]
-            .reverse()
-            .find(
-              (term) =>
-                term.effectiveDate <= date &&
-                term.expectedSessionRevenue !== null,
-            )?.expectedSessionRevenue ?? undefined;
+          const expectedTermRate =
+            [...terms]
+              .reverse()
+              .find(
+                (term) =>
+                  term.effectiveDate <= date &&
+                  term.expectedSessionRevenue !== null,
+              )?.expectedSessionRevenue ?? undefined;
           const expectedRate = expectedTermRate ?? c.op?.expectedSessionRevenue;
-          const paidHoursPerWeek = [...terms]
-            .reverse()
-            .find(
-              (term) =>
-                term.effectiveDate <= date && term.paidHoursPerWeek !== null,
-            )?.paidHoursPerWeek ?? c.op?.paidHoursPerWeek ?? 0;
+          const paidHoursPerWeek =
+            [...terms]
+              .reverse()
+              .find(
+                (term) =>
+                  term.effectiveDate <= date && term.paidHoursPerWeek !== null,
+              )?.paidHoursPerWeek ??
+            c.op?.paidHoursPerWeek ??
+            0;
           return {
             date,
             mode,
@@ -1212,8 +1228,7 @@ export function forecast(
           c.instance === String(c.id)
             ? importedBilling.get(c.id)?.get(day.date)
             : undefined;
-        earned +=
-          importedFee ?? (dayCount * day.rate * setting.collectionPct) / 100;
+        earned += importedFee ?? dayCount * day.rate;
       }
       const burden =
         String(c.classification).toLowerCase() === "w2"
@@ -1246,11 +1261,13 @@ export function forecast(
       );
     }
     const collectionMonth = m - setting.collectionDelayMonths;
+    const collectedRevenue = (amount: number) =>
+      (amount * setting.collectionPct) / 100;
     const collections =
       setting.collectionDelayMonths === 0
-        ? revenue
+        ? collectedRevenue(revenue)
         : collectionMonth >= 0
-          ? (results[collectionMonth].values.revenue ?? 0)
+          ? collectedRevenue(results[collectionMonth].values.revenue ?? 0)
           : m === 0
             ? setting.openingReceivables
             : 0;
@@ -1399,24 +1416,27 @@ export function forecast(
     );
     const retainedCash = cashProfit - taxReserve - reserves - distributions;
     cash += retainedCash;
-    const familyDistribution = settings.familyW2ClinicianId !== null
-      ? distributions
-      : configured
-      ? distributions *
-        (ratio(
-          buckets
-            .filter((b) => b.kind === "distribution" && b.household)
-            .reduce((n, b) => n + b.percent, 0),
-          buckets
-            .filter((b) => b.kind === "distribution")
-            .reduce((n, b) => n + b.percent, 0),
-        ) ?? 0)
-      : distributions;
-    const familyTakeHome = settings.familyW2ClinicianId !== null
-      ? estimateW2NetPay(familyGrossPay, settings.estimatedIncomeTaxPct).net + familyDistribution
-      : ownerPayroll +
-        (setting.includeOwnerClinical ? ownerClinicalPay : 0) +
-        familyDistribution;
+    const familyDistribution =
+      settings.familyW2ClinicianId !== null
+        ? distributions
+        : configured
+          ? distributions *
+            (ratio(
+              buckets
+                .filter((b) => b.kind === "distribution" && b.household)
+                .reduce((n, b) => n + b.percent, 0),
+              buckets
+                .filter((b) => b.kind === "distribution")
+                .reduce((n, b) => n + b.percent, 0),
+            ) ?? 0)
+          : distributions;
+    const familyTakeHome =
+      settings.familyW2ClinicianId !== null
+        ? estimateW2NetPay(familyGrossPay, settings.estimatedIncomeTaxPct).net +
+          familyDistribution
+        : ownerPayroll +
+          (setting.includeOwnerClinical ? ownerClinicalPay : 0) +
+          familyDistribution;
     const contributionPerSession = ratio(
       revenue - clinicianPay - employerBurden - fees,
       sessions,
@@ -1505,14 +1525,14 @@ export function forecast(
     const trace: Record<string, string> = {
       sessions: `Demand ${demand.toFixed(1)} allocated across clinician capacity ${capacity.toFixed(1)}, capped by assigned rooms and locations (usable capacity ${Number.isFinite(roomLimit) ? roomLimit.toFixed(1) : "unverified / telehealth"}). Telehealth consumes a room only where configured. Historical baseline is retained separately from new-client cohorts.`,
       revenue:
-        "Sum of clinician sessions x effective session rate x collection assumption. Earned revenue, not necessarily cash received.",
-      collections: `Earned revenue received after ${setting.collectionDelayMonths} month(s), plus opening receivables in month one when a delay applies.`,
+        "Billed session income from imported charged fees where available, otherwise clinician sessions x effective session rate. Not collected cash.",
+      collections: `Estimated cash collected from billed session income after applying the paid-portion assumption and ${setting.collectionDelayMonths} month(s) delay, plus opening receivables in month one when a delay applies.`,
       clinicianPay:
         "Existing compensation function with annual cap progression, effective terms and non-clinical pay; configured salary/hourly/session overrides apply.",
       overhead:
         "Operating budget lines plus any remaining compensation-plan overhead allowance, one-time events and hire support. Marketing and staff payroll are separate.",
       profit:
-        "Earned revenue + other income - clinician pay - employer burden - staff cost - overhead - marketing - fees - owner payroll/burden.",
+        "Billed session income + other income - clinician pay - employer burden - staff cost - overhead - marketing - fees - owner payroll/burden.",
       familyTakeHome:
         "Selected W2 clinician gross pay less estimated employee Social Security, Medicare and other withholding or deductions, plus family distributions. Employer payroll costs are already in practice profit. This is an estimate, not a paycheck record.",
       cash: "Opening available cash + cumulative cash collections/income - cash expenses - tax/reserve allocations - distributions. Reserves are ring-fenced, not available operating cash.",
@@ -2069,9 +2089,7 @@ export function solveGoal(
       : c.goalId === workspace.settings.teamId,
   );
   const rate = selected.length
-    ? ((selected.reduce((n, c) => n + c.sessionRate, 0) / selected.length) *
-        workspace.settings.collectionPct) /
-      100
+    ? selected.reduce((n, c) => n + c.sessionRate, 0) / selected.length
     : 0;
   const margin =
     (v.sessions ?? 0) > 0

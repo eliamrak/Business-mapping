@@ -116,7 +116,7 @@ export async function managementReport(
       [
         "Month",
         "Sessions",
-        "Earned revenue",
+        "Billed session income",
         "Collections",
         "Operating profit",
         "Available cash",

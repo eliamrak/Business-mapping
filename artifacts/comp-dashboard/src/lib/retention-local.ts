@@ -373,6 +373,15 @@ export function isPhoneConsultBillingRow(
   );
 }
 
+function isPhoneConsultAttendanceRow(
+  row: Pick<AttendanceRow, "billingCode" | "visitKind">,
+) {
+  return (
+    normalizeBillingCode(row.billingCode ?? null) === "phone" ||
+    isConsultationVisitKind(row)
+  );
+}
+
 function factGroupKey(
   row: Pick<
     AttendanceRow | BillingRow,
@@ -414,12 +423,12 @@ function phoneOnlyConsultKeys(snapshots: LocalSnapshot[]) {
 export function isPhoneOnlyConsultAttendanceRow(
   row: Pick<
     AttendanceRow,
-    "clientId" | "clinician" | "serviceDate" | "visitKind"
+    "billingCode" | "clientId" | "clinician" | "serviceDate" | "visitKind"
   >,
   snapshots: LocalSnapshot[],
 ) {
   return (
-    isConsultationVisitKind(row) ||
+    isPhoneConsultAttendanceRow(row) ||
     phoneOnlyConsultKeys(snapshots).has(factGroupKey(row))
   );
 }
@@ -430,7 +439,7 @@ export function treatmentAttendanceRows(snapshots: LocalSnapshot[]) {
     snapshot.kind === "attendance"
       ? snapshot.rows.filter(
           (row) =>
-            !isConsultationVisitKind(row) &&
+            !isPhoneConsultAttendanceRow(row) &&
             !consultKeys.has(factGroupKey(row)),
         )
       : [],
@@ -1387,7 +1396,11 @@ function estimateObservedClientEndings(
       ? monthsBetween(coverageStart, endingObservationCutoff).filter(
           (month) =>
             monthEnd(month) <= endingObservationCutoff &&
-            intervalCoversRange(coverageIntervals, monthStart(month), monthEnd(month)) &&
+            intervalCoversRange(
+              coverageIntervals,
+              monthStart(month),
+              monthEnd(month),
+            ) &&
             intervalCoversRange(
               coverageIntervals,
               addDays(monthStart(month), 1),
@@ -1434,7 +1447,11 @@ function estimateObservedClientEndings(
     const finalTreatmentDate = dates.at(-1)!;
     if (
       finalTreatmentDate > endingObservationCutoff ||
-      !hasCompleteLookForward(coverageIntervals, finalTreatmentDate, endingGapDays)
+      !hasCompleteLookForward(
+        coverageIntervals,
+        finalTreatmentDate,
+        endingGapDays,
+      )
     )
       continue;
     const endingMonth = finalTreatmentDate.slice(0, 7);
@@ -1733,11 +1750,14 @@ export function buildLocalRetentionMetrics(
     };
     metric.billedRows++;
     metric.totalFeesCharged += row.totalFeeCharged;
-    if (row.billingCode && billingCodeMinutes[row.billingCode] !== undefined) {
+    const configuredMinutes = billingCodeMinutesFor(
+      billingCodeMinutes,
+      row.billingCode,
+    );
+    if (configuredMinutes !== null) {
       metric.configuredMinuteRows++;
       metric.estimatedBillingHours =
-        (metric.estimatedBillingHours ?? 0) +
-        billingCodeMinutes[row.billingCode] / 60;
+        (metric.estimatedBillingHours ?? 0) + configuredMinutes / 60;
     }
     billingByClinician.set(row.clinician, metric);
   }
@@ -2075,6 +2095,10 @@ function packageNullableString(
   invalidPackage(`${label} must be null or a non-empty string`);
 }
 
+function trimNullableBillingCode(value: string | null) {
+  return value === null ? null : value.trim();
+}
+
 function packageOptionalVisitKind(
   record: Record<string, unknown>,
   key: string,
@@ -2165,9 +2189,24 @@ function validateBillingCodeMinutesValue(
       fail(
         `billing-code minutes for ${code} must be from 1 to ${maxBillingCodeMinutes}`,
       );
-    minutesByCode[code] = minutes;
+    minutesByCode[code.trim()] = minutes;
   }
   return minutesByCode;
+}
+
+function billingCodeMinutesFor(
+  billingCodeMinutes: BillingCodeMinutes,
+  code: string | null,
+) {
+  if (!code) return null;
+  const direct = billingCodeMinutes[code];
+  if (direct !== undefined) return direct;
+  const normalizedCode = normalizeBillingCode(code);
+  const match = Object.entries(billingCodeMinutes).find(
+    ([configuredCode]) =>
+      normalizeBillingCode(configuredCode) === normalizedCode,
+  );
+  return match ? match[1] : null;
 }
 
 function validatePackageCollectionBase(
@@ -2262,10 +2301,12 @@ function validatePackageAttendanceRows(rows: unknown[]) {
     );
     const billingCode =
       "billingCode" in value
-        ? packageNullableString(
-            value,
-            "billingCode",
-            `attendance row ${index + 1} billingCode`,
+        ? trimNullableBillingCode(
+            packageNullableString(
+              value,
+              "billingCode",
+              `attendance row ${index + 1} billingCode`,
+            ),
           )
         : undefined;
     const visitKind = packageOptionalVisitKind(
@@ -2335,10 +2376,12 @@ function validatePackageBillingRows(rows: unknown[]) {
       0,
       maxSafeFee,
     );
-    const billingCode = packageNullableString(
-      value,
-      "billingCode",
-      `billing row ${index + 1} billingCode`,
+    const billingCode = trimNullableBillingCode(
+      packageNullableString(
+        value,
+        "billingCode",
+        `billing row ${index + 1} billingCode`,
+      ),
     );
     const visitKind = packageOptionalVisitKind(
       value,
@@ -2552,11 +2595,16 @@ function validateAttendanceBackupRow(
   const status = value.status;
   if (!isAttendanceStatus(status))
     invalidBackup(`attendance row ${index + 1} has an invalid status`);
-  const billingCode = backupOptionalNullableString(
-    value,
-    "billingCode",
-    `attendance row ${index + 1} billingCode`,
-  );
+  const billingCode =
+    "billingCode" in value
+      ? trimNullableBillingCode(
+          backupOptionalNullableString(
+            value,
+            "billingCode",
+            `attendance row ${index + 1} billingCode`,
+          ) ?? null,
+        )
+      : undefined;
   const visitKind = backupOptionalVisitKind(
     value,
     "visitKind",
@@ -2625,10 +2673,12 @@ function validateBillingBackupRow(value: unknown, index: number): BillingRow {
       0,
       maxSafeFee,
     ),
-    billingCode: backupNullableString(
-      value,
-      "billingCode",
-      `billing row ${index + 1} billingCode`,
+    billingCode: trimNullableBillingCode(
+      backupNullableString(
+        value,
+        "billingCode",
+        `billing row ${index + 1} billingCode`,
+      ),
     ),
     ...(visitKind !== undefined ? { visitKind } : {}),
     sourceRowHash: backupString(
