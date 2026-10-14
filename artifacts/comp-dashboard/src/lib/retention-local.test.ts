@@ -317,6 +317,18 @@ CID-slow,Dr Moss,2026-02-10,Room B,show`,
       ?.retainedClients,
     0,
   );
+  assert.deepEqual(
+    metrics.clientActivityByClinician.map((row) => [
+      row.clinician,
+      row.retainedClients,
+      row.initialRetentionDenominator,
+      row.pendingInitialClients,
+    ]),
+    [
+      ["Dr Lane", 0, 2, 0],
+      ["Dr Moss", 0, 2, 0],
+    ],
+  );
 });
 
 test("client ending estimate assigns final sessions after 90 covered days", () => {
@@ -381,6 +393,37 @@ CID-consult,Dr Lane,2026-03-01,Room A,show`,
   assert.deepEqual(estimate.latestSixEndingMonths, ["2026-01", "2026-02"]);
   assert.equal(estimate.latestSixClientEnds, 1);
   assert.equal(estimate.averageClientEndingsPerLatestSixMonths, 0.5);
+
+  const metrics = buildLocalRetentionMetrics(
+    [attendance, billing],
+    {},
+    {},
+    28,
+    "2026-06-14",
+  );
+  const lane = metrics.clientActivityByClinician.find(
+    (row) => row.clinician === "Dr Lane",
+  );
+  const moss = metrics.clientActivityByClinician.find(
+    (row) => row.clinician === "Dr Moss",
+  );
+
+  assert.equal(lane?.initialRetentionPct, 100 * (2 / 3));
+  assert.equal(lane?.pendingInitialClients, 0);
+  assert.equal(lane?.endingObservationCutoff, "2026-03-16");
+  assert.equal(lane?.endingFullMonthClientEnds, 1);
+  assert.equal(lane?.endingFullMonthDenominator, 2);
+  assert.equal(lane?.averageClientEndingsPerFullMonth, 0.5);
+  assert.deepEqual(lane?.latestSixEndingMonths, ["2026-01", "2026-02"]);
+  assert.equal(lane?.latestSixClientEnds, 1);
+  assert.deepEqual(lane?.partialEndingMonth, {
+    month: "2026-03",
+    through: "2026-03-16",
+    endedClients: 1,
+  });
+  assert.equal(moss?.initialRetentionPct, 100);
+  assert.equal(moss?.endingFullMonthClientEnds, 0);
+  assert.equal(moss?.latestSixClientEnds, 0);
 });
 
 test("client ending estimate deduplicates transfers and respects coverage gaps", () => {

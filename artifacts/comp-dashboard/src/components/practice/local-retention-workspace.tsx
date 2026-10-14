@@ -249,6 +249,13 @@ export default function LocalRetentionWorkspace({
       ),
     [snapshots, billingCodeMinutes, sameDayVisitOverrides, today],
   );
+  const clinicianActivityByName = useMemo(
+    () =>
+      new Map(
+        metrics.clientActivityByClinician.map((row) => [row.clinician, row]),
+      ),
+    [metrics.clientActivityByClinician],
+  );
   const sameDayReview = useMemo(
     () => buildSameDayShowReview(snapshots, sameDayVisitOverrides, today),
     [snapshots, sameDayVisitOverrides, today],
@@ -809,30 +816,52 @@ export default function LocalRetentionWorkspace({
                 <th>No-show</th>
                 <th>Clinician cancel</th>
                 <th>Active clients</th>
-                <th>First observed</th>
-                <th>Retained</th>
+                <th>Initial retention</th>
+                <th>90-day clinician-final sessions</th>
               </tr>
             </thead>
             <tbody>
-              {metrics.attendanceByClinician.map((row) => (
-                <tr key={row.clinician}>
-                  <td data-label="Clinician">{row.clinician}</td>
-                  <td data-label="Derived shows">{row.shows}</td>
-                  <td data-label="Client cancel">{row.clientCancelled}</td>
-                  <td data-label="No-show">{row.noShows}</td>
-                  <td data-label="Clinician cancel">
-                    {row.clinicianCancelled}
-                  </td>
-                  <td data-label="Active clients">{row.uniqueActiveClients}</td>
-                  <td data-label="First observed">
-                    {row.firstObservedClients}
-                    {row.immatureClientsExcluded
-                      ? ` (${row.immatureClientsExcluded} immature)`
-                      : ""}
-                  </td>
-                  <td data-label="Retained">{row.retainedClients}</td>
-                </tr>
-              ))}
+              {metrics.attendanceByClinician.map((row) => {
+                const activity = clinicianActivityByName.get(row.clinician);
+                const latestSixRange =
+                  activity && activity.latestSixEndingMonths.length > 0
+                    ? `${activity.latestSixEndingMonths[0]} to ${activity.latestSixEndingMonths.at(-1)}`
+                    : null;
+                return (
+                  <tr key={row.clinician}>
+                    <td data-label="Clinician">{row.clinician}</td>
+                    <td data-label="Derived shows">{row.shows}</td>
+                    <td data-label="Client cancel">{row.clientCancelled}</td>
+                    <td data-label="No-show">{row.noShows}</td>
+                    <td data-label="Clinician cancel">
+                      {row.clinicianCancelled}
+                    </td>
+                    <td data-label="Active clients">
+                      {row.uniqueActiveClients}
+                    </td>
+                    <td data-label="Initial retention">
+                      {activity?.initialRetentionPct === null ||
+                      activity?.initialRetentionPct === undefined
+                        ? "--"
+                        : `${activity.initialRetentionPct.toFixed(1)}%`}
+                      {activity
+                        ? ` (${activity.retainedClients}/${activity.initialRetentionDenominator}; ${activity.pendingInitialClients} pending)`
+                        : ""}
+                    </td>
+                    <td data-label="90-day clinician-final sessions">
+                      {activity?.averageClientEndingsPerLatestSixMonths ===
+                        null ||
+                      activity?.averageClientEndingsPerLatestSixMonths ===
+                        undefined
+                        ? "--"
+                        : `${activity.averageClientEndingsPerLatestSixMonths.toFixed(1)}/mo`}
+                      {activity
+                        ? ` (${activity.latestSixClientEnds}/${activity.latestSixEndingMonths.length} latest full months${latestSixRange ? `, ${latestSixRange}` : ""}; clinician-final, not practice exits; cutoff ${activity.endingObservationCutoff ?? "--"}${activity.partialEndingMonth ? `; partial ${activity.partialEndingMonth.month} ${activity.partialEndingMonth.endedClients} through ${activity.partialEndingMonth.through}` : ""})`
+                        : ""}
+                    </td>
+                  </tr>
+                );
+              })}
               {!metrics.attendanceByClinician.length && (
                 <tr>
                   <td colSpan={8}>

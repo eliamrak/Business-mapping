@@ -78,6 +78,29 @@ export type ClinicianAttendanceMetric = {
   immatureClientsExcluded: number;
 };
 
+export type ClinicianClientActivityMetric = {
+  clinician: string;
+  initialRetentionGapDays: number;
+  retainedClients: number;
+  matureNonRetainedClients: number;
+  pendingInitialClients: number;
+  initialRetentionDenominator: number;
+  initialRetentionPct: number | null;
+  endingGapDays: number;
+  endingObservationCutoff: string | null;
+  endingFullMonthClientEnds: number;
+  endingFullMonthDenominator: number;
+  averageClientEndingsPerFullMonth: number | null;
+  latestSixEndingMonths: string[];
+  latestSixClientEnds: number;
+  averageClientEndingsPerLatestSixMonths: number | null;
+  partialEndingMonth: {
+    month: string;
+    through: string;
+    endedClients: number;
+  } | null;
+};
+
 export type RoomMetric = {
   location: string;
   source: "attendance_location";
@@ -99,6 +122,7 @@ export type LocalRetentionMetrics = {
   excludedConsultationShowRows: number;
   billingByClinician: ClinicianBillingMetric[];
   attendanceByClinician: ClinicianAttendanceMetric[];
+  clientActivityByClinician: ClinicianClientActivityMetric[];
   roomCounts: RoomMetric[];
 };
 
@@ -1665,6 +1689,7 @@ export function buildLocalRetentionMetrics(
   sameDayVisitOverrides: SameDayVisitOverrides = {},
   followUpDays = 28,
   asOfDate = "9999-12-31",
+  endingGapDays = 90,
 ): LocalRetentionMetrics {
   const attendance = snapshots.flatMap((snapshot) =>
     snapshot.kind === "attendance"
@@ -1763,16 +1788,45 @@ export function buildLocalRetentionMetrics(
       asOfDate,
     ),
   );
+  const clinicianClientDates = new Map<string, Map<string, string[]>>();
+  const clientActivityByClinician = new Map<
+    string,
+    ClinicianClientActivityMetric
+  >();
   for (const [key, dates] of showDatesByClinicianClient) {
-    const clinician = key.split("\u0000")[0];
+    const [clinician, clientId] = key.split("\u0000");
     const metric = attendanceByClinician.get(clinician);
     if (!metric) continue;
     const sorted = [...new Set(dates)].sort();
     const firstShowDate = sorted[0];
     metric.uniqueActiveClients++;
+    const clinicianDates =
+      clinicianClientDates.get(clinician) ?? new Map<string, string[]>();
+    clinicianDates.set(clientId, sorted);
+    clinicianClientDates.set(clinician, clinicianDates);
+    const activity = clientActivityByClinician.get(clinician) ?? {
+      clinician,
+      initialRetentionGapDays: followUpDays,
+      retainedClients: 0,
+      matureNonRetainedClients: 0,
+      pendingInitialClients: 0,
+      initialRetentionDenominator: 0,
+      initialRetentionPct: null,
+      endingGapDays,
+      endingObservationCutoff: null,
+      endingFullMonthClientEnds: 0,
+      endingFullMonthDenominator: 0,
+      averageClientEndingsPerFullMonth: null,
+      latestSixEndingMonths: [],
+      latestSixClientEnds: 0,
+      averageClientEndingsPerLatestSixMonths: null,
+      partialEndingMonth: null,
+    };
     const { initialEpisode } = initialRetentionEpisode(sorted, followUpDays);
-    if (initialEpisode.length >= 3) metric.retainedClients++;
-    else {
+    if (initialEpisode.length >= 3) {
+      metric.retainedClients++;
+      activity.retainedClients++;
+    } else {
       metric.firstObservedClients++;
       if (
         !hasCompleteLookForward(
@@ -1780,8 +1834,49 @@ export function buildLocalRetentionMetrics(
           initialEpisode.at(-1) ?? firstShowDate,
           followUpDays,
         )
-      )
+      ) {
         metric.immatureClientsExcluded++;
+        activity.pendingInitialClients++;
+      } else {
+        activity.matureNonRetainedClients++;
+      }
+    }
+    activity.initialRetentionDenominator =
+      activity.retainedClients + activity.matureNonRetainedClients;
+    activity.initialRetentionPct =
+      activity.initialRetentionDenominator > 0
+        ? (activity.retainedClients / activity.initialRetentionDenominator) *
+          100
+        : null;
+    clientActivityByClinician.set(clinician, activity);
+  }
+  const coverageDates = coverageIntervals
+    .flatMap((interval) => [interval.start, interval.end])
+    .sort();
+  const activityCoverageStart = coverageDates[0];
+  const activityCoverageEnd = coverageDates.at(-1);
+  if (activityCoverageStart && activityCoverageEnd) {
+    for (const [clinician, clientDates] of clinicianClientDates) {
+      const activity = clientActivityByClinician.get(clinician);
+      if (!activity) continue;
+      const endings = estimateObservedClientEndings(
+        clientDates,
+        coverageIntervals,
+        activityCoverageStart,
+        activityCoverageEnd,
+        endingGapDays,
+      );
+      activity.endingObservationCutoff = endings.endingObservationCutoff;
+      activity.endingFullMonthClientEnds = endings.endingFullMonthClientEnds;
+      activity.endingFullMonthDenominator = endings.endingFullMonthDenominator;
+      activity.averageClientEndingsPerFullMonth =
+        endings.averageClientEndingsPerFullMonth;
+      activity.latestSixEndingMonths = endings.latestSixEndingMonths;
+      activity.latestSixClientEnds = endings.latestSixClientEnds;
+      activity.averageClientEndingsPerLatestSixMonths =
+        endings.averageClientEndingsPerLatestSixMonths;
+      activity.partialEndingMonth = endings.partialEndingMonth;
+      clientActivityByClinician.set(clinician, activity);
     }
   }
   const roomCounts = new Map<string, RoomMetric>();
@@ -1828,6 +1923,9 @@ export function buildLocalRetentionMetrics(
     excludedConsultationShowRows,
     billingByClinician: sortByName([...billingByClinician.values()]),
     attendanceByClinician: sortByName([...attendanceByClinician.values()]),
+    clientActivityByClinician: sortByName([
+      ...clientActivityByClinician.values(),
+    ]),
     roomCounts: sortByName([...roomCounts.values()]),
   };
 }
