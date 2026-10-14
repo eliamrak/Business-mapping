@@ -35,3 +35,11 @@ test("name-only imported metrics require one distinct clinician ID across the ro
   assert.equal(hasUniqueClinicianIdentity(people, "Missing"), false);
   assert.equal(hasUniqueClinicianIdentity([...people, { id: 3, label: "Erin" }], "erin"), true);
 });
+
+test("configuration copies are not ambiguous people within the selected roster", () => {
+  const people = [{ id: 1, label: "Elia", goalId: 101 }, { id: 2, label: "Elia", goalId: 102 }, { id: 3, label: "Elia", goalId: null }];
+  assert.equal(hasUniqueClinicianIdentity(people, "Elia", 101), true);
+  assert.equal(hasUniqueClinicianIdentity(people, "Elia", 102), true);
+  assert.equal(hasUniqueClinicianIdentity(people, "Elia", null), true);
+  assert.equal(hasUniqueClinicianIdentity([...people, { id: 4, label: "Elia", goalId: 101 }], "Elia", 101), false);
+});

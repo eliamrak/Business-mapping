@@ -38,8 +38,8 @@ export function resolveWorkspaceDefaults(
   context: Context,
   goals: CompensationGoal[] = [],
 ): WorkspaceDefaults {
-  const inheritedTeam = stored.settings.teamId === null && goals.length > 0;
-  const teamId = stored.settings.teamId ?? goals[0]?.id ?? null;
+  const inheritedTeam = stored.settings.teamId === null && !stored.settings.teamSelectionExplicit && goals.length > 0;
+  const teamId = stored.settings.teamSelectionExplicit ? stored.settings.teamId : stored.settings.teamId ?? goals[0]?.id ?? null;
   const goal = goals.find((item) => item.id === teamId) ?? null;
   const people = context.clinicians.filter(
     (person) => (person.goalId ?? null) === teamId,
@@ -114,4 +114,8 @@ export function resolveWorkspaceDefaults(
       profitGoal: inheritProfitGoal,
     },
   };
+}
+
+export function selectPracticeTeam(stored: Workspace, teamId: number | null): Workspace {
+  return { ...stored, settings: { ...stored.settings, teamId, teamSelectionExplicit: true } };
 }

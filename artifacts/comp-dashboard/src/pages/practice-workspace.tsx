@@ -91,7 +91,7 @@ import {
   type TransferSection,
 } from "@/lib/section-transfer";
 import { calculateGoalPace, type PacePoint } from "@/lib/goal-pace";
-import { resolveWorkspaceDefaults } from "@/lib/workspace-defaults";
+import { resolveWorkspaceDefaults, selectPracticeTeam } from "@/lib/workspace-defaults";
 import {
   buildPracticeProjection,
   type PracticeView,
@@ -124,6 +124,7 @@ import WorkspaceSessions from "@/components/practice/workspace-sessions";
 import PercentageKpi from "@/components/practice/percentage-kpi";
 import MetricComparison from "@/components/practice/metric-comparison";
 import { hasUniqueClinicianIdentity } from "@/lib/metric-comparison";
+import { staffPaySummary } from "@/lib/staff-pay-summary";
 import { selectedPeriodSessionSummary } from "@/lib/session-trend";
 import { monthlySessionObservations } from "@/lib/monthly-session-observations";
 import WorkspaceCalculations from "@/components/practice/workspace-calculations";
@@ -2701,7 +2702,7 @@ export default function PracticeWorkspace() {
     ? sharedContributor
     : "Whole Practice";
   const contributorActivity =
-    selectedContributorName === "Whole Practice" || !hasUniqueClinicianIdentity(context.clinicians, selectedContributorName)
+    selectedContributorName === "Whole Practice" || !hasUniqueClinicianIdentity(context.clinicians, selectedContributorName, workspace.settings.teamId)
       ? null
       : clinicianActivityByName.get(
           normalizeClinicianName(selectedContributorName),
@@ -2709,13 +2710,13 @@ export default function PracticeWorkspace() {
   const contributorConsult =
     selectedContributorName === "Whole Practice"
       ? consultConversionSummary.practice
-      : !hasUniqueClinicianIdentity(context.clinicians, selectedContributorName) ? null : consultConversionSummary.byClinician.find(
+      : !hasUniqueClinicianIdentity(context.clinicians, selectedContributorName, workspace.settings.teamId) ? null : consultConversionSummary.byClinician.find(
           (row) =>
             normalizeClinicianName(row.clinician ?? "") ===
             normalizeClinicianName(selectedContributorName),
         ) ?? null;
   const clinicalComparisonRows = people.map((person) => {
-    const unique = hasUniqueClinicianIdentity(context.clinicians, person.label);
+    const unique = hasUniqueClinicianIdentity(context.clinicians, person.label, workspace.settings.teamId);
     const row = unique ? clinicianActivityByName.get(normalizeClinicianName(person.label)) : undefined;
     return { id: String(person.id), label: person.label,
       value: sessionMetricView === "retention" ? row?.initialRetentionPct : row?.averageClientEndingsPerFullMonth,
@@ -2731,7 +2732,7 @@ export default function PracticeWorkspace() {
       : `${fmt(clientActivityEstimate?.endingFullMonthClientEnds)} unique client endings / ${fmt(clientActivityEstimate?.endingFullMonthDenominator)} mature months`,
   }]).map((row) => ({ ...row, practice: row.id === "practice" }));
   const consultComparisonRows = [...people.map((person) => {
-    const unique = hasUniqueClinicianIdentity(context.clinicians, person.label);
+    const unique = hasUniqueClinicianIdentity(context.clinicians, person.label, workspace.settings.teamId);
     const row = unique ? consultConversionSummary.byClinician.find((metric) => normalizeClinicianName(metric.clinician ?? "") === normalizeClinicianName(person.label)) : undefined;
     return { id: String(person.id), label: person.label, value: row?.conversionRate,
       detail: unique ? `${fmt(row?.converted)} confirmed closes / ${fmt(row?.evaluated)} evaluated; ${fmt(row?.pending)} pending` : "Unknown: clinician name maps to multiple IDs; resolve the import mapping.",
@@ -3519,24 +3520,12 @@ export default function PracticeWorkspace() {
                           aria-label="Practice team"
                           disabled={saving}
                           value={workspace.settings.teamId ?? "unassigned"}
-                          onChange={(e) =>
-                            void saveWorkspace({
-                              ...workspace,
-                              settings: {
-                                ...workspace.settings,
-                                teamId:
-                                  e.target.value === "unassigned"
-                                    ? null
-                                    : Number(e.target.value),
-                              },
-                            }).catch((e) => setError(errorText(e)))
-                          }
+                          onChange={(e) => {
+                            if (!query.data) return;
+                            void saveWorkspace(selectPracticeTeam(query.data.data, e.target.value === "unassigned" ? null : Number(e.target.value))).catch((error) => setError(errorText(error)));
+                          }}
                         >
-                          {!teams.data?.length && (
-                            <option value="unassigned">
-                              No saved compensation team
-                            </option>
-                          )}
+                          <option value="unassigned">Unassigned staff</option>
                           {teams.data?.map((t) => (
                             <option key={t.id} value={t.id}>
                               {t.name}
@@ -3579,7 +3568,7 @@ export default function PracticeWorkspace() {
                         end: periodRange.end.startsWith("9999-") ? today : periodRange.end,
                       };
                       const sessionEvidence = selectedPeriodSessionSummary(personRecords, [person.id], sessionEvidenceBounds, importedSessionOverlay?.attendanceCoverage ?? []);
-                      const uniqueIdentity = hasUniqueClinicianIdentity(context.clinicians, person.label);
+                      const uniqueIdentity = hasUniqueClinicianIdentity(context.clinicians, person.label, workspace.settings.teamId);
                       const importedActivity = uniqueIdentity ? clinicianActivityByName.get(
                         normalizeClinicianName(person.label),
                       ) : undefined;
@@ -3930,7 +3919,10 @@ export default function PracticeWorkspace() {
                   {!sandbox && (
                     <section className="pw-modeled-staff" aria-label="Nonclinical staff">
                       <div className="pw-section-heading"><div><h3>Nonclinical staff</h3></div><button className="pw-button" onClick={() => showTool("team")}><Users />Manage staff</button></div>
-                      {context.staff.filter((member) => (member.goalId ?? null) === workspace.settings.teamId).map((member, index) => <div className="pw-modeled-staff-row" key={member.id ?? index}><strong>{member.label ?? "Unnamed staff"}</strong><span>{member.annualSalary !== null ? "Salary" : "Hourly"}</span><span>{money(calculateStaffMemberCost(member).totalAnnualCost / 12)} monthly practice cost</span></div>)}
+                      {context.staff.filter((member) => (member.goalId ?? null) === workspace.settings.teamId).map((member, index) => {
+                        const pay = staffPaySummary(member);
+                        return <div className="pw-modeled-staff-row" key={member.id ?? index}><strong>{member.label ?? "Unnamed staff"}</strong><span>{pay.payType}</span><span>{pay.totalAnnualCost === null ? "Unknown" : money(pay.totalAnnualCost / 12)} monthly practice cost</span></div>;
+                      })}
                       {!context.staff.some((member) => (member.goalId ?? null) === workspace.settings.teamId) && <p className="pw-note">No nonclinical staff recorded for this team.</p>}
                     </section>
                   )}
@@ -4345,7 +4337,7 @@ export default function PracticeWorkspace() {
                           </p>
                         </>
                       )}
-                      {!compareWholePractice && selectedContributorName !== "Whole Practice" && !hasUniqueClinicianIdentity(context.clinicians, selectedContributorName) && <p className="pw-note">Imported clinician metrics are unknown: this name maps to multiple clinician IDs.</p>}
+                      {!compareWholePractice && selectedContributorName !== "Whole Practice" && !hasUniqueClinicianIdentity(context.clinicians, selectedContributorName, workspace.settings.teamId) && <p className="pw-note">Imported clinician metrics are unknown: this name maps to multiple clinician IDs.</p>}
                       {compareWholePractice && sessionMetricView === "attrition" && <p className="pw-note">Goal unavailable: no defined client-ending target or sourced replacement model. Endings require mature 90-day coverage; later returns remove prior endings.</p>}
                     </section>
                   )}
@@ -4847,7 +4839,7 @@ export default function PracticeWorkspace() {
                         />
                         </>}
                         {contributorConsult && !consultConversionSummary.coverageVerified && <p className="pw-note">Observed conversions; report coverage is unverified. {fmt(contributorConsult.pending)} journeys remain pending.</p>}
-                        {!compareWholePractice && selectedContributorName !== "Whole Practice" && !hasUniqueClinicianIdentity(context.clinicians, selectedContributorName) && <p className="pw-note">Imported clinician metrics are unknown: this name maps to multiple clinician IDs.</p>}
+                        {!compareWholePractice && selectedContributorName !== "Whole Practice" && !hasUniqueClinicianIdentity(context.clinicians, selectedContributorName, workspace.settings.teamId) && <p className="pw-note">Imported clinician metrics are unknown: this name maps to multiple clinician IDs.</p>}
                         <div className="pw-number-grid pw-consult-audit">
                           <div>
                             <span>Needs attribution</span>

@@ -34,9 +34,10 @@ Page/prototype changes, access grants, or new infrastructure.
 
 ## Verification
 
-- `corepack pnpm test`: 479 passed, zero failed.
+- `corepack pnpm test`: 487 passed, zero failed.
 - `corepack pnpm run typecheck:libs`: passed.
 - Dashboard and API typechecks: passed.
+- API production build: passed.
 - Frontend production build with PORT and BASE_PATH set: passed; existing
   sourcemap, mixed jsPDF import and large-chunk warnings remain.
 - Synthetic isolated Playwright harness: 49 desktop/mobile captures, no horizontal
@@ -102,6 +103,46 @@ views, individual Attrition, ranked outcomes and duplicate-name withholding.
 
 The new frozen candidate still requires the external reviewer's exact-commit
 check and the user's screen approval. This is not a production-data certification.
+
+## Final Staff/Configuration Follow-Up
+
+The final staff checks reproduced and repaired the remaining roster/pay issues:
+
+- Explicit zero work weeks remain zero in the shared compensation helper.
+- Salary/hourly labels follow the actual pay precedence, including omitted or
+  zero salary with hourly terms. Incomplete/nonfinite pay or W2 burden data remain
+  unknown in Team and Pay structure, including the aggregate readout.
+- Unassigned staff are selectable and survive reload through an optional explicit
+  team-selection preference. The absent preference retains legacy first-team
+  defaulting. No staff/clinician configuration IDs are assigned or duplicated.
+- The selector writes only selection fields on the stored snapshot, never the
+  resolved view's inherited owner-payroll/profit defaults. Regression tests and
+  browser checks preserve stored zero values and all source roster arrays.
+- Name-only clinical metrics are matched within the selected configuration,
+  consistent with the import overlay. Configuration copies are not treated as
+  ambiguous people; two matching IDs within one configuration remain unknown.
+
+`verification/staff-configuration-render.mjs` adds 15 desktop/mobile captures and
+isolated checks for 6/1,8/1,7/0,9/0 clinical/nonclinical configuration counts, six
+unassigned clinicians, no-session visibility, and zero inherited staff in blank
+Sandbox. Two Grace rows remain configuration-specific. The explicit Year1
+compatibility inputs provided by the parent (18/hour,10hours/week,48weeks,W2 burden
+7.65%+1%+0.5%+0%) reconcile to8640base+790.56burden=9430.56annual,785.88monthly.
+Step2 terms were not copied, inferred or exported; the fixture leaves them unknown.
+The harness uses mocked APIs and synthetic IDs/clinical economics, not a production
+adapter, and no business records were changed.
+
+Independent read-only review caught the inherited-default persistence risk and
+confirmed its correction (27 focused tests/typechecks). It also reviewed the final
+configuration identity scoping with no findings (5 focused tests/typecheck).
+All 49 existing screen captures were rerun after the final scope change. Five
+database-free API tests pass; local authenticated/real-database end-to-end testing
+remains unavailable as described above.
+
+Deploy frontend and backend from the same commit so both recognize the optional
+selection preference. No migration or seed data is introduced. The parent owns the
+established repository push, existing-environment deployment and real-account
+post-deployment verification. This task has not pushed or deployed the candidate.
 
 ## Limits and release gates
 

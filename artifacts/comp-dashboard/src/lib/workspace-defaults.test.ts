@@ -7,7 +7,7 @@ import {
   categorySchema,
   type Context,
 } from "@workspace/practice/hub";
-import { resolveWorkspaceDefaults } from "./workspace-defaults.ts";
+import { resolveWorkspaceDefaults, selectPracticeTeam } from "./workspace-defaults.ts";
 
 const clinician = {
   id: 1,
@@ -61,6 +61,32 @@ test("an empty workspace starts from the existing compensation plan", () => {
   const firstMonth = forecast(result.forecastWorkspace, context)[0];
   assert.ok((firstMonth.values.revenue ?? 0) > 0);
   assert.ok((firstMonth.values.overhead ?? 0) > 9_000);
+});
+
+test("explicit Unassigned selection survives defaults without reassigning or duplicating any roster", () => {
+  const stored = emptyWorkspace("2026-09-20");
+  stored.settings.teamSelectionExplicit = true;
+  const source = { ...context, clinicians: [...context.clinicians, { ...clinician, id: 2, goalId: null }] };
+  const before = structuredClone({ stored, source, goals });
+  const result = resolveWorkspaceDefaults(stored, source, goals);
+  assert.equal(result.workspace.settings.teamId, null);
+  assert.equal(result.goal, null);
+  assert.deepEqual({ stored, source, goals }, before);
+  const selected = source.clinicians.filter((person) => (person.goalId ?? null) === result.workspace.settings.teamId);
+  assert.deepEqual(selected.map((person) => person.id), [2]);
+});
+
+test("selecting a roster persists only selection fields, never inherited compensation defaults", () => {
+  const stored = emptyWorkspace("2026-09-20");
+  const before = structuredClone(stored);
+  assert.equal(resolveWorkspaceDefaults(stored, context, goals).workspace.settings.ownerPayrollMonthly, 10000);
+  const selected = selectPracticeTeam(stored, null);
+  assert.equal(selected.settings.ownerPayrollMonthly, 0);
+  assert.equal(selected.settings.targetProfitMonthly, 0);
+  assert.equal(selected.settings.teamId, null);
+  assert.equal(selected.settings.teamSelectionExplicit, true);
+  assert.deepEqual(stored, before);
+  assert.deepEqual({ ...selected, settings: { ...selected.settings, teamId: before.settings.teamId, teamSelectionExplicit: undefined } }, { ...before, settings: { ...before.settings, teamSelectionExplicit: undefined } });
 });
 
 test("detailed workspace values are not replaced by compensation defaults", () => {

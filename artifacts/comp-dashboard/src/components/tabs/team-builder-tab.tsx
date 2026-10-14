@@ -19,6 +19,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { Plus, Trash, User, Copy, Users, ChevronDown, ChevronRight } from "lucide-react";
 import { calculateClinicianMetrics, calculateStaffMemberCost } from "@/lib/calculations";
+import { staffPaySummary, staffRosterCost } from "@/lib/staff-pay-summary";
 import { formatCurrency } from "@/lib/format";
 import { useQueryClient } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
@@ -329,6 +330,7 @@ export default function TeamBuilderTab({ teamId }: { teamId?: number | null } = 
   const { data: allStaffMembers, isLoading: staffLoading } = useListStaffMembers();
   const clinicians = teamId === undefined ? allClinicians : allClinicians?.filter(c => (c.goalId ?? null) === teamId);
   const staffMembers = teamId === undefined ? allStaffMembers : allStaffMembers?.filter(s => (s.goalId ?? null) === teamId);
+  const totalStaffAnnualCost = staffMembers ? staffRosterCost(staffMembers) : null;
   const staffGoalId = teamId === undefined ? (businessGoals?.[0]?.id ?? null) : teamId;
   const createStaff = useCreateStaffMember();
   const updateStaff = useUpdateStaffMember();
@@ -591,17 +593,7 @@ export default function TeamBuilderTab({ teamId }: { teamId?: number | null } = 
               <>
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                   {staffMembers.map(s => {
-                    const cost = calculateStaffMemberCost({
-                      annualSalary: s.annualSalary,
-                      hourlyRate: s.hourlyRate,
-                      hoursPerWeek: s.hoursPerWeek,
-                      weeksPerYear: s.weeksPerYear,
-                      classification: String(s.classification),
-                      w2EmployerFicaPct: s.w2EmployerFicaPct,
-                      futaSutaPct: s.futaSutaPct,
-                      workersCompPct: s.workersCompPct,
-                      otherEmployerBurdenPct: s.otherEmployerBurdenPct,
-                    });
+                    const cost = staffPaySummary(s);
                     return (
                       <Card key={s.id} className="flex flex-col">
                         <CardHeader className="flex flex-row items-start justify-between pb-2">
@@ -619,16 +611,16 @@ export default function TeamBuilderTab({ teamId }: { teamId?: number | null } = 
                         <CardContent className="flex-1">
                           <div className="grid grid-cols-2 gap-y-3 gap-x-2 text-sm mt-1">
                             <div>
-                              <span className="text-muted-foreground block text-xs">Base Salary</span>
-                              <span className="font-semibold">{formatCurrency(cost.baseAnnualCost)}</span>
+                              <span className="text-muted-foreground block text-xs">Annual Base Pay</span>
+                              <span className="font-semibold">{cost.baseAnnualCost === null ? "Unknown" : formatCurrency(cost.baseAnnualCost)}</span>
                             </div>
                             <div>
                               <span className="text-muted-foreground block text-xs">Employer Burden</span>
-                              <span className="font-semibold text-amber-600">{formatCurrency(cost.employerBurden)}</span>
+                              <span className="font-semibold text-amber-600">{cost.employerBurden === null ? "Unknown" : formatCurrency(cost.employerBurden)}</span>
                             </div>
                             <div className="col-span-2">
                               <span className="text-muted-foreground block text-xs">Total Annual Cost</span>
-                              <span className="font-semibold text-primary text-base">{formatCurrency(cost.totalAnnualCost)}</span>
+                              <span className="font-semibold text-primary text-base">{cost.totalAnnualCost === null ? "Unknown" : formatCurrency(cost.totalAnnualCost)}</span>
                             </div>
                           </div>
                         </CardContent>
@@ -645,20 +637,7 @@ export default function TeamBuilderTab({ teamId }: { teamId?: number | null } = 
                   <div className="bg-muted/50 border rounded-lg px-4 py-3 text-sm">
                     <span className="text-muted-foreground">Total Staff Cost (annual): </span>
                     <span className="font-bold text-primary">
-                      {formatCurrency(staffMembers.reduce((sum, s) => {
-                        const { totalAnnualCost } = calculateStaffMemberCost({
-                          annualSalary: s.annualSalary,
-                          hourlyRate: s.hourlyRate,
-                          hoursPerWeek: s.hoursPerWeek,
-                          weeksPerYear: s.weeksPerYear,
-                          classification: String(s.classification),
-                          w2EmployerFicaPct: s.w2EmployerFicaPct,
-                          futaSutaPct: s.futaSutaPct,
-                          workersCompPct: s.workersCompPct,
-                          otherEmployerBurdenPct: s.otherEmployerBurdenPct,
-                        });
-                        return sum + totalAnnualCost;
-                      }, 0))}
+                      {totalStaffAnnualCost === null ? "Unknown" : formatCurrency(totalStaffAnnualCost)}
                     </span>
                   </div>
                 </div>

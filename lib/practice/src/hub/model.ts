@@ -626,6 +626,7 @@ export type GoalSearch = z.infer<typeof goalSearchSchema>;
 export const settingsSchema = z.object({
   practiceName: label.default("EMCounseling"),
   teamId: z.number().int().positive().nullable().default(null),
+  teamSelectionExplicit: z.boolean().optional(),
   forecastStart: dateSchema,
   horizonMonths: z.number().int().min(1).max(60).default(24),
   baselineMode: z.enum(["manual", "historical"]).default("historical"),

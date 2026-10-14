@@ -151,7 +151,7 @@ export function calculateStaffMemberCost(input: StaffCostInput) {
     baseAnnualCost =
       (input.hourlyRate || 0) *
       (input.hoursPerWeek || 0) *
-      (input.weeksPerYear || 52);
+      (input.weeksPerYear ?? 52);
   }
 
   const isW2 = String(input.classification).toLowerCase() === "w2";

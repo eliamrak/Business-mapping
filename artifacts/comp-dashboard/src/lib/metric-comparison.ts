@@ -10,9 +10,9 @@ export type ComparisonRow = {
 
 const finite = (value: unknown): value is number => typeof value === "number" && Number.isFinite(value);
 
-export function hasUniqueClinicianIdentity(clinicians: { id: number; label: string }[], label: string) {
+export function hasUniqueClinicianIdentity(clinicians: { id: number; label: string; goalId?: number | null }[], label: string, teamId?: number | null) {
   const normalize = (value: string) => value.trim().toLowerCase().replace(/\s+/g, " ");
-  const ids = new Set(clinicians.filter((person) => normalize(person.label) === normalize(label)).map((person) => person.id));
+  const ids = new Set(clinicians.filter((person) => (teamId === undefined || (person.goalId ?? null) === teamId) && normalize(person.label) === normalize(label)).map((person) => person.id));
   return ids.size === 1;
 }
 
