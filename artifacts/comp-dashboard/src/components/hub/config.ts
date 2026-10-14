@@ -15,6 +15,7 @@ import {
   eventSchema,
   goalSchema,
   fundGoalSchema,
+  consultAttributionOverrideSchema,
   proposalSchema,
   customKpiSchema,
   ruleSchema,
@@ -93,6 +94,7 @@ export const schemas = {
   events: eventSchema,
   goals: goalSchema,
   fundGoals: fundGoalSchema,
+  consultAttributionOverrides: consultAttributionOverrideSchema,
   proposals: proposalSchema,
   kpis: customKpiSchema,
   rules: ruleSchema,
@@ -434,6 +436,16 @@ export const fields: Record<Collection, Field[]> = {
     d("balanceDate", "Balance date", true),
     notes,
   ],
+  consultAttributionOverrides: [
+    { key: "clientId", label: "Client ID" },
+    select("outcome", "Resolution", [
+      "confirmed_closer",
+      "missed_owner",
+      "needs_review",
+    ]),
+    { key: "clinicianName", label: "Clinician name", optional: true },
+    notes,
+  ],
   proposals: [name, notes],
   kpis: [
     name,
@@ -485,6 +497,7 @@ export const labels: Record<Collection, string> = {
   events: "Plan events",
   goals: "Goals",
   fundGoals: "Fund goals",
+  consultAttributionOverrides: "Consult attribution corrections",
   proposals: "Proposals",
   kpis: "Custom KPIs",
   rules: "Decision rules",
@@ -561,6 +574,11 @@ export function newRecord(
     },
     goals: { metric: "revenue", amount: 0, date: null },
     fundGoals: { amount: 0, date: null, currentBalance: null, balanceDate: null },
+    consultAttributionOverrides: {
+      clientId: "",
+      outcome: "needs_review",
+      clinicianName: null,
+    },
     proposals: { changes: [] },
     kpis: {
       key: "",

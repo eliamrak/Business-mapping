@@ -735,6 +735,53 @@
   color: #26392e;
   font-size: 20px;
 }
+.pw-consult-resolution {
+  margin-top: 14px;
+  border: 1px solid #dfe7e1;
+  border-radius: 6px;
+  padding: 10px 12px;
+  background: #fbfcfb;
+}
+.pw-consult-resolution summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  cursor: pointer;
+  color: #26392e;
+  font-weight: 600;
+}
+.pw-consult-resolution summary::-webkit-details-marker { display: none; }
+.pw-consult-resolution[open] summary svg { transform: rotate(180deg); }
+.pw-consult-resolution-list {
+  display: grid;
+  gap: 10px;
+  margin-top: 12px;
+}
+.pw-consult-resolution-row {
+  display: grid;
+  grid-template-columns: minmax(120px, 1.2fr) minmax(120px, 1fr) auto;
+  gap: 12px;
+  align-items: center;
+  border-top: 1px solid #dfe7e1;
+  padding-top: 10px;
+}
+.pw-consult-resolution-row strong,
+.pw-consult-resolution-row span,
+.pw-consult-resolution-row small {
+  display: block;
+}
+.pw-consult-resolution-row span,
+.pw-consult-resolution-row small {
+  color: #66766b;
+  font-size: 11px;
+}
+.pw-consult-resolution-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
 .pw-money-bridge {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
@@ -778,6 +825,7 @@
 }
 .pw-overhead-bar > div,
 .pw-fund-track {
+  position: relative;
   height: 9px;
   overflow: hidden;
   border-radius: 999px;
@@ -785,10 +833,20 @@
 }
 .pw-overhead-bar i,
 .pw-fund-track i {
+  position: relative;
+  z-index: 2;
   display: block;
   height: 100%;
   border-radius: inherit;
   background: #486f5b;
+}
+.pw-fund-track b {
+  position: absolute;
+  z-index: 1;
+  top: 1px;
+  bottom: 1px;
+  display: block;
+  border-top: 2px dotted #2f6f8f;
 }
 .pw-overhead-bar strong,
 .pw-fund-chart-row strong {
@@ -4484,6 +4542,14 @@
 }
 
 @media (max-width: 760px) {
+  .pw-consult-resolution-row {
+    grid-template-columns: 1fr;
+  }
+
+  .pw-consult-resolution-actions {
+    justify-content: flex-start;
+  }
+
   .pw-table-scroll,
   .pw-import-table-wrap,
   .pw-local-tables section {

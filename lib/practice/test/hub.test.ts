@@ -161,6 +161,27 @@ test("practice-wide lead totals cannot be mixed with source or clinician breakdo
   w.funnels[0] = { ...practiceTotal, clinicianId: 1 };
   assert.equal(workspaceSchema.safeParse(w).success, false);
 });
+test("consult attribution overrides persist as client-level review records", () => {
+  const w = setup();
+  w.consultAttributionOverrides.push({
+    id: id(),
+    name: "Consult attribution client-1",
+    archived: false,
+    notes: "Confirmed after manual review.",
+    sourceAttachmentId: null,
+    clientId: "client-1",
+    outcome: "confirmed_closer",
+    clinicianName: "Dr Closer",
+  });
+  const parsed = workspaceSchema.parse(JSON.parse(JSON.stringify(w)));
+  assert.equal(parsed.consultAttributionOverrides[0].clientId, "client-1");
+  assert.equal(
+    parsed.consultAttributionOverrides[0].outcome,
+    "confirmed_closer",
+  );
+  parsed.consultAttributionOverrides[0].clinicianName = "x".repeat(161);
+  assert.equal(workspaceSchema.safeParse(parsed).success, false);
+});
 test("recurring budgets normalize calendar days and effective dates", () => {
   const c = categorySchema.parse({ id: id(), name: "Rent", kind: "expense" });
   const b = budgetSchema.parse({

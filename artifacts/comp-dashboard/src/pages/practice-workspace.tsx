@@ -16,6 +16,7 @@ import {
   RotateCcw,
   X,
   ChevronRight,
+  ChevronDown,
   PanelTop,
   ChartNoAxesCombined,
   Download,
@@ -42,6 +43,7 @@ import {
   proposalSchema,
   goalSchema,
   fundGoalSchema,
+  consultAttributionOverrideSchema,
   budgetSchema,
   categorySchema,
   roomSchema,
@@ -877,6 +879,7 @@ export default function PracticeWorkspace() {
         periodRange.start,
         periodRange.end,
         today,
+        (stagedWorkspace ?? workspace)?.consultAttributionOverrides ?? [],
       ),
     [
       localRetentionState.snapshots,
@@ -884,6 +887,8 @@ export default function PracticeWorkspace() {
       periodRange.start,
       periodRange.end,
       today,
+      stagedWorkspace,
+      workspace,
     ],
   );
   const modelContext = importedSessionOverlay?.context ?? context;
@@ -1499,6 +1504,65 @@ export default function PracticeWorkspace() {
       fundGoals: [...(current.fundGoals ?? []), goal],
     });
     setStagedLabels((prior) => ({ ...prior, ["fundGoals:" + goal.id]: name }));
+    setReviewStaged(false);
+  }
+  function stageConsultAttributionOverride(
+    clientId: string,
+    outcome: Workspace["consultAttributionOverrides"][number]["outcome"],
+    clinicianName: string | null,
+  ) {
+    if (!workspace) return;
+    const current = stagedWorkspace ?? workspace;
+    const existing = (current.consultAttributionOverrides ?? []).find(
+      (override) => !override.archived && override.clientId === clientId,
+    );
+    const patch = {
+      outcome,
+      clinicianName:
+        outcome === "needs_review" ? null : clinicianName?.trim() || null,
+      name: `Consult attribution ${clientId}`,
+    };
+    if (existing) {
+      setStagedWorkspace({
+        ...current,
+        consultAttributionOverrides: current.consultAttributionOverrides.map(
+          (override) =>
+            override.id === existing.id ? { ...override, ...patch } : override,
+        ),
+      });
+      setStagedLabels((prior) => ({
+        ...prior,
+        ["consultAttributionOverrides:" + existing.id]:
+          "Consult attribution " + clientId,
+      }));
+      setReviewStaged(false);
+      return;
+    }
+    const override = consultAttributionOverrideSchema.parse({
+      id: crypto.randomUUID(),
+      ...patch,
+      clientId,
+      archived: false,
+      notes:
+        outcome === "confirmed_closer"
+          ? "Manual closer confirmation from Practice workspace review."
+          : outcome === "missed_owner"
+            ? "Manual missed-consult ownership from Practice workspace review."
+            : "Manual review requested from Practice workspace.",
+      sourceAttachmentId: null,
+    });
+    setStagedWorkspace({
+      ...current,
+      consultAttributionOverrides: [
+        ...(current.consultAttributionOverrides ?? []),
+        override,
+      ],
+    });
+    setStagedLabels((prior) => ({
+      ...prior,
+      ["consultAttributionOverrides:" + override.id]:
+        "Consult attribution " + clientId,
+    }));
     setReviewStaged(false);
   }
   function stageFunnelPatch(
@@ -2789,10 +2853,16 @@ export default function PracticeWorkspace() {
       ];
       const assumptionSignature = assumptions.join("|");
       const focusKpis = [
-        projected?.values.profit ? "Profit" : null,
-        projected?.values.sessions ? "Sessions" : null,
-        projected?.values.roomUtilization ? "Rooms" : "Capacity",
-      ].filter((item): item is string => typeof item === "string");
+        { name: "Profit", weight: Math.abs(profitDelta) / 1000 },
+        { name: "Sessions", weight: Math.abs(sessionDelta) },
+        {
+          name: projected?.values.roomUtilization ? "Rooms" : "Capacity",
+          weight: projected?.values.roomUtilization ?? 0,
+        },
+      ]
+        .sort((a, b) => b.weight - a.weight)
+        .slice(0, 2)
+        .map((item) => item.name);
       const adoption = planAdoptionMetadata(goal);
       return {
         goal,
@@ -3016,7 +3086,14 @@ export default function PracticeWorkspace() {
       date: goal?.balanceDate ?? "blank balance assumed today",
       projectedEta: projection?.eta ?? null,
       projectedContribution: projection?.contribution ?? null,
+      remaining: projection?.remaining ?? Math.max(0, target - current),
       pct: target > 0 ? Math.min(100, (current / target) * 100) : 0,
+      projectedPct:
+        target > 0 && projection?.eta && projection.contribution !== null
+          ? 100
+          : target > 0
+            ? Math.min(100, (current / target) * 100)
+            : 0,
     };
   });
   const practiceRevenueForOverhead =
@@ -3592,11 +3669,11 @@ export default function PracticeWorkspace() {
                               </small>
                             </div>
                             <div>
-                              <span>Consults</span>
+                              <span>Confirmed close</span>
                               <strong>{fmt(consultMetric?.conversionRate, "percent")}</strong>
                               <small>
                                 {consultMetric
-                                  ? `${fmt(consultMetric.converted)} / ${fmt(consultMetric.evaluated)} evaluated`
+                                  ? `${fmt(consultMetric.converted)} confirmed; ${fmt(consultMetric.candidateConversions)} candidate`
                                   : "no imported PHONE journeys"}
                               </small>
                             </div>
@@ -4676,7 +4753,7 @@ export default function PracticeWorkspace() {
                           </strong>
                           <span>
                             {contributorConsult
-                              ? `${fmt(contributorConsult.converted)} of ${fmt(contributorConsult.evaluated)} evaluated; ${fmt(contributorConsult.pending)} pending`
+                              ? `${fmt(contributorConsult.converted)} confirmed of ${fmt(contributorConsult.evaluated)} evaluated; ${fmt(contributorConsult.candidateConversions)} treatment-start candidates; ${fmt(contributorConsult.pending)} pending`
                               : "No imported PHONE journeys for this contributor"}
                           </span>
                         </div>
@@ -4697,7 +4774,8 @@ export default function PracticeWorkspace() {
                               {fmt(contributorConsult?.needsAttribution)}
                             </strong>
                             <small>
-                              Conflicting or missing closer on converted clients.
+                              Missing manual closer confirmation or missed-owner
+                              review.
                             </small>
                           </div>
                           <div>
@@ -4715,10 +4793,120 @@ export default function PracticeWorkspace() {
                         </div>
                         <p className="pw-note">
                           Practice conversion is de-duplicated once per client.
-                          Converted clients credit the actual recorded closer.
+                          A qualifying treatment start counts for practice
+                          conversion, but clinician close rates use only manual
+                          closer confirmations. The treatment-start clinician is
+                          shown as a candidate until confirmed.
                           Non-converted clients stay pending until one calendar
                           month after consultation.
                         </p>
+                        <details className="pw-consult-resolution">
+                          <summary>
+                            Review client attribution candidates
+                            <ChevronDown />
+                          </summary>
+                          <div className="pw-consult-resolution-list">
+                            {consultConversionSummary.journeys
+                              .filter(
+                                (journey) =>
+                                  journey.status === "needs_attribution" ||
+                                  journey.attributionSource !== "none",
+                              )
+                              .slice(0, 25)
+                              .map((journey) => {
+                                const candidate =
+                                  journey.treatmentStartClinician ??
+                                  (journey.consultClinicians.length === 1
+                                    ? journey.consultClinicians[0]
+                                    : null);
+                                return (
+                                  <div
+                                    className="pw-consult-resolution-row"
+                                    key={`${journey.clientId}:${journey.consultDate}`}
+                                  >
+                                    <div>
+                                      <strong>{journey.clientId}</strong>
+                                      <span>
+                                        Consult {journey.consultDate}
+                                        {journey.treatmentDate
+                                          ? ` · treatment start ${journey.treatmentDate}`
+                                          : ""}
+                                      </span>
+                                      <small>
+                                        {journey.attributionIssue ??
+                                          (journey.attributionSource ===
+                                          "manual_confirmed_closer"
+                                            ? "Manually confirmed closer."
+                                            : journey.attributionSource ===
+                                                "manual_missed_owner"
+                                              ? "Manually confirmed missed-consult owner."
+                                              : "No review needed.")}
+                                      </small>
+                                    </div>
+                                    <div>
+                                      <span>
+                                        Candidate: {candidate ?? "needs review"}
+                                      </span>
+                                      <span>
+                                        Consult clinician
+                                        {journey.consultClinicians.length === 1
+                                          ? `: ${journey.consultClinicians[0]}`
+                                          : `s: ${journey.consultClinicians.join(", ") || "--"}`}
+                                      </span>
+                                    </div>
+                                    <div className="pw-consult-resolution-actions">
+                                      <button
+                                        className="pw-text-button"
+                                        disabled={!journey.treatmentDate || !candidate}
+                                        onClick={() =>
+                                          stageConsultAttributionOverride(
+                                            journey.clientId,
+                                            "confirmed_closer",
+                                            candidate,
+                                          )
+                                        }
+                                      >
+                                        Confirm closer
+                                      </button>
+                                      <button
+                                        className="pw-text-button"
+                                        disabled={
+                                          !!journey.treatmentDate || !candidate
+                                        }
+                                        onClick={() =>
+                                          stageConsultAttributionOverride(
+                                            journey.clientId,
+                                            "missed_owner",
+                                            candidate,
+                                          )
+                                        }
+                                      >
+                                        Assign missed
+                                      </button>
+                                      <button
+                                        className="pw-text-button"
+                                        onClick={() =>
+                                          stageConsultAttributionOverride(
+                                            journey.clientId,
+                                            "needs_review",
+                                            null,
+                                          )
+                                        }
+                                      >
+                                        Mark review
+                                      </button>
+                                    </div>
+                                  </div>
+                                );
+                              })}
+                            {!consultConversionSummary.journeys.length && (
+                              <p className="pw-note">
+                                Import PHONE consultation rows to review
+                                attribution candidates.
+                              </p>
+                            )}
+                          </div>
+                        </details>
                       </section>
                       <LeadFlow
                         workspace={workingWorkspace}
@@ -5729,11 +5917,17 @@ export default function PracticeWorkspace() {
                           </div>
                           <div className="pw-fund-track">
                             <i style={{ width: `${row.pct}%` }} />
+                            <b
+                              style={{
+                                left: `${row.pct}%`,
+                                width: `${Math.max(0, row.projectedPct - row.pct)}%`,
+                              }}
+                            />
                           </div>
                           <span>
                             {money(row.target)} goal
                             {row.projectedEta
-                              ? ` · projected ${monthLabel(row.projectedEta)}`
+                              ? ` · dotted projection reaches ${monthLabel(row.projectedEta)}`
                               : row.projectedContribution === null
                                 ? " · no projected contribution"
                                 : ""}

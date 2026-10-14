@@ -378,6 +378,14 @@ export const fundGoalSchema = z.object({
   currentBalance: money.nullable().default(null),
   balanceDate: dateSchema.nullable().default(null),
 });
+export const consultAttributionOverrideSchema = z.object({
+  ...named,
+  clientId: z.string().trim().min(1).max(160),
+  outcome: z
+    .enum(["confirmed_closer", "missed_owner", "needs_review"])
+    .default("needs_review"),
+  clinicianName: z.string().trim().max(160).nullable().default(null),
+});
 export const proposalSchema = z.object({
   ...named,
   status: z
@@ -655,6 +663,10 @@ export const workspaceSchema = z
     events: z.array(eventSchema).max(5000),
     goals: z.array(goalSchema).max(2000),
     fundGoals: z.array(fundGoalSchema).max(2000).default(() => []),
+    consultAttributionOverrides: z
+      .array(consultAttributionOverrideSchema)
+      .max(5000)
+      .default(() => []),
     proposals: z.array(proposalSchema).max(1000),
     kpis: z.array(customKpiSchema).max(1000),
     rules: z.array(ruleSchema).max(1000),
@@ -1057,6 +1069,7 @@ export const collections: Collection[] = [
   "events",
   "goals",
   "fundGoals",
+  "consultAttributionOverrides",
   "proposals",
   "kpis",
   "rules",

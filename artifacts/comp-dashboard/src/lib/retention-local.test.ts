@@ -1131,7 +1131,7 @@ test("Practice package treats attendance Phone code as consultation evidence", (
   assert.equal(metrics.excludedConsultationShowRows, 1);
 });
 
-test("consult conversion credits actual closer and protects internal referrers", () => {
+test("consult conversion separates treatment-start candidates from confirmed closer credit", () => {
   const packageData = packageFixture();
   packageData.collections.attendance.coverageStart = "2026-01-01";
   packageData.collections.attendance.coverageEnd = "2026-01-20";
@@ -1220,15 +1220,20 @@ test("consult conversion credits actual closer and protects internal referrers",
   );
 
   assert.equal(summary.practice.consultations, 5);
-  assert.equal(summary.practice.converted, 1);
+  assert.equal(summary.practice.converted, 2);
   assert.equal(summary.practice.missed, 1);
   assert.equal(summary.practice.pending, 1);
-  assert.equal(summary.practice.needsAttribution, 2);
-  assert.equal(summary.practice.evaluated, 2);
-  assert.equal(summary.practice.conversionRate, 50);
+  assert.equal(summary.practice.needsAttribution, 3);
+  assert.equal(summary.practice.evaluated, 3);
+  assert.equal(Math.round(summary.practice.conversionRate ?? 0), 67);
   assert.equal(
     summary.byClinician.find((row) => row.clinician === "Dr Closer")
       ?.converted,
+    0,
+  );
+  assert.equal(
+    summary.byClinician.find((row) => row.clinician === "Dr Closer")
+      ?.candidateConversions,
     1,
   );
   assert.equal(
@@ -1252,6 +1257,41 @@ test("consult conversion credits actual closer and protects internal referrers",
   assert.equal(
     summary.byClinician.find((row) => row.clinician === "Dr Backup")?.missed,
     0,
+  );
+
+  const reviewed = summarizeConsultConversions(
+    parsed.snapshots,
+    {},
+    "2026-01-01",
+    "2026-01-31",
+    "2026-02-06",
+    [
+      {
+        clientId: "converted-referral",
+        outcome: "confirmed_closer",
+        clinicianName: "Dr Closer",
+      },
+      {
+        clientId: "multi-consult-missed",
+        outcome: "missed_owner",
+        clinicianName: "Dr Referrer",
+      },
+    ],
+  );
+  assert.equal(
+    reviewed.journeys.find((row) => row.clientId === "converted-referral")
+      ?.attributionSource,
+    "manual_confirmed_closer",
+  );
+  assert.equal(
+    reviewed.byClinician.find((row) => row.clinician === "Dr Closer")
+      ?.converted,
+    1,
+  );
+  assert.equal(
+    reviewed.byClinician.find((row) => row.clinician === "Dr Referrer")
+      ?.missed,
+    2,
   );
 });
 

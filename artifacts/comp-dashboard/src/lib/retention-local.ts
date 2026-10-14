@@ -239,15 +239,24 @@ export type ConsultJourney = {
   status: ConsultJourneyStatus;
   consultClinicians: string[];
   closerClinician: string | null;
+  treatmentStartClinician: string | null;
   creditedClinician: string | null;
   treatmentDate: string | null;
   attributionIssue: string | null;
+  attributionSource:
+    | "manual_confirmed_closer"
+    | "manual_missed_owner"
+    | "manual_needs_review"
+    | "treatment_start_candidate"
+    | "consult_owner"
+    | "none";
 };
 
 export type ConsultConversionMetric = {
   clinician: string | null;
   consultations: number;
   converted: number;
+  candidateConversions: number;
   missed: number;
   pending: number;
   needsAttribution: number;
@@ -264,6 +273,13 @@ export type ConsultConversionSummary = {
   practice: ConsultConversionMetric;
   byClinician: ConsultConversionMetric[];
   journeys: ConsultJourney[];
+};
+
+export type ConsultAttributionOverrideInput = {
+  clientId: string;
+  outcome: "confirmed_closer" | "missed_owner" | "needs_review";
+  clinicianName: string | null;
+  archived?: boolean;
 };
 
 export type LocalImportResult<T extends LocalFactKind> = {
@@ -1766,6 +1782,7 @@ const blankConsultMetric = (clinician: string | null): ConsultConversionMetric =
   clinician,
   consultations: 0,
   converted: 0,
+  candidateConversions: 0,
   missed: 0,
   pending: 0,
   needsAttribution: 0,
@@ -1791,7 +1808,13 @@ export function summarizeConsultConversions(
   periodStart = "0000-01-01",
   periodEnd = "9999-12-31",
   asOfDate = "9999-12-31",
+  attributionOverrides: ConsultAttributionOverrideInput[] = [],
 ): ConsultConversionSummary {
+  const overridesByClient = new Map(
+    attributionOverrides
+      .filter((override) => !override.archived)
+      .map((override) => [override.clientId.trim(), override]),
+  );
   const consultRows = snapshots
     .flatMap((snapshot) =>
       snapshot.kind === "attendance"
@@ -1863,39 +1886,71 @@ export function summarizeConsultConversions(
     ].sort();
     const converted = firstTreatmentRows.length > 0;
     const pending = !converted && asOfDate < deadline;
-    const attributionIssue = converted
-      ? treatmentClinicians.length === 0
-        ? "Converted client is missing a closer."
-        : treatmentClinicians.length > 1
-          ? "Converted client has conflicting same-day closers."
-          : null
-      : !pending && consultClinicians.length !== 1
-        ? "Non-converted client is missing a single recorded consult owner."
-      : null;
-    const closerClinician =
+    const override = overridesByClient.get(clientId);
+    const treatmentStartClinician =
       converted && treatmentClinicians.length === 1 ? treatmentClinicians[0] : null;
-    const nonconvertedOwner =
-      !converted && !pending && consultClinicians.length === 1
-        ? consultClinicians[0]
+    const manualClinician = override?.clinicianName?.trim() || null;
+    const closerClinician =
+      converted && override?.outcome === "confirmed_closer" && manualClinician
+        ? manualClinician
         : null;
+    const nonconvertedOwner =
+      !converted &&
+      !pending &&
+      override?.outcome === "missed_owner" &&
+      manualClinician
+        ? manualClinician
+        : !converted && !pending && consultClinicians.length === 1 && !override
+          ? consultClinicians[0]
+          : null;
+    const attributionIssue = converted
+      ? override?.outcome === "needs_review"
+        ? "Manual review marked this converted client as unresolved."
+        : closerClinician
+          ? null
+          : treatmentClinicians.length === 1
+            ? "Treatment start clinician is a candidate, not a confirmed closer."
+            : treatmentClinicians.length > 1
+              ? "Converted client has conflicting same-day treatment-start clinicians."
+              : "Converted client is missing a treatment-start clinician candidate."
+      : pending
+        ? null
+        : override?.outcome === "needs_review"
+          ? "Manual review marked this non-converted client as unresolved."
+          : nonconvertedOwner
+            ? null
+            : "Non-converted client is missing a single confirmed missed-consult owner.";
+    const status: ConsultJourneyStatus = converted
+      ? closerClinician
+        ? "converted"
+        : "needs_attribution"
+      : pending
+        ? "pending"
+        : attributionIssue
+          ? "needs_attribution"
+          : "missed";
     journeys.push({
       clientId,
       consultDate,
       deadline,
-      status: converted
-        ? attributionIssue
-          ? "needs_attribution"
-          : "converted"
-        : pending
-          ? "pending"
-          : attributionIssue
-            ? "needs_attribution"
-          : "missed",
+      status,
       consultClinicians,
       closerClinician,
+      treatmentStartClinician,
       creditedClinician: converted ? closerClinician : nonconvertedOwner,
       treatmentDate: firstTreatmentDate,
       attributionIssue,
+      attributionSource: closerClinician
+        ? "manual_confirmed_closer"
+        : override?.outcome === "needs_review"
+          ? "manual_needs_review"
+          : nonconvertedOwner && override?.outcome === "missed_owner"
+            ? "manual_missed_owner"
+            : nonconvertedOwner
+              ? "consult_owner"
+              : treatmentStartClinician
+                ? "treatment_start_candidate"
+                : "none",
     });
   }
   const practice = blankConsultMetric(null);
@@ -1907,10 +1962,10 @@ export function summarizeConsultConversions(
   };
   for (const journey of journeys) {
     practice.consultations++;
-    if (journey.status === "converted") practice.converted++;
+    if (journey.treatmentDate) practice.converted++;
     else if (journey.status === "pending") practice.pending++;
-    else if (journey.status === "needs_attribution") practice.needsAttribution++;
-    else practice.missed++;
+    else if (journey.status !== "needs_attribution") practice.missed++;
+    if (journey.status === "needs_attribution") practice.needsAttribution++;
 
     if (journey.status === "converted" && journey.closerClinician) {
       const metric = clinicianMetric(journey.closerClinician);
@@ -1918,6 +1973,19 @@ export function summarizeConsultConversions(
       metric.converted++;
       for (const clinician of journey.consultClinicians) {
         if (clinician !== journey.closerClinician)
+          clinicianMetric(clinician).internalReferralsProtected++;
+      }
+      continue;
+    }
+    if (
+      journey.treatmentStartClinician &&
+      journey.attributionSource === "treatment_start_candidate"
+    ) {
+      const metric = clinicianMetric(journey.treatmentStartClinician);
+      metric.candidateConversions++;
+      metric.needsAttribution++;
+      for (const clinician of journey.consultClinicians) {
+        if (clinician !== journey.treatmentStartClinician)
           clinicianMetric(clinician).internalReferralsProtected++;
       }
       continue;
