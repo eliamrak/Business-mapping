@@ -531,6 +531,13 @@ const linkedOwner = page.locator(".pw-edit-item", { has: page.getByRole("heading
 assert.equal(await linkedOwner.getByLabel("Goal amount", { exact: true }).inputValue(), "90000", "legacy owner goal is read through without stored override");
 await capture("linked-goals-desktop", 1280, 900);
 await capture("linked-goals-mobile", 390, 900);
+await page.locator(".pw-rail-bottom").getByRole("button", { name: "Settings", exact: true }).click();
+await capture("settings-desktop", 1280, 900);
+await capture("settings-mobile", 390, 900);
+assert.ok(await page.locator(".hub-tabs button").evaluateAll((nodes) => {
+  const rects = nodes.map((node) => node.getBoundingClientRect());
+  return rects.length === 4 && rects.every((a, index) => a.left >= 0 && a.right <= innerWidth && rects.every((b, other) => index === other || a.right <= b.left + 1 || b.right <= a.left + 1 || a.bottom <= b.top + 1 || b.bottom <= a.top + 1));
+}), "shared Settings tabs fit the mobile viewport and never overlap");
 const localAuthErrors = browserErrors.filter((error) => error.includes("Clerk: Failed to load Clerk JS") && error.includes("clerk.127.0.0.1"));
 assert.deepEqual(browserErrors.filter((error) => !localAuthErrors.includes(error)), [], "no application browser exceptions");
 
