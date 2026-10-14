@@ -108,6 +108,7 @@ import LocalRetentionWorkspace, {
   useLocalRetentionWorkspaceState,
 } from "@/components/practice/local-retention-workspace";
 import {
+  buildLocalRetentionMetrics,
   estimateLocalClientActivity,
   mergeImportedLocationRooms,
 } from "@/lib/retention-local";
@@ -246,6 +247,8 @@ const addMonths = (date: string, months: number) => {
   d.setUTCMonth(d.getUTCMonth() + months);
   return d.toISOString().slice(0, 10);
 };
+const normalizeClinicianName = (value: string) =>
+  value.trim().replace(/\s+/g, " ").toLowerCase();
 const roomHours = (room: Workspace["rooms"][number]) =>
   room.blocks.length
     ? room.blocks.reduce(
@@ -599,6 +602,32 @@ export default function PracticeWorkspace() {
       localRetentionState.sameDayVisitOverrides,
       today,
     ],
+  );
+  const localImportMetrics = useMemo(
+    () =>
+      buildLocalRetentionMetrics(
+        localRetentionState.snapshots,
+        localRetentionState.billingCodeMinutes,
+        localRetentionState.sameDayVisitOverrides,
+        28,
+        today,
+      ),
+    [
+      localRetentionState.snapshots,
+      localRetentionState.billingCodeMinutes,
+      localRetentionState.sameDayVisitOverrides,
+      today,
+    ],
+  );
+  const clinicianActivityByName = useMemo(
+    () =>
+      new Map(
+        localImportMetrics.clientActivityByClinician.map((row) => [
+          normalizeClinicianName(row.clinician),
+          row,
+        ]),
+      ),
+    [localImportMetrics.clientActivityByClinician],
   );
   const modelContext = importedSessionOverlay?.context ?? context;
   const planProjection = useMemo(
@@ -2360,6 +2389,21 @@ export default function PracticeWorkspace() {
     ? recordedOverheadValues.reduce((sum, value) => sum + value, 0) /
       recordedOverheadValues.length
     : null;
+  const selectedCompletedLeadPeriod = summaryMonth
+    ? workspace.periods.find(
+        (period) =>
+          !period.archived &&
+          period.funnelComplete &&
+          period.start.slice(0, 7) === summaryMonth.date.slice(0, 7),
+      )
+    : undefined;
+  const selectedPracticeFunnel = selectedCompletedLeadPeriod
+    ? workspace.funnels.find(
+        (funnel) =>
+          funnel.scope === "practice" &&
+          funnel.periodId === selectedCompletedLeadPeriod.id,
+      )
+    : undefined;
   const familyDistributionPct = activeAllocations
     .filter(
       (allocation) =>
@@ -3006,6 +3050,9 @@ export default function PracticeWorkspace() {
                       const pace = viewProjection?.clinicianPace.find(
                         (item) => item.id === person.id,
                       );
+                      const importedActivity = clinicianActivityByName.get(
+                        normalizeClinicianName(person.label),
+                      );
                       const setting = workspace.clinicians.find(
                         (c) =>
                           c.clinicianId === person.id &&
@@ -3109,28 +3156,39 @@ export default function PracticeWorkspace() {
                             <div>
                               <span>Retention</span>
                               <strong>
-                                {clientActivityEstimate?.initialRetentionRate ===
-                                null
+                                {importedActivity?.initialRetentionPct === null ||
+                                importedActivity?.initialRetentionPct ===
+                                  undefined
                                   ? "--"
-                                  : percent(
-                                      clientActivityEstimate?.initialRetentionRate,
-                                    )}
+                                  : percent(importedActivity.initialRetentionPct)}
                               </strong>
-                              <small>practice cohort</small>
+                              <small>
+                                {importedActivity
+                                  ? `${fmt(importedActivity.initialRetentionDenominator)} mature starts`
+                                  : "no imported clinician data"}
+                              </small>
                             </div>
                             <div>
                               <span>Attrition</span>
                               <strong>
                                 {fmt(
-                                  clientActivityEstimate?.estimatedClientsLeavingPerMonth,
+                                  importedActivity?.averageClientEndingsPerFullMonth,
                                 )}
                               </strong>
-                              <small>clients / month</small>
+                              <small>
+                                {importedActivity?.endingFullMonthDenominator
+                                  ? `${fmt(importedActivity.endingFullMonthDenominator)} observed client-months`
+                                  : "no mature observed months"}
+                              </small>
                             </div>
                             <div>
                               <span>Consults</span>
-                              <strong>{fmt(projected?.consultations)}</strong>
-                              <small>selected month</small>
+                              <strong>{fmt(selectedPracticeFunnel?.scheduled)}</strong>
+                              <small>
+                                {selectedPracticeFunnel
+                                  ? "completed practice month"
+                                  : "no completed lead month"}
+                              </small>
                             </div>
                           </div>
                           <div className="pw-number-grid">
