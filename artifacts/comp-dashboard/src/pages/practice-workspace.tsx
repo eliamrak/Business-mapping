@@ -107,6 +107,7 @@ import {
 import { evaluateCompletedGoal } from "@/lib/completed-goals";
 import { planRevisionSignature, planFocusHighlights } from "@/lib/plan-focus";
 import { overviewClientFlow, overviewFundingSummary } from "@/lib/practice-overview";
+import { moneyBridgeSummary } from "@/lib/money-bridge";
 import { newRecord } from "@/components/hub/config";
 import RecordEditor from "@/components/hub/record-editor";
 import RecordTable from "@/components/hub/record-table";
@@ -2739,6 +2740,7 @@ export default function PracticeWorkspace() {
     .sort((a, b) => b.date.localeCompare(a.date));
   const moneyMonth = months[Math.min(moneyMonthIndex, months.length - 1)];
   const moneyValues = moneyMonth?.values ?? {};
+  const moneyBridge = moneyBridgeSummary(moneyValues, workingWorkspace.settings.ownerPayrollBurdenPct);
   const ownerBurden =
     ((moneyValues.ownerPayroll ?? 0) *
       workspace.settings.ownerPayrollBurdenPct) /
@@ -5875,6 +5877,9 @@ export default function PracticeWorkspace() {
                     <div className="pw-money-bridge">
                       {[
                         ["Billed revenue", moneyValues.revenue ?? null, "in"],
+                        ...(moneyBridge.adjustments !== null && Math.abs(moneyBridge.adjustments) > 0.005
+                          ? [["Other income / adjustments", moneyBridge.adjustments, "in"]]
+                          : []),
                         [
                           "Clinician pay",
                           moneyValues.clinicianPay == null
@@ -5883,14 +5888,8 @@ export default function PracticeWorkspace() {
                           "out",
                         ],
                         [
-                          "Overhead + staff",
-                          moneyValues.overhead == null &&
-                          moneyValues.staffCost == null
-                            ? null
-                            : -(
-                                (moneyValues.overhead ?? 0) +
-                                (moneyValues.staffCost ?? 0)
-                              ),
+                          "Other practice costs",
+                          moneyBridge.otherCosts === null ? null : -moneyBridge.otherCosts,
                           "out",
                         ],
                         ["Operating profit", moneyValues.profit ?? null, "profit"],
@@ -5901,8 +5900,15 @@ export default function PracticeWorkspace() {
                         </div>
                       ))}
                     </div>
+                    <details aria-label="Money bridge cost breakdown">
+                      <summary>Cost breakdown</summary>
+                      {moneyBridge.components.map((component) => <div className="pw-overview-total" key={component.label}><span>{component.label}</span><strong>{money(component.value)}</strong></div>)}
+                      <div className="pw-overview-total"><span>Other income / reconciliation adjustment</span><strong>{money(moneyBridge.adjustments)}</strong></div>
+                      <p className="pw-note">Costs use this projection's period and revenue basis. The adjustment reconciles billed revenue and disclosed costs to the engine's operating profit; it is not assigned to an unverified cost category. Taxes, reserves and distributions are allocations after operating profit.</p>
+                    </details>
                     <MetricTargetBar
                       value={moneyValues.profit}
+                      valueLabel="Projected"
                       goal={workingWorkspace.settings.targetProfitMonthly}
                       benchmark={recordedFinancialPeriods[0]?.values.profit}
                     />
@@ -7044,7 +7050,7 @@ export default function PracticeWorkspace() {
                           return <div key={step.label}><strong>{money(step.value)}</strong><div className="pw-overview-bridge-plot"><i className={step.kind} style={{ height: `${Math.min(100, Math.abs(step.value ?? 0) / scale * 100)}%`, bottom: `${Math.max(0, Math.min(100, step.bottom / scale * 100))}%` }} /></div><span>{step.label}</span></div>;
                         })}
                       </div>
-                      <details><summary>Financial details</summary><p>Clinical revenue {money(overviewFinancial.income)}; other income or adjustments {money(overviewFinancial.adjustments)}. Other costs include employer burden, staff, overhead, marketing, processing fees and separate owner payroll. Owner distributions are funding needs after profit; owner clinical revenue stays in the business.</p></details>
+                      <details><summary>Financial details</summary><p>Clinical revenue {money(overviewFinancial.income)}; other income or reconciliation adjustments {money(overviewFinancial.adjustments)}.</p>{overviewFinancial.costComponents.map((component) => <div className="pw-overview-total" key={component.label}><span>{component.label}</span><strong>{money(component.value)}</strong></div>)}<p>Owner distributions are funding needs after profit; owner clinical revenue stays in the business. Taxes, reserves and distributions are not counted again as operating costs.</p></details>
                     </section>
                     <section aria-label="Overview combined funding progress">
                       <h3>Projected goal progress</h3>

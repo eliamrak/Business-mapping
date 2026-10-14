@@ -1,6 +1,7 @@
 import type { ForecastMonth, Workspace } from "@workspace/practice/hub";
 import { derivedShowVisits, estimateLocalClientActivity, type LocalSnapshot, type SameDayVisitOverrides } from "./retention-local.ts";
 import { fundProjectionSummary } from "./practice-money-visuals.ts";
+import { moneyBridgeSummary } from "./money-bridge.ts";
 
 export function overviewClientFlow(snapshots: LocalSnapshot[], overrides: SameDayVisitOverrides, start: string, end: string, asOf: string) {
   const activity = estimateLocalClientActivity(snapshots, overrides, 56, 56, 28, asOf, 90, start, end);
@@ -46,15 +47,10 @@ export function overviewFundingSummary(workspace: Workspace, annualMonths: Forec
   });
   const parts = [owner === null ? null : owner * 12, salaryGap, retained === null ? null : retained * 12, ...fundAmounts];
   const target = parts.every((part) => part !== null) ? parts.reduce<number>((total, part) => total + part!, 0) : null;
-  const costFields = ["employerBurden", "staffCost", "overhead", "marketing", "fees", "ownerPayroll"];
-  const knownCosts = costFields.map(sum);
-  const payroll = sum("ownerPayroll");
-  const otherCosts = knownCosts.every((value) => value !== null) && payroll !== null
-    ? knownCosts.reduce<number>((total, value) => total + value!, 0) + payroll * workspace.settings.ownerPayrollBurdenPct / 100 : null;
-  const income = sum("revenue"), clinicianPay = sum("clinicianPay"), profit = sum("profit");
+  const bridge = moneyBridgeSummary(Object.fromEntries(["revenue", "clinicianPay", "profit", "employerBurden", "staffCost", "overhead", "marketing", "fees", "ownerPayroll"].map((metric) => [metric, sum(metric)])), workspace.settings.ownerPayrollBurdenPct);
   return {
-    income, clinicianPay, profit, otherCosts,
-    adjustments: income !== null && clinicianPay !== null && profit !== null && otherCosts !== null ? profit + clinicianPay + otherCosts - income : null,
+    income: bridge.revenue, clinicianPay: bridge.clinicianPay, profit: bridge.profit, otherCosts: bridge.otherCosts,
+    adjustments: bridge.adjustments, costComponents: bridge.components,
     target, knownSubtotal: parts.reduce<number>((total, part) => total + (part ?? 0), 0),
     missingAmounts: parts.filter((part) => part === null).length,
     includedSalaryAnnual, ownerAnnual: owner === null ? null : owner * 12,
