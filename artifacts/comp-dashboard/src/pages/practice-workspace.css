@@ -866,6 +866,22 @@
   color: #66766b;
   font-size: 12px;
 }
+.pw-plan-adoption {
+  display: grid;
+  gap: 3px;
+  padding: 10px;
+  border-left: 3px solid #386f50;
+  background: #f4f8f5;
+  font-size: 12px;
+}
+.pw-plan-adoption span,
+.pw-plan-adoption small {
+  color: #66766b;
+}
+.pw-plan-adoption strong {
+  color: #26392e;
+  font-size: 13px;
+}
 .pw-progress-comparison {
   display: grid;
   grid-template-columns: minmax(130px, 1fr) minmax(130px, 1fr);

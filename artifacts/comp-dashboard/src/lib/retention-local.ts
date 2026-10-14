@@ -1432,6 +1432,8 @@ function estimateObservedClientEndings(
   coverageStart: string,
   coverageEnd: string,
   endingGapDays: number,
+  eventStart = coverageStart,
+  eventEnd = coverageEnd,
 ) {
   const endingObservationCutoff = addDays(coverageEnd, -endingGapDays);
   const monthlyRows = new Map<
@@ -1442,6 +1444,8 @@ function estimateObservedClientEndings(
     endingObservationCutoff >= coverageStart
       ? monthsBetween(coverageStart, endingObservationCutoff).filter(
           (month) =>
+            monthEnd(month) >= eventStart &&
+            monthStart(month) <= eventEnd &&
             monthEnd(month) <= endingObservationCutoff &&
             intervalCoversRange(
               coverageIntervals,
@@ -1465,6 +1469,8 @@ function estimateObservedClientEndings(
   const cutoffMonth = endingObservationCutoff.slice(0, 7);
   const partialEndingMonth =
     endingObservationCutoff >= coverageStart &&
+    monthEnd(cutoffMonth) >= eventStart &&
+    monthStart(cutoffMonth) <= eventEnd &&
     monthEnd(cutoffMonth) > endingObservationCutoff &&
     intervalCoversRange(
       coverageIntervals,
@@ -1560,6 +1566,8 @@ export function estimateLocalClientActivity(
   initialRetentionGapDays = 28,
   asOfDate = "9999-12-31",
   endingGapDays = 90,
+  eventStart = "0000-01-01",
+  eventEnd = "9999-12-31",
 ): LocalClientActivityEstimate | null {
   const shows = derivedShowVisits(snapshots, sameDayVisitOverrides)
     .filter((row) => row.serviceDate <= asOfDate)
@@ -1618,6 +1626,9 @@ export function estimateLocalClientActivity(
       rightCensoredClientPairs++;
     const { initialEpisode, laterReturnAfterInitialGap } =
       initialRetentionEpisode(dates, initialRetentionGapDays);
+    if (first < eventStart || first > eventEnd) {
+      continue;
+    }
     if (initialEpisode.length >= 3) {
       retained.push({
         first,
@@ -1649,6 +1660,8 @@ export function estimateLocalClientActivity(
     coverageStart,
     coverageEnd,
     inactivityDays,
+  ).filter(
+    (month) => monthEnd(month) >= eventStart && monthStart(month) <= eventEnd,
   );
   const practiceInactivity = estimateObservedInactivity(
     practiceShowDates,
@@ -1700,6 +1713,8 @@ export function estimateLocalClientActivity(
     coverageStart,
     coverageEnd,
     endingGapDays,
+    eventStart,
+    eventEnd,
   );
   return {
     coverageStart,
@@ -1854,9 +1869,15 @@ export function summarizeConsultConversions(
         : treatmentClinicians.length > 1
           ? "Converted client has conflicting same-day closers."
           : null
+      : !pending && consultClinicians.length !== 1
+        ? "Non-converted client is missing a single recorded consult owner."
       : null;
     const closerClinician =
       converted && treatmentClinicians.length === 1 ? treatmentClinicians[0] : null;
+    const nonconvertedOwner =
+      !converted && !pending && consultClinicians.length === 1
+        ? consultClinicians[0]
+        : null;
     journeys.push({
       clientId,
       consultDate,
@@ -1867,10 +1888,12 @@ export function summarizeConsultConversions(
           : "converted"
         : pending
           ? "pending"
+          : attributionIssue
+            ? "needs_attribution"
           : "missed",
       consultClinicians,
       closerClinician,
-      creditedClinician: converted ? closerClinician : consultClinicians.at(-1) ?? null,
+      creditedClinician: converted ? closerClinician : nonconvertedOwner,
       treatmentDate: firstTreatmentDate,
       attributionIssue,
     });
@@ -1934,6 +1957,8 @@ export function buildLocalRetentionMetrics(
   followUpDays = 28,
   asOfDate = "9999-12-31",
   endingGapDays = 90,
+  eventStart = "0000-01-01",
+  eventEnd = "9999-12-31",
 ): LocalRetentionMetrics {
   const attendance = snapshots.flatMap((snapshot) =>
     snapshot.kind === "attendance"
@@ -2070,6 +2095,10 @@ export function buildLocalRetentionMetrics(
       partialEndingMonth: null,
     };
     const { initialEpisode } = initialRetentionEpisode(sorted, followUpDays);
+    if (firstShowDate < eventStart || firstShowDate > eventEnd) {
+      clientActivityByClinician.set(clinician, activity);
+      continue;
+    }
     if (initialEpisode.length >= 3) {
       metric.retainedClients++;
       activity.retainedClients++;
@@ -2112,6 +2141,8 @@ export function buildLocalRetentionMetrics(
         activityCoverageStart,
         activityCoverageEnd,
         endingGapDays,
+        eventStart,
+        eventEnd,
       );
       activity.endingObservationCutoff = endings.endingObservationCutoff;
       activity.endingFullMonthClientEnds = endings.endingFullMonthClientEnds;

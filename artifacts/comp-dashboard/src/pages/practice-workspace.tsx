@@ -39,6 +39,7 @@ import {
   observed,
   observedSeries,
   workspaceSchema,
+  proposalSchema,
   goalSchema,
   fundGoalSchema,
   budgetSchema,
@@ -96,6 +97,10 @@ import {
   compareOperatingPlans,
   summarizeOperatingPlan,
 } from "@/lib/operating-plan";
+import {
+  fundProjectionSummary,
+  periodOverheadSummary,
+} from "@/lib/practice-money-visuals";
 import { newRecord } from "@/components/hub/config";
 import RecordEditor from "@/components/hub/record-editor";
 import RecordTable from "@/components/hub/record-table";
@@ -201,6 +206,13 @@ type SharedPeriod =
   | "4weeks"
   | "custom";
 type SessionMetricView = "sessions" | "retention" | "attrition";
+type PlanAdoptionMetadata = {
+  adoptedAt: string;
+  adoptedRevision: number;
+  focusKpis: string[];
+  highlights: string[];
+  assumptionSignature: string;
+};
 const sections: { id: Section; label: string; active?: Section[] }[] = [
   { id: "summary", label: "Overview" },
   { id: "sessions", label: "Sessions", active: ["sessions", "retention"] },
@@ -264,11 +276,6 @@ const periodLabel = (start: string, end: string) => {
       day: "numeric",
     });
   return `${short(start)} - ${short(end)}, ${end.slice(0, 4)}`;
-};
-const addMonths = (date: string, months: number) => {
-  const d = new Date(date.slice(0, 7) + "-01T12:00:00Z");
-  d.setUTCMonth(d.getUTCMonth() + months);
-  return d.toISOString().slice(0, 10);
 };
 const normalizeClinicianName = (value: string) =>
   value.trim().replace(/\s+/g, " ").toLowerCase();
@@ -348,6 +355,35 @@ const varianceText = (value: number | null, metric: PaceMetric) =>
       (value >= 0 ? " ahead" : " behind");
 const active = <T extends { archived?: boolean }>(rows: T[]) =>
   rows.filter((r) => !r.archived);
+const planAdoptionMetadata = (
+  proposal: Proposal,
+): PlanAdoptionMetadata | null => {
+  const baseline = proposal.baseline;
+  if (!baseline || typeof baseline !== "object" || Array.isArray(baseline))
+    return null;
+  const value = (baseline as { adoption?: unknown }).adoption;
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  const record = value as Record<string, unknown>;
+  if (
+    typeof record.adoptedAt !== "string" ||
+    typeof record.adoptedRevision !== "number" ||
+    !Array.isArray(record.focusKpis) ||
+    !Array.isArray(record.highlights) ||
+    typeof record.assumptionSignature !== "string"
+  )
+    return null;
+  return {
+    adoptedAt: record.adoptedAt,
+    adoptedRevision: record.adoptedRevision,
+    focusKpis: record.focusKpis.filter(
+      (item): item is string => typeof item === "string",
+    ),
+    highlights: record.highlights.filter(
+      (item): item is string => typeof item === "string",
+    ),
+    assumptionSignature: record.assumptionSignature,
+  };
+};
 const errorText = (e: unknown) =>
   e instanceof ApiError
     ? ((e.data as { error?: string })?.error ?? e.message)
@@ -790,10 +826,15 @@ export default function PracticeWorkspace() {
         56,
         28,
         today,
+        90,
+        periodRange.start,
+        periodRange.end,
       ),
     [
       localRetentionState.snapshots,
       localRetentionState.sameDayVisitOverrides,
+      periodRange.start,
+      periodRange.end,
       today,
     ],
   );
@@ -805,11 +846,16 @@ export default function PracticeWorkspace() {
         localRetentionState.sameDayVisitOverrides,
         28,
         today,
+        90,
+        periodRange.start,
+        periodRange.end,
       ),
     [
       localRetentionState.snapshots,
       localRetentionState.billingCodeMinutes,
       localRetentionState.sameDayVisitOverrides,
+      periodRange.start,
+      periodRange.end,
       today,
     ],
   );
@@ -1280,6 +1326,42 @@ export default function PracticeWorkspace() {
       setDraft((d) => (d ? { ...d, workspace: parsed } : d));
       setMessage(mode === "goals" ? "Scenario only" : "Sandbox only");
     } else await persist(data, action);
+  }
+  async function adoptLongTermPlan(
+    goal: Proposal,
+    focusKpis: string[],
+    highlights: string[],
+    assumptionSignature: string,
+  ) {
+    if (!workspace || !query.data?.data) return;
+    const baseline =
+      goal.baseline && typeof goal.baseline === "object" && !Array.isArray(goal.baseline)
+        ? goal.baseline
+        : {};
+    const adopted = proposalSchema.parse({
+      ...goal,
+      status: "active",
+      approvedAt: new Date().toISOString(),
+      baseline: {
+        ...baseline,
+        adoption: {
+          adoptedAt: new Date().toISOString(),
+          adoptedRevision: query.data.revision,
+          focusKpis,
+          highlights,
+          assumptionSignature,
+        },
+      },
+    });
+    await saveWorkspace(
+      {
+        ...query.data.data,
+        proposals: query.data.data.proposals.map((proposal) =>
+          proposal.id === goal.id ? adopted : proposal,
+        ),
+      },
+      "Adopted Long Term Goals plan",
+    );
   }
   type InlineCollection =
     | "budgets"
@@ -2614,13 +2696,13 @@ export default function PracticeWorkspace() {
     (importedSessionOverlay?.diagnostic.manualImportConflictCount ?? 0) +
     (importedSessionOverlay?.diagnostic.missingClinicianLabels.length ?? 0) +
     (importedSessionOverlay?.diagnostic.ambiguousClinicianLabels.length ?? 0);
-  const recordedOverheadValues = recordedFinancialPeriods
-    .map((row) => row.values.overhead)
-    .filter((value): value is number => value !== null && value !== undefined);
-  const recordedOverheadAverage = recordedOverheadValues.length
-    ? recordedOverheadValues.reduce((sum, value) => sum + value, 0) /
-      recordedOverheadValues.length
-    : null;
+  const overheadSummary = periodOverheadSummary(
+    recordedFinancialPeriods,
+    periodRange.start,
+    periodRange.end,
+  );
+  const recordedOverheadValues = overheadSummary.values;
+  const recordedOverheadAverage = overheadSummary.average;
   const familyDistributionPct = activeAllocations
     .filter(
       (allocation) =>
@@ -2705,11 +2787,13 @@ export default function PracticeWorkspace() {
         `Profit ${profitDelta >= 0 ? "+" : "-"}${money(Math.abs(profitDelta))} / month`,
         `Sessions ${sessionDelta >= 0 ? "+" : "-"}${fmt(Math.abs(sessionDelta))} / month`,
       ];
+      const assumptionSignature = assumptions.join("|");
       const focusKpis = [
         projected?.values.profit ? "Profit" : null,
         projected?.values.sessions ? "Sessions" : null,
         projected?.values.roomUtilization ? "Rooms" : "Capacity",
-      ].filter(Boolean);
+      ].filter((item): item is string => typeof item === "string");
+      const adoption = planAdoptionMetadata(goal);
       return {
         goal,
         snapshot,
@@ -2719,7 +2803,14 @@ export default function PracticeWorkspace() {
         sessionDelta,
         score,
         assumptions,
+        assumptionSignature,
         focusKpis,
+        adoption,
+        revisionState: !adoption
+          ? "not_adopted"
+          : adoption.assumptionSignature === assumptionSignature
+            ? "current"
+            : "needs_refresh",
       };
     })
     .sort((a, b) => b.score - a.score);
@@ -2743,12 +2834,12 @@ export default function PracticeWorkspace() {
     roomCapacitySlots > 0 && roomDemandWeekly !== null
       ? (roomDemandWeekly / roomCapacitySlots) * 100
       : null;
-  const overheadTrendRows = recordedFinancialPeriods
+  const overheadTrendRows = overheadSummary.rows
     .slice(0, 6)
     .reverse()
-    .map((period) => ({
-      date: monthLabel(period.date),
-      overhead: period.values.overhead ?? 0,
+    .map((row) => ({
+      date: monthLabel(row.date),
+      overhead: row.overhead,
     }));
   const overheadTrendMax = Math.max(
     1,
@@ -2905,51 +2996,26 @@ export default function PracticeWorkspace() {
       ? `Met after completed period ending ${latest.date}.`
       : "Projected as met; waiting for one completed biweekly period.";
   };
-  const allocationForFund = (name: string) => {
-    const lower = name.toLowerCase();
-    return activeAllocations.find((allocation) =>
-      allocation.name.toLowerCase().includes(lower.replace(" fund", "")),
-    );
-  };
   const fundProjection = (goal: Workspace["fundGoals"][number] | undefined) => {
-    if (!goal) return null;
-    const current = goal.currentBalance ?? 0;
-    const remaining = Math.max(0, goal.amount - current);
-    const allocation = allocationForFund(goal.name);
-    if (!allocation || !moneyMonth || remaining <= 0)
-      return { current, remaining, contribution: null, eta: null };
-    const sameKindTotal = activeAllocations
-      .filter((item) => item.kind === allocation.kind)
-      .reduce((sum, item) => sum + item.percent, 0);
-    const kindAmount =
-      allocation.kind === "tax"
-        ? moneyValues.taxReserve
-        : allocation.kind === "distribution"
-          ? moneyValues.distributions
-          : allocation.kind === "retained"
-            ? moneyValues.retainedCash
-            : moneyValues.reserves;
-    const contribution =
-      kindAmount !== null &&
-      kindAmount !== undefined &&
-      sameKindTotal > 0
-        ? (kindAmount * allocation.percent) / sameKindTotal
-        : null;
-    const eta =
-      contribution && contribution > 0
-        ? addMonths(moneyMonth.date, Math.ceil(remaining / contribution))
-        : null;
-    return { current, remaining, contribution, eta };
+    return fundProjectionSummary(
+      goal,
+      activeAllocations,
+      moneyValues,
+      moneyMonth?.date,
+    );
   };
   const fundChartRows = fundGoalRows.map((name) => {
     const goal = findFundGoal(name);
+    const projection = fundProjection(goal);
     const current = goal?.currentBalance ?? 0;
     const target = goal?.amount ?? 0;
     return {
       name,
       current,
       target,
-      date: goal?.balanceDate ?? "blank balance date",
+      date: goal?.balanceDate ?? "blank balance assumed today",
+      projectedEta: projection?.eta ?? null,
+      projectedContribution: projection?.contribution ?? null,
       pct: target > 0 ? Math.min(100, (current / target) * 100) : 0,
     };
   });
@@ -5658,13 +5724,20 @@ export default function PracticeWorkspace() {
                           <div>
                             <strong>{row.name}</strong>
                             <span>
-                              {money(row.current)} recorded · {row.date}
+                              {money(row.current)} recorded anchor · {row.date}
                             </span>
                           </div>
                           <div className="pw-fund-track">
                             <i style={{ width: `${row.pct}%` }} />
                           </div>
-                          <span>{money(row.target)} goal</span>
+                          <span>
+                            {money(row.target)} goal
+                            {row.projectedEta
+                              ? ` · projected ${monthLabel(row.projectedEta)}`
+                              : row.projectedContribution === null
+                                ? " · no projected contribution"
+                                : ""}
+                          </span>
                         </div>
                       ))}
                     </div>
@@ -7646,13 +7719,44 @@ export default function PracticeWorkspace() {
                       <small>
                         Saved{" "}
                         {new Date(option.snapshot.savedAt).toLocaleDateString()}{" "}
-                        · review before adopting or revising.
+                        ·{" "}
+                        {option.revisionState === "current"
+                          ? `adopted ${new Date(option.adoption!.adoptedAt).toLocaleDateString()}`
+                          : option.revisionState === "needs_refresh"
+                            ? "adopted assumptions changed; refresh review"
+                            : "not adopted"}
                       </small>
+                      {option.adoption && (
+                        <div className="pw-plan-adoption">
+                          <span>Adopted focus</span>
+                          <strong>{option.adoption.focusKpis.join(" + ")}</strong>
+                          <small>{option.adoption.highlights.join("; ")}</small>
+                        </div>
+                      )}
                       <button
                         className="pw-button"
                         onClick={() => openGoal(option.goal)}
                       >
                         Review model
+                        <ChevronRight />
+                      </button>
+                      <button
+                        className="pw-text-button"
+                        disabled={saving}
+                        onClick={() =>
+                          void adoptLongTermPlan(
+                            option.goal,
+                            option.focusKpis,
+                            option.assumptions.slice(0, 2),
+                            option.assumptionSignature,
+                          ).catch((e) => setError(errorText(e)))
+                        }
+                      >
+                        {option.revisionState === "current"
+                          ? "Refresh adoption"
+                          : option.revisionState === "needs_refresh"
+                            ? "Re-adopt updated assumptions"
+                            : "Adopt plan"}
                         <ChevronRight />
                       </button>
                     </article>

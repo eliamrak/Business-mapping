@@ -132,6 +132,39 @@ test("legacy proposals are preserved and malformed goals do not load", () => {
   );
   assert.throws(() => makePracticeGoal(" ", fixture(), 1));
 });
+test("adopted plan metadata persists without auto-applying scenario values", () => {
+  const practice = fixture();
+  const goal = makePracticeGoal("Adoptable", practice, 3);
+  const adopted = proposalSchema.parse({
+    ...goal,
+    status: "active",
+    approvedAt: "2026-10-14T00:00:00.000Z",
+    baseline: {
+      ...(goal.baseline as Record<string, unknown>),
+      adoption: {
+        adoptedAt: "2026-10-14T00:00:00.000Z",
+        adoptedRevision: 22,
+        focusKpis: ["Profit", "Sessions"],
+        highlights: ["Profit +$1,000 / month"],
+        assumptionSignature: "Profit +$1,000 / month|Sessions +10 / month",
+      },
+    },
+  });
+  practice.workspace.proposals.push(adopted);
+  const restored = readPracticeGoal(adopted)!;
+
+  assert.equal(practice.workspace.proposals[0].status, "active");
+  assert.deepEqual(
+    (
+      practice.workspace.proposals[0].baseline as {
+        adoption: { focusKpis: string[] };
+      }
+    ).adoption.focusKpis,
+    ["Profit", "Sessions"],
+  );
+  assert.equal(restored.workspace.proposals.length, 0);
+  assert.equal(practice.workspace.settings.baselineWeeklySessions, null);
+});
 test("each goal retains its own team and time horizon", () => {
   const a = fixture(),
     b = fixture();

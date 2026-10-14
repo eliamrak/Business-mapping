@@ -228,6 +228,90 @@ CID-active,Dr Moss,2026-03-12,Room B,show`,
   assert.equal(estimate.estimatedClientsLeavingPerMonth, 0.5);
 });
 
+test("client activity estimate scopes cohorts and endings to selected period", () => {
+  const attendance = attendanceSnapshot(
+    `Client,Clinician,Date of service,Location,Status
+CID-jan-retained,Dr Lane,2026-01-05,Room A,show
+CID-jan-retained,Dr Lane,2026-01-19,Room A,show
+CID-jan-retained,Dr Lane,2026-02-02,Room A,show
+CID-mar-missed,Dr Lane,2026-03-05,Room A,show
+CID-established-ending,Dr Lane,2025-11-15,Room A,show
+CID-established-ending,Dr Lane,2025-12-15,Room A,show
+CID-established-ending,Dr Lane,2026-01-03,Room A,show
+CID-apr-retained,Dr Lane,2026-04-02,Room A,show
+CID-apr-retained,Dr Lane,2026-04-16,Room A,show
+CID-apr-retained,Dr Lane,2026-04-30,Room A,show`,
+    "2025-11-01",
+    "2026-06-30",
+  );
+
+  const january = estimateLocalClientActivity(
+    [attendance],
+    {},
+    56,
+    56,
+    28,
+    "2026-06-30",
+    90,
+    "2026-01-01",
+    "2026-01-31",
+  )!;
+  const april = estimateLocalClientActivity(
+    [attendance],
+    {},
+    56,
+    56,
+    28,
+    "2026-06-30",
+    90,
+    "2026-04-01",
+    "2026-04-30",
+  )!;
+  const januaryMetrics = buildLocalRetentionMetrics(
+    [attendance],
+    {},
+    {},
+    28,
+    "2026-06-30",
+    90,
+    "2026-01-01",
+    "2026-01-31",
+  );
+  const aprilMetrics = buildLocalRetentionMetrics(
+    [attendance],
+    {},
+    {},
+    28,
+    "2026-06-30",
+    90,
+    "2026-04-01",
+    "2026-04-30",
+  );
+
+  assert.equal(january.retainedClientPairs, 1);
+  assert.equal(january.initialRetentionDenominator, 1);
+  assert.equal(january.endingFullMonthClientEnds, 1);
+  assert.deepEqual(
+    january.monthlyEndedClients.map((row) => row.month),
+    ["2026-01"],
+  );
+  assert.equal(april.retainedClientPairs, 1);
+  assert.equal(april.initialRetentionDenominator, 1);
+  assert.equal(april.endingFullMonthClientEnds, 0);
+  assert.deepEqual(
+    april.monthlyEndedClients.map((row) => row.month),
+    [],
+  );
+  assert.equal(
+    januaryMetrics.clientActivityByClinician[0].averageClientEndingsPerFullMonth,
+    1,
+  );
+  assert.equal(
+    aprilMetrics.clientActivityByClinician[0].averageClientEndingsPerFullMonth,
+    null,
+  );
+});
+
 test("client activity estimate uses a 28-day initial retention gap boundary", () => {
   const attendance = attendanceSnapshot(
     `Client,Clinician,Date of service,Location,Status
@@ -1077,6 +1161,22 @@ test("consult conversion credits actual closer and protects internal referrers",
       billingCode: "PHONE",
     },
     {
+      clientId: "multi-consult-missed",
+      clinician: "Dr Referrer",
+      serviceDate: "2026-01-04",
+      location: "Phone",
+      status: "show",
+      billingCode: "PHONE",
+    },
+    {
+      clientId: "multi-consult-missed",
+      clinician: "Dr Backup",
+      serviceDate: "2026-01-05",
+      location: "Phone",
+      status: "show",
+      billingCode: "PHONE",
+    },
+    {
       clientId: "pending",
       clinician: "Dr Pending",
       serviceDate: "2026-01-20",
@@ -1116,14 +1216,14 @@ test("consult conversion credits actual closer and protects internal referrers",
     {},
     "2026-01-01",
     "2026-01-31",
-    "2026-02-03",
+    "2026-02-06",
   );
 
-  assert.equal(summary.practice.consultations, 4);
+  assert.equal(summary.practice.consultations, 5);
   assert.equal(summary.practice.converted, 1);
   assert.equal(summary.practice.missed, 1);
   assert.equal(summary.practice.pending, 1);
-  assert.equal(summary.practice.needsAttribution, 1);
+  assert.equal(summary.practice.needsAttribution, 2);
   assert.equal(summary.practice.evaluated, 2);
   assert.equal(summary.practice.conversionRate, 50);
   assert.equal(
@@ -1143,6 +1243,15 @@ test("consult conversion credits actual closer and protects internal referrers",
   assert.equal(
     summary.journeys.find((row) => row.clientId === "conflict")?.status,
     "needs_attribution",
+  );
+  assert.equal(
+    summary.journeys.find((row) => row.clientId === "multi-consult-missed")
+      ?.status,
+    "needs_attribution",
+  );
+  assert.equal(
+    summary.byClinician.find((row) => row.clinician === "Dr Backup")?.missed,
+    0,
   );
 });
 
