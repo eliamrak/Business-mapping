@@ -25,7 +25,7 @@ function financialCoverage(workspace: Workspace, range: Range) {
 /** Complete report history and the forecast after its covered period never overlap. */
 export function practiceFinancialRange(workspace: Workspace, context: Context, snapshots: LocalSnapshot[], asOf: string, requested: Range, coverage: PaceCoverage[] = []) {
   const roster = context.clinicians.filter((person) => (person.goalId ?? null) === workspace.settings.teamId);
-  const reports = completeReportCoverage(snapshots, roster, asOf);
+  const reports = completeReportCoverage(snapshots, roster, asOf, context.clinicians);
   const sessionProof = completeServicePeriodState(context.sessions, roster.map((person) => person.id), asOf, coverage);
   const earliest = [
     ...workspace.periods.filter((row) => !row.archived && row.status === "finalized").map((row) => row.start),

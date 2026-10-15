@@ -38,21 +38,24 @@ type Range = { start: string; end: string };
 /** Explicit report proof only. Raw input snapshots remain reconciliation evidence. */
 export function completeReportCoverage(
   snapshots: readonly LocalSnapshot[], clinicians: readonly Clinician[], asOf: string,
+  identityClinicians: readonly Clinician[] = clinicians,
 ): CompleteReportCoverage {
   if (!validDate(asOf)) throw new Error("Complete report coverage requires a valid as-of date.");
   const labels = new Map<string, number[]>();
-  for (const person of clinicians) {
+  for (const person of [...identityClinicians, ...clinicians]) {
     const key = normalize(person.label);
     labels.set(key, [...new Set([...(labels.get(key) ?? []), person.id])]);
   }
+  const reportingIds = new Set(clinicians.map((person) => person.id));
   const mappedId = (label: string) => {
     const ids = labels.get(normalize(label));
-    return ids?.length === 1 ? ids[0] : null;
+    return ids?.length === 1 && reportingIds.has(ids[0]) ? ids[0] : null;
   };
   const incompletePeriods: IncompleteReportPeriod[] = [];
   const limits = [
     "Completeness requires explicit valid reportCoverage.complete; observed service-date spans and upload dates are not proof.",
     "Report metadata has no provider roster. Proof is attributed only to uniquely mapped providers present in each snapshot; absent providers are never inferred as zero.",
+    "Name identity is validated across all known clinician IDs before reporting scope. Other-team, former and inactive names cannot be removed to resolve ambiguity; unrelated unique providers need not supply reports for the selected roster.",
     "Through dates require a common complete period for every supplied provider. Supply the intended reporting roster, including former clinicians where relevant; follow-up rows are not filtered by current employment.",
     "Canonical service periods are 14 calendar days anchored at 2026-01-01. Only periods ended on or before the as-of date qualify; gaps remain excluded.",
     "Attendance and billing proof are independent. dataThrough is only the earlier shared through-date, not certification of joint-source continuity or a forecast-start decision; inspect each provider's ranges and gaps.",

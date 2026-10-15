@@ -820,14 +820,10 @@ export default function PracticeWorkspace() {
   const forecastWorkspace = resolved?.forecastWorkspace;
   const completeClinicalReports = useMemo(() => {
     if (!context || !workspace) return null;
-    const selected = context.clinicians.filter((person) => (person.goalId ?? null) === workspace.settings.teamId);
-    const names = new Set(selected.map((person) => normalizeClinicianName(person.label)));
-    const additional = context.clinicians.filter((person) => { const name = normalizeClinicianName(person.label); if (names.has(name)) return false; names.add(name); return true; });
-    const roster = [...selected, ...additional];
-    return completeReportCoverage(localRetentionState.snapshots, roster, today);
+    return completeReportCoverage(localRetentionState.snapshots, context.clinicians, today);
   }, [context, workspace?.settings.teamId, localRetentionState.snapshots, today]);
   const currentReportCoverage = useMemo(() => context && workspace
-    ? completeReportCoverage(localRetentionState.snapshots, currentPracticeClinicians(workingWorkspace, context, today), today) : null,
+    ? completeReportCoverage(localRetentionState.snapshots, currentPracticeClinicians(workingWorkspace, context, today), today, context.clinicians) : null,
   [context, workspace, stagedWorkspace, localRetentionState.snapshots, today]);
   const rawImportedSessionOverlay = useMemo(
     () =>

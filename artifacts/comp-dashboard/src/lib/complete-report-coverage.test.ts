@@ -6,6 +6,26 @@ import { summarizeConsultConversions } from "./retention-local.ts";
 import { summarizeReportedBilling } from "./reported-billing.ts";
 
 const clinicians = [{ id: 1, label: "Current" }, { id: 2, label: "Former" }];
+
+test("global identity ambiguity survives reporting scope while unrelated unique providers need no reports", () => {
+  const selected = [clinicians[0]];
+  const snapshots = [snapshot("attendance", "2026-09-24", "2026-10-21"), snapshot("billing", "2026-09-24", "2026-10-21")];
+  const before = structuredClone(snapshots);
+  const global = [...selected, { id: 99, label: " current " }, clinicians[1]];
+  const ambiguous = completeReportCoverage(snapshots, selected, "2026-10-22", global);
+  assert.equal(ambiguous.dataThrough, null);
+  assert.equal(ambiguous.attendanceThrough, null);
+  assert.equal(ambiguous.billingThrough, null);
+  assert.deepEqual(ambiguous.eligibleSnapshots, []);
+  assert.deepEqual(ambiguous.eligibleAttendanceRows, []);
+  assert.deepEqual(ambiguous.eligibleBillingRows, []);
+  assert.equal(ambiguous.excludedRowsCount, 2);
+  assert.ok(ambiguous.incompletePeriods.every((row) => row.clinicianId === undefined || row.clinicianId === 1), "Other identities do not become reporting requirements");
+  const unique = completeReportCoverage(snapshots, selected, "2026-10-22", [...selected, clinicians[1], { ...selected[0] }]);
+  assert.equal(unique.dataThrough, "2026-10-21", "Unrelated provider and repeated same ID cannot invalidate unique selected identity");
+  assert.deepEqual(unique.completeAttendanceCoverage.map((row) => row.clinicianId), [1, 1]);
+  assert.deepEqual(snapshots, before);
+});
 function snapshot(kind: "attendance" | "billing", start: string, end: string, dates = [start], clinician = "Current"): LocalSnapshot {
   const base = { id: `${kind}:${start}:${end}:${clinician}`, importedAt: "2026-10-30T12:00:00Z", sourceHash: "synthetic",
     coverageStart: start, coverageEnd: end, reportCoverage: { start, end, complete: true as const } };

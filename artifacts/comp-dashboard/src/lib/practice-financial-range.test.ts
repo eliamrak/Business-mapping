@@ -14,6 +14,22 @@ function fixture() {
   return { workspace, context, snapshots };
 }
 
+test("cross-team name ambiguity withholds billed actuals and billing boundary before financial scope", () => {
+  const { workspace, context, snapshots } = fixture();
+  context.sessions = [];
+  context.clinicians.push({ ...context.clinicians[0], id: 99, goalId: 999, label: " synthetic " });
+  const result = practiceFinancialRange(workspace, context, snapshots, "2026-10-22", { start: "2026-01-01", end: "2026-10-21" });
+  assert.equal(result.reports.billingThrough, null);
+  assert.equal(result.dataThrough, null);
+  assert.equal(result.actual.reportedCharges, null);
+  assert.equal(result.values.revenue, null);
+  context.clinicians[1].label = "Unrelated";
+  const unique = practiceFinancialRange(workspace, context, snapshots, "2026-10-22", { start: "2026-01-01", end: "2026-10-07" });
+  assert.equal(unique.reports.billingThrough, "2026-10-07");
+  assert.equal(unique.actual.reportedCharges, 400);
+  assert.equal(unique.actual.values.revenue, 400);
+});
+
 test("shared January versus February dates select different actual fees and never reuse the October forecast", () => {
   const { workspace, context, snapshots } = fixture();
   const before = structuredClone({ workspace, context, snapshots });

@@ -100,10 +100,9 @@ export function buildImportedSessionOverlay(
   const cliniciansByLabel = new Map<string, typeof clinicians>();
   for (const clinician of clinicians) {
     const key = normalizeLabel(clinician.label);
-    cliniciansByLabel.set(key, [
-      ...(cliniciansByLabel.get(key) ?? []),
-      clinician,
-    ]);
+    cliniciansByLabel.set(key, [...new Map(context.clinicians
+      .filter((person) => normalizeLabel(person.label) === key)
+      .map((person) => [person.id, person])).values()]);
   }
 
   const missingClinicianLabels = new Set<string>();

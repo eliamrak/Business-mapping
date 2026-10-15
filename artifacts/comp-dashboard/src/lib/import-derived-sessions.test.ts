@@ -755,3 +755,23 @@ test("missing and ambiguous clinician mappings exclude imported rows", () => {
   assert.deepEqual(overlay.diagnostic.missingClinicianLabels, ["Dr Unknown"]);
   assert.deepEqual(overlay.diagnostic.ambiguousClinicianLabels, ["Dr Moss"]);
 });
+
+test("cross-team duplicate names cannot admit attendance, coverage or billing into a selected team", () => {
+  const source = context();
+  source.clinicians.push(clinician(99, " dr lane ", 999));
+  const attended = attendanceSnapshot([{ clientId: "cross-team", clinician: "Dr Lane", serviceDate: "2026-10-01", location: null, status: "show", sourceRowHash: "cross-team-show" }]);
+  const billed = billingSnapshot([{ clientId: "cross-team", clinician: "Dr Lane", serviceDate: "2026-10-01", totalFeeCharged: 1190, billingCode: "90837", sourceRowHash: "cross-team-bill" }]);
+  for (const snapshot of [attended, billed]) snapshot.reportCoverage = { start: "2026-09-24", end: "2026-10-21", complete: true };
+  const before = structuredClone({ source, attended, billed });
+  const result = buildImportedSessionOverlay(source, [attended, billed], 7);
+  assert.deepEqual(result.derivedSessions, []);
+  assert.deepEqual(result.attendanceCoverage, []);
+  assert.deepEqual(result.importedBillingActuals, []);
+  assert.deepEqual(result.diagnostic.ambiguousClinicianLabels, ["Dr Lane"]);
+  assert.deepEqual(result.diagnostic.ambiguousBillingClinicianLabels, ["Dr Lane"]);
+  const unique = buildImportedSessionOverlay({ ...source, clinicians: source.clinicians.map((person) => person.id === 99 ? { ...person, label: "Unrelated" } : person) }, [attended, billed], 7);
+  assert.equal(unique.derivedSessions.length, 1);
+  assert.equal(unique.importedBillingActuals.length, 1);
+  assert.ok(unique.attendanceCoverage.every((row) => row.clinicianId === 1));
+  assert.deepEqual({ source, attended, billed }, before);
+});
