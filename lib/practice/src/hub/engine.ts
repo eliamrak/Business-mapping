@@ -195,7 +195,7 @@ export const summarizeImportedBillingActuals = (
       continue;
     }
     const key = `${row.clinicianId}|${row.serviceDate}`;
-    if (row.clientId !== undefined) requiresProof.add(key);
+    if (row.clientId !== undefined || row.replacementSessionCount !== undefined) requiresProof.add(key);
     const counts = replacementSessions.get(row.clinicianId) ?? new Map<string, number>();
     const count = row.replacementSessionCount;
     if (count == null || !Number.isInteger(count) || count < 0) unverified.add(key);

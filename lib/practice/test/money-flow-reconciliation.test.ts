@@ -161,3 +161,16 @@ test("W2 service-day billing is validated before the next paycheck, without with
   assert.equal(salary.revenue, null);
   close(salary.clinicianPay, 0);
 });
+
+test("legacy actual billing cannot bypass an explicitly supplied replacement-session count", () => {
+  const { workspace, context } = fixture("2026-01-01");
+  context.clinicians = [{ ...context.clinicians[1] }];
+  workspace.clinicians = [];
+  context.sessions = context.sessions.filter((row) => row.clinicianId === 2).map((row) => ({ ...row, start: "2026-01-01", end: "2026-01-01", completed: 1 }));
+  for (const replacementSessionCount of [2, -1, Number.NaN]) {
+    context.importedBillingActuals = [{ clinicianId: 2, serviceDate: "2026-01-01", totalFeeCharged: 50, sourceRowHash: "legacy-count", replacementSessionCount }];
+    const invalid = monthFlow(workspace, context, "2026-01-01", "2026-01-01");
+    assert.equal(invalid.revenue, null);
+    assert.equal(invalid.clinicianPay, null);
+  }
+});
