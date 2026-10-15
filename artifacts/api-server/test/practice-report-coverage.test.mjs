@@ -25,18 +25,21 @@ const result = await build({
         resolveDir: fileURLToPath(new URL("../", import.meta.url)),
         contents: `
           export * from ${JSON.stringify(schemaPath)};
+          export * from ${JSON.stringify(fileURLToPath(new URL("../../../lib/db/src/schema/clinicians.ts", import.meta.url)))};
           import { PgDialect } from "drizzle-orm/pg-core";
           export const mockState = { available: false, statements: [], writes: 0 };
           const query = { from() { return this; }, async where() { return []; } };
           const tx = {
             async execute(statement) {
-              mockState.statements.push(new PgDialect().sqlToQuery(statement));
+              const compiledQuery = new PgDialect().sqlToQuery(statement);
+              mockState.statements.push(compiledQuery);
+              if (compiledQuery.sql.includes("practice_import_declarations")) return { rows: [{ available: false }] };
               return { rows: [{ available: mockState.available }] };
             },
             select() { return query; },
             insert() { return { async values() { mockState.writes++; } }; }
           };
-          export const db = { select: tx.select, async transaction(callback) { return callback(tx); } };
+          export const db = { select: tx.select, execute: tx.execute, async transaction(callback) { return callback(tx); } };
         `,
       }));
     },

@@ -79,6 +79,25 @@ test("global name collisions remain unknown while unrelated identities do not re
   assert.equal(unique.comparison.candidateSessions, 4);
 });
 
+test("confirmed declarations resolve copied identities in the exact-model aggregate without exposing mapping values", () => {
+  const input = fixture();
+  input.context.clinicians.push({ ...input.context.clinicians[0], id: 2, goalId: 999 });
+  for (const [i, snapshot] of input.snapshots.entries()) {
+    snapshot.id = `${snapshot.kind}-${String(i + 1).repeat(16)}`;
+    delete snapshot.reportCoverage;
+  }
+  input.declarations = { version: 1, mappings: [{ sourceLabel: "Elia", clinicianId: 1, clinicianLabel: "Elia", teamId: null }],
+    sourceSets: input.snapshots.map((snapshot) => ({ kind: snapshot.kind, snapshotIds: [snapshot.id], clinicianIds: [1], start: "2026-01-01", end: "2026-05-06", complete: true })) };
+  const before = structuredClone(input);
+  const result = aggregateAudit(input, options);
+  assert.equal(result.requestedClinician.identity, "explicit_confirmed_selected_identity");
+  assert.equal(result.through.attendance, "2026-05-06");
+  assert.equal(result.comparison.candidateSessions, 4);
+  assert.equal(result.coverageBlocker, null);
+  assert.doesNotMatch(JSON.stringify(result), /SECRET_|clientId|sourceRowHash|sourceHash|snapshotId|clinicianId/);
+  assert.deepEqual(input, before);
+});
+
 function fakeClient({ mode = "on", fail = false } = {}) {
   const calls = [];
   return { calls, async query(sql, params) {

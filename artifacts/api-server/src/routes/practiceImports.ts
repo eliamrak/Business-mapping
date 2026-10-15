@@ -6,8 +6,10 @@ import {
   practiceImportAuditTable,
   practiceImportPackagesTable,
   practiceImportSnapshotsTable,
+  cliniciansTable,
 } from "@workspace/db";
 import { z } from "@workspace/practice";
+import { importDeclarationsSchema, normalizeProviderLabel, type StoredImportDeclarations } from "@workspace/practice/hub";
 
 const router = Router();
 
@@ -353,6 +355,7 @@ async function historyFor(practiceId: string, accountId: string) {
   ]);
   const historySnapshots = snapshots.map(snapshotFromRow);
   return {
+    declarations: await readDeclarations(db, practiceId, accountId),
     snapshots: historySnapshots,
     billingCodeMinutes: packages.reduce<Record<string, number>>(
       (acc, row) => ({
@@ -373,6 +376,66 @@ async function historyFor(practiceId: string, accountId: string) {
     })),
   };
 }
+
+async function readDeclarations(connection: Pick<typeof db, "execute">, practiceId: string, accountId: string): Promise<StoredImportDeclarations | null> {
+  const availability = await connection.execute(sql`SELECT to_regclass('practice_import_declarations') IS NOT NULL AS available`);
+  if (availability.rows[0]?.available !== true) return null;
+  const result = await connection.execute(sql`SELECT revision, data, confirmed_at FROM practice_import_declarations WHERE practice_id = ${practiceId} AND account_id = ${accountId}`);
+  const row = result.rows[0];
+  if (!row) return null;
+  const parsed = importDeclarationsSchema.safeParse(row.data);
+  if (!parsed.success) throw new Error("Invalid saved import declarations require review.");
+  return { revision: Number(row.revision), data: parsed.data, confirmedAt: new Date(String(row.confirmed_at)).toISOString() };
+}
+
+router.put("/practice-imports/declarations", async (req, res) => {
+  const parsed = z.object({ expectedRevision: z.number().int().nonnegative(), confirmed: z.literal(true), data: importDeclarationsSchema }).strict().safeParse(req.body);
+  if (!parsed.success) return res.status(400).json({ error: "Enter explicit provider mappings, source-set dates and confirmation." });
+  const { practiceId, accountId, actor } = scope(res);
+  const { data, expectedRevision } = parsed.data;
+  if (data.sourceSets.some((set) => set.end > new Date().toISOString().slice(0, 10))) return res.status(400).json({ error: "Coverage cannot end in the future." });
+  const result = await db.transaction(async (tx) => {
+    await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtext(${practiceId}), hashtext(${accountId}))`);
+    const available = await tx.execute(sql`SELECT to_regclass('practice_import_declarations') IS NOT NULL AS available`);
+    if (available.rows[0]?.available !== true) return "migration";
+    const old = await readDeclarations(tx, practiceId, accountId);
+    if ((old?.revision ?? 0) !== expectedRevision) return "stale";
+    const roster = await tx.select().from(cliniciansTable);
+    const active = await tx.select(snapshotColumns).from(practiceImportSnapshotsTable).where(and(
+      eq(practiceImportSnapshotsTable.practiceId, practiceId), eq(practiceImportSnapshotsTable.accountId, accountId), eq(practiceImportSnapshotsTable.active, 1),
+    ));
+    const snapshots = active.map(snapshotFromRow);
+    for (const mapping of data.mappings) {
+      const target = roster.find((row) => row.id === mapping.clinicianId);
+      if (!target || target.label !== mapping.clinicianLabel || (target.goalId ?? null) !== mapping.teamId
+        || normalizeProviderLabel(mapping.sourceLabel) !== normalizeProviderLabel(target.label)) return "target";
+      if (!snapshots.some((source) => source.rows.some((row) => normalizeProviderLabel(row.clinician) === normalizeProviderLabel(mapping.sourceLabel)))) return "source";
+    }
+    for (const set of data.sourceSets) {
+      const members = set.snapshotIds.map((id) => snapshots.filter((row) => row.id === id));
+      if (members.some((matches) => matches.length !== 1 || matches[0].kind !== set.kind)) return "source";
+      if (members.flat().some((snapshot) => snapshot.rows.some((row) => !dateSchema.safeParse(row.serviceDate).success || row.serviceDate < set.start || row.serviceDate > set.end))) return "range";
+      for (const id of set.clinicianIds) {
+        const mappings = data.mappings.filter((row) => row.clinicianId === id);
+        if (!mappings.length || !mappings.some((mapping) => members.flat().some((snapshot) => snapshot.rows.some((row) => normalizeProviderLabel(row.clinician) === normalizeProviderLabel(mapping.sourceLabel))))) return "target";
+      }
+      // A declaration cannot silently certify a provider omitted from its explicit scope.
+      if (members.flat().some((snapshot) => snapshot.rows.some((row) => !data.mappings.some((mapping) => set.clinicianIds.includes(mapping.clinicianId) && normalizeProviderLabel(mapping.sourceLabel) === normalizeProviderLabel(row.clinician))))) return "target";
+    }
+    const saved = await tx.execute(sql`INSERT INTO practice_import_declarations (practice_id, account_id, revision, data, confirmed_at, confirmed_by)
+      VALUES (${practiceId}, ${accountId}, ${expectedRevision + 1}, ${JSON.stringify(data)}::jsonb, now(), ${actor})
+      ON CONFLICT (practice_id, account_id) DO UPDATE SET revision = EXCLUDED.revision, data = EXCLUDED.data, confirmed_at = EXCLUDED.confirmed_at, confirmed_by = EXCLUDED.confirmed_by
+      WHERE practice_import_declarations.revision = ${expectedRevision} RETURNING revision`);
+    if (saved.rows.length !== 1) throw new Error("Import declaration revision changed during confirmation.");
+    await tx.insert(practiceImportAuditTable).values({ id: randomUUID(), practiceId, accountId, packageId: "import-declarations", action: "confirm-import-declarations", actor,
+      detail: { oldDeclarations: old, newDeclarations: data, revision: expectedRevision + 1, basis: "owner-confirmation" } });
+    return "saved";
+  });
+  if (result === "migration") return res.status(503).json({ code: "IMPORT_DECLARATIONS_MIGRATION_REQUIRED", error: "Apply migration 009 before confirming mappings and source sets." });
+  if (result === "stale") return res.status(409).json({ error: "Import declarations changed. Reload before confirming." });
+  if (result !== "saved") return res.status(400).json({ error: result === "range" ? "Source-set coverage must contain every member's valid service dates." : "A provider target, explicit source scope or source-set member needs review." });
+  return res.json(await historyFor(practiceId, accountId));
+});
 
 router.get("/practice-imports", async (_req, res) => {
   const { practiceId, accountId } = scope(res);

@@ -1,5 +1,7 @@
 # Complete-Period History Review Candidate
 
+Later owner-confirmed source-set, explicit crosswalk, discounted-charge pay and zero-PHONE rules are documented in `CONFIRMED-IMPORT-DECLARATIONS.md`. The dated candidate results below remain historical evidence, not certification of that later increment.
+
 Publication HOLD. This replaces the older partial-period, today-boundary and historical-revenue rules recorded in WORKING-FORECAST-REPAIR-ACCEPTANCE.md. The prior reviewed ab812508 candidate is not approval for this replacement. No production publication, database migration or business-record mutation was performed for this work.
 
 ## External Identity Blocker Repair

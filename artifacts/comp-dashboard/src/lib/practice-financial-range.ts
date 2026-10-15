@@ -1,4 +1,4 @@
-import { completeServicePeriodState, forecast, observed, type Context, type ForecastMonth, type PaceCoverage, type Workspace } from "@workspace/practice/hub";
+import { completeServicePeriodState, forecast, observed, type Context, type ForecastMonth, type PaceCoverage, type Workspace, type ImportDeclarations } from "@workspace/practice/hub";
 import { buildPracticeProjection } from "./practice-projection.ts";
 import { summarizeReportedBilling } from "./reported-billing.ts";
 import type { LocalSnapshot } from "./retention-local.ts";
@@ -23,9 +23,9 @@ function financialCoverage(workspace: Workspace, range: Range) {
 }
 
 /** Complete report history and the forecast after its covered period never overlap. */
-export function practiceFinancialRange(workspace: Workspace, context: Context, snapshots: LocalSnapshot[], asOf: string, requested: Range, coverage: PaceCoverage[] = []) {
+export function practiceFinancialRange(workspace: Workspace, context: Context, snapshots: LocalSnapshot[], asOf: string, requested: Range, coverage: PaceCoverage[] = [], declarations?: ImportDeclarations | null) {
   const roster = context.clinicians.filter((person) => (person.goalId ?? null) === workspace.settings.teamId);
-  const reports = completeReportCoverage(snapshots, roster, asOf, context.clinicians);
+  const reports = completeReportCoverage(snapshots, roster, asOf, context.clinicians, { declarations, teamId: workspace.settings.teamId });
   const sessionProof = completeServicePeriodState(context.sessions, roster.map((person) => person.id), asOf, coverage);
   const earliest = [
     ...workspace.periods.filter((row) => !row.archived && row.status === "finalized").map((row) => row.start),
@@ -74,7 +74,7 @@ export function practiceFinancialRange(workspace: Workspace, context: Context, s
   warnings.push(...reports.incompletePeriods.map((period) => period.reason));
   if (actualObserved && ledgerComplete && actualValues.revenue !== null && actualObserved.values.revenue != null && Math.abs(actualValues.revenue! - actualObserved.values.revenue!) > 0.005)
     warnings.push("Complete billed session fees differ from the financial ledger's earned-revenue entry. Historical session income uses the billed source; stored ledger entries and independently recorded costs are unchanged.");
-  if (paidConsultationUnclassified) warnings.push("Nonzero PHONE charge classification remains unconfirmed; billed facts remain visible, but treatment-revenue totals are withheld rather than assigning an unapproved revenue category.");
+  if (paidConsultationUnclassified) warnings.push("Nonzero PHONE/consultation charge violates the confirmed zero-fee policy. Original billed facts remain visible for review; affected treatment-revenue totals are withheld, not silently changed to zero.");
   if (actualRange && !complete) warnings.push("Actual billed-revenue or financial-cost coverage is incomplete for the selected dates; only complete report periods contribute. Missing days are not actual zeros.");
   if (!cutoff) warnings.push("Data covers through: unverified. No common complete activity report or complete billing report establishes the actual/forecast boundary; upload dates and occupied row endpoints are not proof.");
   if (reports.billingThrough !== projection.latestCompleteThrough) warnings.push(`Source dates differ: complete activity through ${projection.latestCompleteThrough ?? "unverified"}; complete billing through ${reports.billingThrough ?? "unverified"}. The latest complete report sets the forecast boundary, but does not certify missing activity, billing or cost coverage.`);

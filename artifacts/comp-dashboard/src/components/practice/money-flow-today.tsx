@@ -624,7 +624,7 @@ export default function MoneyFlowToday({
           <span>
             Other clinician pay <small>Earned compensation for this service month</small>
           </span>
-          <strong>-{currency(flow.clinicianPay - flow.familyGrossPay)}</strong>
+          <strong>-{currency(flow.clinicianPay === null || flow.familyGrossPay === null ? null : flow.clinicianPay - flow.familyGrossPay)}</strong>
         </div>
         <Sources label="Clinician pay setup">
           {people.filter((person) => person.id !== payee?.id).map(payRow)}
@@ -651,7 +651,7 @@ export default function MoneyFlowToday({
         <div className="pw-flow-row">
           <span>Employer payroll costs</span>
           <strong>
-            -{currency(flow.employerBurden + flow.legacyOwnerBurden)}
+            -{currency(flow.employerBurden === null ? null : flow.employerBurden + flow.legacyOwnerBurden)}
           </strong>
         </div>
         <Sources label="Employer payroll rates">

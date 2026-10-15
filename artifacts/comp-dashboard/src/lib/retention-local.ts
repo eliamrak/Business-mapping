@@ -552,6 +552,12 @@ export function attendanceStatusConflicts(snapshots: LocalSnapshot[]) {
     .map(({ statusesBySource: _statuses, ...group }) => ({ ...group, statuses: [...new Set(group.rows.map((row) => row.status))].sort() }));
 }
 
+export function phoneChargeAnomalies(snapshots: readonly LocalSnapshot[]) {
+  return snapshots.flatMap((snapshot) => snapshot.kind === "billing"
+    ? snapshot.rows.filter((row) => isPhoneConsultBillingRow(row) && (!Number.isFinite(row.totalFeeCharged) || row.totalFeeCharged !== 0))
+    : []);
+}
+
 export function treatmentBillingRows(snapshots: LocalSnapshot[]) {
   return snapshots.flatMap((snapshot) =>
     snapshot.kind === "billing"

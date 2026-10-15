@@ -1,5 +1,5 @@
 import { dateRangeSchema, type SessionRecord, rangesOverlap } from "@workspace/practice";
-import { canonicalServicePeriod, reconcileBillingEvidence, type Context, type ImportedBillingActual } from "@workspace/practice/hub";
+import { canonicalServicePeriod, reconcileBillingEvidence, resolveImportedProvider, type ImportDeclarations, type Context, type ImportedBillingActual } from "@workspace/practice/hub";
 import type { SessionAttendanceCoverage } from "./session-trend.ts";
 import {
   isPhoneOnlyConsultAttendanceRow,
@@ -91,6 +91,7 @@ export function buildImportedSessionOverlay(
   teamId: number | null,
   sameDayVisitOverrides: SameDayVisitOverrides = {},
   options: {
+    declarations?: ImportDeclarations | null;
     clinicianActiveRanges?: Array<{ clinicianId: number; start: string; end: string | null }>;
     /** Workspace compensation effective dates must never restrict attendance coverage. */
     clinicianActiveRangesBasis?: "employment" | "compensation";
@@ -105,6 +106,10 @@ export function buildImportedSessionOverlay(
     cliniciansByLabel.set(key, [...new Map(context.clinicians
       .filter((person) => normalizeLabel(person.label) === key)
       .map((person) => [person.id, person])).values()]);
+  }
+  for (const mapping of options.declarations?.mappings ?? []) {
+    const id = resolveImportedProvider(mapping.sourceLabel, context.clinicians, teamId, options.declarations);
+    cliniciansByLabel.set(normalizeLabel(mapping.sourceLabel), id === null ? [] : clinicians.filter((person) => person.id === id));
   }
 
   const missingClinicianLabels = new Set<string>();

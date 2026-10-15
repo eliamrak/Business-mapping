@@ -820,11 +820,13 @@ export default function PracticeWorkspace() {
   const forecastWorkspace = resolved?.forecastWorkspace;
   const completeClinicalReports = useMemo(() => {
     if (!context || !workspace) return null;
-    return completeReportCoverage(localRetentionState.snapshots, context.clinicians, today);
-  }, [context, workspace?.settings.teamId, localRetentionState.snapshots, today]);
+    return completeReportCoverage(localRetentionState.snapshots, context.clinicians.filter((person) => (person.goalId ?? null) === workspace.settings.teamId), today, context.clinicians,
+      { declarations: localRetentionState.declarations?.data, teamId: workspace.settings.teamId });
+  }, [context, workspace?.settings.teamId, localRetentionState.snapshots, localRetentionState.declarations, today]);
   const currentReportCoverage = useMemo(() => context && workspace
-    ? completeReportCoverage(localRetentionState.snapshots, currentPracticeClinicians(workingWorkspace, context, today), today, context.clinicians) : null,
-  [context, workspace, stagedWorkspace, localRetentionState.snapshots, today]);
+    ? completeReportCoverage(localRetentionState.snapshots, currentPracticeClinicians(workingWorkspace, context, today), today, context.clinicians,
+      { declarations: localRetentionState.declarations?.data, teamId: workspace.settings.teamId }) : null,
+  [context, workspace, stagedWorkspace, localRetentionState.snapshots, localRetentionState.declarations, today]);
   const rawImportedSessionOverlay = useMemo(
     () =>
       !sandbox && context && workspace
@@ -833,6 +835,7 @@ export default function PracticeWorkspace() {
             localRetentionState.snapshots,
             workspace.settings.teamId,
             localRetentionState.sameDayVisitOverrides,
+            { declarations: localRetentionState.declarations?.data },
           )
         : null,
     [
@@ -841,16 +844,17 @@ export default function PracticeWorkspace() {
       workspace?.settings.teamId,
       localRetentionState.snapshots,
       localRetentionState.sameDayVisitOverrides,
+      localRetentionState.declarations,
     ],
   );
   const importedSessionOverlay = useMemo(() => {
     if (!rawImportedSessionOverlay || !context || !workspace) return null;
     const ids = context.clinicians.filter((person) => (person.goalId ?? null) === workspace.settings.teamId).map((person) => person.id);
-    const accepted = buildImportedSessionOverlay(context, completeClinicalReports?.eligibleSnapshots ?? [], workspace.settings.teamId, localRetentionState.sameDayVisitOverrides);
+    const accepted = buildImportedSessionOverlay(context, completeClinicalReports?.eligibleSnapshots ?? [], workspace.settings.teamId, localRetentionState.sameDayVisitOverrides, { declarations: localRetentionState.declarations?.data });
     const proof = completeClinicalReports?.completeAttendanceCoverage.filter((range) => ids.includes(range.clinicianId)) ?? [];
     const state = completeServicePeriodState(accepted.context.sessions, ids, today, proof);
     return { ...accepted, diagnostic: rawImportedSessionOverlay.diagnostic, context: { ...accepted.context, sessions: state.eligibleRecords }, attendanceCoverage: state.eligibleCoverage };
-  }, [rawImportedSessionOverlay, completeClinicalReports, context, workspace?.settings.teamId, localRetentionState.sameDayVisitOverrides, today]);
+  }, [rawImportedSessionOverlay, completeClinicalReports, context, workspace?.settings.teamId, localRetentionState.sameDayVisitOverrides, localRetentionState.declarations, today]);
   const historicalClinicalSnapshots = useMemo(() => context && workspace
     ? snapshotsForClinicians(completeClinicalReports?.eligibleSnapshots ?? [], context.clinicians.filter((person) => (person.goalId ?? null) === workspace.settings.teamId)) : [],
   [context, workspace?.settings.teamId, completeClinicalReports]);
@@ -1186,11 +1190,11 @@ export default function PracticeWorkspace() {
       if (!row.periodStart) return [];
       const period = canonicalServicePeriod(row.periodStart);
       if (period.start !== row.periodStart || period.end !== row.date) return [];
-      const report = practiceFinancialRange(workspace, modelContext, localRetentionState.snapshots, today, period, importedSessionOverlay?.attendanceCoverage);
+      const report = practiceFinancialRange(workspace, modelContext, localRetentionState.snapshots, today, period, importedSessionOverlay?.attendanceCoverage, localRetentionState.declarations?.data);
       return report.actual.complete && !report.forward.range
         ? [{ source: "actual" as const, start: period.start, end: period.end, basis: "period" as const, values: report.actual.values }] : [];
     });
-  }, [workspace, modelContext, sandbox, recordedFinancialPeriods, localRetentionState.snapshots, today, importedSessionOverlay?.attendanceCoverage]);
+  }, [workspace, modelContext, sandbox, recordedFinancialPeriods, localRetentionState.snapshots, localRetentionState.declarations, today, importedSessionOverlay?.attendanceCoverage]);
   const moneyYtd = useMemo(
     () =>
       workspace && modelContext
@@ -2804,13 +2808,13 @@ export default function PracticeWorkspace() {
         )?.kind !== "income",
     )
     .sort((a, b) => b.date.localeCompare(a.date));
-  const selectedMoneyRange = practiceFinancialRange(moneyFlowWorkspace ?? workingWorkspace, modelContext ?? context, localRetentionState.snapshots, today, periodRange, importedSessionOverlay?.attendanceCoverage);
+  const selectedMoneyRange = practiceFinancialRange(moneyFlowWorkspace ?? workingWorkspace, modelContext ?? context, localRetentionState.snapshots, today, periodRange, importedSessionOverlay?.attendanceCoverage, localRetentionState.declarations?.data);
   const moneyMonth = mode === "practice" ? selectedMoneyRange.forward.months[0] : months[Math.min(moneyMonthIndex, months.length - 1)];
   const moneyValues = mode === "practice" ? selectedMoneyRange.values : moneyMonth?.values ?? {};
   const summaryMoneyReport = practiceFinancialRange(moneyFlowWorkspace ?? workingWorkspace, modelContext ?? context, localRetentionState.snapshots, today, {
     start: (summaryMonth?.date ?? today).slice(0, 7) + "-01",
     end: new Date(Date.UTC(Number((summaryMonth?.date ?? today).slice(0, 4)), Number((summaryMonth?.date ?? today).slice(5, 7)), 0)).toISOString().slice(0, 10),
-  }, importedSessionOverlay?.attendanceCoverage);
+  }, importedSessionOverlay?.attendanceCoverage, localRetentionState.declarations?.data);
   const moneyBridge = mode === "practice" ? financialRangeBridge(selectedMoneyRange) : moneyBridgeSummary(moneyValues, workingWorkspace.settings.ownerPayrollBurdenPct);
   const ownerBurden =
     ((moneyValues.ownerPayroll ?? 0) *
@@ -3137,7 +3141,7 @@ export default function PracticeWorkspace() {
   });
   const overviewYear = (summaryMonth?.date ?? today).slice(0, 4);
   const reportedBilling = selectedMoneyRange.actual.report;
-  const overviewYearRange = practiceFinancialRange(moneyFlowWorkspace ?? workingWorkspace, modelContext ?? context, localRetentionState.snapshots, today, { start: today.slice(0, 4) + "-01-01", end: today.slice(0, 4) + "-12-31" }, importedSessionOverlay?.attendanceCoverage);
+  const overviewYearRange = practiceFinancialRange(moneyFlowWorkspace ?? workingWorkspace, modelContext ?? context, localRetentionState.snapshots, today, { start: today.slice(0, 4) + "-01-01", end: today.slice(0, 4) + "-12-31" }, importedSessionOverlay?.attendanceCoverage, localRetentionState.declarations?.data);
   const overviewYearBridge = financialRangeBridge(overviewYearRange);
   const overviewFinancial = { income: overviewYearBridge.revenue, clinicianPay: overviewYearBridge.clinicianPay, profit: overviewYearBridge.profit, otherCosts: overviewYearBridge.otherCosts, adjustments: overviewYearBridge.adjustments, costComponents: overviewYearBridge.components };
   const overviewFlow = overviewClientFlow(historicalClinicalSnapshots, localRetentionState.sameDayVisitOverrides, periodRange.start, periodRange.end, today, { excludedFollowUpEvidence });
@@ -4245,6 +4249,8 @@ export default function PracticeWorkspace() {
               {section === "retention" && (
                 <>
                   <LocalRetentionWorkspace
+                    roster={context.clinicians}
+                    teamId={workspace.settings.teamId}
                     workspaceState={localRetentionState}
                     today={today}
                     coverageSummary={currentReportCoverage ?? undefined}

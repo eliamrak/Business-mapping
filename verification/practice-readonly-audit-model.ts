@@ -1,4 +1,4 @@
-import { completeServicePeriodState, workspaceSchema, type Context } from "../lib/practice/src/hub/index.ts";
+import { completeServicePeriodState, workspaceSchema, importDeclarationsSchema, resolveImportedProvider, type ImportDeclarations, type Context } from "../lib/practice/src/hub/index.ts";
 import { completeReportCoverage } from "../artifacts/comp-dashboard/src/lib/complete-report-coverage.ts";
 import { buildImportedSessionOverlay } from "../artifacts/comp-dashboard/src/lib/import-derived-sessions.ts";
 import { completePeriodSessionSummary } from "../artifacts/comp-dashboard/src/lib/complete-session-summary.ts";
@@ -26,24 +26,26 @@ function retentionNumbers(metric: ReturnType<typeof buildLocalRetentionMetrics>[
 }
 
 /** Only this explicit numeric/date projection may leave the process. No source strings, keys or rows. */
-export function aggregateAudit(input: { workspace: unknown; context: Context; goals: CompensationGoal[]; snapshots: LocalSnapshot[]; overrides: SameDayVisitOverrides }, options: { asOf: string; start: string; end: string; targetLabel: string }) {
+export function aggregateAudit(input: { workspace: unknown; context: Context; goals: CompensationGoal[]; snapshots: LocalSnapshot[]; overrides: SameDayVisitOverrides; declarations?: ImportDeclarations | null }, options: { asOf: string; start: string; end: string; targetLabel: string }) {
   const { context, snapshots, overrides } = input;
   if (snapshots.some((snapshot) => snapshot.kind !== "attendance" && snapshot.kind !== "billing")) throw new Error("unsupported_snapshot_kind");
   const resolved = resolveWorkspaceDefaults(workspaceSchema.parse(input.workspace), context, input.goals);
   const workspace = resolved.workspace;
+  const declarations = input.declarations ? importDeclarationsSchema.parse(input.declarations) : null;
+  const admission = { declarations, teamId: workspace.settings.teamId };
   const ids = context.clinicians.filter((person) => (person.goalId ?? null) === workspace.settings.teamId).map((person) => person.id);
   const selected = context.clinicians.filter((person) => ids.includes(person.id));
   const current = currentPracticeClinicians(workspace, context, options.asOf);
-  const allProof = completeReportCoverage(snapshots, context.clinicians, options.asOf);
-  const currentProof = completeReportCoverage(snapshots, current, options.asOf, context.clinicians);
-  const proof = completeReportCoverage(snapshots, selected, options.asOf, context.clinicians);
-  const rawOverlay = buildImportedSessionOverlay(context, snapshots, workspace.settings.teamId, overrides);
-  const admittedOverlay = buildImportedSessionOverlay(context, allProof.eligibleSnapshots, workspace.settings.teamId, overrides);
+  const allProof = completeReportCoverage(snapshots, selected, options.asOf, context.clinicians, admission);
+  const currentProof = completeReportCoverage(snapshots, current, options.asOf, context.clinicians, admission);
+  const proof = allProof;
+  const rawOverlay = buildImportedSessionOverlay(context, snapshots, workspace.settings.teamId, overrides, { declarations });
+  const admittedOverlay = buildImportedSessionOverlay(context, allProof.eligibleSnapshots, workspace.settings.teamId, overrides, { declarations });
   const state = completeServicePeriodState(admittedOverlay.context.sessions, ids, options.asOf, proof.completeAttendanceCoverage);
   const modelContext = { ...admittedOverlay.context, sessions: state.eligibleRecords };
   const range = { start: options.start, end: options.end };
   const sessionSummary = completePeriodSessionSummary(modelContext.sessions, ids, range, state.eligibleCoverage, options.asOf);
-  const financial = practiceFinancialRange(resolved.forecastWorkspace, modelContext, snapshots, options.asOf, range, state.eligibleCoverage);
+  const financial = practiceFinancialRange(resolved.forecastWorkspace, modelContext, snapshots, options.asOf, range, state.eligibleCoverage, declarations);
   const projection = buildPracticeProjection(resolved.forecastWorkspace, modelContext, "actual", options.asOf, state.eligibleCoverage, currentProof.billingThrough);
   const rawCharges = summarizeReportedBilling(snapshots, options.asOf, { ...range, clinicianLabels: selected.map((person) => person.label) });
   const admittedCharges = summarizeReportedBilling(snapshots, options.asOf, { ...range, clinicianLabels: selected.map((person) => person.label), eligibleRows: new Set(proof.eligibleBillingRows) });
@@ -67,7 +69,8 @@ export function aggregateAudit(input: { workspace: unknown; context: Context; go
   const retention = buildLocalRetentionMetrics(historical, {}, overrides, 28, options.asOf, 90, options.start, options.end, { excludedFollowUpEvidence });
   const rawRetention = buildLocalRetentionMetrics(rawHistorical, {}, overrides, 28, options.asOf, 90, options.start, options.end);
   const targets = context.clinicians.filter((person) => normalize(person.label) === normalize(options.targetLabel));
-  const target = targets.length === 1 && ids.includes(targets[0].id) ? targets[0] : null;
+  const targetId = resolveImportedProvider(options.targetLabel, context.clinicians, workspace.settings.teamId, declarations);
+  const target = context.clinicians.find((person) => person.id === targetId) ?? null;
   const targetMetric = (metrics: typeof retention) => target ? metrics.clientActivityByClinician.find((row) => normalize(row.clinician) === normalize(target.label)) : undefined;
   const targetConsult = (summary: typeof consultation) => target ? summary.byClinician.find((row) => normalize(row.clinician ?? "") === normalize(target.label)) : undefined;
   const periodEnds = [...new Set([...proof.completeAttendanceCoverage, ...proof.completeBillingCoverage, ...state.eligibleCoverage].map((row) => `${row.start}/${row.end}`))].sort();
@@ -92,7 +95,7 @@ export function aggregateAudit(input: { workspace: unknown; context: Context; go
       admittedAttendanceRows: proof.eligibleAttendanceRows.length, admittedBillingRows: proof.eligibleBillingRows.length, excludedRows: proof.excludedRowsCount,
       incompleteOrMissingProviderPeriods: proof.incompletePeriods.length, retainedManualRecords: context.sessions.filter((row) => ids.includes(row.clinicianId)).length,
       excludedManualRecords: context.sessions.filter((row) => ids.includes(row.clinicianId) && !state.eligibleRecords.includes(row)).length },
-    coverageBlocker: snapshots.length > 0 && snapshots.every((row) => row.reportCoverage == null)
+    coverageBlocker: !declarations?.sourceSets.length && snapshots.length > 0 && snapshots.every((row) => row.reportCoverage == null)
       ? "all_active_imports_lack_explicit_coverage_confirm_source_report_dates_or_owner_confirmed_scope_no_minmax_inference"
       : proof.eligibleAttendanceRows.length === 0 && proof.eligibleBillingRows.length === 0 ? "no_import_rows_pass_complete_period_and_global_identity_gates" : null,
     through: { attendance: proof.attendanceThrough, billing: proof.billingThrough, joint: proof.dataThrough,
@@ -119,7 +122,7 @@ export function aggregateAudit(input: { workspace: unknown; context: Context; go
       rawInvalidFeeRows: rawCharges.evidence.invalidFeeRowCount, rawInvalidDateRows: rawCharges.evidence.invalidDateRowCount,
       admittedNonzeroPhoneChargeRows: proof.eligibleBillingRows.filter((row) => row.serviceDate >= range.start && row.serviceDate <= range.end && row.totalFeeCharged !== 0 && (row.billingCode?.trim().toUpperCase() === "PHONE" || row.visitKind === "consultation")).length,
       unresolvedPartialFollowUpRows: excludedFollowUpEvidence.length },
-    requestedClinician: { identity: targets.length > 1 ? "ambiguous_global_identity" : target ? "unique_selected_identity" : "not_found_or_not_selected",
+    requestedClinician: { identity: target ? declarations?.mappings.some((row) => row.clinicianId === target.id) ? "explicit_confirmed_selected_identity" : "unique_selected_identity" : targets.length > 1 ? "ambiguous_global_identity" : "not_found_or_not_selected",
       beforeAdmission: { confirmedCloser: consultNumbers(targetConsult(rawConsultation)), retention: retentionNumbers(targetMetric(rawRetention)) },
       candidate: { confirmedCloser: consultNumbers(targetConsult(consultation)), retention: retentionNumbers(targetMetric(retention)) } },
     practiceConsultation: { beforeAdmission: consultNumbers(rawConsultation.practice), candidate: consultNumbers(consultation.practice) },
@@ -127,6 +130,6 @@ export function aggregateAudit(input: { workspace: unknown; context: Context; go
       clinicianClose: "manual_confirmed_closer_credit_divided_by_evaluated_credited_journeys_unconfirmed_candidates_pending_internal_referrers_protected",
       initialRetention: "three_treatment_sessions_initial_gaps_at_most_28_days_PHONE_excluded_pending_excluded",
       endings: "three_treatment_sessions_then_90_days_mature_covered_followup_later_returns_and_unresolved_partial_evidence_block_absence" },
-    limitations: ["raw_evidence_is_not_certified_actual_coverage", "no_old_deployed_UI_reconstruction", "billed_fees_are_not_cash", "missing_actual_costs_remain_unknown", "no_coverage_inferred_or_written", "no_compensation_or_paid_PHONE_policy_change", "aggregate_single_person_groups_may_still_be_sensitive_keep_report_private"],
+    limitations: ["raw_evidence_is_not_certified_actual_coverage", "no_old_deployed_UI_reconstruction", "billed_fees_are_not_cash", "missing_actual_costs_remain_unknown", "no_coverage_inferred_or_written", "percentage_pay_uses_accepted_discounted_charges_PHONE_must_be_zero", "aggregate_single_person_groups_may_still_be_sensitive_keep_report_private"],
   };
 }

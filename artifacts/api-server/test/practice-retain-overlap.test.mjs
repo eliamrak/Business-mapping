@@ -15,6 +15,7 @@ const bundled = await build({
     builder.onResolve({ filter: /^@workspace\/db$/ }, () => ({ path: "mock", namespace: "no-database" }));
     builder.onLoad({ filter: /.*/, namespace: "no-database" }, () => ({ resolveDir: fileURLToPath(new URL("../", import.meta.url)), contents: `
       export * from ${JSON.stringify(schemaPath)};
+      export * from ${JSON.stringify(fileURLToPath(new URL("../../../lib/db/src/schema/clinicians.ts", import.meta.url)))};
       import { PgDialect } from "drizzle-orm/pg-core";
       import { getTableName } from "drizzle-orm";
       export const mockState = { snapshots: [], packages: [], audits: [], updates: [], failAudit: false };
@@ -23,6 +24,7 @@ const bundled = await build({
       const tx = {
         async execute(statement) {
           const query = dialect.sqlToQuery(statement);
+          if (query.sql.includes("practice_import_declarations")) return { rows: [{ available: false }] };
           if (/INSERT INTO practice_import_snapshots/.test(query.sql)) {
             const [id, packageImportId, practiceId, accountId, kind, coverageStart, coverageEnd, sourceHash, rowCount, rows, proof] = query.params;
             mockState.snapshots.push({ id, packageImportId, practiceId, accountId, kind, coverageStart, coverageEnd, sourceHash, rowCount,
@@ -48,7 +50,7 @@ const bundled = await build({
           } else mockState.packages.push({ active: 1, importedAt: new Date("2026-10-15T00:00:00Z"), ...structuredClone(value) });
         } }; }
       };
-      export const db = { select: tx.select, async transaction(callback) {
+      export const db = { select: tx.select, execute: tx.execute, async transaction(callback) {
         const before = structuredClone(mockState);
         try { return await callback(tx); } catch (error) { Object.assign(mockState, before); throw error; }
       } };

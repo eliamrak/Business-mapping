@@ -93,8 +93,10 @@ export async function readOnlyInput(client, scope) {
       importedAt: new Date(row.createdAt).toISOString(), coverageStart: row.coverageStart, coverageEnd: row.coverageEnd,
       reportCoverage: row.reportCoverage ?? null, sourceHash: row.sourceHash, rows: row.rows }));
     const overrides = reconcileOverrides(results.packages, snapshots);
+    const declarationTable = (await client.query("SELECT to_regclass('practice_import_declarations') IS NOT NULL AS available")).rows[0]?.available === true;
+    const declarations = declarationTable ? (await client.query("SELECT data FROM practice_import_declarations WHERE practice_id = $1 AND account_id = $2", [scope, scope])).rows[0]?.data ?? null : null;
     return { workspace: results.workspace[0].data, context: { clinicians: results.clinicians.map(numeric), staff: results.staff.map(numeric), sessions: results.sessions.map((row) => ({ ...row, updatedAt: new Date(row.updatedAt).toISOString() })) },
-      goals: results.goals.map(numeric), snapshots, overrides: overrides.effective, storedOverrideCount: overrides.storedCount };
+      goals: results.goals.map(numeric), snapshots, declarations, overrides: overrides.effective, storedOverrideCount: overrides.storedCount };
   } finally {
     if (began) await client.query("ROLLBACK");
   }

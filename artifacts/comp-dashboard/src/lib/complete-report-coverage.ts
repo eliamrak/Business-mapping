@@ -1,8 +1,8 @@
-import { canonicalServicePeriod, type PaceCoverage } from "@workspace/practice/hub";
+import { canonicalServicePeriod, resolveImportedProvider, type ImportDeclarations, type PaceCoverage } from "@workspace/practice/hub";
 import type { AttendanceRow, BillingRow, LocalFactKind, LocalSnapshot } from "./retention-local.ts";
 import { attendanceStatusConflicts } from "./retention-local.ts";
 
-type Clinician = { id: number; label: string };
+type Clinician = { id: number; label: string; goalId?: number | null };
 export type IncompleteReportPeriod = {
   start: string | null;
   end: string | null;
@@ -42,6 +42,7 @@ type Range = { start: string; end: string };
 export function completeReportCoverage(
   snapshots: readonly LocalSnapshot[], clinicians: readonly Clinician[], asOf: string,
   identityClinicians: readonly Clinician[] = clinicians,
+  options: { declarations?: ImportDeclarations | null; teamId?: number | null } = {},
 ): CompleteReportCoverage {
   if (!validDate(asOf)) throw new Error("Complete report coverage requires a valid as-of date.");
   const labels = new Map<string, number[]>();
@@ -50,7 +51,14 @@ export function completeReportCoverage(
     labels.set(key, [...new Set([...(labels.get(key) ?? []), person.id])]);
   }
   const reportingIds = new Set(clinicians.map((person) => person.id));
+  const resolveAny = (label: string) => options.teamId !== undefined
+    ? resolveImportedProvider(label, identityClinicians, options.teamId, options.declarations)
+    : labels.get(normalize(label))?.length === 1 ? labels.get(normalize(label))![0] : null;
   const mappedId = (label: string) => {
+    if (options.teamId !== undefined) {
+      const id = resolveImportedProvider(label, identityClinicians, options.teamId, options.declarations);
+      return id !== null && reportingIds.has(id) ? id : null;
+    }
     const ids = labels.get(normalize(label));
     return ids?.length === 1 && reportingIds.has(ids[0]) ? ids[0] : null;
   };
@@ -58,20 +66,42 @@ export function completeReportCoverage(
   const limits = [
     "Completeness requires explicit valid reportCoverage.complete; observed service-date spans and upload dates are not proof.",
     "Report metadata has no provider roster. Proof is attributed only to uniquely mapped providers present in each snapshot; absent providers are never inferred as zero.",
-    "Name identity is validated across all known clinician IDs before reporting scope. Other-team, former and inactive names cannot be removed to resolve ambiguity; unrelated unique providers need not supply reports for the selected roster.",
+    "Name identity is validated across all known clinician IDs before reporting scope. Only a confirmed scoped crosswalk may resolve copied IDs; selecting a team alone never resolves ambiguity.",
     "Through dates require a common complete period for every supplied provider. Supply the intended reporting roster, including former clinicians where relevant; follow-up rows are not filtered by current employment.",
     "Canonical service periods are 14 calendar days anchored at 2026-01-01. Only periods ended on or before the as-of date qualify; gaps remain excluded.",
     "Attendance and billing proof are independent. dataThrough is only the earlier shared through-date, not certification of joint-source continuity or a forecast-start decision; inspect each provider's ranges and gaps.",
     "Raw rows remain available for reconciliation, not eligible actual totals or historical averages. Coverage proof does not certify fee identity, cash collection or contractual percentage-compensation basis.",
-    "Each admitted source must individually enclose the entire canonical 14-day period. Adjacent partial declarations never combine; partial-source rows remain excluded after a full replacement report arrives.",
+    "A source or explicitly confirmed frozen source set must enclose the entire canonical 14-day period. Adjacent partial declarations never combine automatically. Source-set declarations do not change individual source proofs or certify future uploads.",
     "Any invalid service date or row outside its own source's explicit proof bounds invalidates that whole source's proof, even if another source covers that date. Eligible raw-row arrays preserve original identity for source admission before conflict reconciliation, followed by team/date scoping; they are not reconciled totals.",
   ];
-  const proofs = new Map<LocalSnapshot, Range>();
+  const proofs = new Map<LocalSnapshot, Array<Range & { clinicianIds?: number[] }>>();
   const providerRanges = new Map<string, { kind: LocalFactKind; clinicianId: number; ranges: Range[] }>();
+  const addRange = (kind: LocalFactKind, clinicianId: number, range: Range) => {
+    const key = `${kind}:${clinicianId}`;
+    const group = providerRanges.get(key) ?? { kind, clinicianId, ranges: [] };
+    group.ranges.push(range);
+    providerRanges.set(key, group);
+  };
+  for (const set of options.declarations?.sourceSets ?? []) {
+    const members = set.snapshotIds.map((id) => snapshots.filter((snapshot) => snapshot.id === id));
+    const valid = validDate(set.start) && validDate(set.end) && set.start <= set.end
+      && members.length > 0 && new Set(set.snapshotIds).size === set.snapshotIds.length
+      && members.every((matches) => matches.length === 1 && matches[0].kind === set.kind)
+      && members.flat().every((snapshot) => snapshot.rows.every((row) => validDate(row.serviceDate) && row.serviceDate >= set.start && row.serviceDate <= set.end
+        && set.clinicianIds.some((id) => resolveAny(row.clinician) === id)))
+      && set.clinicianIds.every((id) => members.flat().some((snapshot) => snapshot.rows.some((row) => resolveAny(row.clinician) === id)));
+    if (!valid) {
+      incompletePeriods.push({ start: set.start, end: set.end, kind: set.kind, reason: "Source-set declaration is stale, unmapped, contradictory or missing an active member; it is not admitted." });
+      continue;
+    }
+    const scopedIds = set.clinicianIds.filter((id) => reportingIds.has(id));
+    for (const snapshot of members.flat()) proofs.set(snapshot, [...(proofs.get(snapshot) ?? []), { start: set.start, end: set.end, clinicianIds: scopedIds }]);
+    for (const id of scopedIds) addRange(set.kind, id, { start: set.start, end: set.end });
+  }
   for (const snapshot of snapshots) {
     const proof = snapshot.reportCoverage;
     if (!proof || proof.complete !== true || !validDate(proof.start) || !validDate(proof.end) || proof.start > proof.end) {
-      incompletePeriods.push({ start: validDate(snapshot.coverageStart) ? snapshot.coverageStart : null,
+      if (!proofs.has(snapshot)) incompletePeriods.push({ start: validDate(snapshot.coverageStart) ? snapshot.coverageStart : null,
         end: validDate(snapshot.coverageEnd) ? snapshot.coverageEnd : null, kind: snapshot.kind, snapshotId: snapshot.id,
         reason: "Missing or invalid explicit complete report proof; observed bounds do not establish completeness." });
       continue;
@@ -81,16 +111,13 @@ export function completeReportCoverage(
         reason: "Invalid or contradictory report range: at least one service date is invalid or outside the declared proof; the entire source proof is rejected." });
       continue;
     }
-    proofs.set(snapshot, proof);
+    proofs.set(snapshot, [...(proofs.get(snapshot) ?? []), proof]);
     const ids = new Set(snapshot.rows.filter((row) => validDate(row.serviceDate) && row.serviceDate >= proof.start && row.serviceDate <= proof.end)
       .map((row) => mappedId(row.clinician)).filter((id): id is number => id !== null));
     if (!ids.size) incompletePeriods.push({ ...proof, kind: snapshot.kind, snapshotId: snapshot.id,
       reason: "No uniquely mapped provider in this report; provider scope cannot be established." });
     for (const clinicianId of ids) {
-      const key = `${snapshot.kind}:${clinicianId}`;
-      const group = providerRanges.get(key) ?? { kind: snapshot.kind, clinicianId, ranges: [] };
-      group.ranges.push({ start: proof.start, end: proof.end });
-      providerRanges.set(key, group);
+      addRange(snapshot.kind, clinicianId, { start: proof.start, end: proof.end });
     }
   }
   const eligible = new Map<string, Range[]>();
@@ -116,11 +143,11 @@ export function completeReportCoverage(
   const eligibleBillingRows = new Set<BillingRow>();
   const eligibleAttendanceRows = new Set<AttendanceRow>();
   for (const snapshot of snapshots) {
-    const proof = proofs.get(snapshot);
-    if (!proof) continue;
-    const ids = new Set(snapshot.rows.map((row) => mappedId(row.clinician)).filter((id): id is number => id !== null));
+    const sourceProofs = proofs.get(snapshot);
+    if (!sourceProofs) continue;
+    const ids = new Set([...snapshot.rows.map((row) => mappedId(row.clinician)).filter((id): id is number => id !== null), ...sourceProofs.flatMap((proof) => proof.clinicianIds ?? [])]);
     for (const clinicianId of ids) for (const period of eligible.get(`${snapshot.kind}:${clinicianId}`) ?? []) {
-      if (proof.start > period.start || proof.end < period.end) continue;
+      if (!sourceProofs.some((proof) => proof.start <= period.start && proof.end >= period.end && (!proof.clinicianIds || proof.clinicianIds.includes(clinicianId)))) continue;
       const { start, end } = period;
       const rows = snapshot.rows.filter((row) => mappedId(row.clinician) === clinicianId && validDate(row.serviceDate) && row.serviceDate >= start && row.serviceDate <= end);
       for (const row of rows) {

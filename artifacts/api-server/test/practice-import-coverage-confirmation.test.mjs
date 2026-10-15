@@ -15,12 +15,13 @@ const bundle = await build({
     builder.onResolve({ filter: /^@workspace\/db$/ }, () => ({ path: "mock-db", namespace: "mock-db" }));
     builder.onLoad({ filter: /.*/, namespace: "mock-db" }, () => ({ resolveDir: fileURLToPath(new URL("../", import.meta.url)), contents: `
       export * from ${JSON.stringify(schemaPath)};
+      export * from ${JSON.stringify(fileURLToPath(new URL("../../../lib/db/src/schema/clinicians.ts", import.meta.url)))};
       import { PgDialect } from "drizzle-orm/pg-core";
       import { getTableName } from "drizzle-orm";
       export const mockState = { available: true, snapshots: [], packages: [], updates: [], audits: [], statements: [], reads: [], failAudit: false, failUpdate: false, failCas: false };
       const dialect = new PgDialect();
       const tx = {
-        async execute(statement) { mockState.statements.push(dialect.sqlToQuery(statement)); return { rows: [{ available: mockState.available }] }; },
+        async execute(statement) { const query = dialect.sqlToQuery(statement); mockState.statements.push(query); return { rows: [{ available: query.sql.includes("practice_import_declarations") ? false : mockState.available }] }; },
         select() { return { from(table) { this.table = table; return this; }, async where(condition) {
           const query = dialect.sqlToQuery(condition); mockState.reads.push(query);
           const rows = getTableName(this.table) === "practice_import_snapshots" ? mockState.snapshots : mockState.packages;
@@ -40,7 +41,7 @@ const bundle = await build({
           mockState.audits.push({ table: getTableName(table), value: structuredClone(value) });
         } }; }
       };
-      export const db = { select: tx.select, async transaction(callback) {
+      export const db = { select: tx.select, execute: tx.execute, async transaction(callback) {
         const before = structuredClone({ snapshots: mockState.snapshots, updates: mockState.updates, audits: mockState.audits });
         try { return await callback(tx); } catch (error) { Object.assign(mockState, before); throw error; }
       } };

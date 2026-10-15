@@ -40,10 +40,10 @@ export type MonthFlow = {
   incompleteClinicians: string[];
   revenue: number | null;
   otherIncome: number;
-  clinicianPay: number;
-  employerBurden: number;
-  familyGrossPay: number;
-  familyEmployerBurden: number;
+  clinicianPay: number | null;
+  employerBurden: number | null;
+  familyGrossPay: number | null;
+  familyEmployerBurden: number | null;
   staffPay: number | null;
   overhead: number;
   marketing: number;
@@ -330,6 +330,9 @@ export function monthFlow(
   let employerBurden = 0;
   let familyGrossPay = 0;
   let familyEmployerBurden = 0;
+  let unknownPercentagePay = false;
+  let unknownFamilyPay = false;
+  let rejectedDayReplacement = false;
   for (const person of people) {
     const baseProfile = workspace.clinicians.find(
       (entry) => entry.clinicianId === person.id && entry.status !== "archived",
@@ -339,20 +342,37 @@ export function monthFlow(
     let personSessions = 0;
     let personRevenue = 0;
     let capEarned = baseProfile?.openingCapContribution ?? 0;
+    let unknownCap = false;
     const schedule = payrollScheduleForClassification(person.classification);
     const activeStart = baseProfile?.start ?? payrollHistoryStart;
+    const validateDayBilling = (date: string, count: number, mode: string, split: number) => {
+      const proofRequired = !projection && importedBillingSource.requiresProof.has(`${person.id}|${date}`);
+      const expectedCount = importedBillingSource.replacementSessions.get(person.id)?.get(date);
+      const rejected = proofRequired && (expectedCount === undefined || Math.abs(expectedCount - count) > 1e-8);
+      if (rejected) rejectedDayReplacement = true;
+      const unknownCharge = !projection && (rejected || importedBillingSource.unknownDates.some((row) => row.clinicianId === person.id && row.date === date));
+      const percentageSensitive = split > 0 || (person.capEnabled && person.postCapClinicianSplit > 0);
+      if (mode !== "existing_split" || !percentageSensitive || (!unknownCharge && !unknownCap)) return false;
+      unknownPercentagePay = true;
+      if (person.id === familyId) unknownFamilyPay = true;
+      if (person.capEnabled && person.capAmount > 0) unknownCap = true;
+      return true;
+    };
     const dayPay = (date: string, count: number) => {
       const activeProfile = clinicianModelAt(workspace, person.id, date);
       if (baseProfile && !activeProfile) return 0;
       if (activeProfile?.status === "planned") return 0;
       const term = clinicianTermsAt(workspace, person.id, date);
-      const rate =
+      const modeledRate =
         activeProfile?.expectedSessionRevenue ??
         term.sessionRate ??
         person.sessionRate;
+      const actualCharge = !projection ? importedBilling.get(person.id)?.get(date) : undefined;
+      const rate = actualCharge !== undefined && count > 0 ? actualCharge / count : modeledRate;
       const mode = activeProfile?.payMode ?? "existing_split";
       const amount = activeProfile?.payAmount ?? 0;
       const split = term.clinicianSplit ?? person.preCapClinicianSplit;
+      if (validateDayBilling(date, count, mode, split)) return 0;
       const remaining = Math.max(0, person.capAmount - capEarned);
       const afterCap =
         person.capEnabled && person.capAmount > 0 && remaining === 0;
@@ -398,6 +418,7 @@ export function monthFlow(
       const mode = activeProfile?.payMode ?? "existing_split";
       const amount = activeProfile?.payAmount ?? 0;
       const split = term.clinicianSplit ?? person.preCapClinicianSplit;
+      validateDayBilling(date, count, mode, split);
       if (!schedule && mode === "salary") {
         pay +=
           person.id === familyId
@@ -481,8 +502,8 @@ export function monthFlow(
       ...empty,
       sessions: forecastMonth?.values.sessions ?? null,
       revenue: forecastMonth?.values.revenue ?? null,
-      clinicianPay: forecastMonth?.values.clinicianPay ?? clinicianPay,
-      employerBurden: forecastMonth?.values.employerBurden ?? employerBurden,
+      clinicianPay: forecastMonth?.values.clinicianPay ?? null,
+      employerBurden: forecastMonth?.values.employerBurden ?? null,
       familyGrossPay: earnedFamilyPay,
       familyEmployerBurden: familyId === null ? 0 : forecastMonth?.clinicians[String(familyId)]?.employerBurden ?? familyEmployerBurden,
       staffPay: forecastMonth?.values.staffCost ?? null,
@@ -561,8 +582,8 @@ export function monthFlow(
     (forecastMonth?.values.ownerPayroll ?? 0) * fraction;
   const legacyOwnerBurden =
     (legacyOwnerPayroll * workspace.settings.ownerPayrollBurdenPct) / 100;
-  const unknownActualBilling = !projection && importedBillingSource.unknownDates.some((row) => row.date >= start && row.date <= through);
-  if (!projection && (!scheduledStaffKnown || unknownActualBilling)) {
+  const unknownActualBilling = !projection && (rejectedDayReplacement || importedBillingSource.unknownDates.some((row) => row.date >= start && row.date <= through));
+  if (!projection && (!scheduledStaffKnown || unknownActualBilling || unknownPercentagePay)) {
     const netPay = estimateW2NetPay(familyGrossPay, workspace.settings.estimatedIncomeTaxPct);
     return {
       ...empty,
@@ -571,10 +592,10 @@ export function monthFlow(
       incompleteClinicians,
       revenue: unknownActualBilling ? null : revenue,
       otherIncome,
-      clinicianPay,
-      employerBurden,
-      familyGrossPay,
-      familyEmployerBurden,
+      clinicianPay: unknownPercentagePay ? null : clinicianPay,
+      employerBurden: unknownPercentagePay ? null : employerBurden,
+      familyGrossPay: unknownFamilyPay ? null : familyGrossPay,
+      familyEmployerBurden: unknownFamilyPay ? null : familyEmployerBurden,
       staffPay: scheduledStaffKnown ? staffPay : null,
       overhead,
       marketing,
@@ -583,10 +604,11 @@ export function monthFlow(
       legacyOwnerBurden,
       estimatedEmployeePayrollTax: netPay.employeePayrollTax,
       estimatedAdditionalWithholding: netPay.additionalWithholding,
-      estimatedNetPay: familyId === null ? null : netPay.net,
+      estimatedNetPay: familyId === null || unknownFamilyPay ? null : netPay.net,
       unavailableReasons: [
         ...(!scheduledStaffKnown ? ["Selected staff compensation is unknown; staff costs, profit and allocations cannot be certified."] : []),
         ...(unknownActualBilling ? ["Imported billing source identities conflict or have unknown fees in this actual window; revenue, profit and allocations cannot be certified."] : []),
+        ...(unknownPercentagePay ? ["Percentage compensation or cap progress is unknown because matching billed charges were rejected."] : []),
       ],
     };
   }

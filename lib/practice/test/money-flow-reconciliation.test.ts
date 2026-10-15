@@ -128,3 +128,36 @@ test("default projected allocations share engine taxes and reserves while month-
   assert.equal(actual.allocationBasis, "positive-profit");
   close(actual.distribution, Math.max(0, actual.profit!) * 0.9);
 });
+
+test("actual percentage pay uses discounted charge and rejected day evidence withholds it", () => {
+  const { workspace, context } = fixture("2026-01-01");
+  context.clinicians = [{ ...context.clinicians[2], classification: "other" }];
+  context.sessions = context.sessions.filter((row) => row.clinicianId === 3);
+  workspace.settings.familyW2ClinicianId = null;
+  context.importedBillingActuals = [{ clinicianId: 3, serviceDate: "2026-01-02", clientId: "synthetic", billingCode: "90837", totalFeeCharged: 50, sourceRowHash: "discount", replacementSessionCount: 2 }];
+  const flow = monthFlow(workspace, context, "2026-01-01", "2026-01-14");
+  close(flow.revenue, 2650);
+  close(flow.clinicianPay, 1590);
+  context.importedBillingActuals[0].replacementSessionCount = 3;
+  const invalid = monthFlow(workspace, context, "2026-01-01", "2026-01-14");
+  assert.equal(invalid.revenue, null);
+  assert.equal(invalid.clinicianPay, null);
+  assert.equal(invalid.profit, null);
+});
+
+test("W2 service-day billing is validated before the next paycheck, without withholding fixed salary", () => {
+  const { workspace, context } = fixture("2026-01-01");
+  context.clinicians = [{ ...context.clinicians[1] }];
+  context.sessions = context.sessions.filter((row) => row.clinicianId === 2);
+  workspace.clinicians = [];
+  context.sessions = context.sessions.map((row) => ({ ...row, start: "2026-01-01", end: "2026-01-01", completed: 1 }));
+  context.importedBillingActuals = [{ clinicianId: 2, serviceDate: "2026-01-01", clientId: "synthetic", billingCode: "90837", totalFeeCharged: 50, sourceRowHash: "bad-before-payday", replacementSessionCount: 3 }];
+  const invalid = monthFlow(workspace, context, "2026-01-01", "2026-01-01");
+  assert.equal(invalid.revenue, null);
+  assert.equal(invalid.clinicianPay, null);
+  assert.ok(invalid.unavailableReasons.some((reason) => reason.includes("Percentage compensation")));
+  workspace.clinicians.push(clinicianSettingSchema.parse({ id: crypto.randomUUID(), clinicianId: 2, start: "2026-01-01", desiredWeeklySessions: 14, payMode: "salary", payAmount: 12000, inPersonPct: 0 }));
+  const salary = monthFlow(workspace, context, "2026-01-01", "2026-01-01");
+  assert.equal(salary.revenue, null);
+  close(salary.clinicianPay, 0);
+});

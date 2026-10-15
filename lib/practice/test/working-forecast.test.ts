@@ -45,6 +45,30 @@ test("imported charges replace their matching clinician-date estimate exactly on
   assert.equal(conflict.values.revenue, null); assert.equal(conflict.values.profit, null);
   assert.deepEqual(context.importedBillingActuals.slice(0, 2), before.importedBillingActuals);
 });
+
+test("percentage pay and cap progress use actual discounted charges rather than card fees", () => {
+  const { workspace, context, options } = setup();
+  Object.assign(context.clinicians[0], { classification: "1099", preCapClinicianSplit: 60, preCapPracticeSplit: 40, capEnabled: true, capAmount: 100, postCapClinicianSplit: 80, postCapPracticeSplit: 20 });
+  context.importedBillingActuals = [{ clinicianId: 1, serviceDate: "2026-10-01", totalFeeCharged: 50, sourceRowHash: "discount", replacementSessionCount: 1 }];
+  const before = structuredClone(context);
+  const month = forecast(workspace, context, [], 1, false, { ...options, workingRange: { start: "2026-10-01", end: "2026-10-03" } })[0];
+  near(month.values.revenue, 250);
+  near(month.values.clinicianPay, 150);
+  assert.deepEqual(context, before);
+});
+
+test("rejected replacement evidence cannot certify split pay or later cap progress, but salary remains known", () => {
+  const { workspace, context, options } = setup();
+  Object.assign(context.clinicians[0], { classification: "1099", preCapClinicianSplit: 60, preCapPracticeSplit: 40, capEnabled: true, capAmount: 100, postCapClinicianSplit: 80, postCapPracticeSplit: 20 });
+  context.importedBillingActuals = [{ clinicianId: 1, serviceDate: "2026-10-01", totalFeeCharged: 50, sourceRowHash: "rejected-discount", replacementSessionCount: 2 }];
+  const months = forecast(workspace, context, [], 1, false, options);
+  assert.equal(months[0].values.revenue, null);
+  assert.equal(months[0].values.clinicianPay, null);
+  assert.equal(months[0].clinicians["1"].clinicianPay, null);
+  assert.equal(months[1].values.clinicianPay, null, "Unknown prior cap progress cannot certify a later split");
+  workspace.clinicians.push(clinicianSettingSchema.parse({ id: crypto.randomUUID(), clinicianId: 1, start: "2026-01-01", desiredWeeklySessions: 7, payMode: "salary", payAmount: 12000, inPersonPct: 0 }));
+  near(forecast(workspace, context, [], 1, false, options)[0].values.clinicianPay, 1000);
+});
 test("former current-team flag excludes future estimates without changing stored session or billing facts", () => {
   const { workspace, context, options } = setup();
   workspace.clinicians.push(clinicianSettingSchema.parse({ id: crypto.randomUUID(), clinicianId: 1, start: "2026-01-01", desiredWeeklySessions: 5, onTeam: false }));

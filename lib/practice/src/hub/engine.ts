@@ -187,7 +187,7 @@ export const summarizeImportedBillingActuals = (
     const code = row.billingCode?.trim().toUpperCase();
     const consultation = code === "PHONE" || row.visitKind === "consultation";
     if (consultation) {
-      if (row.totalFeeCharged !== 0) unknownDates.push({ clinicianId: row.clinicianId, date: row.serviceDate, reason: "Paid consultation revenue policy is unapproved; consultation charges cannot replace treatment estimates." });
+      if (row.totalFeeCharged !== 0) unknownDates.push({ clinicianId: row.clinicianId, date: row.serviceDate, reason: "Nonzero PHONE/consultation charge violates the confirmed zero-fee policy; source review is required and charges cannot replace treatment estimates." });
       continue;
     }
     if (row.clientId !== undefined && !/^\d{5}$/.test(code ?? "")) {
@@ -646,6 +646,7 @@ export function forecast(
   let cashKnown = true;
   let baselineRetained = 1;
   const capEarned: Record<string, number> = {};
+  const unknownCapKeys = new Set<string>();
   const cohorts: {
     start: number;
     clients: number;
@@ -664,6 +665,7 @@ export function forecast(
       weeks = days / 7;
     const warnings = [...issues];
     let unknownBilling = options.useImportedBillingActuals !== false && importedBillingSource.unknownDates.some((row) => row.date >= start && row.date <= end);
+    let unknownCompensation = false;
     if (unknownBilling) warnings.push("Imported billing source identities conflict or have unknown fees; matching revenue is unknown.");
     if (unknownBilling) warnings.push(...importedBillingSource.unknownDates.filter((row) => row.date >= start && row.date <= end).flatMap((row) => row.reason ? [row.reason] : []));
     const unknownStaff = staff.filter((member) => datesIn(start, end).some((date) => !staffCompensationKnown(staffMemberAt(workspace, member, date))));
@@ -679,8 +681,10 @@ export function forecast(
       warnings.push(
         "Historical session coverage is incomplete for the selected team.",
       );
-    if (start.endsWith("-01-01") || results.length === 0)
+    if (start.endsWith("-01-01") || results.length === 0) {
       for (const key of Object.keys(capEarned)) delete capEarned[key];
+      unknownCapKeys.clear();
+    }
     if (results.length === 0 && !start.endsWith("-01-01"))
       for (const c of selected) {
         const op = workspace.clinicians.find((o) => o.clinicianId === c.id);
@@ -1361,14 +1365,35 @@ export function forecast(
       const count = allocation.assigned.get(c.instance) ?? 0;
       let pay = 0,
         earned = 0;
+      let personPayUnknown = false;
       for (const day of c.daily) {
         const dayCount =
           options.workingForecast ? (options.baselineWeeklyByClinician?.[c.id] ?? 0) / 7 : c.capacity > 0 ? (count * day.capacity) / c.capacity : 0;
+        const importedFee = options.useImportedBillingActuals !== false && c.instance === String(c.id)
+          ? importedBilling.get(c.id)?.get(day.date) : undefined;
+        const replacementCount = importedBillingSource.replacementSessions.get(c.id)?.get(day.date);
+        const needsProof = importedFee !== undefined && (options.workingForecast || importedBillingSource.requiresProof.has(`${c.id}|${day.date}`));
+        const rejectedReplacement = needsProof && (replacementCount === undefined || Math.abs(replacementCount - dayCount) > 1e-8);
+        if (rejectedReplacement) {
+          unknownBilling = true;
+          importedBillingSource.unknownDates.push({ clinicianId: c.id, date: day.date });
+          warnings.push("Partial or unverified treatment-day billing cannot replace the whole modeled day; revenue and percentage compensation are unknown until complete matching evidence is supplied.");
+        }
+        const unknownDayBilling = options.useImportedBillingActuals !== false && importedBillingSource.unknownDates.some((row) => row.clinicianId === c.id && row.date === day.date);
+        const splitSensitive = day.split > 0 || (c.capEnabled && c.postCapClinicianSplit > 0);
+        const splitUnknown = day.mode === "existing_split" && splitSensitive && (unknownDayBilling || unknownCapKeys.has(c.capKey));
+        if (splitUnknown) {
+          personPayUnknown = true;
+          unknownCompensation = true;
+          if (c.capEnabled && c.capAmount > 0) unknownCapKeys.add(c.capKey);
+        }
+        // Only accepted matching charges can establish percentage pay and cap progress.
+        const compensationRate = importedFee !== undefined && !unknownDayBilling && dayCount > 0 ? importedFee / dayCount : day.rate;
         const remaining = Math.max(0, c.capAmount - (capEarned[c.capKey] ?? 0));
         const afterCap = c.capEnabled && c.capAmount > 0 && remaining === 0;
         const calculated = calculateClinicianMetrics({
           ...c,
-          sessionRate: day.rate,
+          sessionRate: compensationRate,
           sessionsPerWeek: dayCount,
           weeksWorkedPerYear: 1,
           capEnabled: c.capEnabled && !afterCap,
@@ -1381,10 +1406,10 @@ export function forecast(
             ((c.nonClinicalHoursPerWeek ?? 0) / 7) *
             (c.weeksWorkedPerYear / 52.1786),
         });
-        if (day.mode === "existing_split")
+        if (day.mode === "existing_split" && !splitUnknown)
           capEarned[c.capKey] =
             (capEarned[c.capKey] ?? 0) +
-            (calculated.preCapSessions * day.rate * (100 - day.split)) / 100;
+            (calculated.preCapSessions * compensationRate * (100 - day.split)) / 100;
         pay +=
           day.mode === "salary"
             ? day.amount / 12 / calendarDays
@@ -1402,18 +1427,6 @@ export function forecast(
           const salary = day.amount / 12 / calendarDays;
           coOwnerSalaryPretax = (coOwnerSalaryPretax ?? 0) + salary;
           goalMeasureDaily[day.date].coOwnerSalaryPretax = salary;
-        }
-        const importedFee =
-          options.useImportedBillingActuals !== false && c.instance === String(c.id)
-            ? importedBilling.get(c.id)?.get(day.date)
-            : undefined;
-        if (importedFee !== undefined && (options.workingForecast || importedBillingSource.requiresProof.has(`${c.id}|${day.date}`))) {
-          const count = importedBillingSource.replacementSessions.get(c.id)?.get(day.date);
-          if (count === undefined || Math.abs(count - dayCount) > 1e-8) {
-            unknownBilling = true;
-            importedBillingSource.unknownDates.push({ clinicianId: c.id, date: day.date });
-            warnings.push("Partial or unverified treatment-day billing cannot replace the whole modeled day; revenue is unknown until complete matching evidence or an explicit policy is supplied.");
-          }
         }
         const dayRevenue = importedFee ?? dayCount * (options.workingForecast ? day.cardRate : day.rate);
         earned += dayRevenue;
@@ -1443,9 +1456,9 @@ export function forecast(
           capacity: c.capacity,
           utilization: (ratio(count, c.capacity) ?? 0) * 100,
           revenue: options.useImportedBillingActuals !== false && importedBillingSource.unknownDates.some((row) => row.clinicianId === c.id && row.date >= start && row.date <= end) ? null : earned,
-          clinicianPay: pay,
-          employerBurden: burden,
-          profit: options.useImportedBillingActuals !== false && importedBillingSource.unknownDates.some((row) => row.clinicianId === c.id && row.date >= start && row.date <= end) ? null : earned - pay - burden,
+          clinicianPay: personPayUnknown ? null : pay,
+          employerBurden: personPayUnknown ? null : burden,
+          profit: personPayUnknown || (options.useImportedBillingActuals !== false && importedBillingSource.unknownDates.some((row) => row.clinicianId === c.id && row.date >= start && row.date <= end)) ? null : earned - pay - burden,
         },
         end,
       );
@@ -1728,12 +1741,16 @@ export function forecast(
     if (missingPriorWorkingReceipts) warnings.push("Delayed collections are unknown: this working range lacks prior complete calendar-month revenue or exact within-month receipt timing.");
     if (options.workingForecast) for (const key of ["roas", "contributionRoas", "netRoi"]) values[key] = null;
     if (unknownBilling) for (const key of ["revenue", "profit", "ltv", "roas", "contributionRoas", "netRoi", "breakEvenSessions"]) values[key] = null;
+    if (unknownCompensation) {
+      warnings.push("Percentage compensation or prior cap progress is unknown because matching billed charges were rejected; fixed salary/hourly/session terms remain independent.");
+      for (const key of ["clinicianPay", "employerBurden", "ownerClinicalPay", "profit", "contributionPerSession", "contributionRoas", "netRoi", "breakEvenSessions", "taxReserve", "reserves", "distributions", "retainedCash", "familyTakeHome", "ownerDistributionsPretax"]) values[key] = null;
+    }
     if (unknownCollections) {
       values.collections = null;
       if (setting.processingPct > 0 || (missingPriorWorkingReceipts && setting.processingFixedPerTransaction > 0)) for (const key of ["fees", "profit", "netRoi", "contributionRoas", "breakEvenSessions"]) values[key] = null;
     }
     if (unknownCollections || unknownStaff.length) for (const key of ["taxReserve", "reserves", "distributions", "retainedCash", "familyTakeHome", "ownerDistributionsPretax"]) values[key] = null;
-    cashKnown = cashKnown && !unknownCollections && unknownStaff.length === 0;
+    cashKnown = cashKnown && !unknownCollections && !unknownCompensation && unknownStaff.length === 0;
     if (!cashKnown) { values.cash = null; values.runway = null; }
     for (const kpi of workspace.kpis) delete values[kpi.key];
     values = calculateCustomKpis(workspace, values, end);

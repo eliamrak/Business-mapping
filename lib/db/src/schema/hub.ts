@@ -8,8 +8,18 @@ import {
   uuid,
   uniqueIndex,
   date,
+  primaryKey,
   index,
 } from "drizzle-orm/pg-core";
+
+export const practiceImportDeclarationsTable = pgTable("practice_import_declarations", {
+  practiceId: text("practice_id").notNull(),
+  accountId: text("account_id").notNull(),
+  revision: integer("revision").notNull(),
+  data: jsonb("data").notNull(),
+  confirmedAt: timestamp("confirmed_at", { withTimezone: true }).notNull().defaultNow(),
+  confirmedBy: text("confirmed_by").notNull(),
+}, (table) => [primaryKey({ columns: [table.practiceId, table.accountId] })]);
 
 export const hubWorkspacesTable = pgTable("hub_workspaces", {
   id: integer("id").primaryKey(),

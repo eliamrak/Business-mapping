@@ -8,6 +8,8 @@ import {
 } from "react";
 import { ApiError, customFetch } from "@workspace/api-client-react";
 import { Download, Save, ShieldCheck, Upload } from "lucide-react";
+import type { StoredImportDeclarations } from "@workspace/practice/hub";
+import { ImportDeclarationReview } from "./import-declaration-review";
 import { completeReportCoverage, type CompleteReportCoverage } from "@/lib/complete-report-coverage";
 import { summarizeReportedBilling } from "@/lib/reported-billing";
 import {
@@ -17,6 +19,7 @@ import {
   exportLocalBackup,
   importLocalPackage,
   localDerivedVisitDetail,
+  phoneChargeAnomalies,
   type BillingCodeMinutes,
   type LocalSnapshot,
   type SameDayVisitOverrides,
@@ -75,6 +78,7 @@ type PendingLocalSnapshot = {
 };
 
 type StoredImportHistory = {
+  declarations?: StoredImportDeclarations | null;
   snapshots: LocalSnapshot[];
   billingCodeMinutes: BillingCodeMinutes;
   sameDayVisitOverrides: SameDayVisitOverrides;
@@ -139,6 +143,8 @@ class ImportConflict extends Error {
 }
 
 export type LocalRetentionWorkspaceState = {
+  declarations: StoredImportDeclarations | null;
+  setDeclarations: Dispatch<SetStateAction<StoredImportDeclarations | null>>;
   packages: StoredImportHistory["packages"];
   setPackages: Dispatch<SetStateAction<StoredImportHistory["packages"]>>;
   snapshots: LocalSnapshot[];
@@ -160,6 +166,7 @@ export type LocalRetentionWorkspaceState = {
 };
 
 export function useLocalRetentionWorkspaceState(enabled = true): LocalRetentionWorkspaceState {
+  const [declarations, setDeclarations] = useState<StoredImportDeclarations | null>(null);
   const [packages, setPackages] = useState<StoredImportHistory["packages"]>([]);
   const [snapshots, setSnapshots] = useState<LocalSnapshot[]>([]);
   const [billingCodeMinutes, setBillingCodeMinutes] =
@@ -183,6 +190,7 @@ export function useLocalRetentionWorkspaceState(enabled = true): LocalRetentionW
       .then((history) => {
         if (cancelled) return;
         setSnapshots(history.snapshots);
+        setDeclarations(history.declarations ?? null);
         setPackages(history.packages ?? []);
         setBillingCodeMinutes(history.billingCodeMinutes);
         setSameDayVisitOverrides(history.sameDayVisitOverrides ?? {});
@@ -198,6 +206,7 @@ export function useLocalRetentionWorkspaceState(enabled = true): LocalRetentionW
   }, [enabled]);
 
   return {
+    declarations, setDeclarations,
     packages,
     setPackages,
     snapshots,
@@ -293,7 +302,11 @@ export default function LocalRetentionWorkspace({
   metricSnapshots,
   excludedFollowUpEvidence,
   today = new Date().toLocaleDateString("en-CA"),
+  roster = [],
+  teamId = null,
 }: {
+  roster?: Array<{ id: number; label: string; goalId?: number | null }>;
+  teamId?: number | null;
   workspaceState?: LocalRetentionWorkspaceState;
   coverageSummary?: CompleteReportCoverage;
   /** Eligible historical snapshots, including former-clinician follow-up evidence; never raw reconciliation rows. */
@@ -303,6 +316,7 @@ export default function LocalRetentionWorkspace({
 }) {
   const ownedState = useLocalRetentionWorkspaceState(!workspaceState);
   const {
+    declarations, setDeclarations,
     packages,
     setPackages,
     snapshots,
@@ -590,6 +604,7 @@ export default function LocalRetentionWorkspace({
         {(rawBillingEvidence.conflictingHashCount > 0 || rawBillingEvidence.ambiguousEncounterCount > 0) && <p>Billing source review: {rawBillingEvidence.conflictingHashCount} fee conflicts; {rawBillingEvidence.ambiguousEncounterCount} ambiguous fee encounters. Original exports are retained. Conflicting amounts are not added together or automatically applied as corrections; actual totals still require independently admitted complete-period evidence.</p>}
         {verifiedCoverage.attendanceStatusConflictCount > 0 && <p>{verifiedCoverage.attendanceStatusConflictCount} conflicting attendance status groups. Affected complete provider periods are withheld, not zero; review matching diagnostics below.</p>}
         <p>Imported coverage proof does not certify separate manual-source session history.</p>
+        {phoneChargeAnomalies(snapshots).length > 0 && <p role="alert">PHONE charge review: {phoneChargeAnomalies(snapshots).length} raw source rows violate the zero-fee policy. Original amounts are preserved; PHONE is excluded from treatment counts and affected revenue remains unknown.</p>}
         {!coverageSummary && <p>Provider roster scope is unavailable. Actual metrics remain withheld until mapped complete-report coverage is supplied.</p>}
         {recentCoverageGaps.length > 0 && <ul aria-label="Most recent incomplete report periods">
           {recentCoverageGaps.map((period, index) => <li key={index}>{gapDescription(period)}</li>)}
@@ -601,6 +616,8 @@ export default function LocalRetentionWorkspace({
           {verifiedCoverage.limits.map((limit) => <p key={limit}>{limit}</p>)}
         </details>
       </section>
+      <ImportDeclarationReview key={`${teamId}:${declarations?.revision ?? 0}:${snapshots.map((source) => source.id).sort().join(",")}`}
+        snapshots={snapshots} roster={roster} teamId={teamId} stored={declarations} onSaved={setDeclarations} />
       <section className="pw-import-provenance" aria-label="Confirm individual import coverage">
         <h3>Confirm report coverage</h3>
         <p>Enter dates from the source report or an explicit owner confirmation. Dates are never filled from occupied service dates. This saves coverage metadata only; it does not alter source facts or establish a provider roster.</p>
