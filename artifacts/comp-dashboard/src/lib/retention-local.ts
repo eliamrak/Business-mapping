@@ -1882,6 +1882,11 @@ export function consultConversionForContributor(summary: ConsultConversionSummar
   return metric ? { ...metric, benchmarkRate: metric.evaluated > 0 ? summary.practice.conversionRate : null } : null;
 }
 
+export type ConsultConversionOptions = {
+  /** Scope consultation cohorts only. All clinicians' treatment and coverage evidence remains available. */
+  cohortClinicianNames?: readonly string[];
+};
+
 export function summarizeConsultConversions(
   snapshots: LocalSnapshot[],
   sameDayVisitOverrides: SameDayVisitOverrides = {},
@@ -1889,7 +1894,10 @@ export function summarizeConsultConversions(
   periodEnd = "9999-12-31",
   asOfDate = "9999-12-31",
   attributionOverrides: ConsultAttributionOverrideInput[] = [],
+  options: ConsultConversionOptions = {},
 ): ConsultConversionSummary {
+  const cohortNames = options.cohortClinicianNames === undefined ? null
+    : new Set(options.cohortClinicianNames.map(normalizeClinician).filter(Boolean));
   const coverageIntervals = verifiedAttendanceIntervals(snapshots, asOfDate);
   const isConsult = consultAttendanceClassifier(snapshots);
   const overridesByClient = new Map(
@@ -1904,6 +1912,7 @@ export function summarizeConsultConversions(
             (row) =>
               row.status === "show" &&
               row.serviceDate <= asOfDate &&
+              (cohortNames === null || cohortNames.has(normalizeClinician(row.clinician))) &&
               isConsult(row),
           )
         : [],

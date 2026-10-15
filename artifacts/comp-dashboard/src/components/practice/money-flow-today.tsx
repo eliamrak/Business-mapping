@@ -181,6 +181,7 @@ type Props = {
   workspace: Workspace;
   context: Context;
   today: string;
+  sourceMonth?: string;
   attendanceCoverage?: PaceCoverage[];
   onPayeeChange: (id: number | null) => void;
   onAllocationPercent: (id: string, percent: number) => void;
@@ -224,6 +225,7 @@ export default function MoneyFlowToday({
   workspace,
   context,
   today,
+  sourceMonth,
   attendanceCoverage,
   onPayeeChange,
   onAllocationPercent,
@@ -257,9 +259,9 @@ export default function MoneyFlowToday({
   const previous = new Date(today.slice(0, 7) + "-01T12:00:00Z");
   previous.setUTCMonth(previous.getUTCMonth() - 1);
   const month =
-    view === "current"
+    sourceMonth ?? (view === "current"
       ? today.slice(0, 7) + "-01"
-      : previous.toISOString().slice(0, 7) + "-01";
+      : previous.toISOString().slice(0, 7) + "-01");
   const end = new Date(
     Date.UTC(Number(month.slice(0, 4)), Number(month.slice(5, 7)), 0),
   )
@@ -470,7 +472,7 @@ export default function MoneyFlowToday({
           <h2>Money flow projection</h2>
           <p>Projected full-month business flow for {label(month)}</p>
         </div>
-        <div
+        {!sourceMonth && <div
           className="pw-segmented"
           role="group"
           aria-label="Money flow period"
@@ -489,7 +491,7 @@ export default function MoneyFlowToday({
           >
             Last month
           </button>
-        </div>
+        </div>}
       </header>
       {changeError && (
         <p className="pw-flow-warning" role="alert">

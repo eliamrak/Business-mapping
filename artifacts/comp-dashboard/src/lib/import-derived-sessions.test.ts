@@ -10,6 +10,7 @@ import { sameDayVisitKey, type LocalSnapshot } from "./retention-local.ts";
 import { buildImportedSessionOverlay } from "./import-derived-sessions.ts";
 import { buildSessionTrend, selectedPeriodSessionSummary } from "./session-trend.ts";
 import { observedBiweeklySessionRecords, summarizeLast1099Period, summarizeSessionOverview } from "./session-overview.ts";
+import { summarizeReportedBilling } from "./reported-billing.ts";
 
 const clinician = (id: number, label: string, goalId: number | null = 7) => ({
   id,
@@ -576,10 +577,11 @@ test("billed fees feed revenue without adding attended sessions", () => {
   );
 
   assert.equal(october.sessions, 1);
-  assert.equal(october.revenue, 225);
+  assert.equal(october.revenue, null, "NO-SHOW charges are not proof of treatment-day replacement");
+  assert.equal(overlay.diagnostic.billedFees, 225, "reported charge facts remain intact despite unapproved modeled treatment replacement");
 });
 
-test("Phone meet-and-greet charges remain actual revenue but never derive treatment sessions", () => {
+test("paid Phone charges remain reported facts but do not certify modeled treatment revenue", () => {
   const overlay = buildImportedSessionOverlay(
     context(),
     [
@@ -637,7 +639,8 @@ test("Phone meet-and-greet charges remain actual revenue but never derive treatm
   workspace.settings.collectionPct = 100;
   const actual = monthFlow(workspace, overlay.context, "2026-10-01", "2026-10-02");
   assert.equal(actual.sessions, 1);
-  assert.equal(actual.revenue, 175);
+  assert.equal(actual.revenue, null, "a paid consultation addition has no approved treatment-revenue policy");
+  assert.ok(actual.unavailableReasons.length > 0);
 });
 
 test("repeated billing snapshots deduplicate stable hashes without mutating older source context or snapshots", () => {

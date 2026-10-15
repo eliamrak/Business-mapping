@@ -299,7 +299,7 @@ test("matching imported charges replace day estimates once in working projection
   const projectedBefore = monthFlow(workspace, data, "2026-10-01", "2026-10-14", { fullMonthProjection: true });
   const actualBefore = monthFlow(workspace, data, "2026-10-01", "2026-10-14");
   data.importedBillingActuals = [{ clinicianId: 1, serviceDate: "2026-10-01", totalFeeCharged: 999,
-    sourceRowHash: "synthetic-billing-actual" }];
+    sourceRowHash: "synthetic-billing-actual", replacementSessionCount: 2 }];
   const before = structuredClone(data);
   const projectedAfter = monthFlow(workspace, data, "2026-10-01", "2026-10-14", { fullMonthProjection: true });
   const actualAfter = monthFlow(workspace, data, "2026-10-01", "2026-10-14");
@@ -469,7 +469,7 @@ test("month-to-date conflicting or unknown fee sources withhold only affected-wi
   }
 });
 
-test("unknown actual charges preserve known zero or count-based processing costs and ignore unselected source conflicts", () => {
+test("unknown actual charges preserve count-based costs and reconcile source conflicts before team scope", () => {
   const { workspace, data } = actualSourceFixture();
   data.importedBillingActuals = [350, 351].map((totalFeeCharged) => ({ clinicianId: 1, serviceDate: "2026-10-01", totalFeeCharged, sourceRowHash: "conflicting-actual-source" }));
   const zero = monthFlow(workspace, data, "2026-10-01", "2026-10-14");
@@ -479,6 +479,11 @@ test("unknown actual charges preserve known zero or count-based processing costs
   close(monthFlow(workspace, data, "2026-10-01", "2026-10-14").processing, 7);
   data.clinicians.push({ ...wife, id: 2, goalId: 99 });
   data.importedBillingActuals = [{ ...data.importedBillingActuals[0] }, { ...data.importedBillingActuals[1], clinicianId: 2 }];
+  const crossTeamConflict = monthFlow(workspace, data, "2026-10-01", "2026-10-14");
+  assert.equal(crossTeamConflict.revenue, null);
+  assert.equal(crossTeamConflict.profit, null);
+  close(crossTeamConflict.processing, 7);
+  data.importedBillingActuals[1].sourceRowHash = "unrelated-unselected-source";
   const current = monthFlow(workspace, data, "2026-10-01", "2026-10-14");
   close(current.revenue, 1650);
   close(current.profit, 1643);

@@ -1,11 +1,13 @@
 import type { Context, Workspace } from "@workspace/practice/hub";
 import type { LocalSnapshot } from "./retention-local.ts";
 const normalize = (label: string) => label.trim().replace(/\s+/g, " ").toLowerCase();
-export function currentPracticeClinicians(workspace: Workspace, context: Context) {
+/** Current roster as of an inclusive calendar date; does not filter historical facts. */
+export function currentPracticeClinicians(workspace: Workspace, context: Context, asOf: string) {
   return context.clinicians.filter((person) => {
     if ((person.goalId ?? null) !== workspace.settings.teamId) return false;
     const profile = workspace.clinicians.find((entry) => entry.clinicianId === person.id);
-    return profile?.onTeam !== false && profile?.status !== "archived" && profile?.status !== "planned";
+    return !profile || (profile.onTeam !== false && profile.status === "active"
+      && profile.start <= asOf && (profile.end === null || profile.end >= asOf));
   });
 }
 export function snapshotsForClinicians(snapshots: LocalSnapshot[], clinicians: Context["clinicians"]) {

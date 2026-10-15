@@ -1,4 +1,5 @@
 import type { BillingRow, LocalSnapshot } from "./retention-local.ts";
+import { reconcileBillingEvidence } from "@workspace/practice/hub";
 
 export type ReportedBillingMonth = {
   month: string;
@@ -8,6 +9,7 @@ export type ReportedBillingMonth = {
   rawRowCount: number;
   duplicateRowCount: number;
   conflictingHashCount: number;
+  ambiguousEncounterCount: number;
   invalidFeeRowCount: number;
   firstServiceDate: string;
   latestServiceDate: string;
@@ -33,10 +35,6 @@ const validDate = (date: unknown): date is string => {
 const monthLabel = (month: string) => new Date(month + "-01T12:00:00Z")
   .toLocaleDateString("en-US", { month: "long", year: "numeric", timeZone: "UTC" });
 const normalizedLabel = (label: string) => label.trim().replace(/\s+/g, " ").toLowerCase();
-const samePayload = (a: BillingRow, b: BillingRow) => a.clientId === b.clientId
-  && a.clinician === b.clinician && a.serviceDate === b.serviceDate
-  && Object.is(a.totalFeeCharged, b.totalFeeCharged)
-  && a.billingCode === b.billingCode && a.visitKind === b.visitKind;
 
 /** Reported charged fees by service date, not cash, production projections or coverage claims.
  * Hash identity is global across snapshots. Conflicting identities never select a winner.
@@ -45,25 +43,25 @@ const samePayload = (a: BillingRow, b: BillingRow) => a.clientId === b.clientId
 export function summarizeReportedBilling(
   snapshots: readonly LocalSnapshot[],
   asOf: string,
-  options: { clinicianLabel?: string } = {},
+  options: { clinicianLabel?: string; clinicianLabels?: readonly string[]; start?: string; end?: string } = {},
 ) {
   if (!validDate(asOf)) throw new Error("Reported billing requires a valid as-of date.");
+  if ((options.start !== undefined && !validDate(options.start)) || (options.end !== undefined && !validDate(options.end)) || (options.start && options.end && options.start > options.end))
+    throw new Error("Reported billing range requires valid ordered calendar dates.");
   const scope = options.clinicianLabel === undefined ? null : normalizedLabel(options.clinicianLabel);
   if (scope === "") throw new Error("Selected clinician label must not be blank.");
-  const matches = (row: BillingRow) => scope === null || normalizedLabel(row.clinician) === scope;
+  const teamScope = options.clinicianLabels === undefined ? null : new Set(options.clinicianLabels.map(normalizedLabel));
+  if (teamScope?.has("")) throw new Error("Selected clinician labels must not be blank.");
+  const matches = (row: BillingRow) => (scope === null || normalizedLabel(row.clinician) === scope) && (teamScope === null || teamScope.has(normalizedLabel(row.clinician)));
   const billingSnapshots = snapshots.filter((snapshot) => snapshot.kind === "billing");
-  const groups = new Map<string | symbol, BillingRow[]>();
-  for (const snapshot of billingSnapshots) for (const row of snapshot.rows) {
-    const key = typeof row.sourceRowHash === "string" && row.sourceRowHash.trim() ? row.sourceRowHash : Symbol();
-    const existing = groups.get(key);
-    if (existing) existing.push(row); else groups.set(key, [row]);
-  }
+  const groups = reconcileBillingEvidence(billingSnapshots.flatMap((snapshot) => snapshot.rows.map((row) => ({ row, snapshotId: snapshot.id }))));
   const evidence = {
     billingSnapshotCount: billingSnapshots.length,
     rawRowCount: 0,
     uniqueRowCount: 0,
     duplicateRowCount: 0,
     conflictingHashCount: 0,
+    ambiguousEncounterCount: 0,
     invalidFeeRowCount: 0,
     invalidDateRowCount: 0,
     missingHashRowCount: 0,
@@ -73,15 +71,17 @@ export function summarizeReportedBilling(
   };
   const months = new Map<string, ReportedBillingMonth>();
   let unassignedRows = false;
-  for (const [hash, rows] of groups) {
-    const scopedRows = rows.filter(matches);
+  for (const group of groups) {
+    const rows = group.rows;
+    const scopedRows = rows.filter(matches).filter((row) => !validDate(row.serviceDate) || ((!options.start || row.serviceDate >= options.start) && (!options.end || row.serviceDate <= options.end)));
     if (!scopedRows.length) continue;
-    const conflicting = rows.some((row) => !samePayload(rows[0], row));
-    const missingHash = typeof hash === "symbol";
+    const conflicting = group.conflicting;
+    const missingHash = group.missingHash;
     evidence.rawRowCount += scopedRows.length;
     evidence.uniqueRowCount++;
     evidence.duplicateRowCount += scopedRows.length - 1;
     if (conflicting) evidence.conflictingHashCount++;
+    if (group.ambiguous) evidence.ambiguousEncounterCount++;
     if (missingHash) evidence.missingHashRowCount += scopedRows.length;
     const byMonth = new Map<string, BillingRow[]>();
     for (const row of scopedRows) {
@@ -100,7 +100,7 @@ export function summarizeReportedBilling(
       const dates = monthRows.map((row) => row.serviceDate).sort();
       const aggregate = months.get(month) ?? {
         month, label: monthLabel(month), charges: 0, rowCount: 0, rawRowCount: 0,
-        duplicateRowCount: 0, conflictingHashCount: 0, invalidFeeRowCount: 0,
+        duplicateRowCount: 0, conflictingHashCount: 0, ambiguousEncounterCount: 0, invalidFeeRowCount: 0,
         firstServiceDate: dates[0], latestServiceDate: dates.at(-1)!,
         fullyElapsed: month < asOf.slice(0, 7), coverage: "reported-rows-only" as const,
       };
@@ -108,18 +108,20 @@ export function summarizeReportedBilling(
       aggregate.rawRowCount += monthRows.length;
       aggregate.duplicateRowCount += monthRows.length - 1;
       aggregate.conflictingHashCount += Number(conflicting);
+      aggregate.ambiguousEncounterCount += Number(group.ambiguous);
       aggregate.invalidFeeRowCount += monthRows.filter((row) => !Number.isFinite(row.totalFeeCharged)).length;
       aggregate.firstServiceDate = aggregate.firstServiceDate < dates[0] ? aggregate.firstServiceDate : dates[0];
       aggregate.latestServiceDate = aggregate.latestServiceDate > dates.at(-1)! ? aggregate.latestServiceDate : dates.at(-1)!;
       // Signed adjustments and PHONE fees are included. Bad fees and conflicting
       // hash payloads invalidate the affected total instead of becoming zero.
       const sum = aggregate.charges === null ? null : aggregate.charges + monthRows[0].totalFeeCharged;
-      aggregate.charges = conflicting || missingHash || monthRows.some((row) => !Number.isFinite(row.totalFeeCharged))
+      aggregate.charges = !group.known || monthRows.some((row) => !Number.isFinite(row.totalFeeCharged))
         || sum === null || !Number.isFinite(sum) ? null : sum;
       months.set(month, aggregate);
     }
   }
-  if (evidence.conflictingHashCount) evidence.warnings.push("Conflicting source-row hashes make affected monthly charges unknown; no payload was selected as authoritative.");
+  if (evidence.conflictingHashCount) evidence.warnings.push("Conflicting encounter/source identities make affected monthly charges unknown; no payload was selected as authoritative.");
+  if (evidence.ambiguousEncounterCount) evidence.warnings.push("Indistinguishable repeated encounters cannot establish separate charges; affected totals remain unknown.");
   if (evidence.invalidFeeRowCount) evidence.warnings.push("Nonfinite charged fees make affected monthly charges unknown.");
   if (evidence.missingHashRowCount) evidence.warnings.push("Rows without a stable source hash cannot be safely deduplicated; affected monthly charges are unknown.");
   if (unassignedRows) evidence.warnings.push("Invalid service dates cannot be assigned to a month; summary averages and charges to date are unknown.");

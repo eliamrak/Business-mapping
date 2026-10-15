@@ -1,8 +1,9 @@
 import { dateRangeSchema, type SessionRecord, rangesOverlap } from "@workspace/practice";
-import type { Context, ImportedBillingActual } from "@workspace/practice/hub";
+import { reconcileBillingEvidence, type Context, type ImportedBillingActual } from "@workspace/practice/hub";
 import type { SessionAttendanceCoverage } from "./session-trend.ts";
 import {
   isPhoneOnlyConsultAttendanceRow,
+  isPhoneConsultBillingRow,
   sameDayVisitKey,
   type AttendanceRow,
   type BillingRow,
@@ -110,9 +111,7 @@ export function buildImportedSessionOverlay(
   const missingBillingClinicianLabels = new Set<string>();
   const ambiguousBillingClinicianLabels = new Set<string>();
   const seenAttendanceRows = new Set<string>();
-  const seenBillingRows = new Map<string, ImportedBillingActual>();
-  const seenBillingPayloads = new Set<string>();
-  const conflictingBillingHashes = new Set<string>();
+  const billingEntries: { row: BillingRow; snapshotId: string }[] = [];
   const scopedAttendanceCoverage: SessionAttendanceCoverage[] = [];
   const attendanceObservedSpans: ImportedAttendanceObservedSpan[] = [];
   const attendedByClinicianDate = new Map<
@@ -193,6 +192,7 @@ export function buildImportedSessionOverlay(
   for (const snapshot of snapshots) {
     if (snapshot.kind !== "billing") continue;
     for (const row of snapshot.rows) {
+      billingEntries.push({ row, snapshotId: snapshot.id });
       const matches =
         cliniciansByLabel.get(normalizeLabel(row.clinician)) ?? [];
       if (matches.length === 0) {
@@ -203,14 +203,23 @@ export function buildImportedSessionOverlay(
         ambiguousBillingClinicianLabels.add(row.clinician);
         continue;
       }
-      const actual = billingActual(matches[0].id, row);
-      const payload = JSON.stringify(actual);
-      if (seenBillingPayloads.has(payload)) continue;
-      seenBillingPayloads.add(payload);
-      const previous = seenBillingRows.get(actual.sourceRowHash);
-      if (previous && (previous.clinicianId !== actual.clinicianId || previous.serviceDate !== actual.serviceDate || previous.totalFeeCharged !== actual.totalFeeCharged)) conflictingBillingHashes.add(actual.sourceRowHash);
-      seenBillingRows.set(actual.sourceRowHash, actual);
-      billingActuals.push(actual);
+    }
+  }
+  const billingGroups = reconcileBillingEvidence(billingEntries).filter((group) => group.rows.some((row) => cliniciansByLabel.get(normalizeLabel(row.clinician))?.length === 1));
+  for (const group of billingGroups) {
+    const payloads = new Set<string>();
+    for (const row of group.known ? [group.row] : group.rows) {
+      const matches = cliniciansByLabel.get(normalizeLabel(row.clinician));
+      if (matches?.length !== 1) continue;
+      const payload = JSON.stringify(row);
+      if (payloads.has(payload)) continue;
+      payloads.add(payload);
+      const clinicianId = matches[0].id;
+      billingActuals.push({
+        ...billingActual(clinicianId, row),
+        sourceSnapshotId: billingEntries.find((entry) => entry.row === row)!.snapshotId,
+        ...(!group.known ? { evidenceUnknown: true } : {}),
+      });
     }
   }
 
@@ -245,6 +254,16 @@ export function buildImportedSessionOverlay(
       );
       if (grouped) grouped.visits += visits;
     }
+  }
+  for (const actual of billingActuals) {
+    if (actual.evidenceUnknown || isPhoneConsultBillingRow({ billingCode: actual.billingCode ?? null, visitKind: actual.visitKind })) continue;
+    const day = attendedByClinicianDate.get(`${actual.clinicianId}\u0000${actual.serviceDate}`);
+    const covered = scopedAttendanceCoverage.some((range) => range.clinicianId === actual.clinicianId && range.start <= actual.serviceDate && range.end >= actual.serviceDate);
+    const charged = billingActuals.filter((row) => row.clinicianId === actual.clinicianId && row.serviceDate === actual.serviceDate && !isPhoneConsultBillingRow({ billingCode: row.billingCode ?? null, visitKind: row.visitKind }));
+    const clients = new Set(day?.rows.map((row) => row.clientId.trim()));
+    const billedClients = new Set(charged.map((row) => row.clientId!.trim()));
+    if (covered && day && day.visits > 0 && charged.every((row) => !row.evidenceUnknown && /^\d{5}$/.test(row.billingCode?.trim() ?? "")) && clients.size === billedClients.size && [...clients].every((client) => billedClients.has(client)))
+      actual.replacementSessionCount = day.visits;
   }
   for (const record of context.sessions) {
     const coverage = scopedAttendanceCoverage.filter(range => range.clinicianId === record.clinicianId);
@@ -331,11 +350,11 @@ export function buildImportedSessionOverlay(
         ...ambiguousBillingClinicianLabels,
       ].sort(),
       billedRows: billingActuals.length,
-      billedFees: conflictingBillingHashes.size || billingActuals.some((row) => !Number.isFinite(row.totalFeeCharged)) ? null : billingActuals.reduce(
-        (sum, row) => sum + row.totalFeeCharged,
+      billedFees: billingGroups.some((group) => !group.known) ? null : billingGroups.reduce(
+        (sum, group) => sum + group.row.totalFeeCharged,
         0,
       ),
-      billingConflictCount: conflictingBillingHashes.size,
+      billingConflictCount: billingGroups.filter((group) => !group.known).length,
       rawAttendedRows,
       collapsedDuplicateShowRows,
       sameDayVisitOverrideCount,
@@ -352,5 +371,8 @@ function billingActual(
     serviceDate: row.serviceDate,
     totalFeeCharged: row.totalFeeCharged,
     sourceRowHash: row.sourceRowHash,
+    clientId: row.clientId,
+    billingCode: row.billingCode,
+    visitKind: row.visitKind,
   };
 }

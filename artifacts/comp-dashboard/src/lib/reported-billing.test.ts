@@ -57,7 +57,7 @@ test("reported charges reproduce specified monthly totals and row counts, separa
 
 test("identical hashes deduplicate across snapshots and input order without dropping PHONE fees or signed adjustments", () => {
   const rows = [row(), row({ sourceRowHash: "phone", billingCode: "PHONE", visitKind: "consultation", totalFeeCharged: 75 }),
-    row({ sourceRowHash: "credit", totalFeeCharged: -25 }), row({ sourceRowHash: "zero", totalFeeCharged: 0 })];
+    row({ clientId: "synthetic-credit-encounter", sourceRowHash: "credit", totalFeeCharged: -25 }), row({ clientId: "synthetic-zero-encounter", sourceRowHash: "zero", totalFeeCharged: 0 })];
   const first = snapshot(rows), repeated = snapshot(structuredClone(rows), "repeat");
   const result = summarizeReportedBilling([first, repeated], "2026-10-14");
   assert.equal(result.months[0].charges, 150);
@@ -149,4 +149,18 @@ test("output contains aggregates only and frozen input rows are never changed", 
   const encoded = JSON.stringify(result);
   for (const privateValue of ["synthetic-private-client", "synthetic-private-provider", "synthetic-private-hash", "clientId", "sourceRowHash"])
     assert.equal(encoded.includes(privateValue), false);
+});
+
+test("inclusive dates and team labels are applied after global encounter/hash reconciliation", () => {
+  const snapshots = [snapshot([row(), row({ sourceRowHash: "unrelated", clinician: "Other", serviceDate: "2026-09-20", totalFeeCharged: 200 })]), snapshot([row({ serviceDate: "2026-08-10", clinician: "Other", totalFeeCharged: 125 })], "conflicting-export")];
+  const result = summarizeReportedBilling(snapshots, "2026-10-14", { start: "2026-09-10", end: "2026-09-10", clinicianLabels: [" SYNTHETIC  CLINICIAN "] });
+  assert.equal(result.months.length, 1);
+  assert.equal(result.months[0].charges, null, "an out-of-range/provider conflicting hash still invalidates its selected counterpart");
+  assert.equal(result.evidence.conflictingHashCount, 1);
+  assert.equal(result.evidence.rawRowCount, 1);
+  assert.deepEqual(summarizeReportedBilling(snapshots, "2026-10-14", { clinicianLabels: [] }).months, []);
+  const healthy = summarizeReportedBilling([snapshot([row(), row({ clientId: "other-date", sourceRowHash: "different", serviceDate: "2026-09-11", totalFeeCharged: 300 })])], "2026-10-14", { start: "2026-09-10", end: "2026-09-10", clinicianLabels: ["Synthetic clinician"] });
+  assert.equal(healthy.months[0].charges, 100);
+  assert.equal(healthy.evidence.rawRowCount, 1);
+  assert.throws(() => summarizeReportedBilling([], "2026-10-14", { start: "2026-10-15", end: "2026-10-14" }), /ordered calendar dates/);
 });

@@ -1386,6 +1386,70 @@ missed,Dr Intake,2026-01-02,Phone,show`).snapshot;
   assert.equal(confirmed.byClinician[0].conversionRate, 0);
 });
 
+test("current-team consultation cohorts retain former clinicians' treatment evidence and protected referrals", () => {
+  const attendance = attendanceSnapshot(`Client,Clinician,Date of service,Location,Status
+synthetic-referral,Current Consultant,2026-01-05,Phone,show
+synthetic-referral,Former Clinician,2026-01-12,Room A,show
+synthetic-former-consult,Former Clinician,2026-01-06,Phone,show`, "2026-01-01", "2026-03-01");
+  attendance.rows[0].visitKind = "consultation";
+  attendance.rows[2].visitKind = "consultation";
+  const snapshots = [attendance];
+  const cohortClinicianNames = ["  CURRENT   consultant  "];
+  const overrides = [{ clientId: "synthetic-referral", outcome: "confirmed_closer" as const, clinicianName: "Former Clinician" }];
+  const before = structuredClone({ snapshots, cohortClinicianNames, overrides });
+  const summary = summarizeConsultConversions(snapshots, {}, "2026-01-01", "2026-01-31", "2026-03-01", overrides, { cohortClinicianNames });
+  assert.equal(summary.practice.consultations, 1);
+  assert.equal(summary.practice.converted, 1);
+  assert.equal(summary.practice.missed, 0);
+  assert.equal(summary.practice.evaluated, 1);
+  assert.equal(summary.practice.conversionRate, 100);
+  assert.equal(summary.journeys[0].treatmentDate, "2026-01-12");
+  assert.equal(summary.journeys[0].closerClinician, "Former Clinician");
+  const consultant = consultConversionForContributor(summary, "Current Consultant")!;
+  assert.equal(consultant.internalReferralsProtected, 1);
+  assert.equal(consultant.missed, 0);
+  assert.equal(consultant.conversionRate, null, "Referral protection is not invented confirmed credit for the referrer");
+  assert.equal(consultConversionForContributor(summary, "Former Clinician")!.converted, 1, "Known follow-up/credit remains evidence even outside the cohort roster");
+  const all = summarizeConsultConversions(snapshots, {}, "2026-01-01", "2026-01-31", "2026-03-01", overrides);
+  assert.equal(all.practice.consultations, 2);
+  assert.equal(all.practice.conversionRate, 50, "Unscoped behavior still includes the former clinician's unconverted consultation");
+  const noCohort = summarizeConsultConversions(snapshots, {}, "2026-01-01", "2026-01-31", "2026-03-01", overrides, { cohortClinicianNames: [] });
+  assert.equal(noCohort.practice.consultations, 0);
+  assert.equal(noCohort.practice.conversionRate, null);
+  assert.deepEqual(noCohort.journeys, []);
+  assert.deepEqual({ snapshots, cohortClinicianNames, overrides }, before);
+});
+
+test("cohort scope preserves treatment window, as-of maturity and unconfirmed candidate denominators", () => {
+  const attendance = attendanceSnapshot(`Client,Clinician,Date of service,Location,Status
+synthetic-on-deadline,Current,2026-01-05,Phone,show
+synthetic-on-deadline,Former,2026-02-05,Room A,show
+synthetic-after-deadline,Current,2026-01-06,Phone,show
+synthetic-after-deadline,Former,2026-02-07,Room A,show`, "2026-01-01", "2026-03-01");
+  attendance.rows[0].visitKind = "consultation";
+  attendance.rows[2].visitKind = "consultation";
+  const options = { cohortClinicianNames: ["current"] };
+  const before = structuredClone({ attendance, options });
+  const summary = summarizeConsultConversions([attendance], {}, "2026-01-01", "2026-01-31", "2026-03-01", [], options);
+  assert.equal(summary.practice.consultations, 2);
+  assert.equal(summary.practice.converted, 1);
+  assert.equal(summary.practice.missed, 1);
+  assert.equal(summary.practice.conversionRate, 50);
+  const candidate = consultConversionForContributor(summary, "Former")!;
+  assert.equal(candidate.candidateConversions, 1);
+  assert.equal(candidate.converted, 0);
+  assert.equal(candidate.pending, 1);
+  assert.equal(candidate.evaluated, 0);
+  assert.equal(candidate.conversionRate, null);
+  assert.equal(consultConversionForContributor(summary, "Current")!.internalReferralsProtected, 1);
+  assert.equal(summary.journeys.find((row) => row.clientId === "synthetic-after-deadline")!.treatmentDate, null);
+  const beforeTreatment = summarizeConsultConversions([attendance], {}, "2026-01-01", "2026-01-31", "2026-02-04", [], options);
+  assert.equal(beforeTreatment.practice.converted, 0);
+  assert.equal(beforeTreatment.practice.pending, 2);
+  assert.equal(beforeTreatment.practice.conversionRate, null, "Future former-clinician treatments must not leak into the as-of result");
+  assert.deepEqual({ attendance, options }, before);
+});
+
 test("consult conversion separates treatment-start candidates from confirmed closer credit", () => {
   const packageData = packageFixture();
   packageData.collections.attendance.reportCoverage = { start: "2026-01-01", end: "2026-02-06", complete: true };

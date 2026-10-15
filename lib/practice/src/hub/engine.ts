@@ -19,6 +19,8 @@ import type {
 } from "./model.ts";
 import { conditionResult } from "./conditions.ts";
 import { estimateW2NetPay } from "./family-pay.ts";
+import { reconcileBillingEvidence } from "./billing-evidence.ts";
+export { reconcileBillingEvidence } from "./billing-evidence.ts";
 
 export type Clinician = ClinicianMetricsInput & {
   id: number;
@@ -35,6 +37,13 @@ export type ImportedBillingActual = {
   serviceDate: string;
   totalFeeCharged: number;
   sourceRowHash: string;
+  clientId?: string;
+  billingCode?: string | null;
+  visitKind?: "consultation";
+  sourceSnapshotId?: string;
+  evidenceUnknown?: boolean;
+  /** Explicit whole-treatment-day matching proof, never inferred from row count alone. */
+  replacementSessionCount?: number;
 };
 export type Context = {
   clinicians: Clinician[];
@@ -107,6 +116,7 @@ export type Values = Record<string, number | null>;
 export type ForecastMonth = {
   date: string;
   periodStart?: string;
+  periodEnd?: string;
   values: Values;
   clinicians: Record<string, Values>;
   channels: Record<string, FunnelEstimate>;
@@ -122,6 +132,7 @@ export type ForecastOptions = {
   baselineWeeklyByClinician?: Record<number, number>;
   useImportedBillingActuals?: boolean;
   workingForecast?: boolean;
+  workingRange?: { start: string; end: string };
 };
 import { metrics, metricMap } from "./metrics.ts";
 export { metrics, metricMap } from "./metrics.ts";
@@ -145,19 +156,52 @@ export const summarizeImportedBillingActuals = (
 ) => {
   const billed = new Map<number, Map<string, number>>();
   const groups = new Map<string, ImportedBillingActual[]>();
+  const enriched = context.importedBillingActuals?.filter((row) => row.clientId !== undefined) ?? [];
   for (const row of context.importedBillingActuals ?? []) {
-    if (!selectedIds.has(row.clinicianId)) continue;
+    if (row.clientId !== undefined) continue;
     const group = groups.get(row.sourceRowHash) ?? [];
     group.push(row);
     groups.set(row.sourceRowHash, group);
   }
-  const unknownDates: Array<{ clinicianId: number; date: string }> = [];
+  const unknownDates: Array<{ clinicianId: number; date: string; reason?: string }> = [];
+  const resolved: ImportedBillingActual[] = [];
+  for (const group of reconcileBillingEvidence(enriched.map((row) => ({ row: { ...row, clientId: row.clientId!, clinician: String(row.clinicianId) }, snapshotId: row.sourceSnapshotId ?? "context" })))) {
+    if (!group.known || group.rows.some((row) => row.evidenceUnknown)) {
+      unknownDates.push(...group.rows.map((row) => ({ clinicianId: row.clinicianId, date: row.serviceDate, reason: "Billing encounter identity or amount is ambiguous; no duplicate or conflicting payload is authoritative." })));
+    } else resolved.push(group.row);
+  }
   for (const [hash, rows] of groups) {
     const row = rows[0];
     if (!hash.trim() || !Number.isFinite(row.totalFeeCharged) || rows.some((other) => other.clinicianId !== row.clinicianId || other.serviceDate !== row.serviceDate || other.totalFeeCharged !== row.totalFeeCharged)) {
       unknownDates.push(...rows.map((other) => ({ clinicianId: other.clinicianId, date: other.serviceDate })));
       continue;
     }
+    if (row.evidenceUnknown) { unknownDates.push({ clinicianId: row.clinicianId, date: row.serviceDate }); continue; }
+    resolved.push(row);
+  }
+  const replacementSessions = new Map<number, Map<string, number>>();
+  const requiresProof = new Set<string>();
+  const unverified = new Set<string>();
+  for (const row of resolved) {
+    if (!selectedIds.has(row.clinicianId)) continue;
+    const code = row.billingCode?.trim().toUpperCase();
+    const consultation = code === "PHONE" || row.visitKind === "consultation";
+    if (consultation) {
+      if (row.totalFeeCharged !== 0) unknownDates.push({ clinicianId: row.clinicianId, date: row.serviceDate, reason: "Paid consultation revenue policy is unapproved; consultation charges cannot replace treatment estimates." });
+      continue;
+    }
+    if (row.clientId !== undefined && !/^\d{5}$/.test(code ?? "")) {
+      unknownDates.push({ clinicianId: row.clinicianId, date: row.serviceDate, reason: "Unclassified charges cannot establish a complete treatment-day replacement." });
+      continue;
+    }
+    const key = `${row.clinicianId}|${row.serviceDate}`;
+    if (row.clientId !== undefined) requiresProof.add(key);
+    const counts = replacementSessions.get(row.clinicianId) ?? new Map<string, number>();
+    const count = row.replacementSessionCount;
+    if (count == null || !Number.isInteger(count) || count < 0) unverified.add(key);
+    else if (counts.has(row.serviceDate) && counts.get(row.serviceDate) !== count) unverified.add(key);
+    else counts.set(row.serviceDate, count);
+    replacementSessions.set(row.clinicianId, counts);
     const clinician = billed.get(row.clinicianId) ?? new Map<string, number>();
     clinician.set(
       row.serviceDate,
@@ -165,7 +209,11 @@ export const summarizeImportedBillingActuals = (
     );
     billed.set(row.clinicianId, clinician);
   }
-  return { billed, unknownDates };
+  for (const key of unverified) {
+    const [id, date] = key.split("|");
+    replacementSessions.get(Number(id))?.delete(date);
+  }
+  return { billed, unknownDates: unknownDates.filter((row) => selectedIds.has(row.clinicianId)), replacementSessions, requiresProof };
 };
 export const ratio = (a: number, b: number) => (b > 0 ? a / b : null);
 export const monthDate = (date: string, offset = 0) => {
@@ -232,6 +280,7 @@ function activeClinicalHeadcountAt(
   workspace: Workspace,
   context: Context,
   date: string,
+  currentTeamOnly = false,
 ) {
   return context.clinicians.filter((clinician) => {
     const selected =
@@ -243,7 +292,7 @@ function activeClinicalHeadcountAt(
     );
     return (
       selected &&
-      (!setting || (setting.status === "active" && active(setting, date, date)))
+      (!setting || (setting.status === "active" && (!currentTeamOnly || setting.onTeam !== false) && active(setting, date, date)))
     );
   }).length;
 }
@@ -590,6 +639,9 @@ export function forecast(
       ? settings.baselineWeeklySessions
       : historicalWeekly;
   const results: ForecastMonth[] = [];
+  const workingRange = options.workingForecast ? options.workingRange : undefined;
+  if (workingRange && (!/^\d{4}-\d{2}-\d{2}$/.test(workingRange.start) || !/^\d{4}-\d{2}-\d{2}$/.test(workingRange.end) || workingRange.start > workingRange.end || [workingRange.start, workingRange.end].some((date) => !Number.isFinite(Date.parse(date + "T12:00:00Z")) || new Date(date + "T12:00:00Z").toISOString().slice(0, 10) !== date)))
+    throw new Error("Working forecast range requires valid ordered calendar dates.");
   let cash = settings.openingCash;
   let cashKnown = true;
   let baselineRetained = 1;
@@ -602,13 +654,18 @@ export function forecast(
   }[] = [];
   const futureClients: Record<number, typeof cohorts> = {};
   for (let m = 0; m < settings.horizonMonths; m++) {
-    const start = monthDate(settings.forecastStart, m),
-      end = monthEnd(start),
-      days = daysInclusive(start, end),
+    const calendarStart = monthDate(settings.forecastStart, m);
+    const calendarEnd = monthEnd(calendarStart);
+    const start = workingRange && workingRange.start > calendarStart ? workingRange.start : calendarStart,
+      end = workingRange && workingRange.end <calendarEnd ? workingRange.end : calendarEnd;
+    if (start > end) continue;
+    const days = daysInclusive(start, end),
+      calendarDays = daysInclusive(calendarStart, calendarEnd),
       weeks = days / 7;
     const warnings = [...issues];
-    const unknownBilling = options.useImportedBillingActuals !== false && importedBillingSource.unknownDates.some((row) => row.date >= start && row.date <= end);
+    let unknownBilling = options.useImportedBillingActuals !== false && importedBillingSource.unknownDates.some((row) => row.date >= start && row.date <= end);
     if (unknownBilling) warnings.push("Imported billing source identities conflict or have unknown fees; matching revenue is unknown.");
+    if (unknownBilling) warnings.push(...importedBillingSource.unknownDates.filter((row) => row.date >= start && row.date <= end).flatMap((row) => row.reason ? [row.reason] : []));
     const unknownStaff = staff.filter((member) => datesIn(start, end).some((date) => !staffCompensationKnown(staffMemberAt(workspace, member, date))));
     if (unknownStaff.length) warnings.push("Selected staff compensation is unknown; financial feasibility and profit cannot be certified.");
     if (baseWeekly === null)
@@ -622,9 +679,9 @@ export function forecast(
       warnings.push(
         "Historical session coverage is incomplete for the selected team.",
       );
-    if (start.endsWith("-01-01") || m === 0)
+    if (start.endsWith("-01-01") || results.length === 0)
       for (const key of Object.keys(capEarned)) delete capEarned[key];
-    if (m === 0 && !start.endsWith("-01-01"))
+    if (results.length === 0 && !start.endsWith("-01-01"))
       for (const c of selected) {
         const op = workspace.clinicians.find((o) => o.clinicianId === c.id);
         capEarned[String(c.id)] = op?.openingCapContribution ?? 0;
@@ -739,30 +796,30 @@ export function forecast(
         }
         const estimate = estimateCampaign(daily, workspace, {}, date);
         if (estimate.clients !== null)
-          acquiredClients += (estimate.clients / days) * demandMultiplier;
+          acquiredClients += (estimate.clients / calendarDays) * demandMultiplier;
         attended =
           attended === null ||
           estimate.consultations === null ||
           daily.attendancePct === null
             ? null
             : attended +
-              ((estimate.consultations * daily.attendancePct) / 100 / days) *
+              ((estimate.consultations * daily.attendancePct) / 100 / calendarDays) *
                 demandMultiplier;
-        adSpend += (daily.monthlySpend ?? 0) / days;
+        adSpend += (daily.monthlySpend ?? 0) / calendarDays;
         f.clients =
           f.clients === null || estimate.clients === null
             ? null
-            : f.clients + (estimate.clients / days) * demandMultiplier;
-        f.spend += estimate.spend / days;
+            : f.clients + (estimate.clients / calendarDays) * demandMultiplier;
+        f.spend += estimate.spend / calendarDays;
         f.leads =
           f.leads === null || estimate.leads === null
             ? null
-            : f.leads + (estimate.leads / days) * demandMultiplier;
+            : f.leads + (estimate.leads / calendarDays) * demandMultiplier;
         f.consultations =
           f.consultations === null || estimate.consultations === null
             ? null
             : f.consultations +
-              (estimate.consultations / days) * demandMultiplier;
+              (estimate.consultations / calendarDays) * demandMultiplier;
         f.inferredLeads ||= estimate.inferredLeads;
         f.warnings = [...new Set([...f.warnings, ...estimate.warnings])];
       }
@@ -1275,6 +1332,7 @@ export function forecast(
       ? { assigned: workingAssignments, total: [...workingAssignments.values()].reduce((sum, count) => sum + count, 0), roomUse: 0 }
       : allocate(Math.min(demand, capacity));
     const sessions = allocation.total;
+    if (options.workingForecast && anyRooms) warnings.push("Working room utilization is unavailable: average session pace does not establish dated room-use assignments.");
     const utilization = ratio(sessions, capacity);
     let revenue = 0,
       clinicianPay = 0,
@@ -1290,12 +1348,14 @@ export function forecast(
             workspace,
             context,
             date,
+            options.workingForecast,
           ),
           coOwnerSalaryPretax: null,
         },
       ]),
     );
     const clinicianValues: Record<string, Values> = {};
+    const serviceDaily = new Map<string, { sessions: number; revenue: number }>();
     for (const c of people) {
       const count = allocation.assigned.get(c.instance) ?? 0;
       let pay = 0,
@@ -1326,7 +1386,7 @@ export function forecast(
             (calculated.preCapSessions * day.rate * (100 - day.split)) / 100;
         pay +=
           day.mode === "salary"
-            ? day.amount / 12 / days
+            ? day.amount / 12 / calendarDays
             : day.mode === "hourly"
               ? ((day.amount * day.paidHoursPerWeek) / 7) *
                 (c.weeksWorkedPerYear / 52.1786)
@@ -1338,7 +1398,7 @@ export function forecast(
           c.instance === String(c.id) &&
           day.mode === "salary"
         ) {
-          const salary = day.amount / 12 / days;
+          const salary = day.amount / 12 / calendarDays;
           coOwnerSalaryPretax = (coOwnerSalaryPretax ?? 0) + salary;
           goalMeasureDaily[day.date].coOwnerSalaryPretax = salary;
         }
@@ -1346,7 +1406,18 @@ export function forecast(
           options.useImportedBillingActuals !== false && c.instance === String(c.id)
             ? importedBilling.get(c.id)?.get(day.date)
             : undefined;
-        earned += importedFee ?? dayCount * day.rate;
+        if (importedFee !== undefined && (options.workingForecast || importedBillingSource.requiresProof.has(`${c.id}|${day.date}`))) {
+          const count = importedBillingSource.replacementSessions.get(c.id)?.get(day.date);
+          if (count === undefined || Math.abs(count - dayCount) > 1e-8) {
+            unknownBilling = true;
+            importedBillingSource.unknownDates.push({ clinicianId: c.id, date: day.date });
+            warnings.push("Partial or unverified treatment-day billing cannot replace the whole modeled day; revenue is unknown until complete matching evidence or an explicit policy is supplied.");
+          }
+        }
+        const dayRevenue = importedFee ?? dayCount * day.rate;
+        earned += dayRevenue;
+        const totals = serviceDaily.get(day.date) ?? { sessions: 0, revenue: 0 };
+        serviceDaily.set(day.date, { sessions: totals.sessions + dayCount, revenue: totals.revenue + dayRevenue });
       }
       const burden =
         String(c.classification).toLowerCase() === "w2"
@@ -1378,14 +1449,18 @@ export function forecast(
         end,
       );
     }
-    const collectionMonth = m - setting.collectionDelayMonths;
+    const priorMonthDate = monthDate(calendarStart, -setting.collectionDelayMonths);
+    const priorMonth = results.find((month) => monthDate(month.date) === priorMonthDate);
+    const priorFullMonthKnown = priorMonth !== undefined && priorMonth.date === priorMonthDate &&
+      (priorMonth.periodEnd ?? monthEnd(priorMonth.date)) === monthEnd(priorMonthDate) && priorMonth.values.revenue !== null;
+    const missingPriorWorkingReceipts = !!workingRange && setting.collectionDelayMonths > 0 && (!priorFullMonthKnown || days !== calendarDays);
     const collectedRevenue = (amount: number) =>
       (amount * setting.collectionPct) / 100;
     const collections =
       setting.collectionDelayMonths === 0
         ? collectedRevenue(revenue)
-        : collectionMonth >= 0
-          ? collectedRevenue(results[collectionMonth].values.revenue ?? 0)
+        : priorMonth
+          ? collectedRevenue(priorMonth.values.revenue ?? 0)
           : m === 0
             ? setting.openingReceivables
             : 0;
@@ -1394,7 +1469,7 @@ export function forecast(
           n +
           (e.monthlyCost *
             activeDays({ start: e.date, end: e.end }, start, end)) /
-            days,
+            calendarDays,
         0,
       ),
       additionalIncome = 0,
@@ -1423,8 +1498,14 @@ export function forecast(
           };
           return (
             sum +
-            budgetAmount(line, date, date, sessions / days, revenue / days)
+            budgetAmount(line, date, date, workingRange ? serviceDaily.get(date)?.sessions ?? 0 : sessions / days, workingRange ? serviceDaily.get(date)?.revenue ?? 0 : revenue / days)
           );
+        }, 0);
+      } else if (workingRange) {
+        amount = datesIn(start, end).reduce((sum, date) => {
+          const daily = serviceDaily.get(date);
+          const line = { ...b, amount: datedValue(b.amount, changes, date, date) };
+          return sum + budgetAmount(line, date, date, daily?.sessions ?? 0, daily?.revenue ?? 0);
         }, 0);
       } else {
         b.amount = datedValue(
@@ -1461,13 +1542,13 @@ export function forecast(
       (n, s) => n + staffCostForRange(workspace, s, start, end),
       0,
     );
-    const ownerPayroll = setting.ownerPayrollMonthly + explicitOwner;
+    const ownerPayroll = setting.ownerPayrollMonthly * monthFraction + explicitOwner;
     const ownerBurden = (ownerPayroll * setting.ownerPayrollBurdenPct) / 100;
     const chargedSessions =
       setting.collectionDelayMonths === 0
         ? sessions
-        : collectionMonth >= 0
-          ? (results[collectionMonth].values.sessions ?? 0)
+        : priorMonth
+          ? (priorMonth.values.sessions ?? 0)
           : 0;
     const fees =
       (collections * setting.processingPct) / 100 +
@@ -1571,6 +1652,7 @@ export function forecast(
           workspace,
           context,
           end,
+          options.workingForecast,
         ),
         ownerDistributionsPretax,
         coOwnerSalaryPretax,
@@ -1578,7 +1660,7 @@ export function forecast(
         utilization: utilization === null ? null : utilization * 100,
         unservedSessions: Math.max(0, demand - sessions),
         roomCapacity: anyRooms ? roomCapacity : null,
-        roomUtilization: anyRooms
+        roomUtilization: options.workingForecast ? null : anyRooms
           ? ratio(allocation.roomUse, roomCapacity) === null
             ? null
             : (allocation.roomUse / roomCapacity) * 100
@@ -1641,11 +1723,13 @@ export function forecast(
       end,
     );
     if (unknownStaff.length) for (const key of ["staffCost", "profit", "taxReserve", "reserves", "distributions", "retainedCash", "cash", "familyTakeHome", "ownerDistributionsPretax", "breakEvenSessions", "runway"]) values[key] = null;
-    const unknownCollections = setting.collectionDelayMonths === 0 ? unknownBilling : m >= setting.collectionDelayMonths && results[m - setting.collectionDelayMonths].values.revenue === null;
+    const unknownCollections = setting.collectionDelayMonths === 0 ? unknownBilling : missingPriorWorkingReceipts || priorMonth?.values.revenue === null;
+    if (missingPriorWorkingReceipts) warnings.push("Delayed collections are unknown: this working range lacks prior complete calendar-month revenue or exact within-month receipt timing.");
+    if (options.workingForecast) for (const key of ["roas", "contributionRoas", "netRoi"]) values[key] = null;
     if (unknownBilling) for (const key of ["revenue", "profit", "ltv", "roas", "contributionRoas", "netRoi", "breakEvenSessions"]) values[key] = null;
     if (unknownCollections) {
       values.collections = null;
-      if (setting.processingPct > 0) for (const key of ["fees", "profit", "netRoi", "contributionRoas", "breakEvenSessions"]) values[key] = null;
+      if (setting.processingPct > 0 || (missingPriorWorkingReceipts && setting.processingFixedPerTransaction > 0)) for (const key of ["fees", "profit", "netRoi", "contributionRoas", "breakEvenSessions"]) values[key] = null;
     }
     if (unknownCollections || unknownStaff.length) for (const key of ["taxReserve", "reserves", "distributions", "retainedCash", "familyTakeHome", "ownerDistributionsPretax"]) values[key] = null;
     cashKnown = cashKnown && !unknownCollections && unknownStaff.length === 0;
@@ -1696,8 +1780,9 @@ export function forecast(
         "Sum of each active clinician's dated weekly capacity / 7, adjusted for working weeks, calendar days, credentialing delay and hire ramp.",
       roomCapacity:
         "Usable hours in each active room x 60 / session minutes. Dedicated ownership, recurring shared blocks, clinician availability and location limits constrain access.",
-      roomUtilization:
-        "Room slots consumed, including configured telehealth occupancy, divided by usable room slots.",
+      roomUtilization: options.workingForecast
+        ? "Unknown: average working session pace does not establish dated room-use assignments. Configured room capacity remains a separate diagnostic."
+        : "Room slots consumed, including configured telehealth occupancy, divided by usable room slots.",
       requiredRooms:
         "In-person session demand / average configured room capacity, rounded up. Location assignment can impose additional limits.",
       consultations:
@@ -1765,6 +1850,7 @@ export function forecast(
       );
     results.push({
       date: start,
+      ...(workingRange ? { periodStart: start, periodEnd: end } : {}),
       values,
       goalMeasureDaily,
       clinicians: clinicianValues,

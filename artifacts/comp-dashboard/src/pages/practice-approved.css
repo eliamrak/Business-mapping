@@ -218,3 +218,5 @@
 .pw-app .pw-overview-bridge-plot .profit.loss { background: #e88f86; }
 .pw-app .pw-overview-goal-status { padding: 12px 0; border-bottom: 1px solid #34414b; }
 @media (max-width: 1000px) { .pw-app .pw-clinical-metric-grid { grid-template-columns: minmax(0, 1fr); } }
+[aria-label="Overview financial summary"] .pw-overview-total > span { min-width: 0; overflow-wrap: anywhere; }
+[aria-label="Overview financial summary"] .pw-overview-total > strong { flex: 0 0 auto; white-space: nowrap; }

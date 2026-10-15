@@ -256,14 +256,15 @@ test("working pace includes quiet calendar days and only matching report coverag
     28 * 7 / calendarDays("2026-10-08", "2026-10-09"));
 });
 
-test("actual charges replace only their clinician-date estimate, deduplicate stable hashes and preserve source data", () => {
+test("unmatched day charges withhold only their clinician-month while deduplicating evidence and preserving sources", () => {
   const { workspace, context } = setup();
   context.sessions = [record(8), { ...record(16), id: 12, clinicianId: 2 }];
   const baseline = buildPracticeProjection(workspace, context, "actual", "2026-09-22");
   context.importedBillingActuals = [{ clinicianId: 1, serviceDate: "2026-09-10", totalFeeCharged: 99999, sourceRowHash: "synthetic-billing" }];
   const before = structuredClone({ workspace, context });
   const actual = buildPracticeProjection(workspace, context, "actual", "2026-09-22");
-  closeTo(actual.months[0].values.revenue, baseline.months[0].values.revenue! - 4 / 7 * 100 + 99999);
+  assert.equal(actual.months[0].values.revenue, null, "one known charge does not establish replacement of a fractional modeled treatment day");
+  assert.equal(actual.months[0].clinicians["1"].revenue, null);
   assert.equal(actual.months[0].values.sessions, baseline.months[0].values.sessions);
   assert.equal(actual.months[0].clinicians["2"].revenue, baseline.months[0].clinicians["2"].revenue);
   assert.equal(actual.months[1].values.revenue, baseline.months[1].values.revenue);

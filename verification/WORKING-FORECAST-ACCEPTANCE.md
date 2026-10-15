@@ -1,5 +1,7 @@
 # Working Forecast Candidate Acceptance
 
+Historical pre-external-review handoff only: f2be9f19 was blocked by eight additional findings. This document is superseded by WORKING-FORECAST-REPAIR-ACCEPTANCE.md. Its prior test counts and acceptance wording are not approval of the repaired candidate.
+
 Baseline: bd7856013a087b88b357ce8c468df3c7e24bbbc6. This is a review candidate, not a production release.
 
 ## Implemented

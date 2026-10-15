@@ -33,6 +33,7 @@ export type FinancialSessionGoalInput = {
   workspace: Workspace;
   context: Context;
   range: FinancialGoalRange;
+  asOf?: string;
   /** Optional exact financial periods, contained in range and non-overlapping. */
   periods?: FinancialGoalRange[];
   legacyGoal?: CompensationGoal | null;
@@ -165,7 +166,7 @@ export function financialSessionGoal(
     );
     return result;
   }
-  const selected = currentPracticeClinicians(workspace, context);
+  const selected = currentPracticeClinicians(workspace, context, input.asOf ?? range.start);
   const financialContext: Context = {
     ...context,
     clinicians: selected,
