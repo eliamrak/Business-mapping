@@ -60,6 +60,7 @@ try {
   assert.deepEqual(snapshots.slice(0, 2), before);
   assert.equal(snapshots[1].rows[1].totalFeeCharged, 100);
   assert.equal(snapshots.at(-1).rows[0].totalFeeCharged, 125);
+  await page.getByText(/Billing source review: 1 fee conflicts; 0 ambiguous fee encounters/).waitFor();
   await capture("retain-overlap-preserved-desktop", 1280, 900);
   await capture("retain-overlap-preserved-mobile", 390, 900);
   assert.ok(checks.every(check => check.scrollWidth <= check.clientWidth + 1));

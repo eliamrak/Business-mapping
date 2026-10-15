@@ -325,6 +325,7 @@ export default function LocalRetentionWorkspace({
   const verifiedCoverage = useMemo(() => coverageSummary ?? completeReportCoverage(snapshots, [], today), [coverageSummary, snapshots, today]);
   const eligibleMetricSnapshots = metricSnapshots ?? verifiedCoverage.eligibleSnapshots;
   const reportedCharges = useMemo(() => summarizeReportedBilling(eligibleMetricSnapshots, today), [eligibleMetricSnapshots, today]);
+  const rawBillingEvidence = useMemo(() => summarizeReportedBilling(snapshots, today).evidence, [snapshots, today]);
   const chargedByClinician = useMemo(() => {
     const labels = new Map<string, { clinician: string; sourceRows: number }>();
     for (const snapshot of eligibleMetricSnapshots) if (snapshot.kind === "billing") for (const row of snapshot.rows) {
@@ -586,6 +587,7 @@ export default function LocalRetentionWorkspace({
         <h3>Data covers through {dateLabel(verifiedCoverage.dataThrough)}</h3>
         <p>Attendance: {dateLabel(verifiedCoverage.attendanceThrough)} · Billing: {dateLabel(verifiedCoverage.billingThrough)}</p>
         <p>{verifiedCoverage.excludedRowsCount} raw rows excluded from eligible actual totals and historical averages. Raw rows remain available for reconciliation and review; they are not certified actual totals.</p>
+        {(rawBillingEvidence.conflictingHashCount > 0 || rawBillingEvidence.ambiguousEncounterCount > 0) && <p>Billing source review: {rawBillingEvidence.conflictingHashCount} fee conflicts; {rawBillingEvidence.ambiguousEncounterCount} ambiguous fee encounters. Original exports are retained. Conflicting amounts are not added together or automatically applied as corrections; actual totals still require independently admitted complete-period evidence.</p>}
         {verifiedCoverage.attendanceStatusConflictCount > 0 && <p>{verifiedCoverage.attendanceStatusConflictCount} conflicting attendance status groups. Affected complete provider periods are withheld, not zero; review matching diagnostics below.</p>}
         <p>Imported coverage proof does not certify separate manual-source session history.</p>
         {!coverageSummary && <p>Provider roster scope is unavailable. Actual metrics remain withheld until mapped complete-report coverage is supplied.</p>}
