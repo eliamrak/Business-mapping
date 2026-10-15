@@ -104,6 +104,7 @@ export const roomSchema = z.object({
     .default([]),
 });
 export const clinicianSettingSchema = z.object({
+  onTeam: z.boolean().optional(),
   id,
   clinicianId: z.number().int().positive(),
   ...dates,

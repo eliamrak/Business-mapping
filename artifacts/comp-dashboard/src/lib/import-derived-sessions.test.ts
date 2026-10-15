@@ -523,8 +523,10 @@ test("current month projection withholds an unknown clinician and never fills go
   assert.equal(october.sessions, null);
   assert.deepEqual(october.incompleteClinicians, ["Dr Moss"]);
   const oneClinician = monthFlow(workspace, { ...overlay.context, clinicians: [overlay.context.clinicians[0]] }, "2026-10-01", "2026-10-02", { fullMonthProjection: true });
-  assert.ok(Math.abs(oneClinician.sessions! - 31 / 56) < 1e-10);
-  assert.match(oneClinician.paceSource, /unverified coverage remains an estimate/);
+  // The latest available record ends Oct 1 and history starts Oct 1: one
+  // calendar day, not two as-of days and not an invented 56-day history.
+  assert.ok(Math.abs(oneClinician.sessions! - 1 * 31 / 1) < 1e-10);
+  assert.match(oneClinician.paceSource, /rolling three months/);
 });
 
 test("billed fees feed revenue without adding attended sessions", () => {
@@ -577,7 +579,7 @@ test("billed fees feed revenue without adding attended sessions", () => {
   assert.equal(october.revenue, 225);
 });
 
-test("Phone-only meet-and-greet rows do not derive treatment sessions or fees", () => {
+test("Phone meet-and-greet charges remain actual revenue but never derive treatment sessions", () => {
   const overlay = buildImportedSessionOverlay(
     context(),
     [
@@ -604,7 +606,7 @@ test("Phone-only meet-and-greet rows do not derive treatment sessions or fees", 
           clientId: "client-phone",
           clinician: "Dr Lane",
           serviceDate: "2026-10-01",
-          totalFeeCharged: 0,
+          totalFeeCharged: 25,
           billingCode: "Phone",
           sourceRowHash: "b-phone",
         },
@@ -625,11 +627,58 @@ test("Phone-only meet-and-greet rows do not derive treatment sessions or fees", 
     overlay.derivedSessions.map((item) => [item.start, item.completed]),
     [["2026-10-02", 1]],
   );
-  assert.equal(overlay.importedBillingActuals.length, 1);
-  assert.equal(overlay.importedBillingActuals[0].totalFeeCharged, 150);
+  assert.equal(overlay.importedBillingActuals.length, 2);
+  assert.deepEqual(overlay.importedBillingActuals.map((row) => row.totalFeeCharged), [25, 150]);
   assert.equal(overlay.diagnostic.rawAttendedRows, 1);
-  assert.equal(overlay.diagnostic.billedRows, 1);
-  assert.equal(overlay.diagnostic.billedFees, 150);
+  assert.equal(overlay.diagnostic.billedRows, 2);
+  assert.equal(overlay.diagnostic.billedFees, 175);
+  const workspace = emptyWorkspace("2026-10-01");
+  workspace.settings.teamId = 7;
+  workspace.settings.collectionPct = 100;
+  const actual = monthFlow(workspace, overlay.context, "2026-10-01", "2026-10-02");
+  assert.equal(actual.sessions, 1);
+  assert.equal(actual.revenue, 175);
+});
+
+test("repeated billing snapshots deduplicate stable hashes without mutating older source context or snapshots", () => {
+  const source = context([record(1, "2026-09-01", "2026-09-14", 8)]);
+  const snapshot = billingSnapshot([{
+    clientId: "synthetic-client", clinician: "Dr Lane", serviceDate: "2026-10-01",
+    totalFeeCharged: 25, billingCode: "PHONE", sourceRowHash: "synthetic-stable-charge",
+  }]);
+  const snapshots = [snapshot, structuredClone(snapshot)];
+  const before = structuredClone({ source, snapshots });
+  const first = buildImportedSessionOverlay(source, snapshots, 7);
+  assert.equal(first.importedBillingActuals.length, 1);
+  assert.equal(first.diagnostic.billedRows, 1);
+  assert.equal(first.diagnostic.billedFees, 25);
+  assert.equal(first.derivedSessions.length, 0);
+  const again = buildImportedSessionOverlay(source, [snapshot], 7);
+  assert.deepEqual(again.importedBillingActuals, first.importedBillingActuals);
+  assert.deepEqual(again.context.sessions, before.source.sessions);
+  assert.deepEqual({ source, snapshots }, before);
+});
+
+test("conflicting charge payloads preserve evidence and withhold projected revenue instead of silently summing", () => {
+  const source = context([record(1, "2026-10-01", "2026-10-14", 14)]);
+  source.clinicians = [source.clinicians[0]];
+  const snapshots = [25, 50].map((totalFeeCharged) => billingSnapshot([{
+    clientId: "synthetic-client", clinician: "Dr Lane", serviceDate: "2026-10-01",
+    totalFeeCharged, billingCode: "PHONE", sourceRowHash: "synthetic-conflict",
+  }]));
+  const before = structuredClone({ source, snapshots });
+  const overlay = buildImportedSessionOverlay(source, snapshots, 7);
+  assert.equal(overlay.importedBillingActuals.length, 2, "Both conflicting payloads remain evidence");
+  assert.equal(overlay.diagnostic.billingConflictCount, 1);
+  assert.equal(overlay.diagnostic.billedFees, null);
+  assert.equal(overlay.derivedSessions.length, 0);
+  const workspace = emptyWorkspace("2026-10-01");
+  workspace.settings.teamId = 7;
+  const projection = monthFlow(workspace, overlay.context, "2026-10-01", "2026-10-14", { fullMonthProjection: true });
+  assert.equal(projection.revenue, null);
+  assert.equal(projection.sessions, 31);
+  assert.ok(projection.unavailableReasons.some((reason) => /billing.*conflict/i.test(reason)));
+  assert.deepEqual({ source, snapshots }, before);
 });
 
 test("attendance Phone billing code alone does not derive treatment sessions", () => {

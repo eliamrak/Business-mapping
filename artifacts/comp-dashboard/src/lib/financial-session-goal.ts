@@ -4,11 +4,14 @@ import {
   forecastForPeriods,
   type Context,
   type ForecastMonth,
+  type ForecastOptions,
   type Values,
   type Workspace,
 } from "@workspace/practice/hub";
 import { linkedGoalFor, linkedFundGoalFor } from "./legacy-practice-goals.ts";
 import type { CompensationGoal } from "./workspace-defaults.ts";
+import { staffCostCoverageReasons } from "./staff-cost-coverage.ts";
+import { currentPracticeClinicians } from "./practice-scope.ts";
 
 export type FinancialGoalRange = { start: string; end: string };
 export type FinancialGoalTarget = {
@@ -38,6 +41,7 @@ export type FinancialSessionGoalInput = {
   /** Explicit retainedCash targets or other registered measures, with provenance. */
   additionalTargets?: FinancialGoalTarget[];
   recurringFundContributions?: RecurringFundContribution[];
+  forecastOptions?: ForecastOptions;
 };
 export type FinancialSessionGoalResult = {
   status: "available" | "unavailable";
@@ -161,6 +165,14 @@ export function financialSessionGoal(
     );
     return result;
   }
+  const selected = currentPracticeClinicians(workspace, context);
+  const financialContext: Context = {
+    ...context,
+    clinicians: selected,
+    staff: context.staff.filter((member) => (member.goalId ?? null) === workspace.settings.teamId),
+  };
+  const clinicianIds = new Set(selected.map((person) => person.id));
+  const staffIds = new Set(financialContext.staff.map((member) => member.id));
   // Financial flows are monthly in forecastForPeriods. Daily salary alone cannot
   // justify prorating changing revenue/pay/capacity into an arbitrary subwindow.
   const partialMonths = new Set<string>();
@@ -169,9 +181,9 @@ export function financialSessionGoal(
     if (p.end !== monthEnd(p.end)) partialMonths.add(p.end.slice(0, 7));
   }
   const changingDates = [
-    ...workspace.terms.map((t) => t.effectiveDate),
-    ...workspace.staffTerms.flatMap((t) => [t.effectiveDate, t.end]),
-    ...workspace.clinicians.flatMap((c) => [c.start, c.end]),
+    ...workspace.terms.filter((t) => clinicianIds.has(t.clinicianId)).map((t) => t.effectiveDate),
+    ...workspace.staffTerms.filter((t) => staffIds.has(t.staffMemberId)).flatMap((t) => [t.effectiveDate, t.end]),
+    ...workspace.clinicians.filter((c) => clinicianIds.has(c.clinicianId)).flatMap((c) => [c.start, c.end]),
     ...workspace.allocations.flatMap((a) => [a.start, a.end]),
     ...workspace.events
       .filter((e) => e.enabled)
@@ -186,11 +198,6 @@ export function financialSessionGoal(
     reasons.push(
       "Partial-month window has dated changes; monthly financial proration cannot establish an exact minimum. Daily financial aggregation is required.",
     );
-  const selected = context.clinicians.filter((c) =>
-    workspace.settings.teamId === null
-      ? c.goalId == null
-      : c.goalId === workspace.settings.teamId,
-  );
   let mix = input.baselineMix?.byClinician;
   if (!mix && selected.length === 1) {
     mix = { [selected[0].id]: 1 };
@@ -316,6 +323,7 @@ export function financialSessionGoal(
   }));
   if (!targets.length)
     reasons.push("No explicit current financial or metric target is set.");
+  reasons.push(...staffCostCoverageReasons(workspace, financialContext, periods));
   for (const t of targets)
     if (!nonnegative(t.amount) || !t.source.trim())
       reasons.push(
@@ -383,10 +391,13 @@ export function financialSessionGoal(
     return sum;
   };
   const evaluate = (weekly: number) => {
-    const months = forecast(projectionWorkspace, context, [], 1, false, {
+    const months = forecast(projectionWorkspace, financialContext, [], 1, false, {
+      ...input.forecastOptions,
       baselineWeeklyByClinician: Object.fromEntries(
         selected.map((c) => [c.id, (weekly * mix![c.id]) / mixTotal]),
       ),
+      useImportedBillingActuals: false,
+      workingForecast: false,
     });
     const values = forecastForPeriods(months, periods);
     values.retainedCash = aggregate(months, "retainedCash");
@@ -476,6 +487,16 @@ export function financialSessionGoal(
       "At least one selected-window goal measure is unavailable; no substitution from household pay or fund balances is made.",
     );
     return result;
+  }
+  for (let index = 0; index < targets.length; index++) {
+    if (targets[index].metric !== "coOwnerSalaryPretax") continue;
+    const salary = zero.modeled[index]!;
+    const target = result.details.targets[index].target!;
+    if (salary + 1e-8 < target) {
+      result.details.targets[index].modeled = salary;
+      reasons.push(`${targets[index].name}: configured fixed gross salary ${salary.toFixed(2)} is below the selected-period target ${target.toFixed(2)}; increasing sessions cannot change fixed salary. Review the dated salary terms or the salary target.`);
+      return result;
+    }
   }
   // A zero lower bound is essential: the current forecast can already exceed the minimum.
   let low = 0,

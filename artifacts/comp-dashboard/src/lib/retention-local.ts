@@ -263,10 +263,12 @@ export type ConsultJourney = {
 
 export type ConsultConversionMetric = {
   clinician: string | null;
+  rateBasis: "observed_treatment_starts" | "confirmed_closer_credit";
   consultations: number;
   converted: number;
   candidateConversions: number;
   missed: number;
+  /** Clinician pending includes unresolved credit; practice pending is follow-up maturity. */
   pending: number;
   needsAttribution: number;
   internalReferralsProtected: number;
@@ -1849,6 +1851,7 @@ export function estimateLocalClientActivity(
 
 const blankConsultMetric = (clinician: string | null): ConsultConversionMetric => ({
   clinician,
+  rateBasis: clinician === null ? "observed_treatment_starts" : "confirmed_closer_credit",
   consultations: 0,
   converted: 0,
   candidateConversions: 0,
@@ -1870,6 +1873,14 @@ const finishConsultMetric = (
     conversionRate: evaluated > 0 ? (metric.converted / evaluated) * 100 : null,
   };
 };
+
+/** null selects the practice; a named contributor never falls back to its rate. */
+export function consultConversionForContributor(summary: ConsultConversionSummary, clinician: string | null): (ConsultConversionMetric & { benchmarkRate: number | null }) | null {
+  if (clinician === null) return { ...summary.practice, benchmarkRate: null };
+  const key = normalizeClinician(clinician);
+  const metric = key ? summary.byClinician.find((metric) => normalizeClinician(metric.clinician ?? "") === key) : undefined;
+  return metric ? { ...metric, benchmarkRate: metric.evaluated > 0 ? summary.practice.conversionRate : null } : null;
+}
 
 export function summarizeConsultConversions(
   snapshots: LocalSnapshot[],
@@ -1942,9 +1953,8 @@ export function summarizeConsultConversions(
     const windowConsults = sortedConsults.filter(
       (row) => row.serviceDate >= consultDate && row.serviceDate <= deadline,
     );
-    const consultClinicians = [
-      ...new Set(windowConsults.map((row) => row.clinician).filter(Boolean)),
-    ].sort();
+    const consultClinicians = [...new Map(windowConsults.filter((row) => normalizeClinician(row.clinician))
+      .map((row) => [normalizeClinician(row.clinician), row.clinician.trim().replace(/\s+/g, " ")])).values()].sort();
     const treatments = (treatmentsByClient.get(clientId) ?? []).filter(
       (row) => row.serviceDate >= consultDate && row.serviceDate <= deadline,
     );
@@ -2025,8 +2035,9 @@ export function summarizeConsultConversions(
   const practice = blankConsultMetric(null);
   const byClinician = new Map<string, ConsultConversionMetric>();
   const clinicianMetric = (name: string) => {
-    const metric = byClinician.get(name) ?? blankConsultMetric(name);
-    byClinician.set(name, metric);
+    const key = normalizeClinician(name);
+    const metric = byClinician.get(key) ?? blankConsultMetric(name.trim().replace(/\s+/g, " "));
+    byClinician.set(key, metric);
     return metric;
   };
   for (const journey of journeys) {
@@ -2041,20 +2052,22 @@ export function summarizeConsultConversions(
       metric.consultations++;
       metric.converted++;
       for (const clinician of journey.consultClinicians) {
-        if (clinician !== journey.closerClinician)
+        if (normalizeClinician(clinician) !== normalizeClinician(journey.closerClinician))
           clinicianMetric(clinician).internalReferralsProtected++;
       }
       continue;
     }
     if (
       journey.treatmentStartClinician &&
-      journey.attributionSource === "treatment_start_candidate"
+      journey.status === "needs_attribution"
     ) {
       const metric = clinicianMetric(journey.treatmentStartClinician);
+      metric.consultations++;
       metric.candidateConversions++;
+      metric.pending++;
       metric.needsAttribution++;
       for (const clinician of journey.consultClinicians) {
-        if (clinician !== journey.treatmentStartClinician)
+        if (normalizeClinician(clinician) !== normalizeClinician(journey.treatmentStartClinician))
           clinicianMetric(clinician).internalReferralsProtected++;
       }
       continue;
@@ -2063,7 +2076,16 @@ export function summarizeConsultConversions(
       for (const clinician of journey.consultClinicians) {
         const metric = clinicianMetric(clinician);
         metric.consultations++;
+        metric.pending++;
         metric.needsAttribution++;
+      }
+      continue;
+    }
+    if (journey.status === "pending") {
+      for (const name of new Map(journey.consultClinicians.map((name) => [normalizeClinician(name), name])).values()) {
+        const metric = clinicianMetric(name);
+        metric.consultations++;
+        metric.pending++;
       }
       continue;
     }
@@ -2071,8 +2093,7 @@ export function summarizeConsultConversions(
     if (!owner) continue;
     const metric = clinicianMetric(owner);
     metric.consultations++;
-    if (journey.status === "pending") metric.pending++;
-    else metric.missed++;
+    metric.missed++;
   }
   return {
     coverageVerified: journeys.length > 0 && journeys.every((journey) => journey.coverageVerified),

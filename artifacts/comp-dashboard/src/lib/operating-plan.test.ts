@@ -7,6 +7,8 @@ import {
   clinicianSettingSchema,
   emptyWorkspace,
   forecast,
+  periodSchema,
+  funnelSchema,
   type Context,
 } from "@workspace/practice/hub";
 import { compareOperatingPlans, summarizeOperatingPlan } from "./operating-plan.ts";
@@ -190,6 +192,27 @@ test("a fixed hourly roster cost also stays fixed for incremental sessions", () 
   assert.ok(Math.abs(summary.contributionPerSession! - 100) < 1e-7);
 });
 
+test("incremental financial feasibility stays unknown with missing staff costs, even at zero displayed gap", () => {
+  const source = salaryFixture();
+  source.context.staff.push({ id: 1, goalId: 7, label: "Unknown support", annualSalary: null, hourlyRate: null, hoursPerWeek: null, weeksPerYear: 48, classification: "w2", w2EmployerFicaPct: 7.65, futaSutaPct: 0, workersCompPct: 0, otherEmployerBurdenPct: 0 });
+  source.workspace.settings.targetProfitMonthly = 0;
+  const month = forecast(source.workspace, source.context, [], 1, false)[0];
+  const before = structuredClone(source);
+  const result = summarizeOperatingPlan(source.workspace, month, 6, "2026-11-01", source.context)!;
+  assert.equal(result.sessionsToCloseGap, null);
+  assert.match(result.warnings.join(" "), /Unknown support.*pay.*unavailable/);
+  assert.deepEqual(source, before);
+});
+
+test("working forecasts do not manufacture incremental acquisition to answer a planning inverse", () => {
+  const source = salaryFixture();
+  const options = { workingForecast: true, useImportedBillingActuals: true, baselineWeeklyByClinician: { 1: 7 } };
+  const month = forecast(source.workspace, source.context, [], 1, false, options)[0];
+  const result = summarizeOperatingPlan(source.workspace, month, 6, "2026-11-01", source.context, options)!;
+  assert.equal(result.sessionsToCloseGap, null);
+  assert.match(result.warnings.join(" "), /observed session pace fixed.*planning scenario/);
+});
+
 test("operating plan keeps lead requirements unknown when conversion assumptions are missing", () => {
   const workspace = emptyWorkspace("2026-09-01");
   workspace.settings.teamId = 7;
@@ -223,7 +246,7 @@ test("recorded conversion outranks campaign estimates, including a recorded zero
     const periodId = crypto.randomUUID();
     workspace.periods.push({
       id: periodId, name: month, start: `${month}-01`, end: `${month}-30`,
-      archived: false,
+      archived: false, funnelComplete: true,
     } as typeof workspace.periods[number]);
     workspace.funnels.push({
       id: crypto.randomUUID(), periodId, scope: "practice", leads: 20,
@@ -239,6 +262,34 @@ test("recorded conversion outranks campaign estimates, including a recorded zero
     workspace, forecast(workspace, context)[0], 6, "2026-07-01",
   )!;
   assert.equal(beforeRecordedMonths.leadRateSource, "campaign");
+});
+
+test("numeric lead rows need completed reports before they can replace campaign assumptions", () => {
+  const { workspace, context: people } = salaryFixture();
+  workspace.campaigns.push(campaignSchema.parse({ id: crypto.randomUUID(), name: "Synthetic campaign", method: "cpl", monthlySpend: 1000, cpl: 50, consultationPct: 50, attendancePct: 80, closePct: 50, start: "2026-11-01" }));
+  for (const month of ["2026-08", "2026-09", "2026-10"]) {
+    const period = periodSchema.parse({ id: crypto.randomUUID(), name: month, start: month + "-01", end: month + "-28", funnelComplete: false });
+    workspace.periods.push(period);
+    workspace.funnels.push(funnelSchema.parse({ id: crypto.randomUUID(), periodId: period.id, scope: "practice", spend: 0, leads: 20, scheduled: 10, attended: 8, clients: 0, firstSessions: 0 }));
+  }
+  const month = forecast(workspace, people)[0];
+  const before = structuredClone({ workspace, people });
+  const incomplete = summarizeOperatingPlan(workspace, month, 6, "2026-11-01", people)!;
+  assert.equal(incomplete.leadRateSource, "campaign");
+  assert.ok(Math.abs(incomplete.leadToClientRate! - 0.2) < 1e-8);
+  assert.deepEqual({ workspace, people }, before);
+  workspace.periods[0].funnelComplete = true;
+  workspace.periods[1].funnelComplete = true;
+  assert.equal(summarizeOperatingPlan(workspace, month, 6, "2026-11-01", people)!.leadRateSource, "campaign");
+  workspace.periods[2].funnelComplete = true;
+  const complete = summarizeOperatingPlan(workspace, month, 6, "2026-11-01", people)!;
+  assert.equal(complete.leadRateSource, "recorded");
+  assert.equal(complete.leadToClientRate, 0, "a complete recorded zero outranks a campaign estimate");
+  workspace.periods[2].funnelComplete = false;
+  workspace.campaigns = [];
+  const unknown = summarizeOperatingPlan(workspace, { ...month, channels: {} }, 6, "2026-11-01", people)!;
+  assert.equal(unknown.leadToClientRate, null);
+  assert.equal(unknown.leadsNeeded, null);
 });
 
 test("selected forecast month changes operating totals without changing assumptions", () => {

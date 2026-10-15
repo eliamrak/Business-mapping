@@ -66,6 +66,18 @@ export function desiredSessionsForRecordYear(
   return record.desired;
 }
 
+/** Display provenance only: imported desired placeholders are never session goals. */
+export function sessionRecordGoalDisplay(record: SessionRecord, goals: SessionGoalYear[]) {
+  const annualWeekly = annualGoalFor(record.clinicianId, sessionGoalYear(record), goals);
+  const desired = annualWeekly !== null ? desiredSessionsForPeriod(annualWeekly, record)
+    : record.id < 0 ? null : record.desired;
+  return {
+    desired,
+    fullness: desired !== null && desired > 0 ? record.completed / desired * 100 : null,
+    source: annualWeekly !== null ? "annual-goal" as const : record.id < 0 ? "imported-actual-only" as const : "manual-period-goal" as const,
+  };
+}
+
 export function withAnnualDesiredSessions(
   records: SessionRecord[],
   clinicians: SessionGoalClinician[],

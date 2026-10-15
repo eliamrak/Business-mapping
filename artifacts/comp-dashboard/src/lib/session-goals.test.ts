@@ -6,6 +6,7 @@ import {
   desiredSessionsForRecordYear,
   sessionGoalUpdateForPeriod,
   sessionGoalYear,
+  sessionRecordGoalDisplay,
   summarizeSessionsWithAnnualGoals,
   weeklyGoalFromPeriodDesired,
   withAnnualDesiredSessions,
@@ -164,4 +165,39 @@ test("saving an edited historical record uses the edited period year, not the vi
     ),
     { clinicianId: 1, year: 2025, sessionsPerWeek: 12 },
   );
+});
+
+test("imported completed-equals-desired placeholders display actuals only, never self-certified goals or fullness", () => {
+  const imported = record("2026-10-08", "2026-10-08", 3, 3, -1);
+  const before = structuredClone(imported);
+  Object.freeze(imported);
+  assert.deepEqual(sessionRecordGoalDisplay(imported, []), {
+    desired: null, fullness: null, source: "imported-actual-only",
+  });
+  assert.deepEqual(imported, before);
+  assert.equal(imported.desired, 3, "Stored source facts are preserved");
+  assert.equal(sessionRecordGoalDisplay({ ...imported, desired: 99 }, []).desired, null,
+    "Negative import IDs identify actual-only provenance even when the placeholder differs from actual");
+});
+
+test("only a matching explicit annual goal permits imported history comparison; other years and clinicians do not", () => {
+  const imported = record("2026-10-01", "2026-10-14", 8, 8, -1);
+  assert.deepEqual(sessionRecordGoalDisplay(imported, [goal(2026, 7)]), {
+    desired: 14, fullness: 8 / 14 * 100, source: "annual-goal",
+  });
+  assert.equal(sessionRecordGoalDisplay(imported, [goal(2025, 7)]).desired, null);
+  assert.equal(sessionRecordGoalDisplay(imported, [clinicianGoal(2, 2026, 7)]).desired, null);
+  assert.deepEqual(sessionRecordGoalDisplay(imported, [goal(2026, 0)]), {
+    desired: 0, fullness: null, source: "annual-goal",
+  });
+});
+
+test("manual period goals remain visible and their display helper never rewrites totals", () => {
+  const manual = record("2026-10-01", "2026-10-14", 10, 20);
+  const before = structuredClone(manual);
+  assert.deepEqual(sessionRecordGoalDisplay(manual, []), { desired: 20, fullness: 50, source: "manual-period-goal" });
+  assert.deepEqual(sessionRecordGoalDisplay(manual, [goal(2026, 7)]), {
+    desired: 14, fullness: 10 / 14 * 100, source: "annual-goal",
+  });
+  assert.deepEqual(manual, before);
 });

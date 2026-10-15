@@ -2,7 +2,6 @@ import { dateRangeSchema, type SessionRecord, rangesOverlap } from "@workspace/p
 import type { Context, ImportedBillingActual } from "@workspace/practice/hub";
 import type { SessionAttendanceCoverage } from "./session-trend.ts";
 import {
-  isPhoneConsultBillingRow,
   isPhoneOnlyConsultAttendanceRow,
   sameDayVisitKey,
   type AttendanceRow,
@@ -24,7 +23,8 @@ export type ImportedSessionDiagnostic = {
   missingBillingClinicianLabels: string[];
   ambiguousBillingClinicianLabels: string[];
   billedRows: number;
-  billedFees: number;
+  billedFees: number | null;
+  billingConflictCount: number;
   rawAttendedRows: number;
   collapsedDuplicateShowRows: number;
   sameDayVisitOverrideCount: number;
@@ -110,7 +110,9 @@ export function buildImportedSessionOverlay(
   const missingBillingClinicianLabels = new Set<string>();
   const ambiguousBillingClinicianLabels = new Set<string>();
   const seenAttendanceRows = new Set<string>();
-  const seenBillingRows = new Set<string>();
+  const seenBillingRows = new Map<string, ImportedBillingActual>();
+  const seenBillingPayloads = new Set<string>();
+  const conflictingBillingHashes = new Set<string>();
   const scopedAttendanceCoverage: SessionAttendanceCoverage[] = [];
   const attendanceObservedSpans: ImportedAttendanceObservedSpan[] = [];
   const attendedByClinicianDate = new Map<
@@ -191,8 +193,6 @@ export function buildImportedSessionOverlay(
   for (const snapshot of snapshots) {
     if (snapshot.kind !== "billing") continue;
     for (const row of snapshot.rows) {
-      if (seenBillingRows.has(row.sourceRowHash)) continue;
-      seenBillingRows.add(row.sourceRowHash);
       const matches =
         cliniciansByLabel.get(normalizeLabel(row.clinician)) ?? [];
       if (matches.length === 0) {
@@ -203,8 +203,14 @@ export function buildImportedSessionOverlay(
         ambiguousBillingClinicianLabels.add(row.clinician);
         continue;
       }
-      if (isPhoneConsultBillingRow(row)) continue;
-      billingActuals.push(billingActual(matches[0].id, row));
+      const actual = billingActual(matches[0].id, row);
+      const payload = JSON.stringify(actual);
+      if (seenBillingPayloads.has(payload)) continue;
+      seenBillingPayloads.add(payload);
+      const previous = seenBillingRows.get(actual.sourceRowHash);
+      if (previous && (previous.clinicianId !== actual.clinicianId || previous.serviceDate !== actual.serviceDate || previous.totalFeeCharged !== actual.totalFeeCharged)) conflictingBillingHashes.add(actual.sourceRowHash);
+      seenBillingRows.set(actual.sourceRowHash, actual);
+      billingActuals.push(actual);
     }
   }
 
@@ -325,10 +331,11 @@ export function buildImportedSessionOverlay(
         ...ambiguousBillingClinicianLabels,
       ].sort(),
       billedRows: billingActuals.length,
-      billedFees: billingActuals.reduce(
+      billedFees: conflictingBillingHashes.size || billingActuals.some((row) => !Number.isFinite(row.totalFeeCharged)) ? null : billingActuals.reduce(
         (sum, row) => sum + row.totalFeeCharged,
         0,
       ),
+      billingConflictCount: conflictingBillingHashes.size,
       rawAttendedRows,
       collapsedDuplicateShowRows,
       sameDayVisitOverrideCount,

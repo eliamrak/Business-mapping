@@ -1,4 +1,5 @@
 import type { ForecastMonth, Workspace } from "@workspace/practice/hub";
+import { cashAllocationsForRange } from "@workspace/practice/hub";
 import { daysInclusive } from "@workspace/practice";
 
 export type OverheadUnknownReason =
@@ -328,30 +329,19 @@ export function fundProjectionSummary(
     projectionStartDate = allocation.start;
     assumptions.push("Projection contributions begin at the allocation start; no earlier contribution is assumed.");
   }
-  const sameKindTotal = allocations
-    .filter((item) => item.kind === allocation?.kind)
-    .reduce((sum, item) => sum + effectivePercent(item), 0);
-  const kindAmount =
-    allocation?.kind === "tax"
-      ? monthlyValues.taxReserve
-      : allocation?.kind === "distribution"
-        ? monthlyValues.distributions
-        : allocation?.kind === "retained"
-          ? monthlyValues.retainedCash
-          : monthlyValues.reserves;
   const cashParts = [monthlyValues.retainedCash, monthlyValues.taxReserve, monthlyValues.reserves, monthlyValues.distributions];
   const cashBasis = cashParts.every((value) => typeof value === "number" && Number.isFinite(value))
     ? Math.max(0, cashParts.reduce<number>((sum, value) => sum + value!, 0)) : null;
-  const contribution = allocation?.kind === "retained"
-    ? remaining > 0 && cashBasis !== null ? cashBasis * effectivePercent(allocation) / 100 : null
-    :
-    allocation &&
-    remaining > 0 &&
-    kindAmount !== null &&
-    kindAmount !== undefined &&
-    sameKindTotal > 0
-      ? (kindAmount * effectivePercent(allocation)) / sameKindTotal
-      : null;
+  const allocationMonth = monthDate ?? anchorDate;
+  const buckets = allocation && allocationMonth && cashBasis !== null
+    ? cashAllocationsForRange(allocations, cashBasis, allocationMonth.slice(0, 7) + "-01", calendarMonthEnd(allocationMonth)).buckets : [];
+  const bucket = buckets.find((row) => row.id === allocation?.id);
+  const requestedDistributions = buckets.filter((row) => row.kind === "distribution").reduce((sum, row) => sum + row.amount, 0);
+  const contribution = cashBasis === 0 ? 0 : allocation && remaining > 0 && cashBasis !== null && bucket
+    ? allocation.kind === "distribution" && requestedDistributions > 0
+      ? bucket.amount * (monthlyValues.distributions ?? 0) / requestedDistributions
+      : bucket.amount
+    : null;
   const monthsToGoal =
     contribution !== null && contribution > 0 && !allocation?.end
       ? Math.ceil(remaining / contribution - 1e-9)

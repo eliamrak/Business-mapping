@@ -1,4 +1,5 @@
-import { datedValue, eventSchema, forecast, monthEnd, type Context, type ForecastMonth, type Workspace } from "@workspace/practice/hub";
+import { datedValue, eventSchema, forecast, monthEnd, type Context, type ForecastMonth, type ForecastOptions, type Workspace } from "@workspace/practice/hub";
+import { staffCostCoverageReasons } from "./staff-cost-coverage.ts";
 
 export type OperatingPlanSummary = {
   month: string;
@@ -73,7 +74,7 @@ const validRate = (value: number | null) =>
 
 function recordedRates(workspace: Workspace, before: string, asOf: string) {
   const recent = workspace.periods
-    .filter((period) => !period.archived && period.end < before && period.end < asOf)
+    .filter((period) => !period.archived && period.funnelComplete === true && period.end < before && period.end < asOf)
     .sort((a, b) => b.end.localeCompare(a.end))
     .slice(0, 6)
     .flatMap((period) => {
@@ -130,10 +131,16 @@ function campaignRates(workspace: Workspace, month: ForecastMonth) {
   };
 }
 
-function incrementalSessionNeed(workspace: Workspace, month: ForecastMonth, context: Context | undefined, gap: number | null) {
+function incrementalSessionNeed(workspace: Workspace, month: ForecastMonth, context: Context | undefined, gap: number | null, forecastOptions: ForecastOptions) {
   const unknown = (warning: string) => ({ contribution: null, sessions: null, warnings: [warning] });
+  if (context) {
+    const reasons = staffCostCoverageReasons(workspace, context, [{ start: month.date, end: monthEnd(month.date) }]);
+    if (reasons.length) return { contribution: null, sessions: null, warnings: reasons };
+  }
   if (gap === 0) return { contribution: null, sessions: 0, warnings: [] };
   if (gap === null) return unknown("Incremental session need is unknown because current profit is unavailable.");
+  if (forecastOptions.workingForecast)
+    return unknown("Working forecasts hold observed session pace fixed; incremental session requirements need an explicit planning scenario.");
   if (!context) return unknown("Incremental session need requires clinician context to model fixed pay, variable costs and cap transitions.");
   const index = (Number(month.date.slice(0, 4)) - Number(workspace.settings.forecastStart.slice(0, 4))) * 12
     + Number(month.date.slice(5, 7)) - Number(workspace.settings.forecastStart.slice(5, 7));
@@ -141,7 +148,7 @@ function incrementalSessionNeed(workspace: Workspace, month: ForecastMonth, cont
     return unknown("Incremental session need requires a complete month within the configured forecast.");
   const copy = structuredClone({ workspace, context });
   copy.workspace.settings.horizonMonths = index + 1;
-  const evaluateBase = () => forecast(copy.workspace, copy.context, [], 1, false)[index];
+  const evaluateBase = () => forecast(copy.workspace, copy.context, [], 1, false, forecastOptions)[index];
   const base = evaluateBase();
   const numeric = (value: unknown): value is number => typeof value === "number" && Number.isFinite(value);
   if (!base || !numeric(base.values.sessions) || !numeric(base.values.profit) || !numeric(base.values.capacity)
@@ -171,7 +178,7 @@ function incrementalSessionNeed(workspace: Workspace, month: ForecastMonth, cont
       field: "assumption.organic", value: organicAtEnd + addedDemand * days / unit,
     });
     if (!event.success) return undefined;
-    return forecast(copy.workspace, copy.context, [event.data], 1, false)[index];
+    return forecast(copy.workspace, copy.context, [event.data], 1, false, forecastOptions)[index];
   };
   const first = evaluate(1);
   if (!numeric(first?.values.sessions) || !numeric(first?.values.profit))
@@ -217,6 +224,7 @@ export function summarizeOperatingPlan(
   fillHorizonMonths = 6,
   asOf = new Date().toISOString().slice(0, 10),
   context?: Context,
+  forecastOptions: ForecastOptions = {},
 ): OperatingPlanSummary | null {
   if (!month) return null;
   const values = month.values;
@@ -235,7 +243,7 @@ export function summarizeOperatingPlan(
     ? null : estimatedProfit - estimatedRevenue + clinicianCompensation + operatingExpense;
   const targetProfit = workspace.settings.targetProfitMonthly;
   const profitGap = estimatedProfit === null ? null : Math.max(0, targetProfit - estimatedProfit);
-  const incremental = incrementalSessionNeed(workspace, month, context, profitGap);
+  const incremental = incrementalSessionNeed(workspace, month, context, profitGap, forecastOptions);
   const contributionPerSession = incremental.contribution;
   const sessionsToCloseGap = incremental.sessions;
   const sessionsPerClientMonth = workspace.settings.sessionsPerClientMonth;

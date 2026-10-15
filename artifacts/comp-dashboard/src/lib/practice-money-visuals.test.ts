@@ -29,6 +29,13 @@ test("fund projections weight allocation dates and keep unknown cash basis unkno
   assert.equal(fundProjectionSummary(goal, [allocation], { retainedCash: 400 } as ForecastMonth["values"], "2026-01-01")?.contribution, null);
 });
 
+test("named reserve funds do not inherit unrelated reserve budget dollars", () => {
+  const allocation = { id: "growth", name: "Growth Fund", kind: "reserve" as const, percent: 20, start: "2026-01-01", end: null, archived: false, household: false, notes: "", sourceAttachmentId: null };
+  const result = fundProjectionSummary({ name: "Growth Fund", amount: 800, currentBalance: 0, balanceDate: "2026-01-01" }, [allocation], { retainedCash: 220, taxReserve: 0, reserves: 180, distributions: 0 } as ForecastMonth["values"], "2026-01-01")!;
+  assert.equal(result.contribution, 80);
+  assert.equal(result.eta, "2026-11-01");
+});
+
 const month = (date: string, overhead: number | null): ForecastMonth =>
   ({
     date,
@@ -116,7 +123,7 @@ test("fund projection keeps blank balance as zero with no dated anchor", () => {
   const blank = fundProjectionSummary(
     workspace.fundGoals[0],
     workspace.allocations,
-    { reserves: 100 } as ForecastMonth["values"],
+    { reserves: 100, retainedCash: 0, taxReserve: 0, distributions: 0 } as ForecastMonth["values"],
     "2026-10-01",
   );
   workspace.fundGoals[0].currentBalance = 600;
@@ -124,7 +131,7 @@ test("fund projection keeps blank balance as zero with no dated anchor", () => {
   const anchored = fundProjectionSummary(
     workspace.fundGoals[0],
     workspace.allocations,
-    { reserves: 100 } as ForecastMonth["values"],
+    { reserves: 100, retainedCash: 0, taxReserve: 0, distributions: 0 } as ForecastMonth["values"],
     "2026-10-01",
   );
 
@@ -476,7 +483,7 @@ test("dated balance anchors ETA and actual/projected trajectory independently of
     fundProjectionSummary(
       workspace.fundGoals[0],
       workspace.allocations,
-      { reserves: 100 } as ForecastMonth["values"],
+      { reserves: 100, retainedCash: 0, taxReserve: 0, distributions: 0 } as ForecastMonth["values"],
       selected,
     );
   const result = project("2028-01-01")!;
@@ -510,12 +517,12 @@ test("fund projections never precede the allocation effective start", () => {
   const workspace = projectionFixture(0, "2026-01-01");
   workspace.fundGoals[0].amount = 1000;
   workspace.allocations[0].start = "2027-01-01";
-  const result = fundProjectionSummary(workspace.fundGoals[0], workspace.allocations, { reserves: 100 } as ForecastMonth["values"], "2027-01-01")!;
+  const result = fundProjectionSummary(workspace.fundGoals[0], workspace.allocations, { reserves: 100, retainedCash: 0, taxReserve: 0, distributions: 0 } as ForecastMonth["values"], "2027-01-01")!;
   assert.equal(result.eta, "2027-11-01");
   assert.equal(result.projectionStartDate, "2027-01-01");
   assert.deepEqual(result.trajectory.slice(0, 2), [{ date: "2026-01-01", balance: 0, kind: "actual" }, { date: "2027-01-01", balance: 0, kind: "projected" }]);
   workspace.allocations[0].end = "2027-01-31";
-  assert.equal(fundProjectionSummary(workspace.fundGoals[0], workspace.allocations, { reserves: 100 } as ForecastMonth["values"], "2027-01-01")!.eta, null, "a dated ending cannot become a perpetual contribution");
+  assert.equal(fundProjectionSummary(workspace.fundGoals[0], workspace.allocations, { reserves: 100, retainedCash: 0, taxReserve: 0, distributions: 0 } as ForecastMonth["values"], "2027-01-01")!.eta, null, "a dated ending cannot become a perpetual contribution");
 });
 
 test("blank balance is an explicit zero assumption, never an actual dated balance", () => {
@@ -523,7 +530,7 @@ test("blank balance is an explicit zero assumption, never an actual dated balanc
   const result = fundProjectionSummary(
     workspace.fundGoals[0],
     workspace.allocations,
-    { reserves: 100 } as ForecastMonth["values"],
+    { reserves: 100, retainedCash: 0, taxReserve: 0, distributions: 0 } as ForecastMonth["values"],
     "2026-10-01",
   )!;
   assert.equal(result.current, 0);
@@ -547,7 +554,7 @@ test("monthly projection clamps month ends without drifting the anchor day", () 
   const result = fundProjectionSummary(
     workspace.fundGoals[0],
     workspace.allocations,
-    { reserves: 100 } as ForecastMonth["values"],
+    { reserves: 100, retainedCash: 0, taxReserve: 0, distributions: 0 } as ForecastMonth["values"],
     "2028-01-01",
   )!;
   assert.equal(result.eta, "2026-03-31");
@@ -578,7 +585,7 @@ test("long projections bound chart data while retaining full ETA", () => {
   const result = fundProjectionSummary(
     workspace.fundGoals[0],
     workspace.allocations,
-    { reserves: 1 } as ForecastMonth["values"],
+    { reserves: 1, retainedCash: 0, taxReserve: 0, distributions: 0 } as ForecastMonth["values"],
     "2028-01-01",
   )!;
   assert.equal(result.eta, "2126-10-14");
@@ -591,7 +598,7 @@ test("missing dates or zero contributions do not invent an ETA", () => {
   const result = fundProjectionSummary(
     workspace.fundGoals[0],
     workspace.allocations,
-    { reserves: 0 } as ForecastMonth["values"],
+    { reserves: 0, retainedCash: 0, taxReserve: 0, distributions: 0 } as ForecastMonth["values"],
     undefined,
   )!;
   assert.equal(result.contribution, 0);

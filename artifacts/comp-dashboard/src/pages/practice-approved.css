@@ -206,3 +206,15 @@
 .pw-plan-outcomes dt { font-size: 12px; color: #a9b8c1; }
 .pw-plan-outcomes dd { margin: 0; font-size: 20px; overflow-wrap: anywhere; font-variant-numeric: tabular-nums; }
 .pw-plan-outcomes dd small { display: block; margin-top: 5px; font-size: 12px; color: #a9b8c1; }
+.pw-app .pw-clinical-metric-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; align-items: start; }
+.pw-app .pw-clinical-card { min-width: 0; padding: 18px; border: 1px solid #34414b; border-radius: 8px; background: #11171d; overflow-wrap: anywhere; }
+.pw-app .pw-clinical-card > .pw-metric-panel { padding: 0; border: none; background: transparent; box-shadow: none; }
+.pw-app .pw-clinical-card h3 { margin: 0 0 10px; font-size: 18px; }
+.pw-app .pw-clinical-card p, .pw-app .pw-clinical-card details { font-size: 13px; line-height: 1.5; }
+.pw-app .pw-clinical-card .pw-metric-hero > strong { font-size: 30px; }
+.pw-app .pw-clinical-count { display: grid; gap: 6px; margin: 20px 0 10px; }
+.pw-app .pw-clinical-count > strong { font-size: 32px; font-variant-numeric: tabular-nums; }
+.pw-app .pw-team-membership { display: flex; align-items: center; gap: 6px; font-size: 12px; }
+.pw-app .pw-overview-bridge-plot .profit.loss { background: #e88f86; }
+.pw-app .pw-overview-goal-status { padding: 12px 0; border-bottom: 1px solid #34414b; }
+@media (max-width: 1000px) { .pw-app .pw-clinical-metric-grid { grid-template-columns: minmax(0, 1fr); } }

@@ -34,7 +34,7 @@ import {
 import {
   annualGoalFor,
   desiredSessionsForPeriod,
-  desiredSessionsForRecordYear,
+  sessionRecordGoalDisplay,
   sessionGoalYear,
   weeklyGoalFromPeriodDesired,
 } from "@/lib/session-goals";
@@ -101,6 +101,7 @@ export default function WorkspaceSessions({
   attendanceCoverage = [],
   attendanceObservedSpans = [],
   controls,
+  compact = false,
 }: {
   context: Context;
   summaryContext?: Context;
@@ -120,6 +121,7 @@ export default function WorkspaceSessions({
   attendanceCoverage?: SessionAttendanceCoverage[];
   attendanceObservedSpans?: ImportedAttendanceObservedSpan[];
   controls?: ReactNode;
+  compact?: boolean;
 }) {
   const queryClient = useQueryClient();
   const team = teamId === null ? "unassigned" : String(teamId);
@@ -174,6 +176,7 @@ export default function WorkspaceSessions({
     practiceRecords.length ? "single" : "bulk",
   );
   const [entryOpen, setEntryOpen] = useState(!practiceRecords.length);
+  const [compactDetailsOpen, setCompactDetailsOpen] = useState(false);
   const entryRef = useRef<HTMLDivElement>(null);
   const [bulkState, setBulkState] = useState({ dirty: false, busy: false });
   const [historyRange, setHistoryRange] = useState("4periods");
@@ -201,12 +204,7 @@ export default function WorkspaceSessions({
     ) ?? person?.sessionsPerWeek ?? 0;
     return desiredSessionsForPeriod(sessionsPerWeek, period);
   };
-  const comparisonDesiredFor = (record: SessionRecord) =>
-    desiredSessionsForRecordYear(
-      record,
-      people.find((person) => person.id === record.clinicianId),
-      annualGoals,
-    );
+  const comparisonDesiredFor = (record: SessionRecord) => sessionRecordGoalDisplay(record, annualGoals).desired;
   const exactRecord = (personId: number) =>
     manualRecords.find(
       (record) =>
@@ -218,7 +216,7 @@ export default function WorkspaceSessions({
     const record = exactRecord(personId);
     return {
       completed: value(record?.completed),
-      desired: String(record ? comparisonDesiredFor(record) : desiredFor(personId)),
+      desired: String(record ? comparisonDesiredFor(record) ?? desiredFor(personId) : desiredFor(personId)),
       cancelled: value(record?.cancelled),
       noShow: value(record?.noShow),
       scheduled: value(record?.scheduled),
@@ -450,7 +448,7 @@ export default function WorkspaceSessions({
   }].map((row) => ({ ...row, practice: row.id === "practice" }));
   const selectedGoal = readPeople.reduce((sum, person) => sum + (annualGoalFor(person.id, Number(chartBounds.end.slice(0, 4)), annualGoals) ?? person.sessionsPerWeek ?? 0), 0);
   const requiredPace = requiredWeeklySessions != null && Number.isFinite(requiredWeeklySessions) ? requiredWeeklySessions : null;
-  const capacityColor = requiredPace !== null && requiredPace > selectedGoal ? "#ee8c84" : "#f2f4f5";
+  const capacityColor = "#ee8c84";
   const progressScale = Math.max(selectedGoal, requiredPace ?? 0, selectedSummary.completedWeekly ?? 0, 1);
   const progressPosition = (number: number) => `${Math.min(100, Math.max(0, number / progressScale * 100))}%`;
   const sourceSpan = attendanceObservedSpans.filter((span) => span.start <= chartBounds.end && span.end >= chartBounds.start && span.clinicianIds.some((id) => readIds.includes(id)))
@@ -458,10 +456,12 @@ export default function WorkspaceSessions({
   const overviewFor = (personId: number) => {
     const current = visibleRecords.filter((record) => record.clinicianId === personId);
     const previous = previousOverviewRecords.filter((record) => record.clinicianId === personId);
+    const annualWeekly = annualGoalFor(personId, Number(chartBounds.end.slice(0, 4)), annualGoals);
+    const displayWeeklyGoal = annualWeekly ?? (current.some((record) => record.id < 0) ? 0
+      : people.find((person) => person.id === personId)?.sessionsPerWeek ?? 0);
     const summary = summarizeSessionOverview(
       current, previous,
-      annualGoalFor(personId, Number(chartBounds.end.slice(0, 4)), annualGoals) ??
-        people.find((person) => person.id === personId)?.sessionsPerWeek ?? 0,
+      displayWeeklyGoal,
       { period: chartBounds, previousPeriod: previousOverviewPeriod, clinicianId: personId, attendanceCoverage },
     );
     return {
@@ -477,19 +477,19 @@ export default function WorkspaceSessions({
       .filter((record): record is SessionRecord => !!record);
     const recent = entries.filter((record) => record.end >= shift(today, -60));
     const fullness = (items: SessionRecord[]) => {
-      const desired = items.reduce(
-        (sum, record) => sum + comparisonDesiredFor(record),
-        0,
-      );
+      const targets = items.map(comparisonDesiredFor);
+      if (!targets.length || targets.some((target) => target === null)) return null;
+      const desired = targets.reduce<number>((sum, target) => sum + target!, 0);
       return desired
         ? (items.reduce((sum, record) => sum + record.completed, 0) / desired) *
             100
         : null;
     };
     const overview = overviewFor(personId);
+    const targets = entries.map(comparisonDesiredFor);
     return {
       average: average(entries.map((record) => record.completed)),
-      desired: average(entries.map(comparisonDesiredFor)),
+      desired: targets.some((target) => target === null) ? null : average(targets as number[]),
       weekly: overview.averageWeekly,
       fullness: overview.fullness,
       recent: average(recent.map((record) => record.completed)),
@@ -497,11 +497,11 @@ export default function WorkspaceSessions({
     };
   };
 
-  return (
-    <section aria-label="Session totals" className="pw-session-tracker">
+  const fullView = (
+    <section aria-label="Session totals" className="pw-session-tracker" style={compact ? { padding: 0, border: "none", background: "transparent" } : undefined}>
       <div className="pw-section-heading pw-session-panel-header">
         <h2>Sessions</h2>
-        {controls && <div className="pw-session-panel-controls">{controls}</div>}
+        {!compact && controls && <div className="pw-session-panel-controls">{controls}</div>}
         <details className="pw-session-tools">
           <summary>Session tools</summary>
         <div className="pw-actions">
@@ -1031,16 +1031,16 @@ export default function WorkspaceSessions({
                 </th>
                 {readPeople.map((person) => {
                   const record = recordFor(period, person.id);
-                  const desired = record ? comparisonDesiredFor(record) : 0;
-                  const fullness = desired
-                    ? (record!.completed / desired) * 100
-                    : null;
+                  const goalDisplay = record ? sessionRecordGoalDisplay(record, annualGoals) : null;
+                  const desired = goalDisplay?.desired ?? null;
+                  const fullness = goalDisplay?.fullness ?? null;
                   return (
                     <td key={person.id}>
                       {record ? (
                         <div className="pw-session-history-value">
                           <strong>{record.completed}</strong>
-                          {columns.desired && <span>of {desired}</span>}
+                          {columns.desired && desired !== null && <span>of {desired}</span>}
+                          {goalDisplay?.source === "imported-actual-only" && <small>Imported actual</small>}
                           {columns.fullness && overviewFor(person.id).coverageComplete && fullness != null && (
                             <em
                               data-tone={
@@ -1168,4 +1168,37 @@ export default function WorkspaceSessions({
       )}
     </section>
   );
+  if (!compact) return fullView;
+  return <section className="pw-metric-panel" aria-label="Sessions clinical card" style={{ minWidth: 0 }}>
+    <h3>Sessions</h3>
+    <p style={{ overflowWrap: "anywhere" }}>{contributorId === null ? "Whole Practice" : readPeople[0]?.label ?? "Selected clinician"} · {shortDate(chartBounds.start)} - {shortDate(chartBounds.end)}</p>
+    <div className="pw-metric-hero">
+      <strong style={{ fontSize: 32 }}>{display(selectedSummary.completedWeekly ?? selectedSummary.calendarWindowWeeklyEstimate ?? null)}</strong>
+      <span>{selectedSummary.coverageComplete ? "Sessions / week" : "Estimated sessions / week"}</span>
+    </div>
+    <p>{display(selectedSummary.observedCompleted ?? null)} observed sessions · {selectedSummary.coverageComplete ? `${selectedSummary.observedCoverageDays} covered calendar days` : "coverage unverified"}</p>
+    {compareWholePractice ? <MetricComparison rows={comparisonRows} unit="sessions / week" label="Session metric comparison" />
+      : <div aria-label="Selected-period calendar session trend" style={{ width: "100%", minWidth: 0, height: 180 }}>
+        <ResponsiveContainer width="100%" height="100%">
+          <LineChart data={chartData} margin={{ top: 8, right: 8, bottom: 4, left: 0 }} accessibilityLayer>
+            <CartesianGrid strokeDasharray="3 3" vertical={false} />
+            <XAxis dataKey="date" type="number" scale="time" domain={['dataMin', 'dataMax']}
+              tickFormatter={(date: number) => new Date(date).toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "UTC" })} minTickGap={30} />
+            <YAxis width={36} domain={[0, 'auto']} />
+            <Tooltip labelFormatter={(_, payload) => payload[0]?.payload.label ?? ""} formatter={(number: number) => display(number)} />
+            <Legend iconSize={8} wrapperStyle={{ fontSize: 11 }} />
+            {chartData.some((point) => point.completed !== null) && <Line dataKey="completed" name="Sessions" stroke="#9fd8c2" strokeWidth={2} dot={{ r: 3 }} connectNulls={false} isAnimationActive={false} />}
+            {chartData.some((point) => point.observedCompleted !== null) && <Line dataKey="observedCompleted" name="Observed (coverage unknown)" stroke="#9fd8c2" strokeWidth={0} dot={{ r: 4, fill: "#12171d", strokeWidth: 2 }} isAnimationActive={false} />}
+            {chartData.some((point) => point.periodRate !== null) && <Line dataKey="periodRate" name="Period pace" stroke="#9fd8c2" strokeWidth={0} dot={{ r: 4 }} isAnimationActive={false} />}
+            <Line dataKey="capacity" name="Capacity" stroke={capacityColor} dot={false} strokeDasharray="6 3" isAnimationActive={false} />
+            {requiredPace !== null && <Line dataKey="required" name="Goal" stroke="#76dda4" dot={false} strokeDasharray="3 3" isAnimationActive={false} />}
+          </LineChart>
+        </ResponsiveContainer>
+      </div>}
+    {!chartData.some((point) => point.completed !== null || point.observedCompleted !== null || point.periodRate !== null) && <p className="pw-note">No observed sessions in this date range.</p>}
+    <details onToggle={(event) => setCompactDetailsOpen(event.currentTarget.open)}>
+      <summary>Session entry, history and hiring</summary>
+      {compactDetailsOpen && fullView}
+    </details>
+  </section>;
 }

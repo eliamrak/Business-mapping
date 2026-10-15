@@ -397,13 +397,13 @@ export default function MoneyFlowToday({
         .reduce((sum, row) => sum + row.percent, 0)
     : workspace.settings.distributionPct;
   const distributionNote =
-    flow.profit === null
-      ? "Enter sessions to estimate profit and distributions"
-      : flow.profit <= 0
-        ? "No positive profit to distribute this month"
+    flow.allocationSurplus === null
+      ? "Cash-surplus estimate unavailable"
+      : flow.allocationSurplus <= 0
+        ? "No positive modeled cash surplus to distribute this month"
         : distributionShare === 0
-          ? "No share of profit assigned to your distribution above"
-          : `Estimated from ${distributionShare}% of positive profit, not a recorded transfer`;
+          ? "No cash-surplus share assigned to your distribution above"
+          : "Configured distribution shares, effective dates and cash availability; not a recorded transfer";
   const payRow = (person: Person) => {
     const profile = profileFor(person);
     const mode = profile?.payMode ?? "existing_split";
@@ -496,13 +496,14 @@ export default function MoneyFlowToday({
           {changeError}
         </p>
       )}
+      {flow.unavailableReasons.length > 0 && <details className="pw-flow-warning"><summary>Financial inputs need review; unknown amounts are withheld</summary>{flow.unavailableReasons.map((reason) => <p key={reason}>{reason}</p>)}</details>}
 
       {flow.through && flow.sessions !== null ? (
         <p className="pw-flow-status">
           Projection runs through {shortDate(flow.through)}.{" "}
           {flow.sessionDataThrough ? (
             <>
-              Latest recorded sessions: {shortDate(flow.sessionDataThrough)}. The entire month uses {paceBasis}, with configured fees; imported charges are shown separately.
+              Latest recorded sessions: {shortDate(flow.sessionDataThrough)}. The month uses {paceBasis} and configured fees, with matching imported service-date charges replacing estimates.
             </>
           ) : (
             <>
@@ -511,7 +512,7 @@ export default function MoneyFlowToday({
             </>
           )}{" "}
           Payroll, expenses, and marketing use the same full-month horizon.
-          Revenue and operating profit use the same capacity-constrained forecast and earned costs as the Money bridge, not reported charges or reconciled cash. Paycheck timing is separate.
+          Revenue and operating profit use the same working forecast and earned costs as the Money bridge. Reported-charge totals and reconciled cash remain separate. Paycheck timing is separate.
         </p>
       ) : (
         <div className="pw-flow-notice">
@@ -1060,9 +1061,9 @@ export default function MoneyFlowToday({
       <section className="pw-flow-funds">
         <div className="pw-flow-section-heading">
           <div>
-            <h3>Decide where profit goes</h3>
+            <h3>Decide where cash surplus goes</h3>
             <p>
-              Estimated shares of positive profit, not confirmed bank transfers
+              Estimated shares of cash surplus after collections and modeled costs, not confirmed bank transfers
             </p>
           </div>
         </div>
@@ -1150,7 +1151,7 @@ export default function MoneyFlowToday({
           <span>
             {flow.profit !== null && flow.profit < 0
               ? "Operating loss (no funds available)"
-              : "Unassigned profit (stays in the business)"}
+              : "Retained cash change after allocations"}
           </span>
           <span />
           <span />

@@ -1,6 +1,7 @@
 import {
   calculateClinicianMetrics,
   calculateStaffMemberCost,
+  staffCompensationKnown,
   type ClinicianMetricsInput,
   type StaffCostInput,
 } from "../compensation.ts";
@@ -120,6 +121,7 @@ export type ForecastMonth = {
 export type ForecastOptions = {
   baselineWeeklyByClinician?: Record<number, number>;
   useImportedBillingActuals?: boolean;
+  workingForecast?: boolean;
 };
 import { metrics, metricMap } from "./metrics.ts";
 export { metrics, metricMap } from "./metrics.ts";
@@ -137,13 +139,25 @@ export const registeredMetrics = (
     .map((k) => [k.key, k.name, k.unit, "Custom"] as const),
 ];
 
-const importedBillingByClinicianDate = (
+export const summarizeImportedBillingActuals = (
   context: Context,
   selectedIds: Set<number>,
 ) => {
   const billed = new Map<number, Map<string, number>>();
+  const groups = new Map<string, ImportedBillingActual[]>();
   for (const row of context.importedBillingActuals ?? []) {
     if (!selectedIds.has(row.clinicianId)) continue;
+    const group = groups.get(row.sourceRowHash) ?? [];
+    group.push(row);
+    groups.set(row.sourceRowHash, group);
+  }
+  const unknownDates: Array<{ clinicianId: number; date: string }> = [];
+  for (const [hash, rows] of groups) {
+    const row = rows[0];
+    if (!hash.trim() || !Number.isFinite(row.totalFeeCharged) || rows.some((other) => other.clinicianId !== row.clinicianId || other.serviceDate !== row.serviceDate || other.totalFeeCharged !== row.totalFeeCharged)) {
+      unknownDates.push(...rows.map((other) => ({ clinicianId: other.clinicianId, date: other.serviceDate })));
+      continue;
+    }
     const clinician = billed.get(row.clinicianId) ?? new Map<string, number>();
     clinician.set(
       row.serviceDate,
@@ -151,7 +165,7 @@ const importedBillingByClinicianDate = (
     );
     billed.set(row.clinicianId, clinician);
   }
-  return billed;
+  return { billed, unknownDates };
 };
 export const ratio = (a: number, b: number) => (b > 0 ? a / b : null);
 export const monthDate = (date: string, offset = 0) => {
@@ -545,10 +559,11 @@ export function forecast(
   const selected = context.clinicians.filter((c) =>
     settings.teamId === null ? c.goalId == null : c.goalId === settings.teamId,
   );
-  const importedBilling = importedBillingByClinicianDate(
+  const importedBillingSource = summarizeImportedBillingActuals(
     context,
     new Set(selected.map((person) => person.id)),
   );
+  const importedBilling = importedBillingSource.billed;
   const staff = context.staff.filter((c) =>
     settings.teamId === null ? c.goalId == null : c.goalId === settings.teamId,
   );
@@ -576,6 +591,7 @@ export function forecast(
       : historicalWeekly;
   const results: ForecastMonth[] = [];
   let cash = settings.openingCash;
+  let cashKnown = true;
   let baselineRetained = 1;
   const capEarned: Record<string, number> = {};
   const cohorts: {
@@ -591,6 +607,10 @@ export function forecast(
       days = daysInclusive(start, end),
       weeks = days / 7;
     const warnings = [...issues];
+    const unknownBilling = options.useImportedBillingActuals !== false && importedBillingSource.unknownDates.some((row) => row.date >= start && row.date <= end);
+    if (unknownBilling) warnings.push("Imported billing source identities conflict or have unknown fees; matching revenue is unknown.");
+    const unknownStaff = staff.filter((member) => datesIn(start, end).some((date) => !staffCompensationKnown(staffMemberAt(workspace, member, date))));
+    if (unknownStaff.length) warnings.push("Selected staff compensation is unknown; financial feasibility and profit cannot be certified.");
     if (baseWeekly === null)
       warnings.push(
         "Baseline sessions are missing; only new acquisition is modeled.",
@@ -772,11 +792,11 @@ export function forecast(
       cohorts.push(cohort);
       newClients += cohort.clients;
     }
-    if (m > 0) baselineRetained *= setting.baselineRetentionPct / 100;
+    if (m > 0 && !options.workingForecast) baselineRetained *= setting.baselineRetentionPct / 100;
     const baselineMonthSessions = options.baselineWeeklyByClinician
       ? selected.reduce((sum, clinician) => {
           const profile = workspace.clinicians.find((entry) => entry.clinicianId === clinician.id);
-          if (profile && (profile.status !== "active" || !active(profile, start, end))) return sum;
+          if (profile && (profile.status !== "active" || !active(profile, start, end) || (options.workingForecast && profile.onTeam === false))) return sum;
           const first = profile && profile.start > start ? profile.start : start;
           const last = profile?.end && profile.end < end ? profile.end : end;
           return sum + (options.baselineWeeklyByClinician?.[clinician.id] ?? clinician.sessionsPerWeek) * daysInclusive(first, last) / 7;
@@ -789,7 +809,7 @@ export function forecast(
       0,
     );
     const demand =
-      baselineDemand + (acquiredDemand * setting.attendancePct) / 100;
+      baselineDemand + (options.workingForecast ? 0 : (acquiredDemand * setting.attendancePct) / 100);
     const roster = selected.map((c) => ({
       ...c,
       instance: String(c.id),
@@ -851,7 +871,7 @@ export function forecast(
     }
     const people = roster
       .filter(
-        (c) => !c.op || (c.op.status === "active" && active(c.op, start, end)),
+        (c) => !c.op || (c.op.status === "active" && active(c.op, start, end) && (!options.workingForecast || c.op.onTeam !== false)),
       )
       .map((c) => {
         const firstDay = c.op && c.op.start > start ? c.op.start : start,
@@ -1248,7 +1268,12 @@ export function forecast(
       };
     };
     const roomLimit = anyRooms ? allocate(capacity).total : Infinity;
-    const allocation = allocate(Math.min(demand, capacity));
+    const workingAssignments = new Map(people.map((person) => [person.instance,
+      (options.baselineWeeklyByClinician?.[person.id] ?? 0) * person.daily.length / 7,
+    ]));
+    const allocation = options.workingForecast
+      ? { assigned: workingAssignments, total: [...workingAssignments.values()].reduce((sum, count) => sum + count, 0), roomUse: 0 }
+      : allocate(Math.min(demand, capacity));
     const sessions = allocation.total;
     const utilization = ratio(sessions, capacity);
     let revenue = 0,
@@ -1277,7 +1302,7 @@ export function forecast(
         earned = 0;
       for (const day of c.daily) {
         const dayCount =
-          c.capacity > 0 ? (count * day.capacity) / c.capacity : 0;
+          options.workingForecast ? (options.baselineWeeklyByClinician?.[c.id] ?? 0) / 7 : c.capacity > 0 ? (count * day.capacity) / c.capacity : 0;
         const remaining = Math.max(0, c.capAmount - (capEarned[c.capKey] ?? 0));
         const afterCap = c.capEnabled && c.capAmount > 0 && remaining === 0;
         const calculated = calculateClinicianMetrics({
@@ -1345,10 +1370,10 @@ export function forecast(
           sessions: count,
           capacity: c.capacity,
           utilization: (ratio(count, c.capacity) ?? 0) * 100,
-          revenue: earned,
+          revenue: options.useImportedBillingActuals !== false && importedBillingSource.unknownDates.some((row) => row.clinicianId === c.id && row.date >= start && row.date <= end) ? null : earned,
           clinicianPay: pay,
           employerBurden: burden,
-          profit: earned - pay - burden,
+          profit: options.useImportedBillingActuals !== false && importedBillingSource.unknownDates.some((row) => row.clinicianId === c.id && row.date >= start && row.date <= end) ? null : earned - pay - burden,
         },
         end,
       );
@@ -1538,7 +1563,7 @@ export function forecast(
       sessions,
     );
     const revenuePerSession = ratio(revenue, sessions) ?? 0;
-    const values = calculateCustomKpis(
+    let values = calculateCustomKpis(
       workspace,
       {
         sessions,
@@ -1615,7 +1640,19 @@ export function forecast(
       },
       end,
     );
-    const constraint =
+    if (unknownStaff.length) for (const key of ["staffCost", "profit", "taxReserve", "reserves", "distributions", "retainedCash", "cash", "familyTakeHome", "ownerDistributionsPretax", "breakEvenSessions", "runway"]) values[key] = null;
+    const unknownCollections = setting.collectionDelayMonths === 0 ? unknownBilling : m >= setting.collectionDelayMonths && results[m - setting.collectionDelayMonths].values.revenue === null;
+    if (unknownBilling) for (const key of ["revenue", "profit", "ltv", "roas", "contributionRoas", "netRoi", "breakEvenSessions"]) values[key] = null;
+    if (unknownCollections) {
+      values.collections = null;
+      if (setting.processingPct > 0) for (const key of ["fees", "profit", "netRoi", "contributionRoas", "breakEvenSessions"]) values[key] = null;
+    }
+    if (unknownCollections || unknownStaff.length) for (const key of ["taxReserve", "reserves", "distributions", "retainedCash", "familyTakeHome", "ownerDistributionsPretax"]) values[key] = null;
+    cashKnown = cashKnown && !unknownCollections && unknownStaff.length === 0;
+    if (!cashKnown) { values.cash = null; values.runway = null; }
+    for (const kpi of workspace.kpis) delete values[kpi.key];
+    values = calculateCustomKpis(workspace, values, end);
+    const constraint = !cashKnown ? "Cash balance unknown" : options.workingForecast ? "Working history average" :
       demand > capacity && capacity <= roomLimit
         ? "Clinician capacity"
         : demand > roomLimit
@@ -1632,7 +1669,7 @@ export function forecast(
         "Cash distributions attributable to household-marked owner distribution allocations, before personal income tax. Excludes clinical compensation and salary; missing owner allocation attribution remains unknown.",
       coOwnerSalaryPretax:
         "Fixed gross salary for settings.familyW2ClinicianId only, using active dates and effective salary-mode terms. Excludes split/hourly/session compensation and personal tax estimates; absent salary attribution remains unknown.",
-      sessions: `Demand ${demand.toFixed(1)} allocated across clinician capacity ${capacity.toFixed(1)}, capped by assigned rooms and locations (usable capacity ${Number.isFinite(roomLimit) ? roomLimit.toFixed(1) : "unverified / telehealth"}). Telehealth consumes a room only where configured. Historical baseline is retained separately from new-client cohorts.`,
+      sessions: options.workingForecast ? "Working average: each current clinician's available sessions in the rolling three-month window divided by calendar weeks, including quiet weeks. No vacation, full-caseload, room-capacity or acquisition adjustment." : `Demand ${demand.toFixed(1)} allocated across clinician capacity ${capacity.toFixed(1)}, capped by assigned rooms and locations (usable capacity ${Number.isFinite(roomLimit) ? roomLimit.toFixed(1) : "unverified / telehealth"}). Telehealth consumes a room only where configured. Historical baseline is retained separately from new-client cohorts.`,
       revenue:
         "Billed session income from imported charged fees where available, otherwise clinician sessions x effective session rate. Not collected cash.",
       collections: `Estimated cash collected from billed session income after applying the paid-portion assumption and ${setting.collectionDelayMonths} month(s) delay, plus opening receivables in month one when a delay applies.`,
@@ -1747,20 +1784,15 @@ export function forecast(
       proposed,
       demandMultiplier,
       false,
+      options,
     );
     results.forEach((month, index) => {
       const baseline = withoutMarketing[index].values;
       const spend = month.values.marketing ?? 0;
-      const increment = (month.values.profit ?? 0) - (baseline.profit ?? 0);
-      month.values.roas = ratio(
-        (month.values.collections ?? 0) - (baseline.collections ?? 0),
-        month.values.adSpend ?? 0,
-      );
-      month.values.contributionRoas = ratio(
-        increment + spend,
-        month.values.adSpend ?? 0,
-      );
-      month.values.netRoi = spend > 0 ? (increment / spend) * 100 : null;
+      const increment = month.values.profit === null || baseline.profit === null ? null : (month.values.profit ?? 0) - (baseline.profit ?? 0);
+      month.values.roas = options.workingForecast || month.values.collections === null || baseline.collections === null ? null : ratio((month.values.collections ?? 0) - (baseline.collections ?? 0), month.values.adSpend ?? 0);
+      month.values.contributionRoas = options.workingForecast || increment === null ? null : ratio(increment + spend, month.values.adSpend ?? 0);
+      month.values.netRoi = options.workingForecast || increment === null ? null : spend > 0 ? (increment / spend) * 100 : null;
       month.trace.netRoi =
         "Modeled incremental operating profit versus the same practice without paid campaigns, divided by campaign costs. Shared capacity is applied in both forecasts; this is not observed attribution or causal proof.";
       month.trace.roas =

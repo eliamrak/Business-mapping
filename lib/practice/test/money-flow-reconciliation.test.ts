@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { emptyWorkspace, clinicianSettingSchema, allocationSchema, forecast, monthFlow, type Context } from "../src/hub/index.ts";
+import { emptyWorkspace, clinicianSettingSchema, allocationSchema, categorySchema, budgetSchema, forecast, monthFlow, type Context } from "../src/hub/index.ts";
 
 const close = (actual: number | null, expected: number | null) => assert.ok(actual !== null && expected !== null && Math.abs(actual - expected) < 1e-8, `${actual} != ${expected}`);
 function fixture(month = "2026-10-01") {
@@ -21,7 +21,8 @@ function fixture(month = "2026-10-01") {
 test("projected Money flow and bridge use the same earned costs, not 28-day October checks", () => {
   const { workspace, context, end } = fixture();
   const before = structuredClone({ workspace, context });
-  const engine = forecast(workspace, context, [], 1, true, { baselineWeeklyByClinician: { 1: 14, 2: 14, 3: 14 }, useImportedBillingActuals: false })[0];
+  const options = { baselineWeeklyByClinician: { 1: 14, 2: 14, 3: 14 }, useImportedBillingActuals: true, workingForecast: true };
+  const engine = forecast(workspace, context, [], 1, true, options)[0];
   const flow = monthFlow(workspace, context, "2026-10-01", end, { fullMonthProjection: true });
   close(flow.revenue, engine.values.revenue);
   close(flow.sessions, engine.values.sessions);
@@ -46,7 +47,8 @@ test("earned operating profit stays equal when check counts, capacity, growth, c
     workspace.settings.collectionDelayMonths = 1;
     workspace.settings.collectionPct = 80;
     workspace.clinicians[0].desiredWeeklySessions = 2;
-    const engine = forecast(workspace, context, [], 1, true, { baselineWeeklyByClinician: { 1: 14, 2: 14, 3: 14 }, useImportedBillingActuals: false })[0];
+    const options = { baselineWeeklyByClinician: { 1: 14, 2: 14, 3: 14 }, useImportedBillingActuals: true, workingForecast: true };
+    const engine = forecast(workspace, context, [], 1, true, options)[0];
     const flow = monthFlow(workspace, context, month, end, { fullMonthProjection: true });
     close(flow.profit, engine.values.profit);
     close(flow.revenue, engine.values.revenue);
@@ -66,4 +68,62 @@ test("tax and household distributions stay after operating profit; owner clinica
   close(adjusted.distribution, Math.max(0, adjusted.profit!) * 0.25);
   close(adjusted.familyTakeHome, adjusted.estimatedNetPay! + adjusted.distribution!);
   close(adjusted.clinicianPay, 7500 + 31 * 2 * 100 * 0.6);
+});
+
+test("projected allocations and family distribution use shared cash surplus, not uncollected earned profit", () => {
+  const { workspace, context, end } = fixture();
+  workspace.settings.collectionDelayMonths = 1;
+  workspace.allocations.push(allocationSchema.parse({ id: crypto.randomUUID(), name: "Owner cash distribution", kind: "distribution", household: true, percent: 50, start: "2026-01-01" }));
+  const before = structuredClone({ workspace, context });
+  const options = { baselineWeeklyByClinician: { 1: 14, 2: 14, 3: 14 }, useImportedBillingActuals: true, workingForecast: true };
+  const engine = forecast(workspace, context, [], 1, true, options)[0];
+  const flow = monthFlow(workspace, context, "2026-10-01", end, { fullMonthProjection: true });
+  assert.ok(flow.profit! > 0);
+  close(flow.profit, engine.values.profit);
+  close(flow.distribution, 0);
+  close(flow.distribution, engine.values.distributions);
+  close(flow.retained, engine.values.retainedCash);
+  close(flow.familyTakeHome, engine.values.familyTakeHome);
+  assert.equal(flow.allocationBasis, "cash-surplus");
+  close(flow.allocationSurplus, 0);
+  assert.deepEqual({ workspace, context }, before);
+});
+
+test("projected allocation rows reconcile explicit tax and reserve budgets and capped household distributions", () => {
+  const { workspace, context, end } = fixture();
+  for (const kind of ["tax", "reserve"] as const) {
+    const category = categorySchema.parse({ id: crypto.randomUUID(), name: `Synthetic ${kind}`, kind });
+    workspace.categories.push(category);
+    workspace.budgets.push(budgetSchema.parse({ id: crypto.randomUUID(), name: category.name, categoryId: category.id, start: "2026-01-01", amount: kind === "tax" ? 100 : 200, cadence: "monthly" }));
+  }
+  for (const [kind, percent, household] of [["tax", 20, false], ["reserve", 20, false], ["distribution", 100, true], ["distribution", 100, false], ["retained", 10, false]] as const)
+    workspace.allocations.push(allocationSchema.parse({ id: crypto.randomUUID(), name: `${kind} ${household}`, kind, percent, household, start: "2026-10-16" }));
+  const options = { baselineWeeklyByClinician: { 1: 14, 2: 14, 3: 14 }, useImportedBillingActuals: true, workingForecast: true };
+  const engine = forecast(workspace, context, [], 1, true, options)[0];
+  const before = structuredClone({ workspace, context });
+  assert.ok(engine.values.distributions! < engine.values.profit! * 2 * 16 / 31, "the engine must actually cap the requested distributions in this control");
+  const flow = monthFlow(workspace, context, "2026-10-01", end, { fullMonthProjection: true });
+  for (const [kind, metric] of [["tax", "taxReserve"], ["reserve", "reserves"], ["distribution", "distributions"]] as const)
+    close(flow.allocations.filter((row) => row.kind === kind).reduce((sum, row) => sum + row.amount, 0), engine.values[metric]);
+  close(flow.distribution, engine.values.distributions);
+  close(flow.retained, engine.values.retainedCash);
+  close(flow.familyTakeHome, engine.values.familyTakeHome);
+  close(flow.familyTakeHome! - flow.estimatedNetPay!, flow.distribution! / 2);
+  close(flow.allocationSurplus!, engine.values.profit);
+  assert.deepEqual({ workspace, context }, before);
+});
+
+test("default projected allocations share engine taxes and reserves while month-to-date remains unchanged", () => {
+  const { workspace, context, end } = fixture();
+  Object.assign(workspace.settings, { taxPct: 20, reservePct: 10, distributionPct: 90 });
+  const options = { baselineWeeklyByClinician: { 1: 14, 2: 14, 3: 14 }, useImportedBillingActuals: true, workingForecast: true };
+  const engine = forecast(workspace, context, [], 1, true, options)[0];
+  const flow = monthFlow(workspace, context, "2026-10-01", end, { fullMonthProjection: true });
+  close(flow.distribution, engine.values.distributions);
+  close(flow.retained, engine.values.retainedCash);
+  close(flow.familyTakeHome, engine.values.familyTakeHome);
+  const actual = monthFlow(workspace, context, "2026-10-01", end);
+  assert.equal(actual.scheduledPayroll, null);
+  assert.equal(actual.allocationBasis, "positive-profit");
+  close(actual.distribution, Math.max(0, actual.profit!) * 0.9);
 });

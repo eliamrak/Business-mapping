@@ -8,6 +8,7 @@ import {
   fundGoalSchema,
   goalSchema,
   termSchema,
+  staffTermSchema,
   type Context,
 } from "@workspace/practice/hub";
 import {
@@ -500,4 +501,87 @@ test("unverified in-person capacity cannot certify a financial session Goal", ()
   assert.match(result.unavailableReasons.join(" "), /unverified capacity/);
   input.workspace.settings.defaultInPersonPct = 0;
   assert.equal(financialSessionGoal(input).status, "available", "explicit telehealth capacity retains the existing valid financial solution");
+});
+
+test("historical billed charges cannot finance a hypothetical zero-session minimum", () => {
+  const input = setup();
+  const clean = financialSessionGoal(input);
+  input.context.importedBillingActuals = [{ clinicianId: 1, serviceDate: "2026-01-10", totalFeeCharged: 3000, sourceRowHash: "synthetic-charge" }];
+  const before = structuredClone(input);
+  const charged = financialSessionGoal(input);
+  assert.equal(charged.status, "available");
+  close(charged.practiceWeeklyGoal, clean.practiceWeeklyGoal!);
+  close(charged.details.values!.revenue, 2000);
+  assert.deepEqual(input, before);
+});
+
+test("unknown selected staff pay or burden withholds feasibility while explicit zero remains known", () => {
+  const input = setup();
+  input.context.staff.push({ id: 1, goalId: null, label: "Synthetic staff", annualSalary: null, hourlyRate: null, hoursPerWeek: null, weeksPerYear: 48, classification: "w2", w2EmployerFicaPct: 7.65, futaSutaPct: 1, workersCompPct: 0.5, otherEmployerBurdenPct: 0 });
+  const before = structuredClone(input);
+  const unknown = financialSessionGoal(input);
+  assert.equal(unknown.status, "unavailable");
+  assert.match(unknown.unavailableReasons.join(" "), /Synthetic staff.*pay.*unavailable/i);
+  assert.deepEqual(input, before);
+  input.context.staff[0].annualSalary = 0;
+  assert.equal(financialSessionGoal(input).status, "available");
+  input.context.staff[0].annualSalary = 48000;
+  close(financialSessionGoal(input).details.values!.staffCost, 4366);
+  input.context.staff[0].w2EmployerFicaPct = undefined as never;
+  assert.equal(financialSessionGoal(input).status, "unavailable");
+  input.context.staff[0].goalId = 99;
+  assert.equal(financialSessionGoal(input).status, "available", "unselected staff cannot block this practice");
+});
+
+test("staff cost coverage respects dated pay terms across the selected window", () => {
+  const input = setup();
+  input.context.staff.push({ id: 1, goalId: null, label: "Dated staff", annualSalary: null, hourlyRate: null, hoursPerWeek: null, weeksPerYear: 48, classification: "1099", w2EmployerFicaPct: 0, futaSutaPct: 0, workersCompPct: 0, otherEmployerBurdenPct: 0 });
+  input.workspace.staffTerms.push(staffTermSchema.parse({ id: randomUUID(), staffMemberId: 1, effectiveDate: "2026-01-16", annualSalary: 12000 }));
+  assert.equal(financialSessionGoal(input).status, "unavailable", "later known terms do not prove earlier missing pay");
+  input.workspace.staffTerms[0].effectiveDate = "2026-01-01";
+  assert.equal(financialSessionGoal(input).status, "available");
+});
+
+test("a fixed-salary shortfall identifies pay terms rather than insufficient capacity", () => {
+  const input = setup();
+  input.workspace.settings.familyW2ClinicianId = 2;
+  input.context.clinicians.push({ ...input.context.clinicians[0], id: 2, label: "Synthetic Erin", classification: "w2" });
+  input.workspace.clinicians.push(clinicianSettingSchema.parse({ id: randomUUID(), clinicianId: 2, start: "2026-01-01", desiredWeeklySessions: 100, inPersonPct: 0, payMode: "salary", payAmount: 12000 }));
+  input.workspace.goals = [goalSchema.parse({ id: randomUUID(), name: "Co-owner salary", metric: "coOwnerSalaryPretax", amount: 2000 })];
+  input.baselineMix = { byClinician: { 1: 1, 2: 0 }, source: "Explicit synthetic owner-session mix" };
+  const before = structuredClone(input);
+  const result = financialSessionGoal(input);
+  assert.equal(result.status, "unavailable");
+  assert.equal(result.capacity.sufficient, null);
+  assert.match(result.unavailableReasons.join(" "), /fixed.*salary.*1000.*2000.*sessions cannot/i);
+  assert.doesNotMatch(result.unavailableReasons.join(" "), /uncapped|above capacity/);
+  assert.deepEqual(input, before);
+});
+
+test("former clinicians and other-team staff cannot receive or distort a current financial session Goal", () => {
+  const input = setup();
+  const baseline = financialSessionGoal(input);
+  input.context.clinicians.push({ ...input.context.clinicians[0], id: 2, label: "Former clinician", sessionRate: 1000, sessionsPerWeek: 100 });
+  input.workspace.clinicians.push(clinicianSettingSchema.parse({ id: randomUUID(), clinicianId: 2, start: "2025-01-01", onTeam: false, desiredWeeklySessions: 100, payMode: "salary", payAmount: 120000 }));
+  input.context.staff.push({ id: 99, goalId: 99, label: "Other configuration staff", annualSalary: null, hourlyRate: null, hoursPerWeek: null, weeksPerYear: 48, classification: "w2", w2EmployerFicaPct: 0, futaSutaPct: 0, workersCompPct: 0, otherEmployerBurdenPct: 0 });
+  const before = structuredClone(input);
+  const current = financialSessionGoal(input);
+  assert.equal(current.status, "available");
+  close(current.practiceWeeklyGoal, baseline.practiceWeeklyGoal!);
+  close(current.details.values!.clinicianPay, baseline.details.values!.clinicianPay!);
+  assert.equal(current.individualWeeklyGoals[2], null);
+  input.baselineMix = { byClinician: { 1: 1, 2: 1000 }, source: "Explicit mix includes a former clinician" };
+  close(financialSessionGoal(input).practiceWeeklyGoal, baseline.practiceWeeklyGoal!);
+  delete input.baselineMix;
+  assert.deepEqual(input, before, "former profiles and source facts are preserved");
+  const partial = setup();
+  partial.range = { start: "2026-01-01", end: "2026-01-14" };
+  const cleanPartial = financialSessionGoal(partial);
+  partial.context.clinicians.push(input.context.clinicians[1]);
+  partial.workspace.clinicians.push({ ...input.workspace.clinicians[0], end: "2026-01-07" });
+  partial.context.staff.push(input.context.staff[0]);
+  partial.workspace.staffTerms.push(staffTermSchema.parse({ id: randomUUID(), staffMemberId: 99, effectiveDate: "2026-01-07", annualSalary: 999999 }));
+  const scopedPartial = financialSessionGoal(partial);
+  assert.equal(scopedPartial.status, "available", "unselected dated staff/former-clinician changes do not invalidate the current window");
+  close(scopedPartial.practiceWeeklyGoal, cleanPartial.practiceWeeklyGoal!);
 });

@@ -7,6 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { calculateClinicianMetrics, calculateStaffMemberCost } from "@/lib/calculations";
 import { formatCurrency, formatPercent } from "@/lib/format";
 import { Users, TrendingUp, TrendingDown } from "lucide-react";
+import type { ForecastMonth } from "@workspace/practice/hub";
 
 function useScenarioData(id: number | null) {
   return useGetScenario(id ?? 0, {
@@ -486,7 +487,7 @@ function W2vs1099SummarySection({ clinicians }: { clinicians: Clinician[] }) {
   );
 }
 
-export default function ClinicianImpactViewTab({ teamId }: { teamId?: number | null } = {}) {
+export default function ClinicianImpactViewTab({ teamId, workingMonth, currentPractice = false }: { teamId?: number | null; workingMonth?: ForecastMonth; currentPractice?: boolean } = {}) {
   const { data: allClinicians, isLoading: isLoadingClinicians } = useListClinicians();
   const { data: scenarios, isLoading: isLoadingScenarios } = useListScenarios();
   const { data: allStaffMembers } = useListStaffMembers();
@@ -539,6 +540,8 @@ export default function ClinicianImpactViewTab({ teamId }: { teamId?: number | n
   }
 
   const hasComparison = selectedClinician && scenarioAId && scenarioBId && scenarioA && scenarioB;
+
+  if (currentPractice) return <section className="space-y-4"><h2>Current pay comparison</h2><p className="text-sm text-muted-foreground">{workingMonth?.date ?? "Working month unavailable"} · dated working forecast. Contributions are before shared overhead. Full-caseload and split-only scenarios remain in Long Term Goals.</p><div className="overflow-x-auto"><table className="w-full text-sm"><thead><tr><th>Clinician</th><th>Revenue</th><th>Earned compensation</th><th>Employer burden</th><th>Contribution before overhead</th></tr></thead><tbody>{clinicians.map((person) => { const values = workingMonth?.clinicians[String(person.id)]; return <tr key={person.id}><th>{person.label}</th>{["revenue", "clinicianPay", "employerBurden", "profit"].map((key) => <td className="p-3" key={key}>{values?.[key] == null ? "Unknown" : formatCurrency(values[key]!)}</td>)}</tr>; })}</tbody></table></div></section>;
 
   return (
     <div className="space-y-6">

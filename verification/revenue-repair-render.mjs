@@ -19,11 +19,14 @@ workspace.clinicians = []; workspace.terms = []; workspace.events = []; workspac
 // All draft/null financial periods must not erase imported reported charges.
 workspace.financialPeriods = Array.from({ length: 9 }, (_, index) => ({ id: uuid(String(8000 + index)), start: "2026-" + String(index + 1).padStart(2, "0") + "-01", end: "2026-" + String(index + 1).padStart(2, "0") + "-28", status: "draft", revenue: null, earnedRevenue: null }));
 const billing = snapshots.find((snapshot) => snapshot.kind === "billing");
+// Spread partial-month charges over all six providers' covered service dates.
+billing.rows = billing.rows.filter((row) => row.serviceDate < "2026-10-01");
+billing.rows.push(...Array.from({ length: 73 }, (_, index) => ({ clientId: "synthetic-charge-" + index, clinician: names[index % 6], serviceDate: "2026-10-" + String(Math.floor(index / 6) % 9 + 1).padStart(2, "0"), totalFeeCharged: 11440 / 73, billingCode: "90837", sourceRowHash: "synthetic-charge-" + index })));
 const rows = counts.flatMap((count, person) => Array.from({ length: count }, (_, index) => {
   const date = new Date(Date.parse("2026-08-20T12:00:00Z") + (index % 56) * 86400000).toISOString().slice(0, 10);
   return attendance("synthetic-person-" + person + "-" + index, names[person], date);
 }));
-snapshots.splice(0, snapshots.length, { id: "synthetic-observed-351", kind: "attendance", importedAt: today + "T00:00:00Z", coverageStart: "2026-08-20", coverageEnd: "2026-10-14", sourceHash: "synthetic-351", rows }, billing);
+snapshots.splice(0, snapshots.length, { id: "synthetic-observed-351", kind: "attendance", importedAt: today + "T00:00:00Z", coverageStart: "2026-08-20", coverageEnd: "2026-10-14", reportCoverage: { start: "2026-08-20", end: "2026-10-14", complete: true }, sourceHash: "synthetic-351", rows }, billing);
 const writes = [];
 await page.route("**/api/**", async (route, request) => {
   if (!["GET", "HEAD", "OPTIONS"].includes(request.method())) { writes.push(request.method() + " " + new URL(request.url()).pathname); return route.abort(); }
@@ -33,11 +36,11 @@ await page.goto(new URL("/workspace", process.env.PRACTICE_PREVIEW_URL ?? "http:
 await clickSection("Money");
 const bridge = page.locator("section", { has: page.getByRole("heading", { name: "Projected money bridge", exact: true }) });
 await page.waitForLoadState("networkidle");
-assert.match(await bridge.innerText(), /Oct 2026 projection[\s\S]*\$32,857[\s\S]*Projected revenue/);
+assert.match(await bridge.innerText(), /Oct 2026 projection[\s\S]*\$34,758[\s\S]*Projected revenue/);
 assert.doesNotMatch(await bridge.innerText(), /61,542|Billed revenue|Nov 2026 projection/);
 const actual = page.getByLabel("Reported charged fees", { exact: true });
 assert.match(await actual.innerText(), /\$32,323[\s\S]*\$32,744[\s\S]*\$11,440/);
-assert.match(await page.locator(".pw-today-flow").innerText(), /\$32,857/);
+assert.match(await page.locator(".pw-today-flow").innerText(), /\$34,758/);
 assert.equal(await page.locator(".pw-flow-profit strong").innerText(), await bridge.locator(".pw-bridge-profit strong").innerText(), "both operating profits use identical earned costs");
 await capture("revenue-repair-desktop", 1280, 900);
 await page.screenshot({ path: path.join(outDir, "revenue-repair-desktop-top.png"), fullPage: false });
@@ -46,7 +49,7 @@ await page.screenshot({ path: path.join(outDir, "revenue-repair-mobile-top.png")
 assert.ok(await bridge.locator(".pw-bridge-step strong").evaluateAll((nodes) => nodes.every((node) => node.scrollWidth <= node.clientWidth + 1)));
 assert.equal(checks.every((check) => check.scrollWidth <= check.clientWidth + 1 && check.topNavigation), true);
 assert.deepEqual(writes, [], "read-only render makes no business or preference writes");
-const report = { productionAccess: false, syntheticDates: true, observedVisits: rows.length, lookbackDays: 56, baselineWeekly: 351 / 8, projectedOctoberRevenue: 59355 * 31 / 56, reportedThreeMonthAverage: 96970 / 3, reportedNineMonthAverage: 294699 / 9, partialOctoberCharges: 11440, writes, browserErrors, checks };
+const report = { productionAccess: false, syntheticDates: true, observedVisits: rows.length, availableHistoryDays: 56, baselineWeekly: 351 / 8, projectedOctoberRevenue: 59355 * 22 / 56 + 11440, reportedThreeMonthAverage: 96970 / 3, reportedNineMonthAverage: 294699 / 9, partialOctoberCharges: 11440, writes, browserErrors, checks };
 assert.deepEqual(browserErrors, []);
 await fs.writeFile(path.join(outDir, "revenue-repair-results.json"), JSON.stringify(report, null, 2));
 await browser.close();

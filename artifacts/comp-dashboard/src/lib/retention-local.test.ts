@@ -26,6 +26,7 @@ import {
   localDerivedVisitDetail,
   sameDayVisitKey,
   summarizeConsultConversions,
+  consultConversionForContributor,
 } from "./retention-local.ts";
 
 const attendanceCsv = `Client,Clinician,Date of service,Location,Status
@@ -1237,6 +1238,84 @@ pending,Dr Intake,2026-02-01,Phone,show`).snapshot;
   assert.equal(candidate?.evaluated, 0);
   assert.equal(candidate?.conversionRate, null);
   assert.ok(summary.byClinician.every((row) => row.missed === 0));
+});
+
+test("a practice's observed 100 percent cannot become a clinician rate with zero confirmed closes", () => {
+  const csv = "Client,Clinician,Date of service,Location,Status\n" +
+    Array.from({ length: 13 }, (_, index) => `synthetic-${index},Dr A,2026-01-01,Phone,show`).join("\n") +
+    "\nsynthetic-0,Dr A,2026-01-10,Room A,show";
+  const attendance = importAttendanceCsv(csv).snapshot;
+  for (const row of attendance.rows) if (row.location === "Phone") row.visitKind = "consultation";
+  attendance.reportCoverage = { start: "2026-01-01", end: "2026-01-20", complete: true };
+  const before = structuredClone(attendance);
+  const summary = summarizeConsultConversions([attendance], {}, "2026-01-01", "2026-01-31", "2026-01-20");
+  assert.equal(summary.practice.conversionRate, 100);
+  assert.equal(summary.practice.rateBasis, "observed_treatment_starts");
+  assert.equal(summary.practice.evaluated, 1);
+  assert.equal(summary.practice.pending, 12);
+  const individual = consultConversionForContributor(summary, " DR   A ")!;
+  assert.equal(individual.rateBasis, "confirmed_closer_credit");
+  assert.equal(individual.converted, 0);
+  assert.equal(individual.candidateConversions, 1);
+  assert.equal(individual.pending, 13, "Candidate attribution and immature follow-up stay pending, not successful closes");
+  assert.equal(individual.evaluated, 0);
+  assert.equal(individual.conversionRate, null);
+  assert.equal(individual.benchmarkRate, null, "Do not display the practice's 100 percent beside zero confirmed evaluations");
+  assert.equal(individual.consultations, individual.converted + individual.missed + individual.pending);
+  assert.equal(consultConversionForContributor(summary, "Unknown clinician"), null);
+  assert.equal(consultConversionForContributor(summary, null)!.conversionRate, 100);
+  assert.deepEqual(attendance, before);
+  const confirmed = summarizeConsultConversions([attendance], {}, "2026-01-01", "2026-01-31", "2026-01-20", [
+    { clientId: "synthetic-0", outcome: "confirmed_closer", clinicianName: " dr a " },
+  ]);
+  assert.equal(confirmed.byClinician.length, 1, "Case/whitespace aliases must not split confirmed credit from pending consultations");
+  const credited = consultConversionForContributor(confirmed, "Dr A")!;
+  assert.equal(credited.converted, 1);
+  assert.equal(credited.evaluated, 1);
+  assert.equal(credited.pending, 12);
+  assert.equal(credited.candidateConversions, 0);
+  assert.equal(credited.conversionRate, 100);
+});
+
+test("mature unresolved clinician misses remain pending attribution until a missed owner is confirmed", () => {
+  const attendance = importAttendanceCsv(`Client,Clinician,Date of service,Location,Status
+synthetic-missed,Dr A,2026-01-02,Phone,show`).snapshot;
+  attendance.rows[0].visitKind = "consultation";
+  attendance.reportCoverage = { start: "2026-01-02", end: "2026-03-01", complete: true };
+  const summarize = (overrides: Parameters<typeof summarizeConsultConversions>[5] = []) =>
+    summarizeConsultConversions([attendance], {}, "2026-01-01", "2026-01-31", "2026-03-01", overrides);
+  const unresolved = consultConversionForContributor(summarize(), "Dr A")!;
+  assert.equal(unresolved.missed, 0);
+  assert.equal(unresolved.pending, 1);
+  assert.equal(unresolved.evaluated, 0);
+  assert.equal(unresolved.conversionRate, null);
+  const confirmed = consultConversionForContributor(summarize([
+    { clientId: "synthetic-missed", outcome: "missed_owner", clinicianName: "Dr A" },
+  ]), "Dr A")!;
+  assert.equal(confirmed.missed, 1);
+  assert.equal(confirmed.pending, 0);
+  assert.equal(confirmed.evaluated, 1);
+  assert.equal(confirmed.conversionRate, 0);
+});
+
+test("initial retention of one evaluated start and twelve pending stays observed 100 percent with visible evidence counts", () => {
+  const attendance = importAttendanceCsv("Client,Clinician,Date of service,Location,Status\n" +
+    ["synthetic-retained,Dr A,2026-01-01,Room,show", "synthetic-retained,Dr A,2026-01-08,Room,show",
+      "synthetic-retained,Dr A,2026-01-15,Room,show",
+      ...Array.from({ length: 12 }, (_, index) => `synthetic-pending-${index},Dr A,2026-01-26,Room,show`)].join("\n")).snapshot;
+  attendance.reportCoverage = { start: "2026-01-01", end: "2026-01-29", complete: true };
+  const before = structuredClone(attendance);
+  const estimate = estimateLocalClientActivity([attendance], {}, 56, 56, 28, "2026-01-29", 90, "2026-01-01", "2026-01-29")!;
+  assert.equal(estimate.initialRetentionRate, 1);
+  assert.equal(estimate.retainedClientPairs, 1);
+  assert.equal(estimate.initialRetentionDenominator, 1);
+  assert.equal(estimate.immatureClientPairsExcluded, 12);
+  assert.equal(estimate.matureNonRetainedClientPairs, 0);
+  const individual = buildLocalRetentionMetrics([attendance], {}, {}, 28, "2026-01-29", 90, "2026-01-01", "2026-01-29").clientActivityByClinician[0];
+  assert.equal(individual.initialRetentionPct, 100);
+  assert.equal(individual.initialRetentionDenominator, 1);
+  assert.equal(individual.pendingInitialClients, 12);
+  assert.deepEqual(attendance, before);
 });
 
 test("sole consult clinician receives missed credit only after explicit manual confirmation", () => {

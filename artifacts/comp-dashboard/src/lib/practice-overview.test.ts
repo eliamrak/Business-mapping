@@ -16,7 +16,7 @@ test("combined funding target subtracts matching salary once and excludes headco
   workspace.goals.push(goalSchema.parse({ id: "00000000-0000-4000-8000-000000000004", name: "Desired Clinicians", metric: "activeClinicalHeadcount", amount: 10 }));
   workspace.fundGoals.push(fundGoalSchema.parse({ id: "00000000-0000-4000-8000-000000000005", name: "Building Fund", amount: 100000 }));
   workspace.allocations.push(allocationSchema.parse({ id: "00000000-0000-4000-8000-000000000006", name: "Building Fund", kind: "reserve", percent: 100, start: "2026-01-01" }));
-  for (const month of months) Object.assign(month.values, { reserves: 100, employerBurden: 0, staffCost: 0, overhead: 2000, marketing: 0, fees: 0, ownerPayroll: 0 });
+  for (const month of months) Object.assign(month.values, { reserves: 100, retainedCash: 0, taxReserve: 0, distributions: 0, employerBurden: 0, staffCost: 0, overhead: 2000, marketing: 0, fees: 0, ownerPayroll: 0 });
   const funded = overviewFundingSummary(workspace, months);
   assert.equal(funded.target, 49200);
   assert.equal(funded.fundsAnnual, 1200);

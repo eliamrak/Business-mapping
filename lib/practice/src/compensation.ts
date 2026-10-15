@@ -169,6 +169,15 @@ export function calculateStaffMemberCost(input: StaffCostInput) {
   return { baseAnnualCost, employerBurden, totalAnnualCost };
 }
 
+export function staffCompensationKnown(input: Partial<StaffCostInput>) {
+  const known = (value: unknown): value is number => typeof value === "number" && Number.isFinite(value) && value >= 0;
+  const salary = known(input.annualSalary) && (input.annualSalary > 0 || (input.hourlyRate == null && input.hoursPerWeek == null));
+  const hourly = !salary && known(input.hourlyRate) && known(input.hoursPerWeek) && known(input.weeksPerYear);
+  const classification = String(input.classification ?? "").toLowerCase();
+  const burden = classification === "w2" ? [input.w2EmployerFicaPct, input.futaSutaPct, input.workersCompPct, input.otherEmployerBurdenPct].every(known) : classification === "1099" || classification === "owner";
+  return (salary || hourly) && burden;
+}
+
 export function calculateTotalStaffCost(staffMembers: StaffCostInput[]) {
   return staffMembers.reduce((sum, s) => {
     const { totalAnnualCost } = calculateStaffMemberCost({

@@ -2,6 +2,7 @@ import { daysInclusive } from "../index.ts";
 import {
   calculateClinicianMetrics,
   calculateStaffMemberCost,
+  staffCompensationKnown,
 } from "../compensation.ts";
 import {
   forecast,
@@ -10,7 +11,9 @@ import {
   budgetAmount,
   monthEnd,
   staffMemberAt,
+  summarizeImportedBillingActuals,
   type Context,
+  type ForecastOptions,
 } from "./engine.ts";
 import {
   estimateW2NetPay,
@@ -22,6 +25,8 @@ import {
 import { clinicianModelAt, clinicianTermsAt } from "./clinician-terms.ts";
 import type { Workspace } from "./model.ts";
 import { observedSessionPace, type PaceCoverage } from "./observed-pace.ts";
+import { workingSessionPace } from "./working-session-pace.ts";
+import { projectedCashAllocations } from "./projected-cash-allocations.ts";
 
 export type MonthFlow = {
   start: string;
@@ -39,10 +44,10 @@ export type MonthFlow = {
   employerBurden: number;
   familyGrossPay: number;
   familyEmployerBurden: number;
-  staffPay: number;
+  staffPay: number | null;
   overhead: number;
   marketing: number;
-  processing: number;
+  processing: number | null;
   legacyOwnerPayroll: number;
   legacyOwnerBurden: number;
   profit: number | null;
@@ -53,12 +58,16 @@ export type MonthFlow = {
   estimatedAdditionalWithholding: number;
   estimatedNetPay: number | null;
   familyTakeHome: number | null;
-  scheduledPayroll: { clinicianPay: number; familyGrossPay: number; employerBurden: number; staffPay: number } | null;
+  scheduledPayroll: { clinicianPay: number; familyGrossPay: number; employerBurden: number; staffPay: number | null } | null;
+  allocationBasis: "cash-surplus" | "positive-profit";
+  allocationSurplus: number | null;
+  unavailableReasons: string[];
 };
 
 export type MonthFlowOptions = {
   fullMonthProjection?: boolean;
   attendanceCoverage?: PaceCoverage[];
+  forecastOptions?: ForecastOptions;
 };
 
 const dayBefore = (date: string, days: number) =>
@@ -82,17 +91,8 @@ export function monthFlow(
     (person) => (person.goalId ?? null) === workspace.settings.teamId,
   );
   const selectedIds = new Set(people.map((person) => person.id));
-  const importedBilling = new Map<number, Map<string, number>>();
-  for (const row of context.importedBillingActuals ?? []) {
-    if (!selectedIds.has(row.clinicianId)) continue;
-    const clinician =
-      importedBilling.get(row.clinicianId) ?? new Map<string, number>();
-    clinician.set(
-      row.serviceDate,
-      (clinician.get(row.serviceDate) ?? 0) + row.totalFeeCharged,
-    );
-    importedBilling.set(row.clinicianId, clinician);
-  }
+  const importedBillingSource = summarizeImportedBillingActuals(context, selectedIds);
+  const importedBilling = importedBillingSource.billed;
   const records = context.sessions.filter(
     (record) =>
       selectedIds.has(record.clinicianId) &&
@@ -144,20 +144,27 @@ export function monthFlow(
   let anyRecordedPace = false;
   const missingPace: string[] = [];
   const fallbackSources: string[] = [];
+  const paceWindows: { name: string; start: string; end: string; basis: string }[] = [];
   const weeklyPaceByClinician = new Map<number, number>();
   for (const person of people) {
     const profile = workspace.clinicians.find((entry) => entry.clinicianId === person.id);
-    if (profile?.status === "planned" || profile?.status === "archived" || (profile && (profile.start > cutoff || (profile.end !== null && profile.end < start)))) {
+    if (profile?.status === "planned" || profile?.status === "archived" || profile?.onTeam === false || (profile && (profile.start > cutoff || (profile.end !== null && profile.end < start)))) {
       weeklyPaceByClinician.set(person.id, 0);
       continue;
     }
-    const pace = observedSessionPace(context.sessions, person.id, cutoff, recentStart, options.attendanceCoverage);
-    if (pace.historicalFallback) fallbackSources.push(`${person.label}: historical fallback ${pace.windowStart} to ${pace.windowEnd}, ${pace.basis}`);
+    const pace = projection
+      ? workingSessionPace(context.sessions, person.id, cutoff, options.attendanceCoverage)
+      : observedSessionPace(context.sessions, person.id, cutoff, recentStart, options.attendanceCoverage);
+    const historicalFallback = projection ? pace.windowEnd < start : "historicalFallback" in pace && pace.historicalFallback;
+    if (historicalFallback) fallbackSources.push(`${person.label}: historical fallback ${pace.windowStart} to ${pace.windowEnd}, ${pace.basis}`);
+    if (pace.weekly !== null) paceWindows.push({ name: person.label, start: pace.windowStart, end: pace.windowEnd, basis: pace.basis });
     anyRecordedPace ||= pace.weekly !== null;
     if (pace.weekly === null) missingPace.push(person.label);
     else weeklyPaceByClinician.set(person.id, pace.weekly);
   }
-  const paceSource = exactFour
+  const paceSource = projection && anyRecordedPace
+    ? `observed rolling three-calendar-month session averages; unverified coverage remains an estimate; no desired-session fill. ${paceWindows.map((window) => `${window.name}: ${window.start} to ${window.end}, ${window.basis}`).join("; ")}${fallbackSources.length ? `. ${fallbackSources.join("; ")}` : ""}`
+    : exactFour
     ? "last four complete biweekly session periods"
     : anyRecordedPace
       ? `observed session averages; unverified coverage remains an estimate; no desired-session fill${fallbackSources.length ? `. ${fallbackSources.join("; ")}` : ""}`
@@ -169,6 +176,12 @@ export function monthFlow(
         .toISOString()
         .slice(0, 10),
     );
+  let scheduledStaffKnown = true;
+  const staffCostAt = (member: Context["staff"][number], date: string) => {
+    const terms = staffMemberAt(workspace, member, date);
+    if (!staffCompensationKnown(terms)) scheduledStaffKnown = false;
+    return calculateStaffMemberCost(terms).totalAnnualCost;
+  };
   const scheduledStaffPay = (throughDate: string) =>
     context.staff
       .filter((member) => (member.goalId ?? null) === workspace.settings.teamId)
@@ -178,9 +191,7 @@ export function monthFlow(
         );
         const payrollHistoryStart = "2026-01-01";
         if (!schedule) {
-          const annualCost = calculateStaffMemberCost(
-            staffMemberAt(workspace, member, throughDate),
-          ).totalAnnualCost;
+          const annualCost = staffCostAt(member, throughDate);
           return (
             sum +
             ((annualCost / 12) * daysInclusive(start, throughDate)) /
@@ -202,9 +213,7 @@ export function monthFlow(
               const amount = datesIn(payStart, period.end).reduce(
                 (daily, date) =>
                   daily +
-                  calculateStaffMemberCost(
-                    staffMemberAt(workspace, member, date),
-                  ).totalAnnualCost /
+                  staffCostAt(member, date) /
                     payPeriods /
                     periodDays,
                 0,
@@ -216,6 +225,9 @@ export function monthFlow(
         );
       }, 0);
   let staffPay = scheduledStaffPay(horizon);
+  if (context.staff.some((member) => (member.goalId ?? null) === workspace.settings.teamId &&
+    datesIn(start, horizon).some((date) => !staffCompensationKnown(staffMemberAt(workspace, member, date)))))
+    scheduledStaffKnown = false;
   const payrollHistoryStart = "2026-01-01";
   const empty = {
     start,
@@ -223,7 +235,7 @@ export function monthFlow(
     sessionDataThrough: dataThrough,
     basisLabel: projection ? "Projection" : "Month to date",
     paceSource,
-    paceLookbackStart: projection && !fallbackSources.length ? recentStart : null,
+    paceLookbackStart: projection && !fallbackSources.length && new Set(paceWindows.map((window) => window.start)).size === 1 ? paceWindows[0].start : null,
     sessions: null,
     splitPeriods: false,
     incompleteClinicians: [],
@@ -233,10 +245,10 @@ export function monthFlow(
     employerBurden: 0,
     familyGrossPay: 0,
     familyEmployerBurden: 0,
-    staffPay,
+    staffPay: !scheduledStaffKnown ? null : staffPay,
     overhead: 0,
     marketing: 0,
-    processing: 0,
+    processing: projection ? null : 0,
     legacyOwnerPayroll: 0,
     legacyOwnerBurden: 0,
     profit: null,
@@ -248,6 +260,9 @@ export function monthFlow(
     estimatedNetPay: familyId === null ? null : 0,
     familyTakeHome: null,
     scheduledPayroll: null,
+    allocationBasis: projection ? "cash-surplus" : "positive-profit",
+    allocationSurplus: null,
+    unavailableReasons: !scheduledStaffKnown ? ["Selected staff compensation is unknown; staff costs, profit and allocations cannot be certified."] : [],
   } satisfies MonthFlow;
   if (!through) return empty;
   if (projection && missingPace.length) return { ...empty, incompleteClinicians: missingPace };
@@ -319,7 +334,7 @@ export function monthFlow(
     const baseProfile = workspace.clinicians.find(
       (entry) => entry.clinicianId === person.id && entry.status !== "archived",
     );
-    if (baseProfile?.status === "planned") continue;
+    if (baseProfile?.status === "planned" || (projection && baseProfile?.onTeam === false)) continue;
     let pay = 0;
     let personSessions = 0;
     let personRevenue = 0;
@@ -456,9 +471,33 @@ export function monthFlow(
     },
     context,
     [], 1, true,
-    projection ? { baselineWeeklyByClinician: Object.fromEntries(weeklyPaceByClinician), useImportedBillingActuals: false } : {},
+    projection ? { ...options.forecastOptions, baselineWeeklyByClinician: Object.fromEntries(weeklyPaceByClinician), useImportedBillingActuals: true, workingForecast: true } : {},
   )[0];
-  const scheduledPayroll = projection ? { clinicianPay, familyGrossPay, employerBurden, staffPay } : null;
+  const scheduledPayroll = projection ? { clinicianPay, familyGrossPay, employerBurden, staffPay: scheduledStaffKnown ? staffPay : null } : null;
+  if (projection && (!forecastMonth || ["revenue", "profit", "clinicianPay", "employerBurden", "staffCost", "overhead", "marketing", "fees", "ownerPayroll"].some((metric) => forecastMonth.values[metric] == null))) {
+    const earnedFamilyPay = familyId === null ? 0 : forecastMonth?.clinicians[String(familyId)]?.clinicianPay ?? familyGrossPay;
+    const net = estimateW2NetPay(earnedFamilyPay, workspace.settings.estimatedIncomeTaxPct);
+    return {
+      ...empty,
+      sessions: forecastMonth?.values.sessions ?? null,
+      revenue: forecastMonth?.values.revenue ?? null,
+      clinicianPay: forecastMonth?.values.clinicianPay ?? clinicianPay,
+      employerBurden: forecastMonth?.values.employerBurden ?? employerBurden,
+      familyGrossPay: earnedFamilyPay,
+      familyEmployerBurden: familyId === null ? 0 : forecastMonth?.clinicians[String(familyId)]?.employerBurden ?? familyEmployerBurden,
+      staffPay: forecastMonth?.values.staffCost ?? null,
+      overhead: forecastMonth?.values.overhead ?? 0,
+      marketing: forecastMonth?.values.marketing ?? 0,
+      processing: forecastMonth?.values.fees ?? null,
+      legacyOwnerPayroll: forecastMonth?.values.ownerPayroll ?? 0,
+      legacyOwnerBurden: (forecastMonth?.values.ownerPayroll ?? 0) * workspace.settings.ownerPayrollBurdenPct / 100,
+      scheduledPayroll,
+      estimatedEmployeePayrollTax: net.employeePayrollTax,
+      estimatedAdditionalWithholding: net.additionalWithholding,
+      estimatedNetPay: familyId === null ? null : net.net,
+      unavailableReasons: forecastMonth?.warnings.length ? forecastMonth.warnings : ["Projected financial inputs are unavailable; profit and allocations are withheld."],
+    };
+  }
   if (projection && forecastMonth) {
     // Operating profit uses earned costs, not checks paid for another service period.
     // Reuse the bridge's forecast so volume, dated pay terms and cost bounds agree.
@@ -513,7 +552,7 @@ export function monthFlow(
     );
   const estimatedCollections =
     (revenue * workspace.settings.collectionPct) / 100;
-  const processing = projection ? forecastMonth?.values.fees ?? 0 :
+  const processing = projection ? forecastMonth!.values.fees! :
     (estimatedCollections * workspace.settings.processingPct) / 100 +
     ((sessions * workspace.settings.collectionPct) / 100) *
       workspace.settings.processingTransactionsPerSession *
@@ -522,6 +561,35 @@ export function monthFlow(
     (forecastMonth?.values.ownerPayroll ?? 0) * fraction;
   const legacyOwnerBurden =
     (legacyOwnerPayroll * workspace.settings.ownerPayrollBurdenPct) / 100;
+  const unknownActualBilling = !projection && importedBillingSource.unknownDates.some((row) => row.date >= start && row.date <= through);
+  if (!projection && (!scheduledStaffKnown || unknownActualBilling)) {
+    const netPay = estimateW2NetPay(familyGrossPay, workspace.settings.estimatedIncomeTaxPct);
+    return {
+      ...empty,
+      sessions,
+      splitPeriods,
+      incompleteClinicians,
+      revenue: unknownActualBilling ? null : revenue,
+      otherIncome,
+      clinicianPay,
+      employerBurden,
+      familyGrossPay,
+      familyEmployerBurden,
+      staffPay: scheduledStaffKnown ? staffPay : null,
+      overhead,
+      marketing,
+      processing: unknownActualBilling && workspace.settings.processingPct > 0 && workspace.settings.collectionPct > 0 ? null : processing,
+      legacyOwnerPayroll,
+      legacyOwnerBurden,
+      estimatedEmployeePayrollTax: netPay.employeePayrollTax,
+      estimatedAdditionalWithholding: netPay.additionalWithholding,
+      estimatedNetPay: familyId === null ? null : netPay.net,
+      unavailableReasons: [
+        ...(!scheduledStaffKnown ? ["Selected staff compensation is unknown; staff costs, profit and allocations cannot be certified."] : []),
+        ...(unknownActualBilling ? ["Imported billing source identities conflict or have unknown fees in this actual window; revenue, profit and allocations cannot be certified."] : []),
+      ],
+    };
+  }
   const profit =
     revenue +
     otherIncome -
@@ -564,16 +632,26 @@ export function monthFlow(
           amount: (positive * workspace.settings.distributionPct) / 100,
         },
       ];
-  const distribution = allocations
+  let distribution = allocations
     .filter((bucket) => bucket.kind === "distribution")
     .reduce((sum, bucket) => sum + bucket.amount, 0);
-  const familyDistribution = configured
+  let familyDistribution = configured
     ? buckets
         .filter((bucket) => bucket.kind === "distribution" && bucket.household)
         .reduce((sum, bucket) => sum + bucket.amount, 0)
     : distribution;
-  const retained =
+  let retained =
     profit - allocations.reduce((sum, bucket) => sum + bucket.amount, 0);
+  let allocationSurplus = positive;
+  if (projection && forecastMonth) {
+    const cash = projectedCashAllocations(workspace, forecastMonth, start, through);
+    if (!cash) return { ...empty, sessions, revenue, profit, scheduledPayroll, unavailableReasons: ["Projected cash allocation inputs are unavailable; distributions and retained cash are withheld."] };
+    allocations.splice(0, allocations.length, ...cash.allocations);
+    distribution = cash.distribution;
+    familyDistribution = cash.familyDistribution;
+    retained = cash.retained;
+    allocationSurplus = cash.surplus;
+  }
   const netPay = estimateW2NetPay(
     familyGrossPay,
     workspace.settings.estimatedIncomeTaxPct,
@@ -604,5 +682,6 @@ export function monthFlow(
     estimatedNetPay: familyId === null ? null : netPay.net,
     familyTakeHome: familyId === null ? null : netPay.net + familyDistribution,
     scheduledPayroll,
+    allocationSurplus,
   };
 }

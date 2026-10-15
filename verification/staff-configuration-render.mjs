@@ -7,6 +7,7 @@ const start = source.indexOf("await page.goto(new URL");
 if (start < 0) throw new Error("Candidate harness setup boundary changed");
 
 const verification = String.raw`
+page.on("dialog", (dialog) => dialog.accept());
 const inventory = [
   { id: 101, name: "Year 1 Baseline", clinical: 6, support: 1, target: 6 },
   { id: 102, name: "Step 2", clinical: 8, support: 1, target: 8 },

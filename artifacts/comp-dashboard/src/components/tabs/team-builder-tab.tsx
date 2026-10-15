@@ -23,6 +23,7 @@ import { staffPaySummary, staffRosterCost } from "@/lib/staff-pay-summary";
 import { formatCurrency } from "@/lib/format";
 import { useQueryClient } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
+import type { ForecastMonth } from "@workspace/practice/hub";
 
 // ─── Clinician Section ────────────────────────────────────────────────────────
 
@@ -319,7 +320,7 @@ function StaffMemberDialog({
 
 // ─── Main Component ───────────────────────────────────────────────────────────
 
-export default function TeamBuilderTab({ teamId }: { teamId?: number | null } = {}) {
+export default function TeamBuilderTab({ teamId, workingMonth, currentPractice = false, onEditPaySetup }: { teamId?: number | null; workingMonth?: ForecastMonth; currentPractice?: boolean; onEditPaySetup?: (clinicianId: number) => void } = {}) {
   const { data: allClinicians, isLoading: clinLoading } = useListClinicians();
   const { data: businessGoals } = useListBusinessGoals();
   const createClinician = useCreateClinician();
@@ -479,6 +480,8 @@ export default function TeamBuilderTab({ teamId }: { teamId?: number | null } = 
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             {clinicians.map(c => {
               const m = calculateClinicianMetrics({ ...c, classification: String(c.classification) });
+              const current = workingMonth?.clinicians[String(c.id)];
+              const workingMoney = (key: string) => current?.[key] == null ? "Unknown" : formatCurrency(current[key]!);
               return (
                 <Card key={c.id} className="flex flex-col">
                   <CardHeader className="flex flex-row items-start justify-between pb-2">
@@ -501,16 +504,16 @@ export default function TeamBuilderTab({ teamId }: { teamId?: number | null } = 
                   <CardContent className="flex-1">
                     <div className="grid grid-cols-2 gap-y-3 gap-x-2 text-sm mt-2">
                       <div>
-                        <span className="text-muted-foreground block text-xs">Annual Production</span>
-                        <span className="font-semibold">{formatCurrency(m.annualProduction)}</span>
+                        <span className="text-muted-foreground block text-xs">{currentPractice ? "Working revenue / month" : "Annual Production"}</span>
+                        <span className="font-semibold">{currentPractice ? workingMoney("revenue") : formatCurrency(m.annualProduction)}</span>
                       </div>
                       <div>
-                        <span className="text-muted-foreground block text-xs">Clinician Comp</span>
-                        <span className="font-semibold text-green-600">{formatCurrency(m.clinicianCompensation)}</span>
+                        <span className="text-muted-foreground block text-xs">{currentPractice ? "Earned compensation / month" : "Clinician Comp"}</span>
+                        <span className="font-semibold">{currentPractice ? workingMoney("clinicianPay") : formatCurrency(m.clinicianCompensation)}</span>
                       </div>
                       <div>
-                        <span className="text-muted-foreground block text-xs">Practice Net</span>
-                        <span className="font-semibold text-primary">{formatCurrency(m.practiceNetBeforeOverhead)}</span>
+                        <span className="text-muted-foreground block text-xs">{currentPractice ? "Contribution before overhead / month" : "Practice Net Before Overhead"}</span>
+                        <span className="font-semibold">{currentPractice ? workingMoney("profit") : formatCurrency(m.practiceNetBeforeOverhead)}</span>
                       </div>
                       <div>
                         <span className="text-muted-foreground block text-xs">Session Rate</span>
@@ -532,7 +535,7 @@ export default function TeamBuilderTab({ teamId }: { teamId?: number | null } = 
                     </div>
                   </CardContent>
                   <CardFooter className="bg-muted/50 border-t py-3">
-                    <Button variant="outline" className="w-full" onClick={() => openEditClinician(c)}>Edit Profile</Button>
+                    <div className="w-full space-y-2">{currentPractice && <><p className="text-xs text-muted-foreground">{workingMonth?.date ?? "Working month unavailable"} · dated compensation, including salary overrides</p><Button variant="outline" className="w-full" onClick={() => onEditPaySetup?.(c.id)}>Schedule and pay method</Button></>}<Button variant="outline" className="w-full" onClick={() => openEditClinician(c)}>{currentPractice ? "Edit base profile" : "Edit Profile"}</Button></div>
                   </CardFooter>
                 </Card>
               );
