@@ -1,5 +1,7 @@
 # Aggregate Clinician-Mapping Diagnostic
 
+For the follow-up where all source labels are globally ambiguous across saved configurations, use `PRACTICE-IDENTITY-LINEAGE.md` and `practice-identity-lineage-diagnostic.sql`. They distinguish selected-team membership from global name collisions without equating copied rows or weakening identity guards.
+
 Run `practice-clinician-mapping-diagnostic.sql` as one SELECT in the existing authorized production SQL UI. No raw rows, patient details, clinician names/IDs, source hashes, credentials or mappings are returned. No DB call has been made by the author. It refuses import data scope unless exactly one active practice/account pair exists.
 
 Input is an exact normalized requested roster label (`elia` in the example), with explicit example dates. Change inputs only to the known agreed label/window; never guess a provider mapping. All active source dates are counted separately from the requested window, so an empty window cannot silently imply no lifetime activity.
