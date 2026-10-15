@@ -3,8 +3,8 @@ import { createHash } from "node:crypto";
 import { createRequire } from "node:module";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
-export const CANDIDATE = "e6856dfa99af13c2a8797116425836ca5492175e";
-const TREE = "de4633d189dda618b9c492c90b575477dbed913d";
+export const CANDIDATE = "e03f6432cb3a5332aefbc6bec4da560a7ae98842";
+const TREE = "2d46ddf41febe689152f65538d9bc540127d9c8a";
 const root = fileURLToPath(new URL("../", import.meta.url));
 export function assertCandidateSource() {
   const options = { cwd: root, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] };
