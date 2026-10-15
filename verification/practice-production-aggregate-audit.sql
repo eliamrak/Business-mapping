@@ -65,7 +65,8 @@ roster AS (
     AND e.period_start >= (k.through - INTERVAL '3 months' + INTERVAL '1 day')::date
   WHERE r.current GROUP BY r.id
 ), imports AS (
-  SELECT count(*) AS total, count(*) FILTER (WHERE to_jsonb(s) -> 'report_coverage' IS NULL OR to_jsonb(s) -> 'report_coverage' = 'null'::jsonb) AS missing
+  SELECT count(*) AS total, count(*) FILTER (WHERE to_regclass('practice_import_declarations') IS NULL
+    AND (to_jsonb(s) -> 'report_coverage' IS NULL OR to_jsonb(s) -> 'report_coverage' = 'null'::jsonb)) AS missing
   FROM practice_import_snapshots s JOIN scope u USING (practice_id, account_id) WHERE s.active = 1
 )
 SELECT (SELECT count(*) FROM roster) AS selected_provider_count, (SELECT count(*) FROM roster WHERE current) AS current_provider_count,
@@ -103,7 +104,7 @@ active_scopes AS (
   UNION SELECT practice_id, account_id FROM practice_import_packages WHERE active = 1
 ), scope AS (SELECT * FROM active_scopes WHERE (SELECT count(*) FROM active_scopes) = 1),
 sources AS (SELECT s.* FROM practice_import_snapshots s JOIN scope u USING (practice_id, account_id) WHERE s.active = 1),
-proof AS (SELECT count(*) > 0 AND bool_and(to_jsonb(s) -> 'report_coverage' IS NULL OR to_jsonb(s) -> 'report_coverage' = 'null'::jsonb) AS all_missing FROM sources s),
+proof AS (SELECT to_regclass('practice_import_declarations') IS NULL AND count(*) > 0 AND bool_and(to_jsonb(s) -> 'report_coverage' IS NULL OR to_jsonb(s) -> 'report_coverage' = 'null'::jsonb) AS all_missing FROM sources s),
 identity AS (SELECT count(DISTINCT c.id) AS matches FROM clinicians c CROSS JOIN input WHERE lower(btrim(regexp_replace(c.label, '\s+', ' ', 'g'))) = input.target),
 raw AS (
   SELECT s.kind, fact, fact ->> 'clientId' AS client_key, lower(btrim(regexp_replace(fact ->> 'clinician', '\s+', ' ', 'g'))) AS clinician_key,

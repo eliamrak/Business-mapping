@@ -149,6 +149,8 @@ test("production fallback contains only four SELECT statements and no mutation o
   assert.doesNotMatch(sql, /regexp_replace\(btrim\(/, "Normalize whitespace before trimming so tab-padded identities cannot hide a duplicate");
   assert.match(sql, /lower\(btrim\(regexp_replace\(c\.label,/);
   assert.equal(statements.length, 4);
+  assert.match(statements[1], /to_regclass\('practice_import_declarations'\) IS NULL/);
+  assert.match(statements[3], /to_regclass\('practice_import_declarations'\) IS NULL/);
   for (const statement of statements) {
     assert.match(statement, /^WITH /);
     assert.doesNotMatch(statement, /\b(insert|update|delete|create|alter|drop|truncate|copy|call|begin|commit|rollback|grant|revoke|pg_sleep|set_config|dblink)\b/i);
