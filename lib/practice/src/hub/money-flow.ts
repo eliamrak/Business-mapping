@@ -53,6 +53,7 @@ export type MonthFlow = {
   estimatedAdditionalWithholding: number;
   estimatedNetPay: number | null;
   familyTakeHome: number | null;
+  scheduledPayroll: { clinicianPay: number; familyGrossPay: number; employerBurden: number; staffPay: number } | null;
 };
 
 export type MonthFlowOptions = {
@@ -214,7 +215,7 @@ export function monthFlow(
           )
         );
       }, 0);
-  const staffPay = scheduledStaffPay(horizon);
+  let staffPay = scheduledStaffPay(horizon);
   const payrollHistoryStart = "2026-01-01";
   const empty = {
     start,
@@ -246,6 +247,7 @@ export function monthFlow(
     estimatedAdditionalWithholding: 0,
     estimatedNetPay: familyId === null ? null : 0,
     familyTakeHome: null,
+    scheduledPayroll: null,
   } satisfies MonthFlow;
   if (!through) return empty;
   if (projection && missingPace.length) return { ...empty, incompleteClinicians: missingPace };
@@ -456,9 +458,22 @@ export function monthFlow(
     [], 1, true,
     projection ? { baselineWeeklyByClinician: Object.fromEntries(weeklyPaceByClinician), useImportedBillingActuals: false } : {},
   )[0];
+  const scheduledPayroll = projection ? { clinicianPay, familyGrossPay, employerBurden, staffPay } : null;
+  if (projection && forecastMonth) {
+    // Operating profit uses earned costs, not checks paid for another service period.
+    // Reuse the bridge's forecast so volume, dated pay terms and cost bounds agree.
+    sessions = forecastMonth.values.sessions ?? 0;
+    revenue = forecastMonth.values.revenue ?? 0;
+    clinicianPay = forecastMonth.values.clinicianPay ?? 0;
+    employerBurden = forecastMonth.values.employerBurden ?? 0;
+    staffPay = forecastMonth.values.staffCost ?? 0;
+    const family = familyId === null ? undefined : forecastMonth.clinicians[String(familyId)];
+    familyGrossPay = family?.clinicianPay ?? 0;
+    familyEmployerBurden = family?.employerBurden ?? 0;
+  }
   let overhead = (forecastMonth?.values.overhead ?? 0) * fraction;
   const goalAllowance = overheadGoalAllowance(workspace.settings, revenue, fraction);
-  if (goalAllowance !== null && forecastMonth) {
+  if (!projection && goalAllowance !== null && forecastMonth) {
     const forecastRevenue = forecastMonth.values.revenue ?? 0;
     const forecastSessions = forecastMonth.values.sessions ?? 0;
     let detailedFullMonth = 0;
@@ -493,12 +508,12 @@ export function monthFlow(
     )
     .reduce(
       (sum, budget) =>
-        sum + budgetAmount(budget, start, through, sessions, revenue),
+        sum + (projection ? forecastMonth?.budgetLines?.[budget.id] ?? 0 : budgetAmount(budget, start, through, sessions, revenue)),
       0,
     );
   const estimatedCollections =
     (revenue * workspace.settings.collectionPct) / 100;
-  const processing =
+  const processing = projection ? forecastMonth?.values.fees ?? 0 :
     (estimatedCollections * workspace.settings.processingPct) / 100 +
     ((sessions * workspace.settings.collectionPct) / 100) *
       workspace.settings.processingTransactionsPerSession *
@@ -588,5 +603,6 @@ export function monthFlow(
     estimatedAdditionalWithholding: netPay.additionalWithholding,
     estimatedNetPay: familyId === null ? null : netPay.net,
     familyTakeHome: familyId === null ? null : netPay.net + familyDistribution,
+    scheduledPayroll,
   };
 }

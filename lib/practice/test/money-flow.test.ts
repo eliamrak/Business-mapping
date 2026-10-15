@@ -324,7 +324,7 @@ test("a recorded zero remains zero and future incomplete periods cannot inflate 
   assert.equal(flow.sessionDataThrough, "2026-10-08");
 });
 
-test("October contractor projection pays both complete service periods including September 24-30", () => {
+test("October earned compensation is distinct from checks covering September 24-October 21", () => {
   const workspace = setup();
   workspace.clinicians[0].payMode = "per_session";
   workspace.clinicians[0].payAmount = 100;
@@ -334,8 +334,9 @@ test("October contractor projection pays both complete service periods including
   const flow = monthFlow(workspace, data, "2026-10-01", "2026-10-08", { fullMonthProjection: true });
   // October 8 and 22 checks each pay 14 service days at one observed
   // session/day. Seven September service days belong to October's first check.
-  close(flow.clinicianPay, 2 * 14 * 100);
-  assert.notEqual(flow.clinicianPay, 2100, "Do not clip the first projected paycheck to October 1-7");
+  close(flow.clinicianPay, 31 * 100);
+  close(flow.scheduledPayroll!.clinicianPay, 2 * 14 * 100);
+  assert.notEqual(flow.scheduledPayroll!.clinicianPay, 2100, "Do not clip the first projected paycheck to October 1-7");
   close(flow.sessions, 31);
   assert.equal(flow.through, "2026-10-31");
   assert.deepEqual({ workspace, data }, before);

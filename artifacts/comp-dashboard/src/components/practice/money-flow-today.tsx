@@ -511,7 +511,7 @@ export default function MoneyFlowToday({
             </>
           )}{" "}
           Payroll, expenses, and marketing use the same full-month horizon.
-          Revenue and profit are model estimates before session/room capacity constraints, not reported charges or reconciled cash.
+          Revenue and operating profit use the same capacity-constrained forecast and earned costs as the Money bridge, not reported charges or reconciled cash. Paycheck timing is separate.
         </p>
       ) : (
         <div className="pw-flow-notice">
@@ -619,19 +619,27 @@ export default function MoneyFlowToday({
         <div className="pw-flow-group-title">Cost to run the practice</div>
         <div className="pw-flow-row">
           <span>
-            Other clinician pay <small>Estimated from pay structures</small>
+            Other clinician pay <small>Earned compensation for this service month</small>
           </span>
           <strong>-{currency(flow.clinicianPay - flow.familyGrossPay)}</strong>
         </div>
         <Sources label="Clinician pay setup">
           {people.filter((person) => person.id !== payee?.id).map(payRow)}
         </Sources>
+        {flow.scheduledPayroll && (
+          <Sources label="Paycheck timing (separate from operating profit)">
+            <SourceRow label="Projected clinician compensation earned"><strong>{currency(flow.clinicianPay)}</strong></SourceRow>
+            <SourceRow label="Scheduled clinician checks paid this month"><strong>{currency(flow.scheduledPayroll.clinicianPay)}</strong></SourceRow>
+            <SourceRow label="Scheduled support staff checks + burden"><strong>{currency(flow.scheduledPayroll.staffPay)}</strong></SourceRow>
+            <p className="pw-flow-note">Paychecks can cover service dates outside this month. Their timing does not reduce or increase compensation earned in the projected service month.</p>
+          </Sources>
+        )}
         {payee && (
           <div className="pw-flow-row">
             <span>
               {payee.label} - gross W2 pay{" "}
               <small>
-                Scheduled salary is a business cost even when sessions vary
+                Earned salary is counted once as a business cost even when sessions vary
               </small>
             </span>
             <strong>-{currency(flow.familyGrossPay)}</strong>
@@ -1206,7 +1214,7 @@ export default function MoneyFlowToday({
         <div className="pw-flow-section-heading">
           <div>
             <h3>Family take-home</h3>
-            <p>Estimated net W2 pay plus your distribution</p>
+            <p>Estimated net earned W2 pay plus your projected distribution; not cash received</p>
           </div>
         </div>
         <label className="pw-flow-payee">
@@ -1324,8 +1332,8 @@ export default function MoneyFlowToday({
               <span>
                 {payee.label} - estimated gross W2 pay{" "}
                 <small>
-                  Scheduled checks through{" "}
-                  {flow.through ? shortDate(flow.through) : label(month)}
+                  Earned pay for {label(month)}
+                  {flow.scheduledPayroll ? `; scheduled checks ${currency(flow.scheduledPayroll.familyGrossPay)}` : ""}
                 </small>
               </span>
               <strong>{currency(flow.familyGrossPay)}</strong>
@@ -1362,7 +1370,7 @@ export default function MoneyFlowToday({
             <div className="pw-flow-row">
               <span>
                 {payee.label} - estimated net W2 pay{" "}
-                <small>No paycheck entry required</small>
+                <small>Estimated from earned gross pay, not check timing</small>
               </span>
               <strong>{currency(flow.estimatedNetPay)}</strong>
             </div>
@@ -1382,7 +1390,7 @@ export default function MoneyFlowToday({
                 ? "Select a W2 clinician to estimate net pay"
                 : flow.familyTakeHome === null
                   ? "Projection needs session pace to estimate the distribution and total"
-                  : "Projected net W2 pay plus your distribution"}
+                  : "Projected net earned W2 pay plus your distribution; not cash received"}
             </small>
           </span>
           <strong

@@ -38,6 +38,7 @@ assert.doesNotMatch(await bridge.innerText(), /61,542|Billed revenue|Nov 2026 pr
 const actual = page.getByLabel("Reported charged fees", { exact: true });
 assert.match(await actual.innerText(), /\$32,323[\s\S]*\$32,744[\s\S]*\$11,440/);
 assert.match(await page.locator(".pw-today-flow").innerText(), /\$32,857/);
+assert.equal(await page.locator(".pw-flow-profit strong").innerText(), await bridge.locator(".pw-bridge-profit strong").innerText(), "both operating profits use identical earned costs");
 await capture("revenue-repair-desktop", 1280, 900);
 await page.screenshot({ path: path.join(outDir, "revenue-repair-desktop-top.png"), fullPage: false });
 await capture("revenue-repair-mobile", 390, 900);
