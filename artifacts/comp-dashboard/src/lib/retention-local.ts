@@ -492,7 +492,7 @@ function phoneOnlyConsultKeys(snapshots: LocalSnapshot[]) {
   );
 }
 
-function consultAttendanceClassifier(snapshots: LocalSnapshot[]) {
+export function consultAttendanceClassifier(snapshots: LocalSnapshot[]) {
   const consultKeys = phoneOnlyConsultKeys(snapshots);
   return (
     row: Pick<

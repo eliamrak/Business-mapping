@@ -853,7 +853,11 @@ export default function PracticeWorkspace() {
     const accepted = buildImportedSessionOverlay(context, completeClinicalReports?.eligibleSnapshots ?? [], workspace.settings.teamId, localRetentionState.sameDayVisitOverrides, { declarations: localRetentionState.declarations?.data });
     const proof = completeClinicalReports?.completeAttendanceCoverage.filter((range) => ids.includes(range.clinicianId)) ?? [];
     const state = completeServicePeriodState(accepted.context.sessions, ids, today, proof);
-    return { ...accepted, diagnostic: rawImportedSessionOverlay.diagnostic, context: { ...accepted.context, sessions: state.eligibleRecords }, attendanceCoverage: state.eligibleCoverage };
+    return { ...accepted, diagnostic: { ...rawImportedSessionOverlay.diagnostic,
+      manualOverlapCount: accepted.diagnostic.manualOverlapCount,
+      manualImportOverrideCount: accepted.diagnostic.manualImportOverrideCount,
+      manualImportConflictCount: accepted.diagnostic.manualImportConflictCount,
+    }, context: { ...accepted.context, sessions: state.eligibleRecords }, attendanceCoverage: state.eligibleCoverage };
   }, [rawImportedSessionOverlay, completeClinicalReports, context, workspace?.settings.teamId, localRetentionState.sameDayVisitOverrides, localRetentionState.declarations, today]);
   const historicalClinicalSnapshots = useMemo(() => context && workspace
     ? snapshotsForClinicians(completeClinicalReports?.eligibleSnapshots ?? [], context.clinicians.filter((person) => (person.goalId ?? null) === workspace.settings.teamId)) : [],
@@ -947,6 +951,9 @@ export default function PracticeWorkspace() {
       workspace,
     ],
   );
+  const overviewFlowMemo = useMemo(() => overviewClientFlow(historicalClinicalSnapshots, localRetentionState.sameDayVisitOverrides,
+    periodRange.start, periodRange.end, today, { excludedFollowUpEvidence }),
+  [historicalClinicalSnapshots, localRetentionState.sameDayVisitOverrides, periodRange.start, periodRange.end, today, excludedFollowUpEvidence]);
   const modelContext = importedSessionOverlay?.context ?? context;
   const planProjection = useMemo(
     () =>
@@ -1033,6 +1040,18 @@ export default function PracticeWorkspace() {
         : forecastWorkspace,
     [stagedValidation, modelContext, teams.data, forecastWorkspace],
   );
+  const financialRangeReports = useMemo(() => {
+    if (!workspace || !modelContext) return null;
+    const report = (range: { start: string; end: string }) => practiceFinancialRange(moneyFlowWorkspace ?? workingWorkspace,
+      modelContext, localRetentionState.snapshots, today, range, importedSessionOverlay?.attendanceCoverage, localRetentionState.declarations?.data);
+    const monthDate = summaryMonth?.date ?? today;
+    return {
+      selected: report({ start: periodRange.start, end: periodRange.end }),
+      summary: report({ start: monthDate.slice(0, 7) + "-01", end: new Date(Date.UTC(Number(monthDate.slice(0, 4)), Number(monthDate.slice(5, 7)), 0)).toISOString().slice(0, 10) }),
+      year: report({ start: today.slice(0, 4) + "-01-01", end: today.slice(0, 4) + "-12-31" }),
+    };
+  }, [workspace, workingWorkspace, moneyFlowWorkspace, modelContext, localRetentionState.snapshots, localRetentionState.declarations,
+    today, periodRange.start, periodRange.end, summaryMonth?.date, importedSessionOverlay?.attendanceCoverage]);
   const baselineMonths = useMemo(
     () =>
       base && workspace
@@ -2808,13 +2827,10 @@ export default function PracticeWorkspace() {
         )?.kind !== "income",
     )
     .sort((a, b) => b.date.localeCompare(a.date));
-  const selectedMoneyRange = practiceFinancialRange(moneyFlowWorkspace ?? workingWorkspace, modelContext ?? context, localRetentionState.snapshots, today, periodRange, importedSessionOverlay?.attendanceCoverage, localRetentionState.declarations?.data);
+  const selectedMoneyRange = financialRangeReports!.selected;
   const moneyMonth = mode === "practice" ? selectedMoneyRange.forward.months[0] : months[Math.min(moneyMonthIndex, months.length - 1)];
   const moneyValues = mode === "practice" ? selectedMoneyRange.values : moneyMonth?.values ?? {};
-  const summaryMoneyReport = practiceFinancialRange(moneyFlowWorkspace ?? workingWorkspace, modelContext ?? context, localRetentionState.snapshots, today, {
-    start: (summaryMonth?.date ?? today).slice(0, 7) + "-01",
-    end: new Date(Date.UTC(Number((summaryMonth?.date ?? today).slice(0, 4)), Number((summaryMonth?.date ?? today).slice(5, 7)), 0)).toISOString().slice(0, 10),
-  }, importedSessionOverlay?.attendanceCoverage, localRetentionState.declarations?.data);
+  const summaryMoneyReport = financialRangeReports!.summary;
   const moneyBridge = mode === "practice" ? financialRangeBridge(selectedMoneyRange) : moneyBridgeSummary(moneyValues, workingWorkspace.settings.ownerPayrollBurdenPct);
   const ownerBurden =
     ((moneyValues.ownerPayroll ?? 0) *
@@ -3141,10 +3157,10 @@ export default function PracticeWorkspace() {
   });
   const overviewYear = (summaryMonth?.date ?? today).slice(0, 4);
   const reportedBilling = selectedMoneyRange.actual.report;
-  const overviewYearRange = practiceFinancialRange(moneyFlowWorkspace ?? workingWorkspace, modelContext ?? context, localRetentionState.snapshots, today, { start: today.slice(0, 4) + "-01-01", end: today.slice(0, 4) + "-12-31" }, importedSessionOverlay?.attendanceCoverage, localRetentionState.declarations?.data);
+  const overviewYearRange = financialRangeReports!.year;
   const overviewYearBridge = financialRangeBridge(overviewYearRange);
   const overviewFinancial = { income: overviewYearBridge.revenue, clinicianPay: overviewYearBridge.clinicianPay, profit: overviewYearBridge.profit, otherCosts: overviewYearBridge.otherCosts, adjustments: overviewYearBridge.adjustments, costComponents: overviewYearBridge.components };
-  const overviewFlow = overviewClientFlow(historicalClinicalSnapshots, localRetentionState.sameDayVisitOverrides, periodRange.start, periodRange.end, today, { excludedFollowUpEvidence });
+  const overviewFlow = overviewFlowMemo;
   const overviewSessionEvidence = selectedPeriodSessionSummary((modelContext ?? context).sessions, people.map((person) => person.id), {
     start: periodRange.start.startsWith("0000-") ? completeSessionHistoryStart((modelContext ?? context).sessions, people.map((person) => person.id), importedSessionOverlay?.attendanceCoverage ?? [], today) ?? today : periodRange.start,
     end: periodRange.end.startsWith("9999-") ? today : periodRange.end,
@@ -4174,8 +4190,8 @@ export default function PracticeWorkspace() {
                           .manualImportConflictCount === 1
                           ? ""
                           : "s"}{" "}
-                        conflict with aggregate manual totals; original source
-                        evidence is retained and the full-window total remains unknown.
+                        conflict with aggregate manual totals after complete-period admission. Original source evidence is retained.
+                        {importedSessionOverlay.conflictedManualSessions.length > 0 && <span className="pw-note"> The affected manual windows remain unknown because their uncovered counts cannot be independently allocated.</span>}
                         {importedSessionOverlay.diagnostic.attendanceStatusConflictCount > 0 && <span className="pw-note"> {importedSessionOverlay.diagnostic.attendanceStatusConflictCount} attendance status conflicts retained for reconciliation. No upload-order winner is selected.</span>}
                         {importedSessionOverlay.conflictedManualSessions.map((record) => <span key={record.id} className="pw-note">Manual source #{record.id}: {record.start} to {record.end}, {record.completed} recorded sessions. Not independently allocatable across uncovered dates.</span>)}
                       </p></details>

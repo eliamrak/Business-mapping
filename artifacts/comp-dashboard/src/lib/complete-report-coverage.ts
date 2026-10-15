@@ -51,16 +51,17 @@ export function completeReportCoverage(
     labels.set(key, [...new Set([...(labels.get(key) ?? []), person.id])]);
   }
   const reportingIds = new Set(clinicians.map((person) => person.id));
-  const resolveAny = (label: string) => options.teamId !== undefined
-    ? resolveImportedProvider(label, identityClinicians, options.teamId, options.declarations)
-    : labels.get(normalize(label))?.length === 1 ? labels.get(normalize(label))![0] : null;
+  const resolvedLabels = new Map<string, number | null>();
+  const resolveAny = (label: string) => {
+    const key = normalize(label);
+    if (!resolvedLabels.has(key)) resolvedLabels.set(key, options.teamId !== undefined
+      ? resolveImportedProvider(label, identityClinicians, options.teamId, options.declarations)
+      : labels.get(key)?.length === 1 ? labels.get(key)![0] : null);
+    return resolvedLabels.get(key)!;
+  };
   const mappedId = (label: string) => {
-    if (options.teamId !== undefined) {
-      const id = resolveImportedProvider(label, identityClinicians, options.teamId, options.declarations);
-      return id !== null && reportingIds.has(id) ? id : null;
-    }
-    const ids = labels.get(normalize(label));
-    return ids?.length === 1 && reportingIds.has(ids[0]) ? ids[0] : null;
+    const id = resolveAny(label);
+    return id !== null && reportingIds.has(id) ? id : null;
   };
   const incompletePeriods: IncompleteReportPeriod[] = [];
   const limits = [
@@ -145,16 +146,26 @@ export function completeReportCoverage(
   for (const snapshot of snapshots) {
     const sourceProofs = proofs.get(snapshot);
     if (!sourceProofs) continue;
+    const rowsByPeriod = new Map<string, Array<AttendanceRow | BillingRow>>();
+    for (const row of snapshot.rows) {
+      const id = mappedId(row.clinician);
+      if (id === null || !validDate(row.serviceDate)) continue;
+      const key = `${id}:${periodStart(row.serviceDate)}`;
+      const group = rowsByPeriod.get(key) ?? [];
+      group.push(row);
+      rowsByPeriod.set(key, group);
+    }
+    const { rows: _sourceRows, ...sourceMetadata } = snapshot;
     const ids = new Set([...snapshot.rows.map((row) => mappedId(row.clinician)).filter((id): id is number => id !== null), ...sourceProofs.flatMap((proof) => proof.clinicianIds ?? [])]);
     for (const clinicianId of ids) for (const period of eligible.get(`${snapshot.kind}:${clinicianId}`) ?? []) {
       if (!sourceProofs.some((proof) => proof.start <= period.start && proof.end >= period.end && (!proof.clinicianIds || proof.clinicianIds.includes(clinicianId)))) continue;
       const { start, end } = period;
-      const rows = snapshot.rows.filter((row) => mappedId(row.clinician) === clinicianId && validDate(row.serviceDate) && row.serviceDate >= start && row.serviceDate <= end);
+      const rows = rowsByPeriod.get(`${clinicianId}:${start}`) ?? [];
       for (const row of rows) {
         if (snapshot.kind === "billing") eligibleBillingRows.add(row as BillingRow);
         else eligibleAttendanceRows.add(row as AttendanceRow);
       }
-      eligibleSnapshots.push({ ...structuredClone(snapshot), id: `${snapshot.id}:complete:${clinicianId}:${period.start}`,
+      eligibleSnapshots.push({ ...structuredClone(sourceMetadata), id: `${snapshot.id}:complete:${clinicianId}:${period.start}`,
         coverageStart: start, coverageEnd: end, reportCoverage: { start, end, complete: true },
         coverageClinicians: [clinicians.find((person) => person.id === clinicianId)!.label], rows: structuredClone(rows) } as LocalSnapshot);
     }

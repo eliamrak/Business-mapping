@@ -2,7 +2,7 @@ import { dateRangeSchema, type SessionRecord, rangesOverlap } from "@workspace/p
 import { canonicalServicePeriod, reconcileBillingEvidence, resolveImportedProvider, type ImportDeclarations, type Context, type ImportedBillingActual } from "@workspace/practice/hub";
 import type { SessionAttendanceCoverage } from "./session-trend.ts";
 import {
-  isPhoneOnlyConsultAttendanceRow,
+  consultAttendanceClassifier,
   attendanceStatusConflicts,
   isPhoneConsultBillingRow,
   sameDayVisitKey,
@@ -129,6 +129,7 @@ export function buildImportedSessionOverlay(
   const sameDayShowGroups = new Map<string, AttendanceRow[]>();
   const billingActuals: ImportedBillingActual[] = [];
   let excludedNonShowRows = 0;
+  const isConsultation = consultAttendanceClassifier(snapshots);
 
   for (const snapshot of snapshots) {
     if (snapshot.kind !== "attendance") continue;
@@ -176,7 +177,7 @@ export function buildImportedSessionOverlay(
         ambiguousClinicianLabels.add(row.clinician);
         continue;
       }
-      if (isPhoneOnlyConsultAttendanceRow(row, snapshots)) continue;
+      if (isConsultation(row)) continue;
       if (row.status !== "show") {
         excludedNonShowRows++;
         continue;
