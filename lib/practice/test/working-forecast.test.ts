@@ -16,7 +16,7 @@ test("working forecast is calendar pace times fee, without vacation, caseload, a
   near(months[2].values.sessions, 31); near(months[2].values.revenue, 3100);
   assert.ok(months[0].values.sessions! > months[0].values.capacity!);
 });
-test("working revenue uses the card fee independently of unchanged configured percentage-pay basis", () => {
+test("working percentage pay uses the same card-fee estimate as projected charges; planning retains expected-fee assumptions", () => {
   const { workspace, context, options } = setup();
   Object.assign(context.clinicians[0], { classification: "1099", preCapClinicianSplit: 60, preCapPracticeSplit: 40 });
   workspace.clinicians.push(clinicianSettingSchema.parse({ id: crypto.randomUUID(), clinicianId: 1, start: "2026-01-01", desiredWeeklySessions: 7, expectedSessionRevenue: 50 }));
@@ -24,7 +24,7 @@ test("working revenue uses the card fee independently of unchanged configured pe
   const working = forecast(workspace, context, [], 1, false, { ...options, useImportedBillingActuals: false })[0];
   near(working.values.sessions, 31);
   near(working.values.revenue, 3100);
-  near(working.values.clinicianPay, 31 * 50 * 0.6);
+  near(working.values.clinicianPay, 31 * 100 * 0.6);
   const plan = forecast(workspace, context, [], 1, false, { ...options, workingForecast: false, useImportedBillingActuals: false })[0];
   near(plan.values.revenue, plan.values.sessions! * 50);
   near(plan.values.clinicianPay, plan.values.sessions! * 50 * 0.6);
@@ -32,7 +32,7 @@ test("working revenue uses the card fee independently of unchanged configured pe
   workspace.terms.push(termSchema.parse({ id: crypto.randomUUID(), clinicianId: 1, effectiveDate: "2026-10-16", sessionRate: 200 }));
   const dated = forecast(workspace, context, [], 1, false, { ...options, useImportedBillingActuals: false })[0];
   near(dated.values.revenue, 15 * 100 + 16 * 200);
-  near(dated.values.clinicianPay, (15 * 50 + 16 * 100) * 0.6);
+  near(dated.values.clinicianPay, (15 * 100 + 16 * 200) * 0.6);
 });
 test("imported charges replace their matching clinician-date estimate exactly once", () => {
   const { workspace, context, options } = setup();

@@ -1388,7 +1388,8 @@ export function forecast(
           if (c.capEnabled && c.capAmount > 0) unknownCapKeys.add(c.capKey);
         }
         // Only accepted matching charges can establish percentage pay and cap progress.
-        const compensationRate = importedFee !== undefined && !unknownDayBilling && dayCount > 0 ? importedFee / dayCount : day.rate;
+        const compensationRate = importedFee !== undefined && !unknownDayBilling && dayCount > 0 ? importedFee / dayCount
+          : options.workingForecast ? day.cardRate : day.rate;
         const remaining = Math.max(0, c.capAmount - (capEarned[c.capKey] ?? 0));
         const afterCap = c.capEnabled && c.capAmount > 0 && remaining === 0;
         const calculated = calculateClinicianMetrics({
