@@ -112,6 +112,7 @@ import OverheadGoalEditor from "@/components/practice/overhead-goal-editor";
 import { planRevisionSignature, planFocusHighlights } from "@/lib/plan-focus";
 import { overviewClientFlow, overviewFundingSummary } from "@/lib/practice-overview";
 import { moneyBridgeSummary } from "@/lib/money-bridge";
+import { summarizeReportedBilling } from "@/lib/reported-billing";
 import { linkedGoalFor, linkedFundGoalFor, type LinkedPracticeGoal, type LinkedFundGoal } from "@/lib/legacy-practice-goals";
 import { completedFundGoalStatus } from "@/lib/completed-fund-goals";
 import { newRecord } from "@/components/hub/config";
@@ -920,9 +921,10 @@ export default function PracticeWorkspace() {
             modelContext,
             "plan",
             today,
+            importedSessionOverlay?.attendanceCoverage,
           )
         : null,
-    [savedResolved, modelContext, today],
+    [savedResolved, modelContext, today, importedSessionOverlay?.attendanceCoverage],
   );
   const viewProjection = useMemo(
     () =>
@@ -936,6 +938,7 @@ export default function PracticeWorkspace() {
                 modelContext,
                 "actual",
                 today,
+                importedSessionOverlay?.attendanceCoverage,
               )
             : null,
     [
@@ -945,6 +948,7 @@ export default function PracticeWorkspace() {
       forecastWorkspace,
       modelContext,
       today,
+      importedSessionOverlay?.attendanceCoverage,
     ],
   );
   const savedMonths = useMemo(
@@ -967,7 +971,7 @@ export default function PracticeWorkspace() {
     ).forecastWorkspace;
     return sandbox
       ? forecast(next, modelContext)
-      : buildPracticeProjection(next, modelContext, practiceView, today).months;
+      : buildPracticeProjection(next, modelContext, practiceView, today, importedSessionOverlay?.attendanceCoverage).months;
   }, [
     stagedValidation,
     modelContext,
@@ -975,6 +979,7 @@ export default function PracticeWorkspace() {
     sandbox,
     practiceView,
     today,
+    importedSessionOverlay?.attendanceCoverage,
   ]);
   const months = stagedValidation?.success ? stagedMonths : savedMonths;
   const summaryMonth =
@@ -3095,9 +3100,11 @@ export default function PracticeWorkspace() {
     return goal && result.met ? [{ goal, result }] : [];
   });
   const overviewYear = (summaryMonth?.date ?? today).slice(0, 4);
-  const overviewAnnualProjection = buildPracticeProjection(moneyFlowWorkspace ?? workingWorkspace, modelContext ?? context, practiceView, today);
-  const overviewAnnualMonths = forecast({ ...overviewAnnualProjection.projectionWorkspace, settings: { ...overviewAnnualProjection.projectionWorkspace.settings, forecastStart: overviewYear + "-01-01", horizonMonths: 12 } }, modelContext ?? context, [], 1, true, practiceView === "actual" ? {
-    baselineWeeklyByClinician: Object.fromEntries(overviewAnnualProjection.clinicianPace.map((person) => [person.id, person.usedWeekly])),
+  const reportedBilling = summarizeReportedBilling(localRetentionState.snapshots, today);
+  const overviewAnnualProjection = buildPracticeProjection(moneyFlowWorkspace ?? workingWorkspace, modelContext ?? context, practiceView, today, importedSessionOverlay?.attendanceCoverage);
+  const overviewAnnualMonths = practiceView === "actual" && overviewAnnualProjection.projectedWeekly === null ? [] : forecast({ ...overviewAnnualProjection.projectionWorkspace, settings: { ...overviewAnnualProjection.projectionWorkspace.settings, forecastStart: overviewYear + "-01-01", horizonMonths: 12 } }, modelContext ?? context, [], 1, true, practiceView === "actual" ? {
+    useImportedBillingActuals: false,
+    baselineWeeklyByClinician: Object.fromEntries(overviewAnnualProjection.clinicianPace.map((person) => [person.id, person.usedWeekly!])),
   } : {});
   const overviewFinancial = overviewFundingSummary(workingWorkspace, overviewAnnualMonths, resolved?.goal);
   const overviewFlow = overviewClientFlow(localRetentionState.snapshots, localRetentionState.sameDayVisitOverrides, periodRange.start, periodRange.end, today);
@@ -3333,9 +3340,10 @@ export default function PracticeWorkspace() {
             <summary>Projection basis</summary>
             <span>
               {recordedClinicianCount
-                ? `${recordedClinicianCount} of ${viewProjection?.clinicianPace.length ?? 0} clinicians recorded in the last 8 weeks; gaps use desired sessions`
-                : "No sessions recorded in the last 8 weeks; using desired sessions"}
+                ? `${recordedClinicianCount} of ${viewProjection?.clinicianPace.length ?? 0} clinicians have observed session averages; desired sessions are not substituted. Unverified coverage remains an estimate.`
+                : "Observed session average unavailable; desired sessions are not substituted."}
             </span>
+            {viewProjection?.clinicianPace.map((person) => <p className="pw-note" key={person.id}>{person.name}: {fmt(person.usedWeekly)} sessions / week · {person.basis}{person.recordedThrough ? ` · latest observation ${person.recordedThrough}` : ""}</p>)}
           </details>
         )}
         {error && (
@@ -3862,9 +3870,9 @@ export default function PracticeWorkspace() {
                           <footer>
                             <span>
                               {mode === "practice" && practiceView === "actual"
-                                ? pace?.recordedWeekly !== null
+                                ? pace?.usedWeekly != null
                                   ? `Projected at ${fmt(pace?.usedWeekly)} sessions / week`
-                                  : "Projected from desired sessions / week"
+                                  : "Observed session average unavailable"
                                 : "At desired sessions / month"}
                             </span>
                             <dl>
@@ -5887,19 +5895,32 @@ export default function PracticeWorkspace() {
                     onCustom={setCustomPeriod}
                     note="Money keeps recorded values, projections, and model goals distinct."
                   />
+                  <section className="pw-money-bridge-panel" aria-label="Reported charged fees">
+                    <div className="pw-section-heading"><div><h3>Reported charged fees</h3><p>Imported billing by service month. Not cash collected.</p></div></div>
+                    <div className="pw-money-bridge">
+                      <div className="pw-bridge-step pw-bridge-in"><strong>{money(reportedBilling.latestThreeMonthAverage.averageMonthlyCharges)}</strong><span>Latest {reportedBilling.latestThreeMonthAverage.denominator} elapsed reported months / month</span></div>
+                      <div className="pw-bridge-step pw-bridge-in"><strong>{money(reportedBilling.elapsedReportedMonthAverage.averageMonthlyCharges)}</strong><span>All {reportedBilling.elapsedReportedMonthAverage.denominator} elapsed reported months / month</span></div>
+                      <div className="pw-bridge-step pw-bridge-in"><strong>{money(reportedBilling.currentMonth.chargesToDate)}</strong><span>{monthLabel(today)} reported through {reportedBilling.currentMonth.through ?? "no imported billing"} (partial)</span></div>
+                    </div>
+                    <details><summary>Monthly charges and source</summary>
+                      {reportedBilling.months.map((row) => <div className="pw-overview-total" key={row.month}><span>{row.label}{!row.fullyElapsed ? " (partial)" : ""} · {row.rowCount} source rows</span><strong>{money(row.charges)}</strong></div>)}
+                      <p className="pw-note">{reportedBilling.latestThreeMonthAverage.label}. Missing months are not zero. Elapsed months do not establish complete billing coverage. Averages use reported charges only; no desired sessions or projected fees are added.</p>
+                      {reportedBilling.evidence.warnings.filter((warning) => !warning.startsWith("Elapsed months")).map((warning) => <p className="pw-note" key={warning}>{warning}</p>)}
+                    </details>
+                  </section>
                   <section className="pw-money-bridge-panel">
                     <div className="pw-section-heading">
                       <div>
-                        <h3>Money bridge</h3>
+                        <h3>Projected money bridge</h3>
                         <p>
                           {monthLabel(moneyMonth?.date ?? today)} projection
-                          from billed revenue to operating profit.
+                          from modeled revenue to operating profit, using observed session averages.
                         </p>
                       </div>
                     </div>
                     <div className="pw-money-bridge">
                       {[
-                        ["Billed revenue", moneyValues.revenue ?? null, "in"],
+                        ["Projected revenue", moneyValues.revenue ?? null, "in"],
                         ...(moneyBridge.adjustments !== null && Math.abs(moneyBridge.adjustments) > 0.005
                           ? [["Other income / adjustments", moneyBridge.adjustments, "in"]]
                           : []),
@@ -5927,7 +5948,7 @@ export default function PracticeWorkspace() {
                       <summary>Cost breakdown</summary>
                       {moneyBridge.components.map((component) => <div className="pw-overview-total" key={component.label}><span>{component.label}</span><strong>{money(component.value)}</strong></div>)}
                       <div className="pw-overview-total"><span>Other income / reconciliation adjustment</span><strong>{money(moneyBridge.adjustments)}</strong></div>
-                      <p className="pw-note">Costs use this projection's period and revenue basis. The adjustment reconciles billed revenue and disclosed costs to the engine's operating profit; it is not assigned to an unverified cost category. Taxes, reserves and distributions are allocations after operating profit.</p>
+                      <p className="pw-note">Costs use this projection's period and modeled revenue basis. The adjustment reconciles projected revenue and disclosed costs to the engine's operating profit; it is not assigned to an unverified cost category. Taxes, reserves and distributions are allocations after operating profit.</p>
                     </details>
                     <MetricTargetBar
                       value={moneyValues.profit}
@@ -5936,9 +5957,7 @@ export default function PracticeWorkspace() {
                       benchmark={recordedFinancialPeriods[0]?.values.profit}
                     />
                     <p className="pw-note">
-                      Billed fees are revenue basis, not cash collected.
-                      Current-month values remain labelled projections until
-                      the reporting period is completed.
+                      Modeled session volume and configured fees, not reported charges or cash collected. Desired sessions remain separate plan assumptions; unverified attendance coverage remains an estimate.
                     </p>
                   </section>
                   <section className="pw-money-bridge-panel">
@@ -6050,6 +6069,7 @@ export default function PracticeWorkspace() {
                     }
                     context={modelContext ?? context}
                     today={today}
+                    attendanceCoverage={importedSessionOverlay?.attendanceCoverage}
                     onPayeeChange={(id) =>
                       stageSettings(
                         {
@@ -7083,7 +7103,7 @@ export default function PracticeWorkspace() {
                   <div className="pw-overview-composition">
                     <section aria-label="Overview financial summary">
                       <h3>Financial summary</h3>
-                      <p>{overviewYear} · full-year projection · billed revenue, not collected cash</p>
+                      <p>{overviewYear} · full-year projection · modeled revenue, not reported charges or collected cash</p>
                       <div className="pw-overview-bridge" role="img" aria-label="Projected annual income less clinician compensation and operating costs leaves practice profit">
                         {[
                           { label: "Income", value: overviewFinancial.income !== null && overviewFinancial.adjustments !== null ? overviewFinancial.income + overviewFinancial.adjustments : null, bottom: 0, kind: "income" },
@@ -7415,7 +7435,7 @@ export default function PracticeWorkspace() {
                         <small>
                           {recordedClinicianCount} clinician
                           {recordedClinicianCount === 1 ? "" : "s"} with
-                          records; missing days use desired sessions
+                          records; no desired-session substitution
                         </small>
                       </div>
                       <button
@@ -7437,7 +7457,7 @@ export default function PracticeWorkspace() {
                             (person) => person.id === record.clinicianId,
                           ),
                         ) &&
-                          " Desired sessions are used until recorded sessions are available."}
+                          " Observed forecasts remain unavailable until session averages exist."}
                       </p>
                     )}
                   {mode === "practice" &&
@@ -7451,8 +7471,7 @@ export default function PracticeWorkspace() {
                           <div>
                             <h3>Recent periods</h3>
                             <p>
-                              Recorded sessions are counted; missing clinician
-                              entries use desired sessions.
+                              Observed session subtotals only; missing clinician entries are not filled from goals.
                             </p>
                           </div>
                         </div>

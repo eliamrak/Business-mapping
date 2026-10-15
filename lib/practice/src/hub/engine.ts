@@ -119,6 +119,7 @@ export type ForecastMonth = {
 };
 export type ForecastOptions = {
   baselineWeeklyByClinician?: Record<number, number>;
+  useImportedBillingActuals?: boolean;
 };
 import { metrics, metricMap } from "./metrics.ts";
 export { metrics, metricMap } from "./metrics.ts";
@@ -772,7 +773,16 @@ export function forecast(
       newClients += cohort.clients;
     }
     if (m > 0) baselineRetained *= setting.baselineRetentionPct / 100;
-    const baselineDemand = (baseWeekly ?? 0) * weeks * baselineRetained;
+    const baselineMonthSessions = options.baselineWeeklyByClinician
+      ? selected.reduce((sum, clinician) => {
+          const profile = workspace.clinicians.find((entry) => entry.clinicianId === clinician.id);
+          if (profile && (profile.status !== "active" || !active(profile, start, end))) return sum;
+          const first = profile && profile.start > start ? profile.start : start;
+          const last = profile?.end && profile.end < end ? profile.end : end;
+          return sum + (options.baselineWeeklyByClinician?.[clinician.id] ?? clinician.sessionsPerWeek) * daysInclusive(first, last) / 7;
+        }, 0)
+      : (baseWeekly ?? 0) * weeks;
+    const baselineDemand = baselineMonthSessions * baselineRetained;
     const acquiredDemand = cohorts.reduce(
       (n, c) =>
         n + c.clients * c.sessions * Math.pow(1 - 1 / c.retention, m - c.start),
@@ -1177,7 +1187,7 @@ export function forecast(
                     (c.instance === String(c.id)
                       ? (options.baselineWeeklyByClinician?.[c.id] ??
                         c.sessionsPerWeek)
-                      : 0) * weeks,
+                      : 0) * (c.daily.length / 7),
                   ),
                 ]),
               )
@@ -1308,7 +1318,7 @@ export function forecast(
           goalMeasureDaily[day.date].coOwnerSalaryPretax = salary;
         }
         const importedFee =
-          c.instance === String(c.id)
+          options.useImportedBillingActuals !== false && c.instance === String(c.id)
             ? importedBilling.get(c.id)?.get(day.date)
             : undefined;
         earned += importedFee ?? dayCount * day.rate;

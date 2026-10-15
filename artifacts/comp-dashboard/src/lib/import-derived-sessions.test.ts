@@ -489,7 +489,7 @@ test("same-day shows collapse by default and month boundaries stay exact", () =>
   assert.equal(confirmed.diagnostic.sameDayVisitOverrideCount, 1);
 });
 
-test("current month projection uses imported backfill plus weekly-average remainder", () => {
+test("current month projection withholds an unknown clinician and never fills goals between imported dates", () => {
   const overlay = buildImportedSessionOverlay(
     context(),
     [
@@ -520,7 +520,11 @@ test("current month projection uses imported backfill plus weekly-average remain
 
   assert.equal(october.sessionDataThrough, "2026-10-01");
   assert.equal(october.basisLabel, "Projection");
-  assert.ok(october.sessions !== null && october.sessions > 1);
+  assert.equal(october.sessions, null);
+  assert.deepEqual(october.incompleteClinicians, ["Dr Moss"]);
+  const oneClinician = monthFlow(workspace, { ...overlay.context, clinicians: [overlay.context.clinicians[0]] }, "2026-10-01", "2026-10-02", { fullMonthProjection: true });
+  assert.ok(Math.abs(oneClinician.sessions! - 31 / 56) < 1e-10);
+  assert.match(oneClinician.paceSource, /unverified coverage remains an estimate/);
 });
 
 test("billed fees feed revenue without adding attended sessions", () => {

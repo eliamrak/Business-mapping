@@ -2,9 +2,11 @@ import { daysInclusive } from "@workspace/practice";
 import {
   forecast,
   monthDate,
+  observedSessionPace,
   type Context,
   type ForecastMonth,
   type Workspace,
+  type PaceCoverage,
 } from "@workspace/practice/hub";
 
 export type PracticeView = "plan" | "actual";
@@ -14,7 +16,8 @@ export type ClinicianPace = {
   name: string;
   desiredWeekly: number;
   recordedWeekly: number | null;
-  usedWeekly: number;
+  usedWeekly: number | null;
+  basis: string;
   recordedDays: number;
   recordedThrough: string | null;
 };
@@ -39,13 +42,14 @@ export function buildPracticeProjection(
   context: Context,
   view: PracticeView,
   today: string,
+  attendanceCoverage: PaceCoverage[] = [],
 ): {
   projectionWorkspace: Workspace;
   months: ForecastMonth[];
   clinicianPace: ClinicianPace[];
   recentPeriods: SessionPeriod[];
   planWeekly: number;
-  projectedWeekly: number;
+  projectedWeekly: number | null;
   recentStart: string;
 } {
   const clinicians = context.clinicians.filter(
@@ -70,50 +74,27 @@ export function buildPracticeProjection(
       )),
     );
   const recentStart = exactFour ? completedBiweekly[3].start : dayBefore(today, 55);
-  const windowDays = daysInclusive(recentStart, today);
   const clinicianPace = clinicians.map((person) => {
-    const recent = context.sessions.filter(
-      (record) =>
-        record.clinicianId === person.id &&
-        (exactFour
-          ? completedBiweekly.some((period) =>
-              record.start === period.start && record.end === period.end)
-          : record.start >= recentStart && record.end <= today),
-    );
-    const days = recent.reduce(
-      (sum, record) => sum + daysInclusive(record.start, record.end),
-      0,
-    );
-    const completed = recent.reduce((sum, record) => sum + record.completed, 0);
-    const recordedWeekly = days ? (completed * 7) / days : null;
-    const usedWeekly = exactFour
-      ? recordedWeekly ?? person.sessionsPerWeek
-      : ((completed +
-          (person.sessionsPerWeek * Math.max(0, windowDays - days)) / 7) *
-          7) /
-        windowDays;
+    const profile = workspace.clinicians.find((entry) => entry.clinicianId === person.id);
+    const inactive = profile?.status === "planned" || profile?.status === "archived" || (profile && (profile.start > today || (profile.end !== null && profile.end < monthDate(today))));
+    const pace = observedSessionPace(context.sessions, person.id, today, recentStart, attendanceCoverage);
     return {
       id: person.id,
       name: person.label,
       desiredWeekly: person.sessionsPerWeek,
-      recordedWeekly,
-      usedWeekly,
-      recordedDays: days,
-      recordedThrough: recent.reduce<string | null>(
-        (latest, record) =>
-          latest === null || record.end > latest ? record.end : latest,
-        null,
-      ),
+      recordedWeekly: pace.weekly,
+      usedWeekly: inactive ? 0 : pace.weekly,
+      basis: inactive ? "no existing-caseload baseline for inactive or planned clinician" : `${pace.historicalFallback ? `historical fallback ${pace.windowStart} to ${pace.windowEnd}: ` : ""}${pace.basis}`,
+      recordedDays: pace.recordedDays,
+      recordedThrough: pace.through,
     };
   });
   const planWeekly = clinicianPace.reduce(
     (sum, person) => sum + person.desiredWeekly,
     0,
   );
-  const projectedWeekly = clinicianPace.reduce(
-    (sum, person) => sum + person.usedWeekly,
-    0,
-  );
+  const projectedWeekly = clinicianPace.length && clinicianPace.every((person) => person.usedWeekly !== null)
+    ? clinicianPace.reduce((sum, person) => sum + person.usedWeekly!, 0) : null;
   const plannedBaseline =
     workspace.settings.baselineMode === "manual" &&
     workspace.settings.baselineWeeklySessions !== null
@@ -123,11 +104,7 @@ export function buildPracticeProjection(
     ...workspace,
     settings: {
       ...workspace.settings,
-      forecastStart:
-        view === "actual" &&
-        workspace.settings.forecastStart < monthDate(today, 1)
-          ? monthDate(today, 1)
-          : workspace.settings.forecastStart,
+      forecastStart: view === "actual" ? monthDate(today) : workspace.settings.forecastStart,
       baselineMode: "manual",
       baselineWeeklySessions:
         view === "actual" ? projectedWeekly : plannedBaseline,
@@ -158,7 +135,6 @@ export function buildPracticeProjection(
     .sort((a, b) => b.end.localeCompare(a.end))
     .slice(0, 4)
     .map((period) => {
-      const days = daysInclusive(period.start, period.end);
       for (const person of clinicians) {
         const record = context.sessions.find(
           (item) =>
@@ -169,15 +145,13 @@ export function buildPracticeProjection(
         if (record) {
           period.recorded += record.completed;
           period.recordedClinicians++;
-        } else {
-          period.estimated += (person.sessionsPerWeek * days) / 7;
         }
       }
       period.total = period.recorded + period.estimated;
       return period;
     });
 
-  const months = forecast(
+  const months = view === "actual" && projectedWeekly === null ? [] : forecast(
     projectionWorkspace,
     context,
     [],
@@ -185,8 +159,9 @@ export function buildPracticeProjection(
     true,
     view === "actual"
       ? {
+          useImportedBillingActuals: false,
           baselineWeeklyByClinician: Object.fromEntries(
-            clinicianPace.map((person) => [person.id, person.usedWeekly]),
+            clinicianPace.map((person) => [person.id, person.usedWeekly!]),
           ),
         }
       : {},

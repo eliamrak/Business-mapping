@@ -9,6 +9,7 @@ import {
   staffMemberAt,
   type Context,
   type Workspace,
+  type PaceCoverage,
 } from "@workspace/practice/hub";
 
 const currency = (value: number | null) =>
@@ -180,6 +181,7 @@ type Props = {
   workspace: Workspace;
   context: Context;
   today: string;
+  attendanceCoverage?: PaceCoverage[];
   onPayeeChange: (id: number | null) => void;
   onAllocationPercent: (id: string, percent: number) => void;
   onDefaultAllocationPercent: (
@@ -222,6 +224,7 @@ export default function MoneyFlowToday({
   workspace,
   context,
   today,
+  attendanceCoverage,
   onPayeeChange,
   onAllocationPercent,
   onDefaultAllocationPercent,
@@ -266,8 +269,9 @@ export default function MoneyFlowToday({
     () =>
       monthFlow(workspace, context, month, today, {
         fullMonthProjection: true,
+        attendanceCoverage,
       }),
-    [workspace, context, month, today],
+    [workspace, context, month, today, attendanceCoverage],
   );
   const flowHorizonDate = flow.through ?? end;
   const paceBasis = flow.paceLookbackStart
@@ -493,14 +497,12 @@ export default function MoneyFlowToday({
         </p>
       )}
 
-      {flow.through ? (
+      {flow.through && flow.sessions !== null ? (
         <p className="pw-flow-status">
           Projection runs through {shortDate(flow.through)}.{" "}
           {flow.sessionDataThrough ? (
             <>
-              Recorded completed sessions are used through{" "}
-              {shortDate(flow.sessionDataThrough)}; remaining days use{" "}
-              {paceBasis}.
+              Latest recorded sessions: {shortDate(flow.sessionDataThrough)}. The entire month uses {paceBasis}, with configured fees; imported charges are shown separately.
             </>
           ) : (
             <>
@@ -509,11 +511,11 @@ export default function MoneyFlowToday({
             </>
           )}{" "}
           Payroll, expenses, and marketing use the same full-month horizon.
-          Billed income and profit are model estimates, not reconciled cash.
+          Revenue and profit are model estimates before session/room capacity constraints, not reported charges or reconciled cash.
         </p>
       ) : (
         <div className="pw-flow-notice">
-          No completed session period overlaps {label(month)}. Session revenue
+          Observed session averages are incomplete for {flow.incompleteClinicians.join(", ") || "this team"}. Session revenue
           and profit are unavailable; support staff costs run through{" "}
           {shortDate(flowHorizonDate)} where configured.{" "}
           <button type="button" onClick={() => onNavigate("sessions")}>
@@ -529,8 +531,7 @@ export default function MoneyFlowToday({
       )}
       {flow.incompleteClinicians.length > 0 && flow.through && (
         <p className="pw-flow-note">
-          No sessions recorded through {shortDate(flow.through)} for{" "}
-          {flow.incompleteClinicians.join(", ")}. Profit may be understated.
+          Observed session average unavailable for {flow.incompleteClinicians.join(", ")}. Revenue and profit are withheld.
         </p>
       )}
 

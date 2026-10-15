@@ -21,6 +21,7 @@ import {
 } from "./family-pay.ts";
 import { clinicianModelAt, clinicianTermsAt } from "./clinician-terms.ts";
 import type { Workspace } from "./model.ts";
+import { observedSessionPace, type PaceCoverage } from "./observed-pace.ts";
 
 export type MonthFlow = {
   start: string;
@@ -56,6 +57,7 @@ export type MonthFlow = {
 
 export type MonthFlowOptions = {
   fullMonthProjection?: boolean;
+  attendanceCoverage?: PaceCoverage[];
 };
 
 const dayBefore = (date: string, days: number) =>
@@ -138,41 +140,27 @@ export function monthFlow(
   const recentStart = exactFour
     ? completedBiweekly[3].start
     : dayBefore(cutoff, 55);
-  const windowDays = daysInclusive(recentStart, cutoff);
   let anyRecordedPace = false;
+  const missingPace: string[] = [];
+  const fallbackSources: string[] = [];
   const weeklyPaceByClinician = new Map<number, number>();
   for (const person of people) {
-    const recent = context.sessions.filter(
-      (record) =>
-        record.clinicianId === person.id &&
-        record.end <= cutoff &&
-        (exactFour
-          ? completedBiweekly.some(
-              (period) =>
-                record.start === period.start && record.end === period.end,
-            )
-          : record.start >= recentStart),
-    );
-    const days = recent.reduce(
-      (sum, record) => sum + daysInclusive(record.start, record.end),
-      0,
-    );
-    const completed = recent.reduce((sum, record) => sum + record.completed, 0);
-    anyRecordedPace ||= days > 0;
-    const recordedWeekly = days ? (completed * 7) / days : null;
-    const usedWeekly = exactFour
-      ? (recordedWeekly ?? person.sessionsPerWeek)
-      : ((completed +
-          (person.sessionsPerWeek * Math.max(0, windowDays - days)) / 7) *
-          7) /
-        windowDays;
-    weeklyPaceByClinician.set(person.id, usedWeekly);
+    const profile = workspace.clinicians.find((entry) => entry.clinicianId === person.id);
+    if (profile?.status === "planned" || profile?.status === "archived" || (profile && (profile.start > cutoff || (profile.end !== null && profile.end < start)))) {
+      weeklyPaceByClinician.set(person.id, 0);
+      continue;
+    }
+    const pace = observedSessionPace(context.sessions, person.id, cutoff, recentStart, options.attendanceCoverage);
+    if (pace.historicalFallback) fallbackSources.push(`${person.label}: historical fallback ${pace.windowStart} to ${pace.windowEnd}, ${pace.basis}`);
+    anyRecordedPace ||= pace.weekly !== null;
+    if (pace.weekly === null) missingPace.push(person.label);
+    else weeklyPaceByClinician.set(person.id, pace.weekly);
   }
   const paceSource = exactFour
     ? "last four complete biweekly session periods"
     : anyRecordedPace
-      ? "recent 56-day average blended with desired weekly pace for missing days"
-      : "desired weekly pace fallback until session averages exist";
+      ? `observed session averages; unverified coverage remains an estimate; no desired-session fill${fallbackSources.length ? `. ${fallbackSources.join("; ")}` : ""}`
+      : "observed session average unavailable; no desired-session substitution";
   const familyId = workspace.settings.familyW2ClinicianId;
   const datesIn = (from: string, to: string) =>
     Array.from({ length: daysInclusive(from, to) }, (_, index) =>
@@ -234,7 +222,7 @@ export function monthFlow(
     sessionDataThrough: dataThrough,
     basisLabel: projection ? "Projection" : "Month to date",
     paceSource,
-    paceLookbackStart: projection ? recentStart : null,
+    paceLookbackStart: projection && !fallbackSources.length ? recentStart : null,
     sessions: null,
     splitPeriods: false,
     incompleteClinicians: [],
@@ -260,6 +248,7 @@ export function monthFlow(
     familyTakeHome: null,
   } satisfies MonthFlow;
   if (!through) return empty;
+  if (projection && missingPace.length) return { ...empty, incompleteClinicians: missingPace };
 
   const elapsed = daysInclusive(start, through);
   const fraction = elapsed / daysInclusive(start, end);
@@ -274,18 +263,9 @@ export function monthFlow(
           : sum,
       0,
     );
-  const hasActualForDate = (clinicianId: number, date: string) =>
-    records.some(
-      (record) =>
-        record.clinicianId === clinicianId &&
-        record.start <= date &&
-        record.end >= date,
-    );
   const sessionsForDate = (clinicianId: number, date: string) => {
-    const actual = actualSessionsForDate(clinicianId, date);
-    if (!projection) return actual;
-    if (hasActualForDate(clinicianId, date)) return actual;
-    if (date < start || date > end) return 0;
+    if (!projection) return actualSessionsForDate(clinicianId, date);
+    // Checks paid this month can cover service dates in the previous month.
     return (weeklyPaceByClinician.get(clinicianId) ?? 0) / 7;
   };
   const dailySessionsByClinician = new Map<number, Map<string, number>>();
@@ -294,7 +274,7 @@ export function monthFlow(
     const overlapEnd = record.end < through ? record.end : through;
     if (overlapStart > overlapEnd) continue;
     const daily = record.completed / daysInclusive(record.start, record.end);
-    if (overlapStart !== record.start || overlapEnd !== record.end)
+    if (!projection && (overlapStart !== record.start || overlapEnd !== record.end))
       splitPeriods = true;
     const clinicianDays =
       dailySessionsByClinician.get(record.clinicianId) ??
@@ -308,7 +288,6 @@ export function monthFlow(
       const clinicianDays =
         dailySessionsByClinician.get(person.id) ?? new Map<string, number>();
       for (const date of datesIn(start, through)) {
-        if (clinicianDays.has(date)) continue;
         clinicianDays.set(
           date,
           (weeklyPaceByClinician.get(person.id) ?? 0) / 7,
@@ -398,7 +377,7 @@ export function monthFlow(
         activeProfile?.expectedSessionRevenue ??
         term.sessionRate ??
         person.sessionRate;
-      const earned = importedBilling.get(person.id)?.get(date) ?? count * rate;
+      const earned = (!projection ? importedBilling.get(person.id)?.get(date) : undefined) ?? count * rate;
       const mode = activeProfile?.payMode ?? "existing_split";
       const amount = activeProfile?.payAmount ?? 0;
       const split = term.clinicianSplit ?? person.preCapClinicianSplit;
@@ -474,6 +453,8 @@ export function monthFlow(
       },
     },
     context,
+    [], 1, true,
+    projection ? { baselineWeeklyByClinician: Object.fromEntries(weeklyPaceByClinician), useImportedBillingActuals: false } : {},
   )[0];
   let overhead = (forecastMonth?.values.overhead ?? 0) * fraction;
   const goalAllowance = overheadGoalAllowance(workspace.settings, revenue, fraction);

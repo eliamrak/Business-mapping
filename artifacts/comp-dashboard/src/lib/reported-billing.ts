@@ -1,0 +1,161 @@
+import type { BillingRow, LocalSnapshot } from "./retention-local.ts";
+
+export type ReportedBillingMonth = {
+  month: string;
+  label: string;
+  charges: number | null;
+  rowCount: number;
+  rawRowCount: number;
+  duplicateRowCount: number;
+  conflictingHashCount: number;
+  invalidFeeRowCount: number;
+  firstServiceDate: string;
+  latestServiceDate: string;
+  fullyElapsed: boolean;
+  coverage: "reported-rows-only";
+};
+
+export type ReportedBillingAverage = {
+  months: string[];
+  monthLabels: string[];
+  denominator: number;
+  totalCharges: number | null;
+  averageMonthlyCharges: number | null;
+  label: string;
+  coverage: "reported-rows-only";
+};
+
+const validDate = (date: unknown): date is string => {
+  if (typeof date !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(date)) return false;
+  const parsed = Date.parse(date + "T12:00:00Z");
+  return Number.isFinite(parsed) && new Date(parsed).toISOString().slice(0, 10) === date;
+};
+const monthLabel = (month: string) => new Date(month + "-01T12:00:00Z")
+  .toLocaleDateString("en-US", { month: "long", year: "numeric", timeZone: "UTC" });
+const normalizedLabel = (label: string) => label.trim().replace(/\s+/g, " ").toLowerCase();
+const samePayload = (a: BillingRow, b: BillingRow) => a.clientId === b.clientId
+  && a.clinician === b.clinician && a.serviceDate === b.serviceDate
+  && Object.is(a.totalFeeCharged, b.totalFeeCharged)
+  && a.billingCode === b.billingCode && a.visitKind === b.visitKind;
+
+/** Reported charged fees by service date, not cash, production projections or coverage claims.
+ * Hash identity is global across snapshots. Conflicting identities never select a winner.
+ * No client identifiers, clinician roster, hashes or raw rows leave this helper.
+ */
+export function summarizeReportedBilling(
+  snapshots: readonly LocalSnapshot[],
+  asOf: string,
+  options: { clinicianLabel?: string } = {},
+) {
+  if (!validDate(asOf)) throw new Error("Reported billing requires a valid as-of date.");
+  const scope = options.clinicianLabel === undefined ? null : normalizedLabel(options.clinicianLabel);
+  if (scope === "") throw new Error("Selected clinician label must not be blank.");
+  const matches = (row: BillingRow) => scope === null || normalizedLabel(row.clinician) === scope;
+  const billingSnapshots = snapshots.filter((snapshot) => snapshot.kind === "billing");
+  const groups = new Map<string | symbol, BillingRow[]>();
+  for (const snapshot of billingSnapshots) for (const row of snapshot.rows) {
+    const key = typeof row.sourceRowHash === "string" && row.sourceRowHash.trim() ? row.sourceRowHash : Symbol();
+    const existing = groups.get(key);
+    if (existing) existing.push(row); else groups.set(key, [row]);
+  }
+  const evidence = {
+    billingSnapshotCount: billingSnapshots.length,
+    rawRowCount: 0,
+    uniqueRowCount: 0,
+    duplicateRowCount: 0,
+    conflictingHashCount: 0,
+    invalidFeeRowCount: 0,
+    invalidDateRowCount: 0,
+    missingHashRowCount: 0,
+    futureDatedRowCount: 0,
+    coverageVerified: false as const,
+    warnings: [] as string[],
+  };
+  const months = new Map<string, ReportedBillingMonth>();
+  let unassignedRows = false;
+  for (const [hash, rows] of groups) {
+    const scopedRows = rows.filter(matches);
+    if (!scopedRows.length) continue;
+    const conflicting = rows.some((row) => !samePayload(rows[0], row));
+    const missingHash = typeof hash === "symbol";
+    evidence.rawRowCount += scopedRows.length;
+    evidence.uniqueRowCount++;
+    evidence.duplicateRowCount += scopedRows.length - 1;
+    if (conflicting) evidence.conflictingHashCount++;
+    if (missingHash) evidence.missingHashRowCount += scopedRows.length;
+    const byMonth = new Map<string, BillingRow[]>();
+    for (const row of scopedRows) {
+      if (!Number.isFinite(row.totalFeeCharged)) evidence.invalidFeeRowCount++;
+      if (!validDate(row.serviceDate)) {
+        evidence.invalidDateRowCount++;
+        unassignedRows = true;
+        continue;
+      }
+      if (row.serviceDate > asOf) { evidence.futureDatedRowCount++; continue; }
+      const month = row.serviceDate.slice(0, 7);
+      const monthRows = byMonth.get(month);
+      if (monthRows) monthRows.push(row); else byMonth.set(month, [row]);
+    }
+    for (const [month, monthRows] of byMonth) {
+      const dates = monthRows.map((row) => row.serviceDate).sort();
+      const aggregate = months.get(month) ?? {
+        month, label: monthLabel(month), charges: 0, rowCount: 0, rawRowCount: 0,
+        duplicateRowCount: 0, conflictingHashCount: 0, invalidFeeRowCount: 0,
+        firstServiceDate: dates[0], latestServiceDate: dates.at(-1)!,
+        fullyElapsed: month < asOf.slice(0, 7), coverage: "reported-rows-only" as const,
+      };
+      aggregate.rowCount++;
+      aggregate.rawRowCount += monthRows.length;
+      aggregate.duplicateRowCount += monthRows.length - 1;
+      aggregate.conflictingHashCount += Number(conflicting);
+      aggregate.invalidFeeRowCount += monthRows.filter((row) => !Number.isFinite(row.totalFeeCharged)).length;
+      aggregate.firstServiceDate = aggregate.firstServiceDate < dates[0] ? aggregate.firstServiceDate : dates[0];
+      aggregate.latestServiceDate = aggregate.latestServiceDate > dates.at(-1)! ? aggregate.latestServiceDate : dates.at(-1)!;
+      // Signed adjustments and PHONE fees are included. Bad fees and conflicting
+      // hash payloads invalidate the affected total instead of becoming zero.
+      const sum = aggregate.charges === null ? null : aggregate.charges + monthRows[0].totalFeeCharged;
+      aggregate.charges = conflicting || missingHash || monthRows.some((row) => !Number.isFinite(row.totalFeeCharged))
+        || sum === null || !Number.isFinite(sum) ? null : sum;
+      months.set(month, aggregate);
+    }
+  }
+  if (evidence.conflictingHashCount) evidence.warnings.push("Conflicting source-row hashes make affected monthly charges unknown; no payload was selected as authoritative.");
+  if (evidence.invalidFeeRowCount) evidence.warnings.push("Nonfinite charged fees make affected monthly charges unknown.");
+  if (evidence.missingHashRowCount) evidence.warnings.push("Rows without a stable source hash cannot be safely deduplicated; affected monthly charges are unknown.");
+  if (unassignedRows) evidence.warnings.push("Invalid service dates cannot be assigned to a month; summary averages and charges to date are unknown.");
+  if (evidence.futureDatedRowCount) evidence.warnings.push("Future-dated billing rows are excluded from as-of charged fees.");
+  evidence.warnings.push("Elapsed months contain reported rows; complete-month coverage is not established. Charged fees are not cash collections.");
+  const ordered = [...months.values()].sort((a, b) => a.month.localeCompare(b.month));
+  const elapsed = ordered.filter((month) => month.fullyElapsed);
+  const average = (selected: ReportedBillingMonth[], description: string): ReportedBillingAverage => {
+    const total = !unassignedRows && selected.length && selected.every((month) => month.charges !== null)
+      ? selected.reduce((sum, month) => sum + month.charges!, 0) : null;
+    const totalCharges = total !== null && Number.isFinite(total) ? total : null;
+    return {
+      months: selected.map((month) => month.month), monthLabels: selected.map((month) => month.label),
+      denominator: selected.length, totalCharges,
+      averageMonthlyCharges: totalCharges === null ? null : totalCharges / selected.length,
+      label: `${description}: ${selected.length ? selected.map((month) => month.label).join(", ") : "no elapsed reported months"}; denominator ${selected.length} reported months`,
+      coverage: "reported-rows-only",
+    };
+  };
+  const currentMonth = asOf.slice(0, 7);
+  const current = months.get(currentMonth);
+  const latestServiceDate = ordered.reduce<string | null>((latest, month) => !latest || month.latestServiceDate > latest ? month.latestServiceDate : latest, null);
+  return {
+    asOf, measure: "charged-fees" as const,
+    label: "Reported charged fees, not cash collections",
+    months: ordered,
+    latestServiceDate,
+    latestThreeMonthAverage: average(elapsed.slice(-3), "Latest three fully elapsed reported-month average"),
+    elapsedReportedMonthAverage: average(elapsed, "All fully elapsed reported-month average"),
+    currentMonth: {
+      month: currentMonth, label: `${monthLabel(currentMonth)} charged fees to date, not cash collections`,
+      asOf, through: current?.latestServiceDate ?? null,
+      chargesToDate: unassignedRows ? null : current?.charges ?? null,
+      rowCount: current?.rowCount ?? 0,
+      coverage: "reported-rows-only" as const,
+    },
+    evidence,
+  };
+}

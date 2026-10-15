@@ -306,6 +306,7 @@ const snapshots = [{ id: "synthetic-attendance", kind: "attendance", importedAt:
   attendance("mature-miss", "Elia", "2026-01-03", true),
   attendance("ended", "Erin", "2026-06-01"), attendance("ended", "Erin", "2026-06-08"), attendance("ended", "Erin", "2026-06-15"),
 ] }];
+snapshots.push({ id: "synthetic-billing", kind: "billing", importedAt: today + "T00:00:00.000Z", coverageStart: "2026-01-01", coverageEnd: "2026-10-09", sourceHash: "synthetic-billing-only", rows: [33035,31370,37480,31655,31927.5,32261.5,30810,33310,32850,11440].map((totalFeeCharged, index) => ({ clientId: `synthetic-billing-${index}`, clinician: "Elia", serviceDate: `2026-${String(index + 1).padStart(2, "0")}-${index === 9 ? "09" : "15"}`, totalFeeCharged, billingCode: "90837", sourceRowHash: `synthetic-month-${index}` })) });
 
 const browser = await chromium.launch({
   executablePath: browserPath,
@@ -504,9 +505,14 @@ assert.equal(await page.locator("h1").innerText(), "Rooms", "room view has its o
 await clickSection("Money");
 await capture("money-desktop", 1280, 900);
 await capture("money-mobile", 390, 900);
-assert.equal(await page.locator(".pw-money-bridge").evaluate((node) => getComputedStyle(node).gridTemplateColumns.split(" ").length), 2, "mobile money bridge uses two columns");
+assert.ok(await page.locator(".pw-money-bridge").evaluateAll((nodes) => nodes.every((node) => getComputedStyle(node).gridTemplateColumns.split(" ").length === 2)), "mobile money bridges use two columns");
 assert.ok(await page.locator(".pw-bridge-step strong").evaluateAll((nodes) => nodes.every((node) => node.scrollWidth <= node.clientWidth + 1)), "mobile currency amounts fit their containers");
-assert.match(await page.locator(".pw-money-bridge").innerText(), /Other practice costs/);
+const reportedFees = page.getByLabel("Reported charged fees", { exact: true });
+assert.match(await reportedFees.innerText(), /\$32,323[\s\S]*\$32,744[\s\S]*\$11,440/, "reported charges remain independent of financial period configuration");
+assert.match(await reportedFees.innerText(), /2026-10-09 \(partial\)/, "October charges are dated and partial");
+const projectedBridge = page.locator("section", { has: page.getByRole("heading", { name: "Projected money bridge", exact: true }) });
+assert.match(await projectedBridge.innerText(), /Oct 2026 projection[\s\S]*Projected revenue[\s\S]*Other practice costs/);
+assert.doesNotMatch(await projectedBridge.innerText(), /Billed revenue|November 2026 projection/);
 const bridgeBreakdown = page.getByLabel("Money bridge cost breakdown", { exact: true });
 await bridgeBreakdown.locator("summary").click();
 assert.match(await bridgeBreakdown.innerText(), /Employer burden.*Marketing.*Processing fees.*Separate owner payroll.*Owner payroll burden/s);

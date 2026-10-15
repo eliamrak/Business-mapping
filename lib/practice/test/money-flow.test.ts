@@ -159,7 +159,7 @@ test("missing session data remains unknown and old workspaces gain the tax estim
   assert.equal(flow.familyTakeHome, null);
 });
 
-test("full-month projection uses recorded sessions through data date and paces the rest", () => {
+test("full-month projection applies the observed period average uniformly to every calendar day", () => {
   const workspace = setup();
   const flow = monthFlow(
     workspace,
@@ -173,15 +173,15 @@ test("full-month projection uses recorded sessions through data date and paces t
   assert.equal(flow.sessionDataThrough, "2026-10-07");
   assert.equal(
     flow.paceSource,
-    "recent 56-day average blended with desired weekly pace for missing days",
+    "observed session averages; unverified coverage remains an estimate; no desired-session fill",
   );
   assert.equal(flow.paceLookbackStart, "2026-08-19");
-  close(flow.sessions, 80);
-  close(flow.revenue, 6400);
+  close(flow.sessions, 14 / 7 * 31);
+  close(flow.revenue, 14 / 7 * 31 * 80);
   close(flow.familyGrossPay, 120000 / 12);
 });
 
-test("full-month projection backfills later actuals without double counting", () => {
+test("a longer observed period with the same daily average does not add actual counts to the projection", () => {
   const workspace = setup();
   const flow = monthFlow(
     workspace,
@@ -190,14 +190,13 @@ test("full-month projection backfills later actuals without double counting", ()
     "2026-10-15",
     { fullMonthProjection: true },
   );
-  const usedWeekly = 18.5;
-  const expectedSessions = 28 + (usedWeekly / 7) * 17;
+  const expectedSessions = 28 / 14 * 31;
   close(flow.sessions, expectedSessions);
   close(flow.revenue, expectedSessions * 80);
   assert.equal(flow.sessionDataThrough, "2026-10-14");
 });
 
-test("full-month projection clips cross-month records to service dates in the selected month", () => {
+test("full-month projection uses the full contained cross-month period average, not clipped actuals plus gap-fill", () => {
   const workspace = setup();
   const flow = monthFlow(
     workspace,
@@ -206,30 +205,173 @@ test("full-month projection clips cross-month records to service dates in the se
     "2026-10-08",
     { fullMonthProjection: true },
   );
-  const usedWeekly = 16.75;
-  const expectedSessions = 7 + (usedWeekly / 7) * 24;
-  assert.equal(flow.splitPeriods, true);
+  const expectedSessions = 14 / 14 * 31;
+  assert.equal(flow.splitPeriods, false, "A uniform period-average projection does not split actual service records");
   assert.equal(flow.sessionDataThrough, "2026-10-07");
   close(flow.sessions, expectedSessions);
   close(flow.revenue, expectedSessions * 80);
+  const actual = monthFlow(workspace, context([record("2026-09-24", "2026-10-07", 14)]), "2026-10-01", "2026-10-08");
+  assert.equal(actual.splitPeriods, true);
+  close(actual.sessions, 7);
 });
 
-test("full-month projection can fall back to desired weekly pace with no session records", () => {
+test("full-month projection stays unknown without observed sessions instead of falling back to desired pace", () => {
   const workspace = setup();
   const flow = monthFlow(workspace, context([]), "2026-10-01", "2026-10-13", {
     fullMonthProjection: true,
   });
-  const expectedSessions = (20 / 7) * 31;
   assert.equal(flow.basisLabel, "Projection");
   assert.equal(flow.through, "2026-10-31");
   assert.equal(flow.sessionDataThrough, null);
   assert.equal(
     flow.paceSource,
-    "desired weekly pace fallback until session averages exist",
+    "observed session average unavailable; no desired-session substitution",
   );
-  close(flow.sessions, expectedSessions);
-  close(flow.revenue, expectedSessions * 80);
-  close(flow.familyGrossPay, 120000 / 12);
+  assert.equal(flow.sessions, null);
+  assert.equal(flow.revenue, null);
+  assert.equal(flow.profit, null);
+  assert.equal(flow.familyTakeHome, null);
+  assert.deepEqual(flow.incompleteClinicians, [wife.label]);
+});
+
+test("one clinician without observed history makes the complete projection unknown", () => {
+  const workspace = setup();
+  const data = context([record("2026-10-01", "2026-10-14", 28)]);
+  data.clinicians.push({ ...wife, id: 2, label: "Synthetic missing clinician", sessionsPerWeek: 50 });
+  const flow = monthFlow(workspace, data, "2026-10-01", "2026-10-14", { fullMonthProjection: true });
+  assert.equal(flow.sessions, null);
+  assert.equal(flow.revenue, null);
+  assert.equal(flow.profit, null);
+  assert.deepEqual(flow.incompleteClinicians, ["Synthetic missing clinician"]);
+});
+
+test("six sparse clinician histories project 351 visits over 56 calendar days instead of full desired capacity", () => {
+  const workspace = emptyWorkspace("2026-10-14");
+  workspace.settings.defaultInPersonPct = 0;
+  const totals = [66, 73, 34, 12, 104, 62];
+  const desired = [15, 16, 20, 5, 23, 15];
+  const fees = [150, 185, 150, 150, 175, 175];
+  const dates = ["2026-08-20", "2026-08-27", "2026-09-03", "2026-09-10", "2026-09-17", "2026-09-24", "2026-10-09"];
+  const data: Context = {
+    clinicians: totals.map((_, index) => ({
+      ...wife, id: index + 1, label: `Synthetic clinician ${index + 1}`, classification: "1099",
+      sessionRate: fees[index], sessionsPerWeek: desired[index], weeksWorkedPerYear: 48,
+    })), staff: [],
+    sessions: totals.flatMap((total, index) => dates.map((date, day) => ({
+      ...record(date, date, Math.floor(total / dates.length) + Number(day < total % dates.length)),
+      id: -(index * dates.length + day + 1), clinicianId: index + 1,
+    }))),
+  };
+  const before = structuredClone({ workspace, data });
+  const flow = monthFlow(workspace, data, "2026-10-01", "2026-10-14", { fullMonthProjection: true });
+  close(flow.sessions, 351 / 56 * 31);
+  close(flow.sessions! * 7 / 31, 43.875);
+  const weightedFees = totals.reduce((sum, total, index) => sum + total * fees[index], 0);
+  close(flow.revenue, weightedFees / 56 * 31);
+  assert.ok(flow.revenue! < 40000, "Actual-pace projection must not become the prior 61542.47 full-capacity projection");
+  assert.match(flow.paceSource, /observed.*unverified.*no desired-session fill/);
+  assert.equal(flow.paceLookbackStart, "2026-08-20");
+  assert.equal(flow.sessionDataThrough, "2026-10-09");
+  const changed = structuredClone(data);
+  changed.clinicians.forEach((person) => { person.sessionsPerWeek += 10; });
+  const higherDesired = monthFlow(workspace, changed, "2026-10-01", "2026-10-14", { fullMonthProjection: true });
+  close(higherDesired.sessions, flow.sessions!);
+  close(higherDesired.revenue, flow.revenue!);
+  assert.deepEqual({ workspace, data }, before);
+});
+
+test("sparse negative-ID visit days use a 56-day denominator until matching attendance coverage is supplied", () => {
+  const workspace = setup();
+  const data = context([{ ...record("2026-09-20", "2026-09-20", 14), id: -1 },
+    { ...record("2026-10-09", "2026-10-09", 14), id: -2 }]);
+  const sparse = monthFlow(workspace, data, "2026-10-01", "2026-10-14", { fullMonthProjection: true });
+  close(sparse.sessions, 28 / 56 * 31);
+  assert.match(sparse.paceSource, /unverified/);
+  const coverage = [{ clinicianId: 1, start: "2026-09-17", end: "2026-10-14" }];
+  const covered = monthFlow(workspace, data, "2026-10-01", "2026-10-14", { fullMonthProjection: true, attendanceCoverage: coverage });
+  close(covered.sessions, 28 / 28 * 31);
+  const wrongClinician = monthFlow(workspace, data, "2026-10-01", "2026-10-14", {
+    fullMonthProjection: true, attendanceCoverage: [{ ...coverage[0], clinicianId: 2 }],
+  });
+  close(wrongClinician.sessions, sparse.sessions!);
+});
+
+test("projection ignores imported billed amounts while month-to-date retains those exact actuals", () => {
+  const workspace = setup();
+  const data = context([record("2026-10-01", "2026-10-07", 14)]);
+  const projectedBefore = monthFlow(workspace, data, "2026-10-01", "2026-10-14", { fullMonthProjection: true });
+  const actualBefore = monthFlow(workspace, data, "2026-10-01", "2026-10-14");
+  data.importedBillingActuals = [{ clinicianId: 1, serviceDate: "2026-10-01", totalFeeCharged: 999,
+    sourceRowHash: "synthetic-billing-actual" }];
+  const before = structuredClone(data);
+  const projectedAfter = monthFlow(workspace, data, "2026-10-01", "2026-10-14", { fullMonthProjection: true });
+  const actualAfter = monthFlow(workspace, data, "2026-10-01", "2026-10-14");
+  close(projectedAfter.revenue, projectedBefore.revenue!);
+  close(projectedAfter.sessions, projectedBefore.sessions!);
+  close(actualAfter.revenue, 999 + 6 * 2 * 80);
+  close(actualAfter.revenue! - actualBefore.revenue!, 999 - 2 * 80);
+  assert.deepEqual(data, before);
+});
+
+test("a recorded zero remains zero and future incomplete periods cannot inflate the observed projection", () => {
+  const workspace = setup();
+  const data = context([record("2026-10-01", "2026-10-08", 0),
+    { ...record("2026-10-09", "2026-10-22", 1000), id: 2 }]);
+  const flow = monthFlow(workspace, data, "2026-10-01", "2026-10-14", { fullMonthProjection: true });
+  close(flow.sessions, 0);
+  close(flow.revenue, 0);
+  assert.deepEqual(flow.incompleteClinicians, []);
+  assert.equal(flow.sessionDataThrough, "2026-10-08");
+});
+
+test("October contractor projection pays both complete service periods including September 24-30", () => {
+  const workspace = setup();
+  workspace.clinicians[0].payMode = "per_session";
+  workspace.clinicians[0].payAmount = 100;
+  const data = context([record("2026-09-24", "2026-10-07", 14)]);
+  data.clinicians[0] = { ...wife, classification: "1099" };
+  const before = structuredClone({ workspace, data });
+  const flow = monthFlow(workspace, data, "2026-10-01", "2026-10-08", { fullMonthProjection: true });
+  // October 8 and 22 checks each pay 14 service days at one observed
+  // session/day. Seven September service days belong to October's first check.
+  close(flow.clinicianPay, 2 * 14 * 100);
+  assert.notEqual(flow.clinicianPay, 2100, "Do not clip the first projected paycheck to October 1-7");
+  close(flow.sessions, 31);
+  assert.equal(flow.through, "2026-10-31");
+  assert.deepEqual({ workspace, data }, before);
+});
+
+test("inactive or future-start clinicians with no history do not make active Money projection unavailable", () => {
+  for (const profile of [
+    { status: "planned", start: "2026-01-01", end: null },
+    { status: "archived", start: "2026-01-01", end: null },
+    { status: "active", start: "2026-11-01", end: null },
+    { status: "active", start: "2026-01-01", end: "2026-09-30" },
+  ] as const) {
+    const workspace = setup();
+    const data = context([record("2026-10-01", "2026-10-14", 28)]);
+    data.clinicians.push({ ...wife, id: 2, label: "Synthetic inactive clinician", sessionsPerWeek: 30 });
+    workspace.clinicians.push(clinicianSettingSchema.parse({
+      id: randomUUID(), clinicianId: 2, desiredWeeklySessions: 30,
+      payMode: "per_session", payAmount: 100, ...profile,
+    }));
+    const before = structuredClone({ workspace, data });
+    const flow = monthFlow(workspace, data, "2026-10-01", "2026-10-14", { fullMonthProjection: true });
+    assert.deepEqual(flow.incompleteClinicians, [], JSON.stringify(profile));
+    close(flow.sessions, 62);
+    close(flow.revenue, 62 * 80);
+    assert.deepEqual({ workspace, data }, before);
+  }
+});
+
+test("historical Money fallback reports actual history dates and the reported-period average", () => {
+  const workspace = setup();
+  const data = context([record("2026-07-01", "2026-07-14", 14)]);
+  const flow = monthFlow(workspace, data, "2026-10-01", "2026-10-14", { fullMonthProjection: true });
+  close(flow.sessions, 31);
+  assert.equal(flow.sessionDataThrough, null, "Historical history must not appear as current-month recorded service dates");
+  assert.match(flow.paceSource, /historical fallback 2026-05-20 to 2026-07-14, reported-period average/);
+  assert.match(flow.paceSource, /no desired-session fill/);
 });
 
 test("month flow keeps month-to-date behavior unless projection is requested", () => {
