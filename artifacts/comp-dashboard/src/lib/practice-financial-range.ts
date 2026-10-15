@@ -1,8 +1,10 @@
-import { forecast, observed, type Context, type ForecastMonth, type PaceCoverage, type Workspace } from "@workspace/practice/hub";
+import { completeServicePeriodState, forecast, observed, type Context, type ForecastMonth, type PaceCoverage, type Workspace } from "@workspace/practice/hub";
 import { buildPracticeProjection } from "./practice-projection.ts";
 import { summarizeReportedBilling } from "./reported-billing.ts";
 import type { LocalSnapshot } from "./retention-local.ts";
 import { moneyBridgeSummary } from "./money-bridge.ts";
+import { completeReportCoverage } from "./complete-report-coverage.ts";
+import { completePeriodSessionSummary } from "./complete-session-summary.ts";
 
 type Range = { start: string; end: string };
 type Values = ForecastMonth["values"];
@@ -20,29 +22,64 @@ function financialCoverage(workspace: Workspace, range: Range) {
   return cursor === shift(range.end, 1);
 }
 
-/** Actual dates and future dates never overlap; missing past coverage is never forecast-filled. */
+/** Complete report history and the forecast after its covered period never overlap. */
 export function practiceFinancialRange(workspace: Workspace, context: Context, snapshots: LocalSnapshot[], asOf: string, requested: Range, coverage: PaceCoverage[] = []) {
-  const earliest = [...workspace.periods.filter((row) => !row.archived).map((row) => row.start), ...snapshots.flatMap((snapshot) => snapshot.rows.map((row) => row.serviceDate))].sort()[0] ?? asOf;
+  const roster = context.clinicians.filter((person) => (person.goalId ?? null) === workspace.settings.teamId);
+  const reports = completeReportCoverage(snapshots, roster, asOf);
+  const sessionProof = completeServicePeriodState(context.sessions, roster.map((person) => person.id), asOf, coverage);
+  const earliest = [
+    ...workspace.periods.filter((row) => !row.archived && row.status === "finalized").map((row) => row.start),
+    ...reports.completeAttendanceCoverage.map((row) => row.start),
+    ...reports.completeBillingCoverage.map((row) => row.start),
+    ...sessionProof.eligibleCoverage.map((row) => row.start),
+  ].sort()[0] ?? asOf;
   const range = { start: requested.start.startsWith("0000-") ? earliest : requested.start, end: requested.end.startsWith("9999-") ? asOf : requested.end };
   const valid = (date: string) => /^\d{4}-\d{2}-\d{2}$/.test(date) && Number.isFinite(Date.parse(date + "T12:00:00Z")) && new Date(date + "T12:00:00Z").toISOString().slice(0, 10) === date;
   if (!valid(range.start) || !valid(range.end) || range.start > range.end) return {
-    range, ownerPayrollBurdenPct: workspace.settings.ownerPayrollBurdenPct, actual: { range: null, values: sum([]), complete: false, reportedCharges: null, report: summarizeReportedBilling([], asOf) },
+    range, dataThrough: null, forecastStart: null, reports, ownerPayrollBurdenPct: workspace.settings.ownerPayrollBurdenPct, actual: { range: null, values: sum([]), complete: false, reportedCharges: null, report: summarizeReportedBilling([], asOf), billingComplete: false },
     forward: { range: null, values: sum([]), months: [] as ForecastMonth[] }, values: sum([]), warnings: ["Choose valid non-reversed reporting dates."],
   };
-  const actualEnd = range.end < asOf ? range.end : asOf;
-  const actualRange = range.start <= actualEnd ? { start: range.start, end: actualEnd } : null;
-  const forwardStart = range.start > asOf ? range.start : shift(asOf, 1);
-  const forwardRange = forwardStart <= range.end ? { start: forwardStart, end: range.end } : null;
+  const projection = buildPracticeProjection(workspace, context, "actual", asOf, coverage, reports.billingThrough);
+  const cutoff = projection.latestReportThrough;
+  const actualEnd = cutoff && cutoff < range.end ? cutoff : range.end;
+  const actualRange = cutoff && range.start <= actualEnd ? { start: range.start, end: actualEnd } : null;
+  const forecastStart = cutoff ? shift(cutoff, 1) : null;
+  const forwardStart = forecastStart && range.start > forecastStart ? range.start : forecastStart;
+  const forwardRange = forwardStart && forwardStart <= range.end ? { start: forwardStart, end: range.end } : null;
   const names = new Set(context.clinicians.filter((person) => (person.goalId ?? null) === workspace.settings.teamId).map((person) => person.label.trim().replace(/\s+/g, " ").toLowerCase()));
-  const charges = actualRange ? summarizeReportedBilling(snapshots, actualEnd, { start: range.start, end: actualEnd, clinicianLabels: [...names] }) : summarizeReportedBilling([], asOf);
-  const reportedCharges = charges.evidence.invalidDateRowCount === 0 && charges.months.length && charges.months.every((row) => row.charges !== null) ? charges.months.reduce((total, row) => total + row.charges!, 0) : null;
-  const complete = actualRange ? financialCoverage(workspace, actualRange) : true;
+  const charges = actualRange ? summarizeReportedBilling(snapshots, actualEnd, { start: range.start, end: actualEnd, clinicianLabels: [...names], eligibleRows: new Set(reports.eligibleBillingRows) }) : summarizeReportedBilling([], asOf);
+  const billingComplete = !!actualRange && roster.length > 0 && roster.every((person) => {
+    for (let date = actualRange.start; date <= actualRange.end; date = shift(date, 1))
+      if (!reports.completeBillingCoverage.some((proof) => proof.clinicianId === person.id && proof.start <= date && proof.end >= date)) return false;
+    return true;
+  });
+  const reportedCharges = charges.evidence.invalidDateRowCount === 0 && charges.months.every((row) => row.charges !== null)
+    ? charges.months.length ? charges.months.reduce((total, row) => total + row.charges!, 0) : billingComplete ? 0 : null : null;
+  const ledgerComplete = actualRange ? financialCoverage(workspace, actualRange) : true;
+  const complete = !!actualRange && ledgerComplete && billingComplete;
   const actualObserved = actualRange ? observed(workspace, context, actualRange.start, actualRange.end) : null;
-  const actualValues = actualObserved ? Object.fromEntries(sumKeys.map((key) => [key, complete ? actualObserved.values[key] ?? null : null])) : {};
+  const actualValues: Values = actualObserved ? Object.fromEntries(sumKeys.map((key) => [key, ledgerComplete ? actualObserved.values[key] ?? null : null])) : {};
+  const paidConsultationUnclassified = !!actualRange && reports.eligibleBillingRows.some((row) => row.serviceDate >= actualRange.start && row.serviceDate <= actualRange.end && row.totalFeeCharged !== 0 && (row.billingCode?.trim().toUpperCase() === "PHONE" || row.visitKind === "consultation"));
+  if (actualRange) {
+    const ledger = actualObserved!.values;
+    const otherCosts = ledgerComplete && [ledger.revenue, ledger.clinicianPay, ledger.profit].every((value) => value != null)
+      ? ledger.revenue! - ledger.clinicianPay! - ledger.profit! : null;
+    actualValues.revenue = billingComplete && !paidConsultationUnclassified ? reportedCharges : null;
+    actualValues.profit = actualValues.revenue !== null && actualValues.clinicianPay != null && otherCosts !== null
+      ? actualValues.revenue! - actualValues.clinicianPay! - otherCosts : null;
+    const sessions = completePeriodSessionSummary(context.sessions, roster.map((person) => person.id), actualRange, coverage, asOf);
+    actualValues.sessions = sessions.coverageComplete ? sessions.observedCompleted : null;
+  }
   const warnings = [...(actualObserved?.warnings ?? []), ...charges.evidence.warnings.filter((warning) => !warning.startsWith("Elapsed months"))];
-  if (actualRange && !complete) warnings.push("Actual financial coverage is incomplete for the selected dates; reported charges remain facts, but missing actual costs or days are not filled with a forecast.");
-  const projection = forwardRange ? buildPracticeProjection(workspace, context, "actual", asOf, coverage) : null;
-  if (projection) warnings.push(...projection.clinicianPace.map((person) => `${person.name}: ${person.basis}. Latest-report anchoring is an estimate, not proof of later quiet days.`));
+  warnings.push(...reports.incompletePeriods.map((period) => period.reason));
+  if (actualObserved && ledgerComplete && actualValues.revenue !== null && actualObserved.values.revenue != null && Math.abs(actualValues.revenue! - actualObserved.values.revenue!) > 0.005)
+    warnings.push("Complete billed session fees differ from the financial ledger's earned-revenue entry. Historical session income uses the billed source; stored ledger entries and independently recorded costs are unchanged.");
+  if (paidConsultationUnclassified) warnings.push("Nonzero PHONE charge classification remains unconfirmed; billed facts remain visible, but treatment-revenue totals are withheld rather than assigning an unapproved revenue category.");
+  if (actualRange && !complete) warnings.push("Actual billed-revenue or financial-cost coverage is incomplete for the selected dates; only complete report periods contribute. Missing days are not actual zeros.");
+  if (!cutoff) warnings.push("Data covers through: unverified. No common complete activity report or complete billing report establishes the actual/forecast boundary; upload dates and occupied row endpoints are not proof.");
+  if (reports.billingThrough !== projection.latestCompleteThrough) warnings.push(`Source dates differ: complete activity through ${projection.latestCompleteThrough ?? "unverified"}; complete billing through ${reports.billingThrough ?? "unverified"}. The latest complete report sets the forecast boundary, but does not certify missing activity, billing or cost coverage.`);
+  warnings.push(...projection.clinicianPace.map((person) => `${person.name}: ${person.basis}. Only complete source pay periods enter the three-month average.`));
+  warnings.push(...projection.unavailableReasons);
   const count = forwardRange ? (Number(forwardRange.end.slice(0, 4)) - Number(forwardRange.start.slice(0, 4))) * 12 + Number(forwardRange.end.slice(5, 7)) - Number(forwardRange.start.slice(5, 7)) + 1 : 0;
   const future = forwardRange && count <= 60 && projection?.projectedWeekly != null ? forecast({ ...projection.projectionWorkspace, settings: { ...projection.projectionWorkspace.settings, forecastStart: forwardRange.start.slice(0, 7) + "-01", horizonMonths: count } }, context, [], 1, true, {
     workingForecast: true,
@@ -54,7 +91,7 @@ export function practiceFinancialRange(workspace: Workspace, context: Context, s
   if (forwardRange && !future.length) warnings.push("Future working forecast is unavailable: session history is incomplete.");
   const forwardValues = forwardRange ? sum(future.map((row) => row.values)) : {};
   const values = sum([...(actualRange ? [actualValues] : []), ...(forwardRange ? [forwardValues] : [])]);
-  return { range, ownerPayrollBurdenPct: workspace.settings.ownerPayrollBurdenPct, actual: { range: actualRange, values: actualValues as Values, complete, reportedCharges, report: charges }, forward: { range: forwardRange, values: forwardValues as Values, months: future }, values, warnings: [...new Set([...warnings, ...future.flatMap((row) => row.warnings)])] };
+  return { range, dataThrough: cutoff, forecastStart, reports, ownerPayrollBurdenPct: workspace.settings.ownerPayrollBurdenPct, actual: { range: actualRange, values: actualValues, complete, reportedCharges, report: charges, billingComplete }, forward: { range: forwardRange, values: forwardValues as Values, months: future }, values, warnings: [...new Set([...warnings, ...future.flatMap((row) => row.warnings)])] };
 }
 
 export type PracticeFinancialRange = ReturnType<typeof practiceFinancialRange>;

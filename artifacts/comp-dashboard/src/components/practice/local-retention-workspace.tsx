@@ -8,6 +8,8 @@ import {
 } from "react";
 import { ApiError, customFetch } from "@workspace/api-client-react";
 import { Download, ShieldCheck, Upload } from "lucide-react";
+import { completeReportCoverage, type CompleteReportCoverage } from "@/lib/complete-report-coverage";
+import { summarizeReportedBilling } from "@/lib/reported-billing";
 import {
   buildLocalRetentionMetrics,
   buildSameDayShowReview,
@@ -22,6 +24,10 @@ import {
 
 const money = (value: number) =>
   value.toLocaleString("en-US", { style: "currency", currency: "USD" });
+const totalReportedCharges = (summary: ReturnType<typeof summarizeReportedBilling>) =>
+  summary.months.length > 0 && summary.evidence.invalidDateRowCount === 0 && summary.months.every((month) => month.charges !== null)
+    ? summary.months.reduce((sum, month) => sum + month.charges!, 0) : null;
+const chargedMoney = (value: number | null) => value === null ? "--" : money(value);
 const dateLabel = (value: string | null) => value ?? "--";
 const importedLabel = (value: string | null) =>
   value ? value.slice(0, 10) : "not loaded";
@@ -240,9 +246,16 @@ async function saveStoredSameDayVisitOverrides(
 
 export default function LocalRetentionWorkspace({
   workspaceState,
+  coverageSummary,
+  metricSnapshots,
+  excludedFollowUpEvidence,
   today = new Date().toLocaleDateString("en-CA"),
 }: {
   workspaceState?: LocalRetentionWorkspaceState;
+  coverageSummary?: CompleteReportCoverage;
+  /** Eligible historical snapshots, including former-clinician follow-up evidence; never raw reconciliation rows. */
+  metricSnapshots?: LocalSnapshot[];
+  excludedFollowUpEvidence?: readonly { clientId: string; serviceDate: string }[];
   today?: string;
 }) {
   const ownedState = useLocalRetentionWorkspaceState(!workspaceState);
@@ -266,17 +279,43 @@ export default function LocalRetentionWorkspace({
     pending,
     setPending,
   } = workspaceState ?? ownedState;
+  const verifiedCoverage = useMemo(() => coverageSummary ?? completeReportCoverage(snapshots, [], today), [coverageSummary, snapshots, today]);
+  const eligibleMetricSnapshots = metricSnapshots ?? verifiedCoverage.eligibleSnapshots;
+  const reportedCharges = useMemo(() => summarizeReportedBilling(eligibleMetricSnapshots, today), [eligibleMetricSnapshots, today]);
+  const chargedByClinician = useMemo(() => {
+    const labels = new Map<string, { clinician: string; sourceRows: number }>();
+    for (const snapshot of eligibleMetricSnapshots) if (snapshot.kind === "billing") for (const row of snapshot.rows) {
+      const key = row.clinician.trim().replace(/\s+/g, " ").toLowerCase();
+      const entry = labels.get(key) ?? { clinician: row.clinician.trim().replace(/\s+/g, " "), sourceRows: 0 };
+      entry.sourceRows++;
+      labels.set(key, entry);
+    }
+    return [...labels.values()].sort((a, b) => a.clinician.localeCompare(b.clinician)).map((row) => ({ ...row,
+      charges: totalReportedCharges(summarizeReportedBilling(eligibleMetricSnapshots, today, { clinicianLabel: row.clinician })),
+    }));
+  }, [eligibleMetricSnapshots, today]);
+  const recentCoverageGaps = [...verifiedCoverage.incompletePeriods]
+    .filter((period) => period.start !== null && period.end !== null)
+    .sort((a, b) => b.end!.localeCompare(a.end!) || b.start!.localeCompare(a.start!))
+    .slice(0, 3);
+  const remainingCoverageGaps = verifiedCoverage.incompletePeriods.length - recentCoverageGaps.length;
+  const gapDescription = (period: CompleteReportCoverage["incompletePeriods"][number]) =>
+    `${period.kind} · ${period.snapshotId ? "unverified report span " : ""}${dateLabel(period.start)} through ${dateLabel(period.end)}${period.clinicianLabel ? ` · ${period.clinicianLabel}` : period.clinicianId === undefined ? "" : ` · clinician ${period.clinicianId}`}: ${period.reason}`;
   const packageInput = useRef<HTMLInputElement>(null);
   const metrics = useMemo(
     () =>
       buildLocalRetentionMetrics(
-        snapshots,
+        metricSnapshots ?? verifiedCoverage.eligibleSnapshots,
         billingCodeMinutes,
         sameDayVisitOverrides,
         28,
         today,
+        90,
+        undefined,
+        undefined,
+        { excludedFollowUpEvidence },
       ),
-    [snapshots, billingCodeMinutes, sameDayVisitOverrides, today],
+    [metricSnapshots, verifiedCoverage, billingCodeMinutes, sameDayVisitOverrides, today, excludedFollowUpEvidence],
   );
   const clinicianActivityByName = useMemo(
     () =>
@@ -476,11 +515,27 @@ export default function LocalRetentionWorkspace({
         </div>
         <ShieldCheck aria-hidden="true" />
       </div>
+      <section className="pw-import-provenance" aria-label="Verified complete report coverage">
+        <h3>Data covers through {dateLabel(verifiedCoverage.dataThrough)}</h3>
+        <p>Attendance: {dateLabel(verifiedCoverage.attendanceThrough)} · Billing: {dateLabel(verifiedCoverage.billingThrough)}</p>
+        <p>{verifiedCoverage.excludedRowsCount} raw rows excluded from eligible actual totals and historical averages. Raw rows remain available for reconciliation and review; they are not certified actual totals.</p>
+        <p>Imported coverage proof does not certify separate manual-source session history.</p>
+        {!coverageSummary && <p>Provider roster scope is unavailable. Actual metrics remain withheld until mapped complete-report coverage is supplied.</p>}
+        {recentCoverageGaps.length > 0 && <ul aria-label="Most recent incomplete report periods">
+          {recentCoverageGaps.map((period, index) => <li key={index}>{gapDescription(period)}</li>)}
+        </ul>}
+        {remainingCoverageGaps > 0 && <p>{remainingCoverageGaps} additional incomplete or unverified entries in Details.</p>}
+        <details>
+          <summary>Details: all gaps and incomplete periods ({verifiedCoverage.incompletePeriods.length})</summary>
+          {verifiedCoverage.incompletePeriods.map((period, index) => <p key={index}>{gapDescription(period)}</p>)}
+          {verifiedCoverage.limits.map((limit) => <p key={limit}>{limit}</p>)}
+        </details>
+      </section>
       <details className="pw-import-provenance" aria-label="Saved import provenance">
         <summary>Saved packages and observed service dates ({snapshots.length} snapshots)</summary>
         <p>Service-date spans describe rows present in the export. They do not prove complete reporting for missing days.</p>
         {packages.map((item) => <div className="pw-import-source" key={item.packageId}><strong>{item.packageId}</strong><span>Exported {item.exportedAt} · imported {item.importedAt}</span><small title={item.contentHash}>Content hash {item.contentHash.slice(0, 12)}</small></div>)}
-        {snapshots.map((snapshot) => <div className="pw-import-source" key={snapshot.id}><strong>{snapshot.kind}: {snapshot.rows.length} rows</strong><span>Observed service dates {snapshot.coverageStart} through {snapshot.coverageEnd}</span><span>{snapshot.reportCoverage ? `Declared complete report: ${snapshot.reportCoverage.start} through ${snapshot.reportCoverage.end}` : "Report completeness unverified"}</span><span>Imported {snapshot.importedAt}</span><small title={snapshot.sourceHash}>Source hash {snapshot.sourceHash.slice(0, 12)}</small></div>)}
+        {snapshots.map((snapshot) => <div className="pw-import-source" key={snapshot.id}><strong>{snapshot.kind}: {snapshot.rows.length} rows</strong><span>Observed service dates (unverified coverage) {snapshot.coverageStart} through {snapshot.coverageEnd}</span><span>{snapshot.reportCoverage ? `Declared coverage (unverified here): ${snapshot.reportCoverage.start} through ${snapshot.reportCoverage.end}` : "Report completeness unverified"}</span><span>Imported {snapshot.importedAt}</span><small title={snapshot.sourceHash}>Source hash {snapshot.sourceHash.slice(0, 12)}</small></div>)}
         {!packages.length && <p>No package metadata is available for these snapshots.</p>}
       </details>
 
@@ -654,19 +709,13 @@ export default function LocalRetentionWorkspace({
           <small>{localDerivedVisitDetail(metrics)}</small>
         </div>
         <div title="Converted billing fact rows with charged fee amounts. These are charges, not collected payments.">
-          <span>Billed rows</span>
-          <strong>{metrics.billingRows.toLocaleString()}</strong>
+          <span>Billing source rows (all codes)</span>
+          <strong>{chargedByClinician.reduce((sum, row) => sum + row.sourceRows, 0).toLocaleString()}</strong>
         </div>
         <div title="Total charged fees from the converted billing source. This does not depend on visit matching and is not collected cash.">
-          <span>Billed fees</span>
-          <strong>
-            {money(
-              metrics.billingByClinician.reduce(
-                (sum, row) => sum + row.totalFeesCharged,
-                0,
-              ),
-            )}
-          </strong>
+          <span>Charged fees (all codes)</span>
+          <strong>{chargedMoney(totalReportedCharges(reportedCharges))}</strong>
+          <small>Includes PHONE charge facts, not treatment classification or cash.</small>
         </div>
         <div title="Attendance rows with no same client, clinician, and date billing counterpart in saved converted history. This is a matching status, not proof that billing is missing.">
           <span>Attendance without billing</span>
@@ -873,13 +922,26 @@ export default function LocalRetentionWorkspace({
           </table>
         </section>
         <section>
-          <h3>Billing charged</h3>
+          <h3>Charged fees by clinician</h3>
+          <p>All billing codes, including PHONE. Source-row counts are not unique visits; charged totals reconcile overlapping sources.</p>
+          <table>
+            <thead><tr><th>Clinician</th><th>Billing source rows</th><th>Total fees charged</th></tr></thead>
+            <tbody>
+              {chargedByClinician.map((row) => <tr key={row.clinician}>
+                <td data-label="Clinician">{row.clinician}</td>
+                <td data-label="Billing source rows">{row.sourceRows}</td>
+                <td data-label="Total fees charged">{chargedMoney(row.charges)}</td>
+              </tr>)}
+              {!chargedByClinician.length && <tr><td colSpan={3}>No eligible complete-report billing facts.</td></tr>}
+            </tbody>
+          </table>
+          <h3>Treatment billing-minute analysis</h3>
+          <p>Treatment-code source rows only; PHONE consultations are excluded from this minute estimate.</p>
           <table>
             <thead>
               <tr>
                 <th>Clinician</th>
-                <th>Billed rows</th>
-                <th>Total fees charged</th>
+                <th>Treatment source rows</th>
                 <th>Configured rows</th>
                 <th>Estimated billing hours</th>
               </tr>
@@ -888,10 +950,7 @@ export default function LocalRetentionWorkspace({
               {metrics.billingByClinician.map((row) => (
                 <tr key={row.clinician}>
                   <td data-label="Clinician">{row.clinician}</td>
-                  <td data-label="Billed rows">{row.billedRows}</td>
-                  <td data-label="Total fees charged">
-                    {money(row.totalFeesCharged)}
-                  </td>
+                  <td data-label="Treatment source rows">{row.billedRows}</td>
                   <td data-label="Configured rows">
                     {row.configuredMinuteRows}
                   </td>
@@ -904,9 +963,8 @@ export default function LocalRetentionWorkspace({
               ))}
               {!metrics.billingByClinician.length && (
                 <tr>
-                  <td colSpan={5}>
-                    Import billing CSVs to calculate billed counts and charged
-                    fees.
+                  <td colSpan={4}>
+                    No eligible treatment billing rows for minute analysis.
                   </td>
                 </tr>
               )}

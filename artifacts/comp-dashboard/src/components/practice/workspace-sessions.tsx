@@ -39,7 +39,8 @@ import {
   weeklyGoalFromPeriodDesired,
 } from "@/lib/session-goals";
 import { firstHiringReviewMonth, observedBiweeklySessionRecords, summarizeHiringReadiness, summarizeLast1099Period, summarizeSessionOverview } from "@/lib/session-overview";
-import { buildSessionTrend, containedSessionRecords, selectedPeriodSessionSummary, type SessionAttendanceCoverage, type SessionPeriod } from "@/lib/session-trend";
+import { containedSessionRecords, type SessionAttendanceCoverage, type SessionPeriod } from "@/lib/session-trend";
+import { buildCompleteSessionTrend as buildSessionTrend, completePeriodSessionSummary as selectedPeriodSessionSummary, completeSessionHistoryStart } from "@/lib/complete-session-summary";
 import SessionImportDialog from "./session-import-dialog";
 import BulkSessionEntry from "./bulk-session-entry";
 import MetricComparison from "./metric-comparison";
@@ -391,11 +392,15 @@ export default function WorkspaceSessions({
     ? (Number(projectedReview.slice(0, 4)) - Number(today.slice(0, 4))) * 12 +
       Number(projectedReview.slice(5, 7)) - Number(today.slice(5, 7))
     : null;
-  const bounds = selectedPeriod ?? (historyRange === "custom"
+  const requestedBounds = selectedPeriod ?? (historyRange === "custom"
     ? customRange
     : historyRange === "all" || historyRange === "4periods"
       ? null
       : { start: shift(today, 1 - Number(historyRange)), end: today });
+  const bounds = requestedBounds ? {
+    start: requestedBounds.start.startsWith("0000-") ? completeSessionHistoryStart(practiceRecords, people.map((person) => person.id), attendanceCoverage, today) ?? today : requestedBounds.start,
+    end: requestedBounds.end.startsWith("9999-") ? today : requestedBounds.end,
+  } : null;
   const boundsValid = !bounds || dateRangeSchema.safeParse(bounds).success;
   const filteredPeriods = !selectedPeriod && historyRange === "4periods"
     ? currentFour
@@ -433,18 +438,18 @@ export default function WorkspaceSessions({
     requiredWeeklySessions,
     attendanceCoverage,
   ) : [];
-  const practiceSummary = selectedPeriodSessionSummary(practiceRecords, people.map((person) => person.id), chartBounds, attendanceCoverage);
-  const selectedSummary = selectedPeriodSessionSummary(records, readIds, chartBounds, attendanceCoverage);
+  const practiceSummary = selectedPeriodSessionSummary(practiceRecords, people.map((person) => person.id), chartBounds, attendanceCoverage, today);
+  const selectedSummary = selectedPeriodSessionSummary(records, readIds, chartBounds, attendanceCoverage, today);
   const comparisonRows = [...people.map((person) => {
-    const summary = selectedPeriodSessionSummary(practiceRecords, [person.id], chartBounds, attendanceCoverage);
+    const summary = selectedPeriodSessionSummary(practiceRecords, [person.id], chartBounds, attendanceCoverage, today);
     return { id: String(person.id), label: person.label, value: summary.completedWeekly,
       capacity: annualGoalFor(person.id, Number(chartBounds.end.slice(0, 4)), annualGoals) ?? person.sessionsPerWeek,
-      detail: `${display(summary.observedCompleted ?? null)} observed sessions; ${summary.coverageComplete ? `${summary.observedCoverageDays} covered days` : "coverage unknown; verified weekly pace unknown"}`,
+      detail: `${display(summary.observedCompleted ?? null)} eligible sessions / ${summary.observedCoverageDays} complete-period days; incomplete periods excluded`,
     };
   }), { id: "practice", label: "Whole Practice", value: practiceSummary.completedWeekly,
     capacity: people.reduce((sum, person) => sum + (annualGoalFor(person.id, Number(chartBounds.end.slice(0, 4)), annualGoals) ?? person.sessionsPerWeek ?? 0), 0),
     goal: practiceRequiredWeeklySessions,
-    detail: `${display(practiceSummary.observedCompleted ?? null)} observed sessions; ${practiceSummary.coverageComplete ? `${practiceSummary.observedCoverageDays} covered days` : "coverage unknown; verified weekly pace unknown"}`,
+    detail: `${display(practiceSummary.observedCompleted ?? null)} eligible sessions / ${practiceSummary.observedCoverageDays} complete-period days; incomplete periods excluded`,
   }].map((row) => ({ ...row, practice: row.id === "practice" }));
   const selectedGoal = readPeople.reduce((sum, person) => sum + (annualGoalFor(person.id, Number(chartBounds.end.slice(0, 4)), annualGoals) ?? person.sessionsPerWeek ?? 0), 0);
   const requiredPace = requiredWeeklySessions != null && Number.isFinite(requiredWeeklySessions) ? requiredWeeklySessions : null;
@@ -582,7 +587,7 @@ export default function WorkspaceSessions({
       </div>
       <div className="pw-session-headline" aria-label="Selected period session pace">
         <div className="pw-session-headline-actual">
-          <span>{selectedSummary.completedWeekly === null ? "Estimated sessions / week" : "Sessions / week"}</span>
+          <span>{selectedSummary.completedWeekly === null ? "Needs complete report" : "Complete-period sessions / week"}</span>
           <strong className="pw-session-headline-actual-value" style={{ color: "#9fd8c2", fontSize: 54 }}>{(selectedSummary.completedWeekly ?? selectedSummary.calendarWindowWeeklyEstimate)?.toLocaleString("en-US", { minimumFractionDigits: 1, maximumFractionDigits: 1 }) ?? "-"}</strong>
         </div>
         <div className="pw-session-headline-capacity">
@@ -1174,9 +1179,9 @@ export default function WorkspaceSessions({
     <p style={{ overflowWrap: "anywhere" }}>{contributorId === null ? "Whole Practice" : readPeople[0]?.label ?? "Selected clinician"} · {shortDate(chartBounds.start)} - {shortDate(chartBounds.end)}</p>
     <div className="pw-metric-hero">
       <strong style={{ fontSize: 32 }}>{display(selectedSummary.completedWeekly ?? selectedSummary.calendarWindowWeeklyEstimate ?? null)}</strong>
-      <span>{selectedSummary.coverageComplete ? "Sessions / week" : "Estimated sessions / week"}</span>
+      <span>{selectedSummary.completedWeekly === null ? "Needs complete report" : "Complete-period sessions / week"}</span>
     </div>
-    <p>{display(selectedSummary.observedCompleted ?? null)} observed sessions · {selectedSummary.coverageComplete ? `${selectedSummary.observedCoverageDays} covered calendar days` : "coverage unverified"}</p>
+    <p>{display(selectedSummary.observedCompleted ?? null)} eligible sessions · {selectedSummary.observedCoverageDays} complete-period calendar days · incomplete periods excluded</p>
     {compareWholePractice ? <MetricComparison rows={comparisonRows} unit="sessions / week" label="Session metric comparison" />
       : <div aria-label="Selected-period calendar session trend" style={{ width: "100%", minWidth: 0, height: 180 }}>
         <ResponsiveContainer width="100%" height="100%">

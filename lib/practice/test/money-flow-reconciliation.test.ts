@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { emptyWorkspace, clinicianSettingSchema, allocationSchema, categorySchema, budgetSchema, forecast, monthFlow, type Context } from "../src/hub/index.ts";
+import { emptyWorkspace, clinicianSettingSchema, allocationSchema, categorySchema, budgetSchema, forecast, monthFlow, canonicalServicePeriod, type Context } from "../src/hub/index.ts";
 
 const close = (actual: number | null, expected: number | null) => assert.ok(actual !== null && expected !== null && Math.abs(actual - expected) < 1e-8, `${actual} != ${expected}`);
 function fixture(month = "2026-10-01") {
@@ -13,8 +13,9 @@ function fixture(month = "2026-10-01") {
     postCapClinicianSplit: 60, postCapPracticeSplit: 40, w2EmployerFicaPct: 7.65, futaSutaPct: 1, workersCompPct: 0.5, otherEmployerBurdenPct: 0,
   }));
   workspace.clinicians.push(clinicianSettingSchema.parse({ id: crypto.randomUUID(), clinicianId: 2, start: "2026-01-01", desiredWeeklySessions: 20, payMode: "salary", payAmount: 90000, inPersonPct: 0 }));
-  const start = month.slice(0, 7) + "-01", end = month.slice(0, 7) + "-14";
-  const context: Context = { clinicians, staff: [], sessions: clinicians.map((person) => ({ id: person.id, revision: 1, updatedAt: end + "T12:00:00Z", clinicianId: person.id, start, end, completed: 28, desired: 40, cancelled: null, noShow: null, scheduled: null, inPerson: null, telehealth: null, sourceAttachmentId: null })) };
+  const end = month.slice(0, 7) + "-14";
+  const period = canonicalServicePeriod(month);
+  const context: Context = { clinicians, staff: [], sessions: clinicians.map((person) => ({ id: person.id, revision: 1, updatedAt: end + "T12:00:00Z", clinicianId: person.id, ...period, completed: 28, desired: 40, cancelled: null, noShow: null, scheduled: null, inPerson: null, telehealth: null, sourceAttachmentId: null })) };
   return { workspace, context, end };
 }
 

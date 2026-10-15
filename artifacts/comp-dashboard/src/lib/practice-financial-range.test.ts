@@ -8,8 +8,9 @@ const near = (actual: number | null, expected: number) => assert.ok(actual !== n
 function fixture() {
   const workspace = emptyWorkspace("2026-10-01");
   Object.assign(workspace.settings, { defaultInPersonPct: 0, baselineRetentionPct: 100, organicClientsPerMonth: 0, processingPct: 0, processingFixedPerTransaction: 0, ownerPayrollMonthly: 0, overheadFloorMonthly: 0 });
-  const context: Context = { clinicians: [{ id: 1, label: "Synthetic", goalId: null, classification: "owner", sessionRate: 100, sessionsPerWeek: 7, weeksWorkedPerYear: 52, capEnabled: false, capAmount: 0, preCapClinicianSplit: 0, preCapPracticeSplit: 100, postCapClinicianSplit: 0, postCapPracticeSplit: 100, w2EmployerFicaPct: 0, futaSutaPct: 0, workersCompPct: 0, otherEmployerBurdenPct: 0 }], staff: [], sessions: [{ id: 1, clinicianId: 1, start: "2026-10-01", end: "2026-10-14", completed: 14, desired: 14 }] };
+  const context: Context = { clinicians: [{ id: 1, label: "Synthetic", goalId: null, classification: "owner", sessionRate: 100, sessionsPerWeek: 7, weeksWorkedPerYear: 52, capEnabled: false, capAmount: 0, preCapClinicianSplit: 0, preCapPracticeSplit: 100, postCapClinicianSplit: 0, postCapPracticeSplit: 100, w2EmployerFicaPct: 0, futaSutaPct: 0, workersCompPct: 0, otherEmployerBurdenPct: 0 }], staff: [], sessions: [{ id: 1, clinicianId: 1, start: "2026-09-24", end: "2026-10-07", completed: 14, desired: 14 }, { id: 2, clinicianId: 1, start: "2026-10-08", end: "2026-10-14", completed: 700, desired: 14 }] };
   const snapshots: LocalSnapshot[] = [{ id: "billing", kind: "billing", sourceHash: "synthetic", importedAt: "2026-10-14T00:00:00Z", coverageStart: "2026-01-05", coverageEnd: "2026-02-06", rows: [{ clientId: "January client", clinician: "Synthetic", serviceDate: "2026-01-05", totalFeeCharged: 100, billingCode: "90837", sourceRowHash: "january" }, { clientId: "February client", clinician: "Synthetic", serviceDate: "2026-02-06", totalFeeCharged: 300, billingCode: "90837", sourceRowHash: "february" }] }];
+  snapshots[0].reportCoverage = { start: "2026-01-01", end: "2026-10-14", complete: true };
   return { workspace, context, snapshots };
 }
 
@@ -23,21 +24,21 @@ test("shared January versus February dates select different actual fees and neve
   assert.equal(january.forward.range, null);
   assert.equal(february.forward.range, null);
   assert.equal(january.values.profit, null);
-  assert.equal(february.values.revenue, null, "billing facts do not certify full earned financial coverage");
+  assert.equal(february.values.revenue, 300, "complete billed source establishes historical income independently of missing costs");
   assert.deepEqual({ workspace, context, snapshots }, before);
 });
 
 test("current year composes finalized actual YTD and dated forward remainder once, never a next-twelve-month replacement", () => {
   const { workspace, context, snapshots } = fixture();
-  workspace.periods.push(periodSchema.parse({ id: crypto.randomUUID(), name: "Actual YTD", start: "2026-01-01", end: "2026-10-14", status: "finalized", earnedRevenue: 1000, revenue: 1000, clinicianPay: 0, employerBurden: 0, staffPay: 0, ownerPay: 0, expensesComplete: true }));
+  workspace.periods.push(periodSchema.parse({ id: crypto.randomUUID(), name: "Actual YTD", start: "2026-01-01", end: "2026-10-07", status: "finalized", earnedRevenue: 1000, revenue: 1000, clinicianPay: 0, employerBurden: 0, staffPay: 0, ownerPay: 0, expensesComplete: true }));
   const report = practiceFinancialRange(workspace, context, snapshots, "2026-10-14", { start: "2026-01-01", end: "2026-12-31" });
   assert.equal(report.actual.complete, true);
-  assert.deepEqual(report.actual.range, { start: "2026-01-01", end: "2026-10-14" });
-  assert.deepEqual(report.forward.range, { start: "2026-10-15", end: "2026-12-31" });
-  near(report.actual.values.revenue, 1000);
-  near(report.forward.values.revenue, 7800);
-  near(report.values.revenue, 8800);
-  near(report.values.profit, 8800);
+  assert.deepEqual(report.actual.range, { start: "2026-01-01", end: "2026-10-07" });
+  assert.deepEqual(report.forward.range, { start: "2026-10-08", end: "2026-12-31" });
+  near(report.actual.values.revenue, 400);
+  near(report.forward.values.revenue, 8500);
+  near(report.values.revenue, 8900);
+  near(report.values.profit, 8900);
   near(financialRangeBridge(report).otherCosts, 0);
   near(financialRangeBridge(report).adjustments, 0);
   assert.equal(report.actual.values.fees, null, "an aggregate actual ledger does not invent a separate zero processing fee");
@@ -49,9 +50,9 @@ test("an unassignable billing date keeps selected charges unknown rather than su
   if (snapshots[0].kind !== "billing") throw new Error("fixture");
   snapshots[0].rows.push({ ...snapshots[0].rows[0], clientId: "Bad date", serviceDate: "invalid", totalFeeCharged: 50, sourceRowHash: "invalid-date" });
   const report = practiceFinancialRange(workspace, context, snapshots, "2026-10-14", { start: "2026-01-01", end: "2026-01-31" });
-  assert.equal(report.actual.report.months[0].charges, 100);
+  assert.equal(report.actual.report.months.length, 0, "a contradictory complete-report declaration is not admitted");
   assert.equal(report.actual.reportedCharges, null);
-  assert.ok(report.warnings.some((warning) => warning.includes("Invalid service dates")));
+  assert.ok(report.reports.incompletePeriods.some((period) => /invalid|outside/i.test(period.reason)));
 });
 
 test("gaps and overlaps in historical financial coverage cannot become complete annual totals", () => {
@@ -59,9 +60,78 @@ test("gaps and overlaps in historical financial coverage cannot become complete 
   workspace.periods.push(periodSchema.parse({ id: crypto.randomUUID(), name: "January", start: "2026-01-01", end: "2026-01-31", status: "finalized", earnedRevenue: 1000, revenue: 1000, clinicianPay: 0, employerBurden: 0, staffPay: 0, ownerPay: 0, expensesComplete: true }));
   const report = practiceFinancialRange(workspace, context, snapshots, "2026-10-14", { start: "2026-01-01", end: "2026-12-31" });
   assert.equal(report.actual.complete, false);
-  assert.equal(report.actual.values.revenue, null);
+  assert.equal(report.actual.values.revenue, 400);
   assert.equal(report.values.profit, null);
-  near(report.forward.values.revenue, 7800);
+  near(report.forward.values.revenue, 8500);
   assert.equal(report.actual.reportedCharges, 400);
-  assert.ok(report.warnings.some((warning) => warning.includes("not filled")));
+  assert.ok(report.warnings.some((warning) => warning.includes("incomplete")));
+});
+
+test("forecast starts after the latest complete covered period, not the upload or current date", () => {
+  const { workspace, context, snapshots } = fixture();
+  const before = structuredClone({ workspace, context, snapshots });
+  snapshots[0].importedAt = "2026-10-20T23:00:00Z";
+  const report = practiceFinancialRange(workspace, context, snapshots, "2026-10-20", { start: "2026-10-08", end: "2026-10-14" });
+  assert.equal(report.dataThrough, "2026-10-07");
+  assert.equal(report.forecastStart, "2026-10-08");
+  assert.equal(report.actual.range, null);
+  near(report.values.sessions, 7);
+  near(report.values.revenue, 700);
+  assert.deepEqual(context, before.context, "partial high counts are retained without influencing the forecast");
+});
+
+test("partial rows remain excluded until a full report extends actual coverage, with no deletion or double counting", () => {
+  const { workspace, context, snapshots } = fixture();
+  if (snapshots[0].kind !== "billing") throw new Error("fixture");
+  snapshots[0].rows.push({ clientId: "Partial only", clinician: "Synthetic", serviceDate: "2026-10-10", totalFeeCharged: 99999, billingCode: "90837", sourceRowHash: "partial-high-fee" });
+  const partial = structuredClone(snapshots[0]);
+  const before = practiceFinancialRange(workspace, context, snapshots, "2026-10-14", { start: "2026-01-01", end: "2026-12-31" });
+  assert.equal(before.dataThrough, "2026-10-07");
+  assert.equal(before.actual.reportedCharges, 400);
+  near(before.forward.values.revenue, 8500);
+  context.sessions.push({ id: 3, clinicianId: 1, start: "2026-10-08", end: "2026-10-21", completed: 14, desired: 14 });
+  snapshots.push({ ...structuredClone(snapshots[0]), id: "full-later", sourceHash: "full-later", importedAt: "2026-10-22T23:00:00Z", reportCoverage: { start: "2026-01-01", end: "2026-10-21", complete: true }, rows: [...snapshots[0].rows.slice(0, 2), { clientId: "Complete later", clinician: "Synthetic", serviceDate: "2026-10-20", totalFeeCharged: 50, billingCode: "90837", sourceRowHash: "complete-later-fee" }] });
+  const after = practiceFinancialRange(workspace, context, snapshots, "2026-10-22", { start: "2026-01-01", end: "2026-12-31" });
+  assert.equal(after.dataThrough, "2026-10-21");
+  assert.equal(after.forecastStart, "2026-10-22");
+  assert.equal(after.actual.reportedCharges, 450);
+  near(after.forward.values.revenue, 7100);
+  assert.deepEqual(snapshots[0], partial, "the old partial snapshot remains unchanged for reconciliation");
+  assert.equal(context.sessions[1].completed, 700, "the excluded partial session record is retained");
+});
+
+test("Overall begins at explicit complete coverage, not the first occupied or excluded service date", () => {
+  const { workspace, context, snapshots } = fixture();
+  snapshots.push({ id: "unverified-earlier", kind: "billing", importedAt: "2026-10-14T00:00:00Z", sourceHash: "unverified-earlier", rows: [{ clientId: "Earlier partial", clinician: "Synthetic", serviceDate: "2025-02-01", totalFeeCharged: 999, billingCode: "90837", sourceRowHash: "earlier-partial" }] });
+  const report = practiceFinancialRange(workspace, context, snapshots, "2026-10-14", { start: "0000-01-01", end: "9999-12-31" });
+  assert.deepEqual(report.range, { start: "2026-01-01", end: "2026-10-14" });
+  assert.equal(report.actual.reportedCharges, 400);
+});
+
+test("a later complete billing report keeps billed actuals visible without inventing activity or overlapping forecast", () => {
+  const { workspace, context, snapshots } = fixture();
+  if (snapshots[0].kind !== "billing") throw new Error("fixture");
+  snapshots[0].reportCoverage = { start: "2026-01-01", end: "2026-10-21", complete: true };
+  snapshots[0].rows.push({ clientId: "Later billed", clinician: "Synthetic", serviceDate: "2026-10-10", totalFeeCharged: 500, billingCode: "90837", sourceRowHash: "later-complete-bill" });
+  const report = practiceFinancialRange(workspace, context, snapshots, "2026-10-22", { start: "2026-10-08", end: "2026-10-21" });
+  assert.equal(report.dataThrough, "2026-10-21");
+  assert.equal(report.forecastStart, "2026-10-22");
+  assert.equal(report.actual.reportedCharges, 500);
+  assert.equal(report.actual.values.revenue, 500);
+  assert.equal(report.actual.values.sessions, null);
+  assert.equal(report.actual.values.profit, null);
+  assert.equal(report.forward.range, null);
+  assert.ok(report.warnings.some((warning) => warning.includes("Source dates differ")));
+  const future = practiceFinancialRange(workspace, context, snapshots, "2026-10-22", { start: "2026-10-22", end: "2026-10-28" });
+  near(future.values.revenue, 700);
+});
+
+test("later complete activity does not certify missing billing fees or forecast-fill an actual evidence gap", () => {
+  const { workspace, context, snapshots } = fixture();
+  context.sessions.push({ id: 3, clinicianId: 1, start: "2026-10-08", end: "2026-10-21", completed: 14, desired: 14 });
+  const report = practiceFinancialRange(workspace, context, snapshots, "2026-10-22", { start: "2026-10-08", end: "2026-10-21" });
+  assert.equal(report.dataThrough, "2026-10-21");
+  assert.equal(report.actual.values.sessions, 14);
+  assert.equal(report.actual.values.revenue, null);
+  assert.equal(report.forward.range, null);
 });

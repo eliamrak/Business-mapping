@@ -6,7 +6,7 @@ export default function MoneyRangeSummary({ report }: { report: PracticeFinancia
   const bridge = financialRangeBridge(report);
   return <section className="pw-today-flow" aria-label="Selected period money flow">
     <header><h2>Money flow</h2><p>{report.range.start} to {report.range.end}</p></header>
-    <p>Actual financial records through {report.actual.range?.end ?? "no past dates"}; future estimates begin {report.forward.range?.start ?? "outside this selected period"}. Reported charges are not cash collected.</p>
+    <p>Complete reported data covers through {report.dataThrough ?? "unverified"}. Forecast estimates begin {report.forward.range?.start ?? "unavailable or outside the selected period"}, after the covered report period, not its upload date. Incomplete periods remain forecast, not actual zeros. Reported charges are not cash collected.</p>
     {report.forward.range && <p>Future percentage compensation uses configured contractual rates. A different charged-fee compensation agreement is not inferred from billing rows.</p>}
     <div className="pw-flow-statement">
       {[["Earned session income", "revenue"], ["Clinician compensation", "clinicianPay"]].map(([label, key]) => <div className="pw-flow-row" key={key}><span>{label}</span><strong>{dollars(values[key])}</strong></div>)}

@@ -3,6 +3,15 @@ const source = await fs.readFile(new URL("./render-practice-workspace.mjs", impo
 const start = source.indexOf("await page.goto(new URL");
 if (start < 0) throw new Error("Harness setup boundary changed");
 const checksSource = String.raw`
+// Keep unfinished October evidence separate from the completed source report.
+const fullAttendance = snapshots.find((snapshot) => snapshot.kind === "attendance");
+fullAttendance.reportCoverage = { start: "2026-01-01", end: "2026-10-07", complete: true };
+const fullBilling = snapshots.find((snapshot) => snapshot.kind === "billing");
+const partialBilling = fullBilling.rows.filter((row) => row.serviceDate > "2026-10-07");
+snapshots.push({ ...structuredClone(fullBilling), id: "synthetic-incomplete-billing", coverageStart: "2026-10-08", coverageEnd: "2026-10-14", reportCoverage: { start: "2026-10-08", end: "2026-10-14", complete: true }, rows: partialBilling });
+fullBilling.rows = fullBilling.rows.filter((row) => row.serviceDate <= "2026-10-07");
+fullBilling.coverageEnd = "2026-10-07";
+fullBilling.reportCoverage = { start: "2026-01-01", end: "2026-10-07", complete: true };
 workspace.periods = [
   { id: uuid("9101"), name: "Synthetic January actual", start: "2026-01-01", end: "2026-01-31", earnedRevenue: 1000 },
   { id: uuid("9102"), name: "Synthetic February actual", start: "2026-02-01", end: "2026-02-28", earnedRevenue: 2000 },
@@ -22,25 +31,28 @@ try {
   await selectRange("2026-01-01", "2026-01-31");
   const january = { bridge: await bridge.innerText(), charges: await page.getByLabel("Reported charged fees", { exact: true }).innerText(), flow: await flow.innerText() };
   assert.match(january.bridge, /2026-01-01 to 2026-01-31/);
-  assert.match(january.bridge, /\$1,000/);
+  assert.match(january.bridge, /\$33,035/);
   assert.match(january.charges, /\$33,035/);
-  assert.match(january.flow, /\$1,000/);
+  assert.match(january.flow, /\$33,035/);
+  assert.equal(await bridge.locator(".pw-bridge-profit strong").innerText(), "$33,035", "complete historical billed fees replace the stored 1000 revenue entry without changing the zero recorded costs");
+  assert.equal(await flow.locator(".pw-flow-profit strong").innerText(), "$33,035");
   await capture("money-selected-january-desktop", 1280, 900);
   await capture("money-selected-january-mobile", 390, 900);
   await flow.screenshot({ path: path.join(outDir, "money-selected-january-flow-mobile.png") });
   await selectRange("2026-02-01", "2026-02-28");
   const february = { bridge: await bridge.innerText(), charges: await page.getByLabel("Reported charged fees", { exact: true }).innerText(), flow: await flow.innerText() };
   assert.match(february.bridge, /2026-02-01 to 2026-02-28/);
-  assert.match(february.bridge, /\$2,000/);
+  assert.match(february.bridge, /\$31,370/);
   assert.match(february.charges, /\$31,370/);
-  assert.match(february.flow, /\$2,000/);
+  assert.match(february.flow, /\$31,370/);
+  assert.equal(await bridge.locator(".pw-bridge-profit strong").innerText(), "$31,370");
   assert.notEqual(january.bridge, february.bridge);
   assert.notEqual(january.charges, february.charges);
   assert.equal(await flow.locator(".pw-flow-profit strong").innerText(), await bridge.locator(".pw-bridge-profit strong").innerText());
   await capture("money-selected-february-desktop", 1280, 900);
   await capture("money-selected-february-mobile", 390, 900);
   await selectRange("2026-01-01", "2026-02-28");
-  assert.equal(await bridge.locator(".pw-bridge-profit strong").innerText(), "$3,000", "two-month actual profit aggregates both finalized months");
+  assert.equal(await bridge.locator(".pw-bridge-profit strong").innerText(), "$64,405", "two-month actual profit uses complete billed fees and unchanged finalized costs, not the stored revenue entries");
   assert.equal(await bridge.locator(".pw-benchmark-marker").count(), 0, "February-only profit cannot benchmark a two-month selected total");
   assert.doesNotMatch(await bridge.locator(".pw-marker-legend").innerText(), /Practice benchmark/, "unsupported comparator is absent from the legend");
   assert.match(await bridge.innerText(), /Practice benchmark withheld: no independent comparator with identical dates and accounting basis/);
@@ -50,9 +62,10 @@ try {
   await page.getByLabel("Shared reporting period", { exact: true }).selectOption("year");
   const annual = await page.getByLabel("Overview financial summary", { exact: true }).innerText();
   assert.match(annual, /2026 current-year progress/);
-  assert.match(annual, /2026-10-15 to 2026-12-31/);
+  assert.match(annual, /2026-10-08 to 2026-12-31/);
   assert.match(annual, /Actual reported charged fees/);
-  assert.match(annual, /finalized financial coverage incomplete/);
+  assert.match(annual, /financial.*coverage.*incomplete/i);
+  assert.match(annual, /Actual operating profit\s+--/, "missing historical cost coverage cannot become a known annual profit");
   assert.doesNotMatch(annual, /Next 12 months|2027/);
   await capture("current-year-split-desktop", 1280, 900);
   await capture("current-year-split-mobile", 390, 900);

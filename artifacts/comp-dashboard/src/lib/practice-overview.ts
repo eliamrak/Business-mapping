@@ -1,12 +1,12 @@
 import type { ForecastMonth, Workspace } from "@workspace/practice/hub";
-import { derivedShowVisits, estimateLocalClientActivity, type LocalSnapshot, type SameDayVisitOverrides } from "./retention-local.ts";
+import { derivedShowVisits, estimateLocalClientActivity, type ClientActivityOptions, type LocalSnapshot, type SameDayVisitOverrides } from "./retention-local.ts";
 import { fundProjectionSummary } from "./practice-money-visuals.ts";
 import { moneyBridgeSummary } from "./money-bridge.ts";
 import { linkedGoalFor } from "./legacy-practice-goals.ts";
 import type { CompensationGoal } from "./workspace-defaults.ts";
 
-export function overviewClientFlow(snapshots: LocalSnapshot[], overrides: SameDayVisitOverrides, start: string, end: string, asOf: string) {
-  const activity = estimateLocalClientActivity(snapshots, overrides, 56, 56, 28, asOf, 90, start, end);
+export function overviewClientFlow(snapshots: LocalSnapshot[], overrides: SameDayVisitOverrides, start: string, end: string, asOf: string, options: ClientActivityOptions = {}) {
+  const activity = estimateLocalClientActivity(snapshots, overrides, 56, 56, 28, asOf, 90, start, end, options);
   if (!activity) return { starts: null, departures: null, through: null, leftCensoredStarts: 0 };
   const firstDates = new Map<string, string>();
   for (const row of derivedShowVisits(snapshots, overrides)) {

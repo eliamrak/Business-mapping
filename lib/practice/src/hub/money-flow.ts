@@ -163,7 +163,7 @@ export function monthFlow(
     else weeklyPaceByClinician.set(person.id, pace.weekly);
   }
   const paceSource = projection && anyRecordedPace
-    ? `observed rolling three-calendar-month session averages; unverified coverage remains an estimate; no desired-session fill. ${paceWindows.map((window) => `${window.name}: ${window.start} to ${window.end}, ${window.basis}`).join("; ")}${fallbackSources.length ? `. ${fallbackSources.join("; ")}` : ""}`
+    ? `complete-service-period averages in rolling three calendar months; partial periods and unproved gaps excluded; no desired-session fill. ${paceWindows.map((window) => `${window.name}: ${window.start} to ${window.end}, ${window.basis}`).join("; ")}${fallbackSources.length ? `. ${fallbackSources.join("; ")}` : ""}`
     : exactFour
     ? "last four complete biweekly session periods"
     : anyRecordedPace
@@ -471,7 +471,7 @@ export function monthFlow(
     },
     context,
     [], 1, true,
-    projection ? { ...options.forecastOptions, baselineWeeklyByClinician: Object.fromEntries(weeklyPaceByClinician), useImportedBillingActuals: true, workingForecast: true } : {},
+    projection ? { ...options.forecastOptions, baselineWeeklyByClinician: Object.fromEntries(weeklyPaceByClinician), useImportedBillingActuals: false, workingForecast: true } : {},
   )[0];
   const scheduledPayroll = projection ? { clinicianPay, familyGrossPay, employerBurden, staffPay: scheduledStaffKnown ? staffPay : null } : null;
   if (projection && (!forecastMonth || ["revenue", "profit", "clinicianPay", "employerBurden", "staffCost", "overhead", "marketing", "fees", "ownerPayroll"].some((metric) => forecastMonth.values[metric] == null))) {

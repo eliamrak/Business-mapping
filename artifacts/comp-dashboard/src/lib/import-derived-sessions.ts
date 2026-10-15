@@ -124,8 +124,8 @@ export function buildImportedSessionOverlay(
 
   for (const snapshot of snapshots) {
     if (snapshot.kind !== "attendance") continue;
-    const mappedIds = new Set(snapshot.rows.flatMap((row) => {
-      const matches = cliniciansByLabel.get(normalizeLabel(row.clinician)) ?? [];
+    const mappedIds = new Set([...snapshot.rows.map((row) => row.clinician), ...(snapshot.reportCoverage?.complete ? snapshot.coverageClinicians ?? [] : [])].flatMap((label) => {
+      const matches = cliniciansByLabel.get(normalizeLabel(label)) ?? [];
       return matches.length === 1 ? [matches[0].id] : [];
     }));
     const snapshotRange = { start: snapshot.coverageStart, end: snapshot.coverageEnd };

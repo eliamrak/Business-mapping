@@ -522,12 +522,15 @@ test("current month projection withholds an unknown clinician and never fills go
   assert.equal(october.sessionDataThrough, "2026-10-01");
   assert.equal(october.basisLabel, "Projection");
   assert.equal(october.sessions, null);
-  assert.deepEqual(october.incompleteClinicians, ["Dr Moss"]);
+  assert.deepEqual(october.incompleteClinicians, ["Dr Lane", "Dr Moss"]);
   const oneClinician = monthFlow(workspace, { ...overlay.context, clinicians: [overlay.context.clinicians[0]] }, "2026-10-01", "2026-10-02", { fullMonthProjection: true });
-  // The latest available record ends Oct 1 and history starts Oct 1: one
-  // calendar day, not two as-of days and not an invented 56-day history.
-  assert.ok(Math.abs(oneClinician.sessions! - 1 * 31 / 1) < 1e-10);
-  assert.match(oneClinician.paceSource, /rolling three months/);
+  assert.equal(oneClinician.sessions, null, "An occupied visit date is not complete service-period proof");
+  const completeReport = monthFlow(workspace, { ...overlay.context, clinicians: [overlay.context.clinicians[0]] }, "2026-10-01", "2026-10-14", {
+    fullMonthProjection: true,
+    attendanceCoverage: [{ clinicianId: 1, start: "2026-09-24", end: "2026-10-07" }],
+  });
+  assert.ok(Math.abs(completeReport.sessions! - 1 * 31 / 14) < 1e-10);
+  assert.match(completeReport.paceSource, /complete-service-period/);
 });
 
 test("billed fees feed revenue without adding attended sessions", () => {
@@ -662,8 +665,8 @@ test("repeated billing snapshots deduplicate stable hashes without mutating olde
   assert.deepEqual({ source, snapshots }, before);
 });
 
-test("conflicting charge payloads preserve evidence and withhold projected revenue instead of silently summing", () => {
-  const source = context([record(1, "2026-10-01", "2026-10-14", 14)]);
+test("conflicting charge evidence withholds historical actuals without contaminating fixed-fee future projection", () => {
+  const source = context([record(1, "2026-09-24", "2026-10-07", 14)]);
   source.clinicians = [source.clinicians[0]];
   const snapshots = [25, 50].map((totalFeeCharged) => billingSnapshot([{
     clientId: "synthetic-client", clinician: "Dr Lane", serviceDate: "2026-10-01",
@@ -678,9 +681,11 @@ test("conflicting charge payloads preserve evidence and withhold projected reven
   const workspace = emptyWorkspace("2026-10-01");
   workspace.settings.teamId = 7;
   const projection = monthFlow(workspace, overlay.context, "2026-10-01", "2026-10-14", { fullMonthProjection: true });
-  assert.equal(projection.revenue, null);
+  assert.equal(projection.revenue, 31 * 175);
   assert.equal(projection.sessions, 31);
-  assert.ok(projection.unavailableReasons.some((reason) => /billing.*conflict/i.test(reason)));
+  const actual = monthFlow(workspace, overlay.context, "2026-10-01", "2026-10-14");
+  assert.equal(actual.revenue, null);
+  assert.ok(actual.unavailableReasons.some((reason) => /billing.*conflict/i.test(reason)));
   assert.deepEqual({ source, snapshots }, before);
 });
 

@@ -222,7 +222,8 @@ test("retention workspace copy describes saved authenticated history", () => {
 
   assert.match(source, /Saved import history/);
   assert.match(source, /saved to authenticated practice storage/);
-  assert.match(source, /Billed fees/);
+  assert.match(source, /Charged fees \(all codes\)/);
+  assert.match(source, /summarizeReportedBilling\(eligibleMetricSnapshots, today\)/);
   assert.match(source, /row\.reviewReason !== null/);
   assert.match(source, /not an action queue/);
   assert.doesNotMatch(source, /Local-only package workspace/);

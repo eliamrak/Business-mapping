@@ -21,12 +21,14 @@ workspace.financialPeriods = Array.from({ length: 9 }, (_, index) => ({ id: uuid
 const billing = snapshots.find((snapshot) => snapshot.kind === "billing");
 // Spread partial-month charges over all six providers' covered service dates.
 billing.rows = billing.rows.filter((row) => row.serviceDate < "2026-10-01");
-billing.rows.push(...Array.from({ length: 73 }, (_, index) => ({ clientId: "synthetic-charge-" + index, clinician: names[index % 6], serviceDate: "2026-10-" + String(Math.floor(index / 6) % 9 + 1).padStart(2, "0"), totalFeeCharged: 11440 / 73, billingCode: "90837", sourceRowHash: "synthetic-charge-" + index })));
+billing.rows.push(...Array.from({ length: 73 }, (_, index) => ({ clientId: "synthetic-charge-" + index, clinician: names[index % 6], serviceDate: "2026-10-" + String(Math.floor(index / 6) % 7 + 1).padStart(2, "0"), totalFeeCharged: 11440 / 73, billingCode: "90837", sourceRowHash: "synthetic-charge-" + index })));
+billing.coverageEnd = "2026-10-07";
+billing.reportCoverage = { start: "2026-01-01", end: "2026-10-07", complete: true };
 const rows = counts.flatMap((count, person) => Array.from({ length: count }, (_, index) => {
-  const date = new Date(Date.parse("2026-08-20T12:00:00Z") + (index % 56) * 86400000).toISOString().slice(0, 10);
+  const date = new Date(Date.parse("2026-08-13T12:00:00Z") + (index % 56) * 86400000).toISOString().slice(0, 10);
   return attendance("synthetic-person-" + person + "-" + index, names[person], date);
 }));
-snapshots.splice(0, snapshots.length, { id: "synthetic-observed-351", kind: "attendance", importedAt: today + "T00:00:00Z", coverageStart: "2026-08-20", coverageEnd: "2026-10-14", reportCoverage: { start: "2026-08-20", end: "2026-10-14", complete: true }, sourceHash: "synthetic-351", rows }, billing);
+snapshots.splice(0, snapshots.length, { id: "synthetic-observed-351", kind: "attendance", importedAt: today + "T00:00:00Z", coverageStart: "2026-08-13", coverageEnd: "2026-10-07", reportCoverage: { start: "2026-08-13", end: "2026-10-07", complete: true }, sourceHash: "synthetic-351", rows }, billing);
 const writes = [];
 await page.route("**/api/**", async (route, request) => {
   if (!["GET", "HEAD", "OPTIONS"].includes(request.method())) { writes.push(request.method() + " " + new URL(request.url()).pathname); return route.abort(); }
@@ -43,6 +45,7 @@ assert.match(await bridge.innerText(), /2026-11-01 to 2026-11-30[\s\S]*\$31,797[
 assert.doesNotMatch(await bridge.innerText(), /61,542|Oct 2026 projection/);
 const actual = page.getByLabel("Reported charged fees", { exact: true });
 assert.doesNotMatch(await actual.innerText(), /\$11,440/, "October fees cannot appear in a November shared period");
+assert.match(await actual.innerText(), /--\s+Selected-period reported charges/, "future months have no fabricated actual billing total");
 const selectedFlow = page.getByLabel("Selected period money flow", { exact: true });
 assert.match(await selectedFlow.innerText(), /\$31,797/);
 assert.equal(await selectedFlow.locator(".pw-flow-profit strong").innerText(), await bridge.locator(".pw-bridge-profit strong").innerText(), "both operating profits use identical dated costs");
@@ -54,8 +57,11 @@ assert.ok(await bridge.locator(".pw-bridge-step strong").evaluateAll((nodes) => 
 assert.equal(checks.every((check) => check.scrollWidth <= check.clientWidth + 1 && check.topNavigation), true);
 assert.deepEqual(writes, [], "read-only render makes no business or preference writes");
 await clickSection("Overview");
-assert.match(await page.getByLabel("Current year actual and forward split", { exact: true }).innerText(), /\$306,139/, "reported YTD facts remain separate from incomplete actual financial totals");
-const report = { productionAccess: false, syntheticDates: true, observedVisits: rows.length, availableHistoryDays: 56, baselineWeekly: 351 / 8, selectedRange: { start: "2026-11-01", end: "2026-11-30" }, projectedNovemberRevenue: 59355 * 30 / 56, reportedYearToDateCharges: 306139, historicalFinancialCoverageComplete: false, writes, browserErrors, checks };
+const annual = await page.getByLabel("Overview financial summary", { exact: true }).innerText();
+assert.match(annual, /\$306,139/, "reported YTD facts remain separate from incomplete actual financial totals");
+assert.match(annual, /2026-10-08 to 2026-12-31/, "forward estimates start after the complete report, not today");
+assert.match(annual, /Actual operating profit\s+--/, "draft ledgers cannot certify historical annual profit");
+const report = { productionAccess: false, syntheticDates: true, observedVisits: rows.length, completeHistoryRange: { start: "2026-08-13", end: "2026-10-07" }, availableHistoryDays: 56, baselineWeekly: 351 / 8, forecastStart: "2026-10-08", selectedRange: { start: "2026-11-01", end: "2026-11-30" }, projectedNovemberRevenue: 59355 * 30 / 56, reportedYearToDateCharges: 306139, historicalFinancialCoverageComplete: false, writes, browserErrors, checks };
 assert.deepEqual(browserErrors, []);
 await fs.writeFile(path.join(outDir, "revenue-repair-results.json"), JSON.stringify(report, null, 2));
 await browser.close();

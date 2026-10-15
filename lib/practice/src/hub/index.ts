@@ -6,6 +6,7 @@ export * from "./reporting.ts";
 export * from "./money-flow.ts";
 export * from "./observed-pace.ts";
 export * from "./working-session-pace.ts";
+export * from "./complete-periods.ts";
 export * from "./family-pay.ts";
 export * from "./clinician-terms.ts";
 export * from "./goal-search.ts";

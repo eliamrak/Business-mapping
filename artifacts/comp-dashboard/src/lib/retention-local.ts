@@ -44,6 +44,8 @@ export type LocalSnapshot =
       coverageStart: string;
       coverageEnd: string;
       reportCoverage?: ReportCoverage;
+      /** Derived in-memory provider scope for quiet complete periods; never an imported/persisted field. */
+      coverageClinicians?: string[];
       sourceHash: string;
       rows: AttendanceRow[];
     }
@@ -54,6 +56,8 @@ export type LocalSnapshot =
       coverageStart: string;
       coverageEnd: string;
       reportCoverage?: ReportCoverage;
+      /** Derived in-memory provider scope for quiet complete periods; never an imported/persisted field. */
+      coverageClinicians?: string[];
       sourceHash: string;
       rows: BillingRow[];
     };
@@ -1231,7 +1235,8 @@ function verifiedAttendanceIntervals(
   if (clinician === undefined) {
     const clinicians = new Set(snapshots.flatMap((snapshot) =>
       snapshot.kind === "attendance"
-        ? snapshot.rows.filter((row) => row.serviceDate <= asOfDate).map((row) => normalizeClinician(row.clinician))
+        ? [...snapshot.rows.filter((row) => row.serviceDate <= asOfDate).map((row) => normalizeClinician(row.clinician)),
+          ...(snapshot.reportCoverage?.complete === true ? snapshot.coverageClinicians ?? [] : []).map(normalizeClinician)].filter(Boolean)
         : [],
     ));
     // Practice-wide absence needs reports for every observed clinician, including transfers.
@@ -1250,14 +1255,16 @@ function verifiedAttendanceIntervals(
   }
   const intervals: DateInterval[] = [];
   for (const snapshot of snapshots) {
-    if (snapshot.kind !== "attendance" || !snapshot.rows.length) continue;
-    if (!snapshot.rows.some((row) => normalizeClinician(row.clinician) === normalizeClinician(clinician))) continue;
+    if (snapshot.kind !== "attendance") continue;
+    const hasDerivedScope = snapshot.reportCoverage?.complete === true
+      && snapshot.coverageClinicians?.some((name) => normalizeClinician(name) === normalizeClinician(clinician));
+    if (!hasDerivedScope && !snapshot.rows.some((row) => normalizeClinician(row.clinician) === normalizeClinician(clinician))) continue;
     const dates = snapshot.rows.map((row) => row.serviceDate).sort();
     try {
       const proof = validateReportCoverage(
         snapshot.reportCoverage,
-        dates[0] < snapshot.coverageStart ? dates[0] : snapshot.coverageStart,
-        dates.at(-1)! > snapshot.coverageEnd ? dates.at(-1)! : snapshot.coverageEnd,
+        dates.length && dates[0] < snapshot.coverageStart ? dates[0] : snapshot.coverageStart,
+        dates.length && dates.at(-1)! > snapshot.coverageEnd ? dates.at(-1)! : snapshot.coverageEnd,
         (reason) => { throw new Error(reason); },
       );
       if (proof) intervals.push({ start: proof.start, end: proof.end });
@@ -1512,8 +1519,17 @@ function estimateObservedClientEndings(
   endingGapDays: number,
   eventStart = coverageStart,
   eventEnd = coverageEnd,
+  excludedFollowUpEvidence: readonly { clientId: string; serviceDate: string }[] = [],
 ) {
   const endingEvents: { clientId: string; date: string }[] = [];
+  const uncertainEndings = new Map<string, string>();
+  for (const [clientId, dates] of showDatesByClient) {
+    const uniqueDates = [...new Set(dates)].sort();
+    const finalDate = uniqueDates.at(-1);
+    if (uniqueDates.length >= 3 && finalDate && excludedFollowUpEvidence.some((row) => row.clientId === clientId && row.serviceDate > finalDate))
+      uncertainEndings.set(clientId, finalDate);
+  }
+  const uncertainMonths = new Set([...uncertainEndings.values()].map((date) => date.slice(0, 7)));
   const endingObservationCutoff = addDays(coverageEnd, -endingGapDays);
   const monthlyRows = new Map<
     string,
@@ -1523,6 +1539,7 @@ function estimateObservedClientEndings(
     endingObservationCutoff >= coverageStart
       ? monthsBetween(coverageStart, endingObservationCutoff).filter(
           (month) =>
+            !uncertainMonths.has(month) &&
             monthStart(month) >= eventStart &&
             monthEnd(month) <= eventEnd &&
             monthEnd(month) <= endingObservationCutoff &&
@@ -1547,6 +1564,7 @@ function estimateObservedClientEndings(
   }
   const cutoffMonth = endingObservationCutoff.slice(0, 7);
   const partialEndingMonth =
+    !uncertainMonths.has(cutoffMonth) &&
     endingObservationCutoff >= coverageStart &&
     monthEnd(cutoffMonth) >= eventStart &&
     monthStart(cutoffMonth) <= eventEnd &&
@@ -1578,6 +1596,7 @@ function estimateObservedClientEndings(
     }
     const finalTreatmentDate = dates.at(-1)!;
     if (
+      uncertainEndings.has(clientId) ||
       finalTreatmentDate > endingObservationCutoff ||
       !hasCompleteLookForward(
         coverageIntervals,
@@ -1614,7 +1633,8 @@ function estimateObservedClientEndings(
   const observedEventEnd = eventEnd < endingObservationCutoff ? eventEnd : endingObservationCutoff;
   return {
     endingEvents,
-    endingEventCoverageComplete: observedEventStart <= observedEventEnd && intervalCoversRange(coverageIntervals, observedEventStart, addDays(observedEventEnd, endingGapDays)),
+    endingEventCoverageComplete: ![...uncertainEndings.values()].some((date) => date >= observedEventStart && date <= observedEventEnd)
+      && observedEventStart <= observedEventEnd && intervalCoversRange(coverageIntervals, observedEventStart, addDays(observedEventEnd, endingGapDays)),
     endingGapDays,
     endingObservationCutoff,
     endingCoverageEnd: coverageEnd,
@@ -1643,6 +1663,33 @@ function estimateObservedClientEndings(
   };
 }
 
+export type ClientActivityOptions = {
+  /** Unresolved partial rows block absence claims but never add visits. Drop them after full source replacement. */
+  excludedFollowUpEvidence?: readonly { clientId: string; serviceDate: string }[];
+};
+
+function unresolvedActivityFollowUp(shows: AttendanceRow[], options: ClientActivityOptions, asOf: string) {
+  const datesByClient = new Map<string, string[]>();
+  for (const row of shows) datesByClient.set(row.clientId, [...(datesByClient.get(row.clientId) ?? []), row.serviceDate]);
+  return (options.excludedFollowUpEvidence ?? []).filter((row) => {
+    const dates = datesByClient.get(row.clientId);
+    const stamp = Date.parse(row.serviceDate + "T00:00:00Z");
+    return dates && /^\d{4}-\d{2}-\d{2}$/.test(row.serviceDate) && Number.isFinite(stamp)
+      && new Date(stamp).toISOString().slice(0, 10) === row.serviceDate && row.serviceDate <= asOf
+      && dates.some((date) => date < row.serviceDate) && !dates.includes(row.serviceDate);
+  });
+}
+
+function absenceCoverageWithoutPartialFollowUp(intervals: DateInterval[], excluded: readonly { serviceDate: string }[]) {
+  return excluded.reduce<DateInterval[]>((remaining, row) => remaining.flatMap((interval) => {
+    if (row.serviceDate < interval.start || row.serviceDate > interval.end) return [interval];
+    return [
+      ...(interval.start < row.serviceDate ? [{ start: interval.start, end: addDays(row.serviceDate, -1) }] : []),
+      ...(interval.end > row.serviceDate ? [{ start: addDays(row.serviceDate, 1), end: interval.end }] : []),
+    ];
+  }), intervals);
+}
+
 export function estimateLocalClientActivity(
   snapshots: LocalSnapshot[],
   sameDayVisitOverrides: SameDayVisitOverrides = {},
@@ -1653,6 +1700,7 @@ export function estimateLocalClientActivity(
   endingGapDays = 90,
   eventStart = "0000-01-01",
   eventEnd = "9999-12-31",
+  options: ClientActivityOptions = {},
 ): LocalClientActivityEstimate | null {
   const shows = derivedShowVisits(snapshots, sameDayVisitOverrides)
     .filter((row) => row.serviceDate <= asOfDate)
@@ -1676,7 +1724,8 @@ export function estimateLocalClientActivity(
       asOfDate,
     ),
   );
-  const coverageIntervals = verifiedAttendanceIntervals(snapshots, asOfDate);
+  const excludedFollowUp = unresolvedActivityFollowUp(shows, options, asOfDate);
+  const coverageIntervals = absenceCoverageWithoutPartialFollowUp(verifiedAttendanceIntervals(snapshots, asOfDate), excludedFollowUp);
   const coverageDates = [...observedIntervals, ...coverageIntervals]
     .flatMap((interval) => [interval.start, interval.end])
     .sort();
@@ -1801,6 +1850,7 @@ export function estimateLocalClientActivity(
     endingGapDays,
     eventStart,
     eventEnd,
+    excludedFollowUp,
   );
   return {
     coverageVerified: intervalCoversRange(coverageIntervals, coverageStart, coverageEnd),
@@ -1885,6 +1935,8 @@ export function consultConversionForContributor(summary: ConsultConversionSummar
 export type ConsultConversionOptions = {
   /** Scope consultation cohorts only. All clinicians' treatment and coverage evidence remains available. */
   cohortClinicianNames?: readonly string[];
+  /** Excluded partial evidence can block an absence claim, never establish a conversion. */
+  excludedFollowUpEvidence?: readonly { clientId: string; serviceDate: string }[];
 };
 
 export function summarizeConsultConversions(
@@ -1975,7 +2027,8 @@ export function summarizeConsultConversions(
       ...new Set(firstTreatmentRows.map((row) => row.clinician).filter(Boolean)),
     ].sort();
     const converted = firstTreatmentRows.length > 0;
-    const coverageVerified = intervalCoversRange(coverageIntervals, consultDate, deadline);
+    const unresolvedFollowUp = !converted && options.excludedFollowUpEvidence?.some((row) => row.clientId === clientId && row.serviceDate >= consultDate && row.serviceDate <= deadline);
+    const coverageVerified = !unresolvedFollowUp && intervalCoversRange(coverageIntervals, consultDate, deadline);
     const pending = !converted && (asOfDate < deadline || !coverageVerified);
     const override = overridesByClient.get(clientId);
     const treatmentStartClinician =
@@ -2127,6 +2180,7 @@ export function buildLocalRetentionMetrics(
   endingGapDays = 90,
   eventStart = "0000-01-01",
   eventEnd = "9999-12-31",
+  options: ClientActivityOptions = {},
 ): LocalRetentionMetrics {
   const attendance = snapshots.flatMap((snapshot) =>
     snapshot.kind === "attendance"
@@ -2220,12 +2274,15 @@ export function buildLocalRetentionMetrics(
       row.serviceDate,
     ]);
   }
-  const coverageIntervals = verifiedAttendanceIntervals(snapshots, asOfDate);
+  const unresolvedFollowUp = unresolvedActivityFollowUp(derivedShows, options, asOfDate);
+  const scopedOptions: ClientActivityOptions = { excludedFollowUpEvidence: unresolvedFollowUp };
+  const coverageIntervals = absenceCoverageWithoutPartialFollowUp(verifiedAttendanceIntervals(snapshots, asOfDate), unresolvedFollowUp);
   const coverageByClinician = new Map<string, DateInterval[]>();
   const coverageForClinician = (clinician: string) => {
     let intervals = coverageByClinician.get(clinician);
     if (!intervals) {
-      intervals = verifiedAttendanceIntervals(snapshots, asOfDate, clinician);
+      const excluded = unresolvedActivityFollowUp(derivedShows.filter((row) => normalizeClinician(row.clinician) === clinician), scopedOptions, asOfDate);
+      intervals = absenceCoverageWithoutPartialFollowUp(verifiedAttendanceIntervals(snapshots, asOfDate, clinician), excluded);
       coverageByClinician.set(clinician, intervals);
     }
     return intervals;
@@ -2304,6 +2361,7 @@ export function buildLocalRetentionMetrics(
     const activityCoverageStart = clinicianIntervals[0]?.start;
     const activityCoverageEnd = clinicianIntervals.at(-1)?.end;
     if (!activityCoverageStart || !activityCoverageEnd) continue;
+    const excludedFollowUp = unresolvedActivityFollowUp(derivedShows.filter((row) => normalizeClinician(row.clinician) === clinician), scopedOptions, asOfDate);
     const endings = estimateObservedClientEndings(
       clientDates,
       clinicianIntervals,
@@ -2312,6 +2370,7 @@ export function buildLocalRetentionMetrics(
       endingGapDays,
       eventStart,
       eventEnd,
+      excludedFollowUp,
     );
     activity.endingObservationCutoff = endings.endingObservationCutoff;
     activity.endingFullMonthClientEnds = endings.endingFullMonthClientEnds;
@@ -2324,7 +2383,7 @@ export function buildLocalRetentionMetrics(
       endings.averageClientEndingsPerLatestSixMonths;
     activity.partialEndingMonth = endings.partialEndingMonth;
     const observedDates = [...clientDates.values()].flat().sort();
-    activity.coverageVerified = intervalCoversRange(
+    activity.coverageVerified = excludedFollowUp.length === 0 && intervalCoversRange(
       clinicianIntervals,
       observedDates[0],
       observedDates.at(-1)!,

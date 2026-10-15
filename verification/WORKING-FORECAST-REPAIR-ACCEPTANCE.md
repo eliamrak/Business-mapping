@@ -1,5 +1,7 @@
 # Working Forecast External-Review Repairs
 
+Historical acceptance record. The later complete-period decision supersedes this document's asOf boundary, historical ledger-revenue, partial-period and billing-override rules. Current candidate contract and evidence: COMPLETE-PERIOD-ACCEPTANCE.md. This older acceptance is not clearance for the new candidate.
+
 Base: f2be9f19d87b1d12285b66c31cd8f5e24386497a, explicitly blocked by independent external review. This is a replacement review candidate, not approval to publish. No main change, deployment, migration or business-record edit was performed.
 
 ## Benchmark Follow-up After 58c9ec2 Re-review

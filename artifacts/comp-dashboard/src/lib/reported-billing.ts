@@ -43,7 +43,7 @@ const normalizedLabel = (label: string) => label.trim().replace(/\s+/g, " ").toL
 export function summarizeReportedBilling(
   snapshots: readonly LocalSnapshot[],
   asOf: string,
-  options: { clinicianLabel?: string; clinicianLabels?: readonly string[]; start?: string; end?: string } = {},
+  options: { clinicianLabel?: string; clinicianLabels?: readonly string[]; start?: string; end?: string; eligibleRows?: ReadonlySet<BillingRow> } = {},
 ) {
   if (!validDate(asOf)) throw new Error("Reported billing requires a valid as-of date.");
   if ((options.start !== undefined && !validDate(options.start)) || (options.end !== undefined && !validDate(options.end)) || (options.start && options.end && options.start > options.end))
@@ -54,7 +54,7 @@ export function summarizeReportedBilling(
   if (teamScope?.has("")) throw new Error("Selected clinician labels must not be blank.");
   const matches = (row: BillingRow) => (scope === null || normalizedLabel(row.clinician) === scope) && (teamScope === null || teamScope.has(normalizedLabel(row.clinician)));
   const billingSnapshots = snapshots.filter((snapshot) => snapshot.kind === "billing");
-  const groups = reconcileBillingEvidence(billingSnapshots.flatMap((snapshot) => snapshot.rows.map((row) => ({ row, snapshotId: snapshot.id }))));
+  const groups = reconcileBillingEvidence(billingSnapshots.flatMap((snapshot) => snapshot.rows.filter((row) => options.eligibleRows === undefined || options.eligibleRows.has(row)).map((row) => ({ row, snapshotId: snapshot.id }))));
   const evidence = {
     billingSnapshotCount: billingSnapshots.length,
     rawRowCount: 0,
@@ -73,7 +73,7 @@ export function summarizeReportedBilling(
   let unassignedRows = false;
   for (const group of groups) {
     const rows = group.rows;
-    const scopedRows = rows.filter(matches).filter((row) => !validDate(row.serviceDate) || ((!options.start || row.serviceDate >= options.start) && (!options.end || row.serviceDate <= options.end)));
+    const scopedRows = rows.filter(matches).filter((row) => options.eligibleRows === undefined || options.eligibleRows.has(row)).filter((row) => !validDate(row.serviceDate) || ((!options.start || row.serviceDate >= options.start) && (!options.end || row.serviceDate <= options.end)));
     if (!scopedRows.length) continue;
     const conflicting = group.conflicting;
     const missingHash = group.missingHash;

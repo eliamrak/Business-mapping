@@ -38,6 +38,8 @@ import {
 } from "recharts";
 import {
   forecast,
+  completeServicePeriodState,
+  canonicalServicePeriod,
   referencedClinicianIds,
   observed,
   observedSeries,
@@ -98,6 +100,7 @@ import {
   type PracticeView,
 } from "@/lib/practice-projection";
 import { buildImportedSessionOverlay } from "@/lib/import-derived-sessions";
+import { completeReportCoverage } from "@/lib/complete-report-coverage";
 import {
   compareOperatingPlans,
   summarizeOperatingPlan,
@@ -129,7 +132,7 @@ import PercentageKpi from "@/components/practice/percentage-kpi";
 import MetricComparison from "@/components/practice/metric-comparison";
 import { hasUniqueClinicianIdentity } from "@/lib/metric-comparison";
 import { staffPaySummary } from "@/lib/staff-pay-summary";
-import { selectedPeriodSessionSummary } from "@/lib/session-trend";
+import { completePeriodSessionSummary as selectedPeriodSessionSummary, completeSessionHistoryStart } from "@/lib/complete-session-summary";
 import { monthlySessionObservations } from "@/lib/monthly-session-observations";
 import WorkspaceCalculations from "@/components/practice/workspace-calculations";
 import LocalRetentionWorkspace, {
@@ -815,7 +818,18 @@ export default function PracticeWorkspace() {
   const workspace = resolved?.workspace;
   const workingWorkspace = stagedWorkspace ?? workspace!;
   const forecastWorkspace = resolved?.forecastWorkspace;
-  const importedSessionOverlay = useMemo(
+  const completeClinicalReports = useMemo(() => {
+    if (!context || !workspace) return null;
+    const selected = context.clinicians.filter((person) => (person.goalId ?? null) === workspace.settings.teamId);
+    const names = new Set(selected.map((person) => normalizeClinicianName(person.label)));
+    const additional = context.clinicians.filter((person) => { const name = normalizeClinicianName(person.label); if (names.has(name)) return false; names.add(name); return true; });
+    const roster = [...selected, ...additional];
+    return completeReportCoverage(localRetentionState.snapshots, roster, today);
+  }, [context, workspace?.settings.teamId, localRetentionState.snapshots, today]);
+  const currentReportCoverage = useMemo(() => context && workspace
+    ? completeReportCoverage(localRetentionState.snapshots, currentPracticeClinicians(workingWorkspace, context, today), today) : null,
+  [context, workspace, stagedWorkspace, localRetentionState.snapshots, today]);
+  const rawImportedSessionOverlay = useMemo(
     () =>
       !sandbox && context && workspace
         ? buildImportedSessionOverlay(
@@ -833,12 +847,25 @@ export default function PracticeWorkspace() {
       localRetentionState.sameDayVisitOverrides,
     ],
   );
+  const importedSessionOverlay = useMemo(() => {
+    if (!rawImportedSessionOverlay || !context || !workspace) return null;
+    const ids = context.clinicians.filter((person) => (person.goalId ?? null) === workspace.settings.teamId).map((person) => person.id);
+    const accepted = buildImportedSessionOverlay(context, completeClinicalReports?.eligibleSnapshots ?? [], workspace.settings.teamId, localRetentionState.sameDayVisitOverrides);
+    const proof = completeClinicalReports?.completeAttendanceCoverage.filter((range) => ids.includes(range.clinicianId)) ?? [];
+    const state = completeServicePeriodState(accepted.context.sessions, ids, today, proof);
+    return { ...accepted, diagnostic: rawImportedSessionOverlay.diagnostic, context: { ...accepted.context, sessions: state.eligibleRecords }, attendanceCoverage: state.eligibleCoverage };
+  }, [rawImportedSessionOverlay, completeClinicalReports, context, workspace?.settings.teamId, localRetentionState.sameDayVisitOverrides, today]);
   const historicalClinicalSnapshots = useMemo(() => context && workspace
-    ? snapshotsForClinicians(localRetentionState.snapshots, context.clinicians.filter((person) => (person.goalId ?? null) === workspace.settings.teamId)) : [],
-  [context, workspace?.settings.teamId, localRetentionState.snapshots]);
+    ? snapshotsForClinicians(completeClinicalReports?.eligibleSnapshots ?? [], context.clinicians.filter((person) => (person.goalId ?? null) === workspace.settings.teamId)) : [],
+  [context, workspace?.settings.teamId, completeClinicalReports]);
   const currentConsultCohort = useMemo(() => context && workspace
     ? currentPracticeClinicians(workingWorkspace, context, today).map((person) => person.label) : [],
   [context, workspace, stagedWorkspace, today]);
+  const excludedFollowUpEvidence = useMemo(() => localRetentionState.snapshots.flatMap((snapshot) => snapshot.kind === "attendance" ? snapshot.rows.filter((row) => {
+    if (row.status !== "show" || completeClinicalReports?.eligibleAttendanceRows.includes(row)) return false;
+    const ids = context?.clinicians.filter((person) => normalizeClinicianName(person.label) === normalizeClinicianName(row.clinician)).map((person) => person.id) ?? [];
+    return !completeClinicalReports?.completeAttendanceCoverage.some((proof) => ids.includes(proof.clinicianId) && proof.start <= row.serviceDate && proof.end >= row.serviceDate);
+  }).map((row) => ({ clientId: row.clientId, serviceDate: row.serviceDate })) : []), [localRetentionState.snapshots, completeClinicalReports, context]);
   const clientActivityEstimate = useMemo(
     () =>
       estimateLocalClientActivity(
@@ -851,9 +878,11 @@ export default function PracticeWorkspace() {
         90,
         periodRange.start,
         periodRange.end,
+        { excludedFollowUpEvidence },
       ),
     [
       historicalClinicalSnapshots,
+      excludedFollowUpEvidence,
       localRetentionState.sameDayVisitOverrides,
       periodRange.start,
       periodRange.end,
@@ -871,9 +900,11 @@ export default function PracticeWorkspace() {
         90,
         periodRange.start,
         periodRange.end,
+        { excludedFollowUpEvidence },
       ),
     [
       historicalClinicalSnapshots,
+      excludedFollowUpEvidence,
       localRetentionState.billingCodeMinutes,
       localRetentionState.sameDayVisitOverrides,
       periodRange.start,
@@ -894,17 +925,20 @@ export default function PracticeWorkspace() {
   const consultConversionSummary = useMemo(
     () =>
       summarizeConsultConversions(
-        localRetentionState.snapshots,
+        completeClinicalReports?.eligibleSnapshots ?? [],
         localRetentionState.sameDayVisitOverrides,
         periodRange.start,
         periodRange.end,
         today,
         (stagedWorkspace ?? workspace)?.consultAttributionOverrides ?? [],
-        { cohortClinicianNames: currentConsultCohort },
+        { cohortClinicianNames: currentConsultCohort, excludedFollowUpEvidence },
       ),
     [
+      completeClinicalReports,
       localRetentionState.snapshots,
+      context,
       currentConsultCohort,
+      excludedFollowUpEvidence,
       localRetentionState.sameDayVisitOverrides,
       periodRange.start,
       periodRange.end,
@@ -940,6 +974,7 @@ export default function PracticeWorkspace() {
                 "actual",
                 today,
                 importedSessionOverlay?.attendanceCoverage,
+                currentReportCoverage?.billingThrough,
               )
             : null,
     [
@@ -950,6 +985,7 @@ export default function PracticeWorkspace() {
       modelContext,
       today,
       importedSessionOverlay?.attendanceCoverage,
+      currentReportCoverage?.billingThrough,
     ],
   );
   const savedMonths = useMemo(
@@ -972,7 +1008,7 @@ export default function PracticeWorkspace() {
     ).forecastWorkspace;
     return sandbox
       ? forecast(next, modelContext)
-      : buildPracticeProjection(next, modelContext, practiceView, today, importedSessionOverlay?.attendanceCoverage).months;
+      : buildPracticeProjection(next, modelContext, practiceView, today, importedSessionOverlay?.attendanceCoverage, currentReportCoverage?.billingThrough).months;
   }, [
     stagedValidation,
     modelContext,
@@ -981,6 +1017,7 @@ export default function PracticeWorkspace() {
     practiceView,
     today,
     importedSessionOverlay?.attendanceCoverage,
+    currentReportCoverage?.billingThrough,
   ]);
   const months = stagedValidation?.success ? stagedMonths : savedMonths;
   const summaryMonth =
@@ -1147,6 +1184,17 @@ export default function PracticeWorkspace() {
         : [],
     [workspace, modelContext, today],
   );
+  const completeFinancialObservations = useMemo(() => {
+    if (!workspace || !modelContext || sandbox) return [];
+    return recordedFinancialPeriods.flatMap((row) => {
+      if (!row.periodStart) return [];
+      const period = canonicalServicePeriod(row.periodStart);
+      if (period.start !== row.periodStart || period.end !== row.date) return [];
+      const report = practiceFinancialRange(workspace, modelContext, localRetentionState.snapshots, today, period, importedSessionOverlay?.attendanceCoverage);
+      return report.actual.complete && !report.forward.range
+        ? [{ source: "actual" as const, start: period.start, end: period.end, basis: "period" as const, values: report.actual.values }] : [];
+    });
+  }, [workspace, modelContext, sandbox, recordedFinancialPeriods, localRetentionState.snapshots, today, importedSessionOverlay?.attendanceCoverage]);
   const moneyYtd = useMemo(
     () =>
       workspace && modelContext
@@ -2763,6 +2811,10 @@ export default function PracticeWorkspace() {
   const selectedMoneyRange = practiceFinancialRange(moneyFlowWorkspace ?? workingWorkspace, modelContext ?? context, localRetentionState.snapshots, today, periodRange, importedSessionOverlay?.attendanceCoverage);
   const moneyMonth = mode === "practice" ? selectedMoneyRange.forward.months[0] : months[Math.min(moneyMonthIndex, months.length - 1)];
   const moneyValues = mode === "practice" ? selectedMoneyRange.values : moneyMonth?.values ?? {};
+  const summaryMoneyReport = practiceFinancialRange(moneyFlowWorkspace ?? workingWorkspace, modelContext ?? context, localRetentionState.snapshots, today, {
+    start: (summaryMonth?.date ?? today).slice(0, 7) + "-01",
+    end: new Date(Date.UTC(Number((summaryMonth?.date ?? today).slice(0, 4)), Number((summaryMonth?.date ?? today).slice(5, 7)), 0)).toISOString().slice(0, 10),
+  }, importedSessionOverlay?.attendanceCoverage);
   const moneyBridge = mode === "practice" ? financialRangeBridge(selectedMoneyRange) : moneyBridgeSummary(moneyValues, workingWorkspace.settings.ownerPayrollBurdenPct);
   const ownerBurden =
     ((moneyValues.ownerPayroll ?? 0) *
@@ -2947,7 +2999,7 @@ export default function PracticeWorkspace() {
     0,
   );
   const roomDemandWeekly =
-    selectedPeriodSessionSummary((modelContext ?? context).sessions, people.map((person) => person.id), periodRange, importedSessionOverlay?.attendanceCoverage ?? []).inPersonWeekly;
+    selectedPeriodSessionSummary((modelContext ?? context).sessions, people.map((person) => person.id), periodRange, importedSessionOverlay?.attendanceCoverage ?? [], today).inPersonWeekly;
   const sessionGoal = financialSessionGoal({ workspace: workingWorkspace, context: modelContext ?? context, range: periodRange, asOf: today, legacyGoal: resolved?.goal });
   const requiredPracticeWeekly = sessionGoal.practiceWeeklyGoal ?? undefined;
   const selectedContributor = people.find((person) => person.label === selectedContributorName);
@@ -3051,7 +3103,7 @@ export default function PracticeWorkspace() {
   ];
   const fundGoalRows = ["Building Fund", "Emergency Reserve", "Growth Fund"];
   const goalExpected = (goal: LinkedPracticeGoal | undefined) =>
-    goal ? summaryMonth?.values[goal.metric] ?? null : null;
+    goal ? mode === "practice" && Object.hasOwn(summaryMoneyReport.values, goal.metric) ? summaryMoneyReport.values[goal.metric] : summaryMonth?.values[goal.metric] ?? null : null;
   const goalTarget = (goal: LinkedPracticeGoal | undefined) =>
     goal ? goal.amount / (goal.metric !== "activeClinicalHeadcount" && goal.basis === "annual" ? 12 : 1) : 0;
   const goalUnit = (metric: Workspace["goals"][number]["metric"]) =>
@@ -3073,13 +3125,7 @@ export default function PracticeWorkspace() {
     asOf: today,
     attendanceCoverage: importedSessionOverlay?.attendanceCoverage ?? [],
     expected,
-    financialObservations: recordedFinancialPeriods.map((row) => ({
-      source: "actual" as const,
-      start: row.periodStart,
-      end: row.date,
-      basis: "period" as const,
-      values: row.values,
-    })),
+    financialObservations: completeFinancialObservations,
   });
   const evaluatedCurrentGoals = [...activeCurrentGoals.map(correctedGoal), ...coreGoalRows.flatMap((row) => activeCurrentGoals.some((goal) => goal.name.trim().toLowerCase() === row.name.toLowerCase()) ? [] : findGoal(row.name) ? [findGoal(row.name)!] : [])];
   const achievedGoals = evaluatedCurrentGoals.flatMap((goal) => {
@@ -3087,7 +3133,7 @@ export default function PracticeWorkspace() {
     return result.status === "met" ? [{ goal, result }] : [];
   });
   const completedSessionReview = evaluateCompletedGoal({ goal: { metric: "sessions", amount: 1, basis: "monthly" }, workspace: workingWorkspace, context: modelContext ?? context, asOf: today, attendanceCoverage: importedSessionOverlay?.attendanceCoverage ?? [] }).date;
-  const completedReviewEnd = [completedSessionReview, ...recordedFinancialPeriods.filter((row) => row.periodStart && daysInclusive(row.periodStart, row.date) >= 12 && daysInclusive(row.periodStart, row.date) <= 16).map((row) => row.date)].filter((date): date is string => !!date).sort().at(-1) ?? null;
+  const completedReviewEnd = [completedSessionReview, ...completeFinancialObservations.map((row) => row.end)].filter((date): date is string => !!date).sort().at(-1) ?? null;
   const achievedFunds = fundGoalRows.flatMap((name) => {
     const goal = findFundGoal(name);
     const result = completedFundGoalStatus(goal, completedReviewEnd);
@@ -3098,11 +3144,11 @@ export default function PracticeWorkspace() {
   const overviewYearRange = practiceFinancialRange(moneyFlowWorkspace ?? workingWorkspace, modelContext ?? context, localRetentionState.snapshots, today, { start: today.slice(0, 4) + "-01-01", end: today.slice(0, 4) + "-12-31" }, importedSessionOverlay?.attendanceCoverage);
   const overviewYearBridge = financialRangeBridge(overviewYearRange);
   const overviewFinancial = { income: overviewYearBridge.revenue, clinicianPay: overviewYearBridge.clinicianPay, profit: overviewYearBridge.profit, otherCosts: overviewYearBridge.otherCosts, adjustments: overviewYearBridge.adjustments, costComponents: overviewYearBridge.components };
-  const overviewFlow = overviewClientFlow(historicalClinicalSnapshots, localRetentionState.sameDayVisitOverrides, periodRange.start, periodRange.end, today);
+  const overviewFlow = overviewClientFlow(historicalClinicalSnapshots, localRetentionState.sameDayVisitOverrides, periodRange.start, periodRange.end, today, { excludedFollowUpEvidence });
   const overviewSessionEvidence = selectedPeriodSessionSummary((modelContext ?? context).sessions, people.map((person) => person.id), {
-    start: periodRange.start.startsWith("0000-") ? (modelContext ?? context).sessions.map((record) => record.start).sort()[0] ?? today : periodRange.start,
+    start: periodRange.start.startsWith("0000-") ? completeSessionHistoryStart((modelContext ?? context).sessions, people.map((person) => person.id), importedSessionOverlay?.attendanceCoverage ?? [], today) ?? today : periodRange.start,
     end: periodRange.end.startsWith("9999-") ? today : periodRange.end,
-  }, importedSessionOverlay?.attendanceCoverage ?? []);
+  }, importedSessionOverlay?.attendanceCoverage ?? [], today);
   const fundProjection = (goal: LinkedFundGoal | undefined) => {
     if (mode === "practice" && (selectedMoneyRange.warnings.includes("Choose valid non-reversed reporting dates.") || (goal?.balanceDate && goal.balanceDate > selectedMoneyRange.range.end))) return null;
     return fundProjectionSummary(
@@ -3571,10 +3617,10 @@ export default function PracticeWorkspace() {
                       );
                       const personRecords = (modelContext ?? context).sessions.filter((record) => record.clinicianId === person.id);
                       const sessionEvidenceBounds = {
-                        start: periodRange.start.startsWith("0000-") ? personRecords.map((record) => record.start).sort()[0] ?? today : periodRange.start,
+                        start: periodRange.start.startsWith("0000-") ? completeSessionHistoryStart(personRecords, [person.id], importedSessionOverlay?.attendanceCoverage ?? [], today) ?? today : periodRange.start,
                         end: periodRange.end.startsWith("9999-") ? today : periodRange.end,
                       };
-                      const sessionEvidence = selectedPeriodSessionSummary(personRecords, [person.id], sessionEvidenceBounds, importedSessionOverlay?.attendanceCoverage ?? []);
+                      const sessionEvidence = selectedPeriodSessionSummary(personRecords, [person.id], sessionEvidenceBounds, importedSessionOverlay?.attendanceCoverage ?? [], today);
                       const uniqueIdentity = hasUniqueClinicianIdentity(context.clinicians, person.label, workspace.settings.teamId);
                       const importedActivity = uniqueIdentity ? clinicianActivityByName.get(
                         normalizeClinicianName(person.label),
@@ -3690,7 +3736,7 @@ export default function PracticeWorkspace() {
                               <span>Sessions</span>
                               <strong>{fmt(sessionEvidence.completedWeekly ?? sessionEvidence.calendarWindowWeeklyEstimate)} / wk</strong>
                               <small>
-                                {fmt(sessionEvidence.observedCompleted)} recorded visits · {sessionEvidence.coverageComplete ? "recorded pace" : "calendar-window estimate"}
+                                {fmt(sessionEvidence.observedCompleted)} eligible visits / {sessionEvidence.observedCoverageDays} complete-period days · incomplete periods excluded
                               </small>
                             </div>
                             <div>
@@ -4103,7 +4149,7 @@ export default function PracticeWorkspace() {
                   {importedSessionOverlay &&
                     (importedSessionOverlay.derivedSessions.length > 0 || importedSessionOverlay.conflictedManualSessions.length > 0) && (
                       <details className="pw-session-import-details"><summary>Import details</summary><p className="pw-note">
-                        Saved imports are contributing{" "}
+                        Saved imports retain{" "}
                         {importedSessionOverlay.diagnostic.rawAttendedRows.toLocaleString()}{" "}
                         attended rows,{" "}
                         {(
@@ -4113,7 +4159,7 @@ export default function PracticeWorkspace() {
                         ).toLocaleString()}{" "}
                         derived attended visits, and{" "}
                         {importedSessionOverlay.diagnostic.billedRows.toLocaleString()}{" "}
-                        billed rows to projections. Fully covered imported
+                        billed rows for reconciliation. Only complete pay periods feed actuals and historical averages; future revenue uses clinician-card fees. Fully covered imported
                         attendance replaces{" "}
                         {importedSessionOverlay.diagnostic.manualImportOverrideCount.toLocaleString()}{" "}
                         manual completed session
@@ -4204,6 +4250,9 @@ export default function PracticeWorkspace() {
                   <LocalRetentionWorkspace
                     workspaceState={localRetentionState}
                     today={today}
+                    coverageSummary={currentReportCoverage ?? undefined}
+                    excludedFollowUpEvidence={excludedFollowUpEvidence}
+                    metricSnapshots={historicalClinicalSnapshots}
                   />
                   <div id="retention-calculations">
                     <WorkspaceCalculations
@@ -5746,8 +5795,8 @@ export default function PracticeWorkspace() {
                     <div className="pw-section-heading"><div><h3>Reported charged fees</h3><p>{selectedMoneyRange.range.start} to {selectedMoneyRange.actual.range?.end ?? selectedMoneyRange.range.end} · imported service-date charges, not cash collected.</p></div></div>
                     <div className="pw-money-bridge">
                       <div className="pw-bridge-step pw-bridge-in"><strong>{money(selectedMoneyRange.actual.reportedCharges)}</strong><span>Selected-period reported charges</span></div>
-                      <div className="pw-bridge-step pw-bridge-in"><strong>{money(selectedMoneyRange.actual.reportedCharges === null || !reportedBilling.months.length ? null : selectedMoneyRange.actual.reportedCharges / reportedBilling.months.length)}</strong><span>Per reported service month · {reportedBilling.months.length} months in selected dates</span></div>
-                      <div className="pw-bridge-step pw-bridge-in"><strong>{reportedBilling.latestServiceDate ?? "Unknown"}</strong><span>Latest reported service date in selected period · coverage not established</span></div>
+                      <div className="pw-bridge-step pw-bridge-in"><strong>{selectedMoneyRange.reports.completeBillingCoverage.filter((proof) => proof.start <= selectedMoneyRange.range.end && proof.end >= selectedMoneyRange.range.start).length}</strong><span>Complete provider billing periods · incomplete periods excluded</span></div>
+                      <div className="pw-bridge-step pw-bridge-in"><strong>{selectedMoneyRange.reports.billingThrough ?? "Unverified"}</strong><span>Complete billing data covers through · not upload date</span></div>
                     </div>
                     <details><summary>Monthly charges and source</summary>
                       {reportedBilling.months.map((row) => <div className="pw-overview-total" key={row.month}><span>{row.label}{!row.fullyElapsed ? " (partial)" : ""} · {row.rowCount} source rows</span><strong>{money(row.charges)}</strong></div>)}
@@ -5760,7 +5809,7 @@ export default function PracticeWorkspace() {
                       <div>
                         <h3>Selected period money bridge</h3>
                         <p>
-                          {selectedMoneyRange.range.start} to {selectedMoneyRange.range.end} · actual records{selectedMoneyRange.forward.range ? " plus future working estimate" : " only; no retrospective forecast fill"}.
+                          {selectedMoneyRange.range.start} to {selectedMoneyRange.range.end} · complete actual periods{selectedMoneyRange.forward.range ? " plus forecast after report coverage" : " only"}.
                         </p>
                       </div>
                     </div>
@@ -5804,7 +5853,7 @@ export default function PracticeWorkspace() {
                     />
                     <p className="pw-note">Practice benchmark withheld: no independent comparator with identical dates and accounting basis is configured.</p>
                     <p className="pw-note">
-                      Historical dates use actual financial records only. Future dates use the available-history working model at configured fees. Actual records and future estimates do not overlap; unknown actual costs are never replaced by modeled costs. Charges are not cash collected.
+                      Complete report periods use actual billed fees. The forecast begins after the latest complete report, including an unfinished period before today, and uses fixed clinician-card fees. Activity, billing and cost coverage remain independent; missing components stay unknown. Incomplete periods and gaps are not actual zeros. Charges are not cash collected.
                     </p>
                   </section>
                   <section className="pw-money-bridge-panel">
@@ -6931,15 +6980,15 @@ export default function PracticeWorkspace() {
                   )}
                   <div className="pw-overview-primary-grid">
                     <section aria-label="Overview monthly surplus">
-                      <h3>Monthly surplus</h3><p>{monthLabel(summaryMonth?.date ?? today)} · projection</p>
-                      <div className="pw-metric-hero"><strong>{money(summaryMonth?.values.profit)}</strong><span>After clinician pay and practice costs</span></div>
+                      <h3>Monthly surplus</h3><p>{monthLabel(summaryMonth?.date ?? today)} · complete actual periods plus forecast after {summaryMoneyReport.dataThrough ?? "unverified report coverage"}</p>
+                      <div className="pw-metric-hero"><strong>{money(summaryMoneyReport.values.profit)}</strong><span>After clinician pay and practice costs</span></div>
                       <button className="pw-button" onClick={() => setSection("money")}>Money<ChevronRight /></button>
-                      <details><summary>Details</summary><p>Projected practice profit, not collected cash or owner take-home. Clinical revenue remains business revenue. Unverified partial-day billing cannot replace a whole modeled treatment day; paid consultation classification and charged-fee compensation policy are not assumed.</p>{summaryMonth?.warnings.map((warning) => <p key={warning}>{warning}</p>)}</details>
+                      <details><summary>Details</summary><p>Historical revenue uses actual billed session fees from complete report periods. Forecast revenue after the covered period uses fixed clinician-card fees. Incomplete pay periods are excluded from actual totals and three-month averages. Missing actual costs withhold profit; percentage compensation still follows configured terms pending any different fee-basis agreement.</p>{summaryMoneyReport.warnings.map((warning) => <p key={warning}>{warning}</p>)}</details>
                     </section>
                     <section aria-label="Overview session pace">
-                      <h3>Sessions / week</h3><p>{sharedPeriodLabel(sharedPeriod)} · recorded visits</p>
-                      <div className="pw-metric-hero"><strong>{fmt(overviewSessionEvidence.completedWeekly ?? overviewSessionEvidence.calendarWindowWeeklyEstimate)}</strong><span>{overviewSessionEvidence.coverageComplete ? "Recorded calendar-week pace" : "Calendar-window estimate · coverage unknown"}</span></div>
-                      <p>{fmt(overviewSessionEvidence.observedCompleted)} observed sessions</p>
+                      <h3>Sessions / week</h3><p>{sharedPeriodLabel(sharedPeriod)} · complete report periods only</p>
+                      <div className="pw-metric-hero"><strong>{fmt(overviewSessionEvidence.completedWeekly)}</strong><span>Complete-period calendar-week average</span></div>
+                      <p>{fmt(overviewSessionEvidence.observedCompleted)} eligible sessions / {overviewSessionEvidence.observedCoverageDays} included days · incomplete periods excluded</p>
                       <button className="pw-button" onClick={() => { setSessionMetricView("sessions"); setSection("sessions"); }}>Sessions<ChevronRight /></button>
                       <details><summary>Details</summary><p>Observed visits remain visible. Unverified missing dates are not recorded zeros and cannot establish achievement.</p></details>
                     </section>
@@ -6953,10 +7002,10 @@ export default function PracticeWorkspace() {
                   <div className="pw-overview-composition">
                     <section aria-label="Overview financial summary">
                       <h3>Financial summary</h3>
-                      <p>{today.slice(0, 4)} current-year progress · actual records through {today}; forward estimate {overviewYearRange.forward.range?.start ?? "none"} to {today.slice(0, 4)}-12-31. Not collected cash.</p>
+                      <p>{today.slice(0, 4)} current-year progress · complete report periods through {overviewYearRange.dataThrough ?? "unverified"}; forecast estimate {overviewYearRange.forward.range?.start ?? "unavailable"} to {today.slice(0, 4)}-12-31. Not collected cash.</p>
                       <div aria-label="Current year actual and forward split">
-                        <div className="pw-overview-total"><span>Actual reported charged fees · {overviewYearRange.actual.range?.start} to {overviewYearRange.actual.range?.end} · coverage not established</span><strong>{money(overviewYearRange.actual.reportedCharges)}</strong></div>
-                        <div className="pw-overview-total"><span>Actual earned revenue · finalized financial coverage {overviewYearRange.actual.complete ? "complete" : "incomplete"}</span><strong>{money(overviewYearRange.actual.values.revenue)}</strong></div>
+                        <div className="pw-overview-total"><span>Actual reported charged fees · {overviewYearRange.actual.range?.start} to {overviewYearRange.actual.range?.end} · billing coverage {overviewYearRange.actual.billingComplete ? "complete" : "incomplete or unverified"}</span><strong>{money(overviewYearRange.actual.reportedCharges)}</strong></div>
+                        <div className="pw-overview-total"><span>Actual billed session income · financial coverage {overviewYearRange.actual.complete ? "complete" : "incomplete"}</span><strong>{money(overviewYearRange.actual.values.revenue)}</strong></div>
                         <div className="pw-overview-total"><span>Future estimated revenue · {overviewYearRange.forward.range?.start} to {overviewYearRange.forward.range?.end}</span><strong>{money(overviewYearRange.forward.values.revenue)}</strong></div>
                         <div className="pw-overview-total"><span>Actual operating profit</span><strong>{money(overviewYearRange.actual.values.profit)}</strong></div>
                         <div className="pw-overview-total"><span>Future estimated operating profit</span><strong>{money(overviewYearRange.forward.values.profit)}</strong></div>
@@ -6977,7 +7026,7 @@ export default function PracticeWorkspace() {
                     </section>
                     <section aria-label="Overview combined funding progress">
                       <h3>Named goal status</h3>
-                      <p>{monthLabel(summaryMonth?.date ?? today)} working forecast; achievement requires completed actual evidence.</p>
+                      <p>{monthLabel(summaryMonth?.date ?? today)} complete actual periods plus forecast; achievement requires completed actual evidence.</p>
                       {coreGoalRows.map((row) => { const goal = findGoal(row.name); const expected = goalExpected(goal); return <div className="pw-overview-goal-status" key={row.name}><div className="pw-overview-total"><span>{row.name}</span><strong>{fmt(expected, goalUnit(row.metric))} / {fmt(goalTarget(goal), goalUnit(row.metric))}</strong></div><small>{completedGoalStatus(goal, expected, goalTarget(goal))}</small></div>; })}
                       <button className="pw-button" onClick={() => setSection("current-goals")}>Goals<ChevronRight /></button>
                     </section>

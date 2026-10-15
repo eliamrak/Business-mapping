@@ -985,6 +985,7 @@ export function forecast(
             0;
           return {
             date,
+            cardRate: listedRate,
             mode,
             amount: datedValue(c.op?.payAmount ?? 0, payChanges, date, date),
             paidHoursPerWeek,
@@ -1414,7 +1415,7 @@ export function forecast(
             warnings.push("Partial or unverified treatment-day billing cannot replace the whole modeled day; revenue is unknown until complete matching evidence or an explicit policy is supplied.");
           }
         }
-        const dayRevenue = importedFee ?? dayCount * day.rate;
+        const dayRevenue = importedFee ?? dayCount * (options.workingForecast ? day.cardRate : day.rate);
         earned += dayRevenue;
         const totals = serviceDaily.get(day.date) ?? { sessions: 0, revenue: 0 };
         serviceDaily.set(day.date, { sessions: totals.sessions + dayCount, revenue: totals.revenue + dayRevenue });

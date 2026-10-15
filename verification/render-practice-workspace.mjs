@@ -307,6 +307,8 @@ const snapshots = [{ id: "synthetic-attendance", kind: "attendance", importedAt:
   attendance("ended", "Erin", "2026-06-01"), attendance("ended", "Erin", "2026-06-08"), attendance("ended", "Erin", "2026-06-15"),
 ] }];
 snapshots.push({ id: "synthetic-billing", kind: "billing", importedAt: today + "T00:00:00.000Z", coverageStart: "2026-01-01", coverageEnd: "2026-10-09", sourceHash: "synthetic-billing-only", rows: [33035,31370,37480,31655,31927.5,32261.5,30810,33310,32850,11440].map((totalFeeCharged, index) => ({ clientId: `synthetic-billing-${index}`, clinician: "Elia", serviceDate: `2026-${String(index + 1).padStart(2, "0")}-${index === 9 ? "09" : "15"}`, totalFeeCharged, billingCode: "90837", sourceRowHash: `synthetic-month-${index}` })) });
+snapshots[1].reportCoverage = { start: "2026-01-01", end: today, complete: true };
+snapshots[1].rows.push({ clientId: "synthetic-zero-fee-scope", clinician: "Erin", serviceDate: "2026-01-05", totalFeeCharged: 0, billingCode: "90837", sourceRowHash: "synthetic-zero-fee-scope" });
 
 const browser = await chromium.launch({
   executablePath: browserPath,
@@ -428,7 +430,7 @@ assert.equal(await page.getByText("Synthetic sessions target goal met", { exact:
 assert.equal(await page.getByText("Desired Clinicians goal met", { exact: true }).count(), 0, "sessions cannot meet a headcount target");
 assert.equal(await page.getByLabel("Overview financial summary", { exact: true }).count(), 1);
 assert.match(await page.getByLabel("Overview financial summary", { exact: true }).innerText(), /2026 current-year progress/);
-assert.match(await page.getByLabel("Current year actual and forward split", { exact: true }).innerText(), /2026-01-01.*2026-10-14[\s\S]*2026-10-15.*2026-12-31/);
+assert.match(await page.getByLabel("Current year actual and forward split", { exact: true }).innerText(), /2026-01-01.*2026-10-07[\s\S]*2026-10-08.*2026-12-31/, "actuals end at the latest complete service period; forecast starts the following day");
 assert.doesNotMatch(await page.getByLabel("Overview financial summary", { exact: true }).innerText(), /Next 12 months/);
 assert.equal(await page.getByLabel("Overview combined funding progress", { exact: true }).count(), 1);
 assert.equal(await page.getByLabel("Overview client growth", { exact: true }).count(), 1);
@@ -464,7 +466,7 @@ await capture("sessions-compare-mobile", 390, 900);
 await page.getByLabel("Shared reporting period", { exact: true }).selectOption("custom");
 await page.getByLabel("From", { exact: true }).fill("2026-02-01");
 await page.getByLabel("Through", { exact: true }).fill("2026-02-28");
-assert.match(await page.getByLabel("Session trends card", { exact: true }).innerText(), /0 observed sessions/);
+assert.match(await page.getByLabel("Session trends card", { exact: true }).innerText(), /0 eligible sessions/);
 await page.getByLabel("Shared reporting period", { exact: true }).selectOption("overall");
 await page.getByRole("button", { name: "Erin", exact: true }).click();
 await page.getByRole("button", { name: "Compare", exact: true }).click();
@@ -509,9 +511,13 @@ assert.ok(await page.locator(".pw-money-bridge").evaluateAll((nodes) => nodes.ev
 assert.ok(await page.locator(".pw-bridge-step strong").evaluateAll((nodes) => nodes.every((node) => node.scrollWidth <= node.clientWidth + 1)), "mobile currency amounts fit their containers");
 const reportedFees = page.getByLabel("Reported charged fees", { exact: true });
 assert.match(await reportedFees.innerText(), /Selected-period reported charges/);
-assert.match(await reportedFees.innerText(), /2026-10-09/, "latest selected service date is disclosed");
+assert.match(await reportedFees.innerText(), /2026-10-07[\s\S]*Complete billing data covers through/, "complete billing cutoff is disclosed rather than occupied row or upload dates");
+assert.match(await reportedFees.innerText(), /\$294,699/, "eligible January-September charges sum independently to 294699; October 9 partial charges are not included");
+assert.doesNotMatch(await reportedFees.innerText(), /2026-10-09|\$11,440/, "unfinished October 8-21 billing is excluded, despite upload/report bounds through October 14");
 const projectedBridge = page.locator("section", { has: page.getByRole("heading", { name: "Selected period money bridge", exact: true }) });
-assert.match(await projectedBridge.innerText(), /actual records[\s\S]*Earned revenue[\s\S]*Other practice costs/);
+assert.match(await projectedBridge.innerText(), /complete actual periods plus forecast after report coverage[\s\S]*Earned revenue[\s\S]*Other practice costs/);
+assert.match(await projectedBridge.innerText(), /Activity, billing and cost coverage remain independent; missing components stay unknown/, "billing proof cannot certify historical operating costs");
+assert.equal(await projectedBridge.locator(".pw-bridge-profit strong").innerText(), "--", "known billed fees cannot certify profit when historical costs are unknown");
 assert.doesNotMatch(await projectedBridge.innerText(), /Oct 2026 projection|Next 12 months/);
 assert.equal(await page.getByLabel("Selected period money flow", { exact: true }).locator(".pw-flow-profit strong").innerText(), await projectedBridge.locator(".pw-bridge-profit strong").innerText());
 const bridgeBreakdown = page.getByLabel("Money bridge cost breakdown", { exact: true });
@@ -605,10 +611,12 @@ await page.reload();
 await clickSection("Sessions");
 await page.getByLabel("Shared reporting period", { exact: true }).selectOption("30d");
 await page.getByRole("button", { name: "Erin", exact: true }).click();
-assert.match(await page.getByLabel("Session trends card", { exact: true }).innerText(), /36 observed sessions/, "all daily visits remain visible");
-assert.match(await page.getByLabel("Session trends card", { exact: true }).innerText(), /8\.4[\s\S]*Estimated sessions \/ week/, "calendar-window estimate is visible and labelled");
-assert.match(await page.getByLabel("Session trends card", { exact: true }).innerText(), /coverage unverified/, "legacy endpoints do not certify absent days");
-assert.ok(await page.getByText("Observed (coverage unknown)", { exact: true }).count(), "legacy visits appear in chart");
+const legacySessionCard = page.getByLabel("Session trends card", { exact: true });
+assert.match(await legacySessionCard.innerText(), /Needs complete report/, "unproved legacy daily rows cannot establish a working average");
+assert.doesNotMatch(await legacySessionCard.innerText(), /36 eligible sessions|8\.4|Estimated sessions \/ week/, "neither daily endpoint spans nor visit dates qualify partial history");
+assert.match(await legacySessionCard.innerText(), /incomplete periods excluded/);
+assert.equal(await page.getByText("Observed (coverage unknown)", { exact: true }).count(), 0, "unproved raw visits do not enter the actual trend");
+assert.equal(snapshots[0].rows.length, 36, "excluded raw daily rows remain intact for reconciliation");
 await capture("legacy-daily-sessions-desktop", 1280, 900);
 await capture("legacy-daily-sessions-mobile", 390, 900);
 await clickSection("Goals");
