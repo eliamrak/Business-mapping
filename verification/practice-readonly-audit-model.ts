@@ -87,6 +87,8 @@ export function aggregateAudit(input: { workspace: unknown; context: Context; go
       billingRows: snapshots.filter((row) => row.kind === "billing").reduce((total, row) => total + row.rows.length, 0),
       explicitCompleteDeclarations: snapshots.filter((row) => row.reportCoverage?.complete === true).length,
       missingExplicitCoverageSnapshots: snapshots.filter((row) => row.reportCoverage == null).length,
+      rawAttendanceStatusConflicts: rawOverlay.diagnostic.attendanceStatusConflictCount,
+      admittedAttendanceStatusConflicts: proof.attendanceStatusConflictCount,
       admittedAttendanceRows: proof.eligibleAttendanceRows.length, admittedBillingRows: proof.eligibleBillingRows.length, excludedRows: proof.excludedRowsCount,
       incompleteOrMissingProviderPeriods: proof.incompletePeriods.length, retainedManualRecords: context.sessions.filter((row) => ids.includes(row.clinicianId)).length,
       excludedManualRecords: context.sessions.filter((row) => ids.includes(row.clinicianId) && !state.eligibleRecords.includes(row)).length },
