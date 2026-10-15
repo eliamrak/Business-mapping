@@ -4143,7 +4143,7 @@ export default function PracticeWorkspace() {
                     <button aria-pressed={compareWholePractice} onClick={() => setCompareWholePractice((value) => !value)}>Compare</button>
                   </div>
                   {importedSessionOverlay &&
-                    (importedSessionOverlay.derivedSessions.length > 0 || importedSessionOverlay.conflictedManualSessions.length > 0) && (
+                    (importedSessionOverlay.derivedSessions.length > 0 || importedSessionOverlay.conflictedManualSessions.length > 0 || importedSessionOverlay.diagnostic.attendanceStatusConflictCount > 0) && (
                       <details className="pw-session-import-details"><summary>Import details</summary><p className="pw-note">
                         Saved imports retain{" "}
                         {importedSessionOverlay.diagnostic.rawAttendedRows.toLocaleString()}{" "}
@@ -4172,6 +4172,7 @@ export default function PracticeWorkspace() {
                           : "s"}{" "}
                         conflict with aggregate manual totals; original source
                         evidence is retained and the full-window total remains unknown.
+                        {importedSessionOverlay.diagnostic.attendanceStatusConflictCount > 0 && <span className="pw-note"> {importedSessionOverlay.diagnostic.attendanceStatusConflictCount} attendance status conflicts retained for reconciliation. No upload-order winner is selected.</span>}
                         {importedSessionOverlay.conflictedManualSessions.map((record) => <span key={record.id} className="pw-note">Manual source #{record.id}: {record.start} to {record.end}, {record.completed} recorded sessions. Not independently allocatable across uncovered dates.</span>)}
                       </p></details>
                     )}

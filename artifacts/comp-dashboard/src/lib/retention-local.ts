@@ -514,13 +514,42 @@ export function isPhoneOnlyConsultAttendanceRow(
 
 export function treatmentAttendanceRows(snapshots: LocalSnapshot[]) {
   const isConsult = consultAttendanceClassifier(snapshots);
+  const conflicted = new Set(attendanceStatusConflicts(snapshots).flatMap((group) => group.rows));
+  const seenNonShows = new Set<string>();
   return snapshots.flatMap((snapshot) =>
     snapshot.kind === "attendance"
       ? snapshot.rows.filter(
-          (row) => !isConsult(row),
+          (row) => {
+            if (isConsult(row) || conflicted.has(row)) return false;
+            if (row.status === "show") return true;
+            const key = `${factGroupKey(row)}\u0000${row.status}`;
+            if (seenNonShows.has(key)) return false;
+            seenNonShows.add(key);
+            return true;
+          },
         )
       : [],
   );
+}
+
+/** Name/date coordinates cannot establish which contradictory appointment status is authoritative. */
+export function attendanceStatusConflicts(snapshots: LocalSnapshot[]) {
+  const isConsult = consultAttendanceClassifier(snapshots);
+  const groups = new Map<string, { clientId: string; clinician: string; serviceDate: string; kind: "consultation" | "treatment"; rows: AttendanceRow[]; snapshotIds: string[]; statusesBySource: Map<string, Set<AttendanceStatus>> }>();
+  for (const snapshot of snapshots) if (snapshot.kind === "attendance") for (const row of snapshot.rows) {
+    const kind = isConsult(row) ? "consultation" : "treatment";
+    const key = `${factGroupKey(row)}\u0000${kind}`;
+    const group = groups.get(key) ?? { clientId: row.clientId, clinician: row.clinician, serviceDate: row.serviceDate, kind, rows: [], snapshotIds: [], statusesBySource: new Map<string, Set<AttendanceStatus>>() };
+    group.rows.push(row);
+    if (!group.snapshotIds.includes(snapshot.id)) group.snapshotIds.push(snapshot.id);
+    const statuses = group.statusesBySource.get(snapshot.id) ?? new Set<AttendanceStatus>();
+    statuses.add(row.status);
+    group.statusesBySource.set(snapshot.id, statuses);
+    groups.set(key, group);
+  }
+  // One export may legitimately contain mixed appointments; only differing export status sets conflict.
+  return [...groups.values()].filter((group) => group.snapshotIds.length > 1 && new Set([...group.statusesBySource.values()].map((statuses) => [...statuses].sort().join("|"))).size > 1)
+    .map(({ statusesBySource: _statuses, ...group }) => ({ ...group, statuses: [...new Set(group.rows.map((row) => row.status))].sort() }));
 }
 
 export function treatmentBillingRows(snapshots: LocalSnapshot[]) {
@@ -1005,6 +1034,7 @@ export function buildLocalVisitReconciliation(
   let ambiguousAttendanceRows = 0;
   let ambiguousBillingRows = 0;
   let totalMatchedFeesCharged = 0;
+  const conflictingStatusRows = new Set(attendanceStatusConflicts(snapshots).flatMap((group) => group.rows));
   for (const group of groups.values()) {
     const attendanceCount = group.attendanceRows.length;
     const treatmentBillingRows = group.billingRows.filter(
@@ -1015,7 +1045,7 @@ export function buildLocalVisitReconciliation(
       group.billingRows.length > 0 && treatmentBillingRows.length === 0;
     const treatmentAttendanceRowsForGroup = isPhoneOnlyConsult
       ? []
-      : group.attendanceRows.filter((row) => !isConsultationVisitKind(row));
+      : group.attendanceRows.filter((row) => !isPhoneConsultAttendanceRow(row));
     const treatmentAttendanceCount = treatmentAttendanceRowsForGroup.length;
     const showRows = treatmentAttendanceRowsForGroup.filter(
       (row) => row.status === "show",
@@ -1054,7 +1084,13 @@ export function buildLocalVisitReconciliation(
       attendanceRows: group.attendanceRows,
       billingRows: group.billingRows,
     };
-    if (isPhoneOnlyConsult) {
+    if (group.attendanceRows.some((row) => conflictingStatusRows.has(row))) {
+      ambiguousGroups++;
+      ambiguousAttendanceRows += attendanceCount;
+      ambiguousBillingRows += group.billingRows.length;
+      rows.push({ ...base, status: "ambiguous", totalFeeCharged: null,
+        reviewReason: "Conflicting attendance statuses for the same client, clinician and date. Original sources are retained; neither upload order nor billing chooses a status." });
+    } else if (isPhoneOnlyConsult) {
       rows.push({
         ...base,
         status: "matched",
@@ -1272,7 +1308,16 @@ function verifiedAttendanceIntervals(
       // Invalid or stale declarations cannot certify missing attendance.
     }
   }
-  return mergeIntervals(clipIntervals(intervals, asOfDate));
+  let verified = mergeIntervals(clipIntervals(intervals, asOfDate));
+  for (const conflict of attendanceStatusConflicts(snapshots).filter((row) => normalizeClinician(row.clinician) === normalizeClinician(clinician))) {
+    const stamp = Date.parse(conflict.serviceDate + "T12:00:00Z");
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(conflict.serviceDate) || !Number.isFinite(stamp) || new Date(stamp).toISOString().slice(0, 10) !== conflict.serviceDate) continue;
+    verified = verified.flatMap((range) => conflict.serviceDate < range.start || conflict.serviceDate > range.end ? [range] : [
+      ...(range.start < conflict.serviceDate ? [{ start: range.start, end: addDays(conflict.serviceDate, -1) }] : []),
+      ...(range.end > conflict.serviceDate ? [{ start: addDays(conflict.serviceDate, 1), end: range.end }] : []),
+    ]);
+  }
+  return verified;
 }
 
 function mergeIntervals(intervals: DateInterval[]) {
@@ -1952,6 +1997,7 @@ export function summarizeConsultConversions(
     : new Set(options.cohortClinicianNames.map(normalizeClinician).filter(Boolean));
   const coverageIntervals = verifiedAttendanceIntervals(snapshots, asOfDate);
   const isConsult = consultAttendanceClassifier(snapshots);
+  const conflictedRows = new Set(attendanceStatusConflicts(snapshots).flatMap((group) => group.rows));
   const overridesByClient = new Map(
     attributionOverrides
       .filter((override) => !override.archived)
@@ -1962,7 +2008,7 @@ export function summarizeConsultConversions(
       snapshot.kind === "attendance"
         ? snapshot.rows.filter(
             (row) =>
-              row.status === "show" &&
+              row.status === "show" && !conflictedRows.has(row) &&
               row.serviceDate <= asOfDate &&
               (cohortNames === null || cohortNames.has(normalizeClinician(row.clinician))) &&
               isConsult(row),
@@ -2198,7 +2244,8 @@ export function buildLocalRetentionMetrics(
   const treatmentShowRows = treatmentAttendance.filter(
     (row) => row.status === "show",
   ).length;
-  const excludedConsultationShowRows = rawShowRows - treatmentShowRows;
+  const isConsultation = consultAttendanceClassifier(snapshots);
+  const excludedConsultationShowRows = attendance.filter((row) => row.status === "show" && isConsultation(row)).length;
   const billing = snapshots.flatMap((snapshot) =>
     snapshot.kind === "billing"
       ? snapshot.rows.filter((row) => row.serviceDate <= asOfDate)

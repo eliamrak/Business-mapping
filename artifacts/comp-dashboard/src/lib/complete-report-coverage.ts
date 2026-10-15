@@ -1,5 +1,6 @@
 import { canonicalServicePeriod, type PaceCoverage } from "@workspace/practice/hub";
 import type { AttendanceRow, BillingRow, LocalFactKind, LocalSnapshot } from "./retention-local.ts";
+import { attendanceStatusConflicts } from "./retention-local.ts";
 
 type Clinician = { id: number; label: string };
 export type IncompleteReportPeriod = {
@@ -10,6 +11,7 @@ export type IncompleteReportPeriod = {
   clinicianLabel?: string;
   snapshotId?: string;
   reason: string;
+  conflictKind?: "attendance-status";
 };
 export type CompleteReportCoverage = {
   eligibleSnapshots: LocalSnapshot[];
@@ -23,6 +25,7 @@ export type CompleteReportCoverage = {
   dataThrough: string | null;
   incompletePeriods: IncompleteReportPeriod[];
   excludedRowsCount: number;
+  attendanceStatusConflictCount: number;
   limits: string[];
 };
 
@@ -130,6 +133,32 @@ export function completeReportCoverage(
     }
   }
   const ids = [...new Set(clinicians.map((person) => person.id))];
+  // Partial sources stay reconciliation-only and cannot poison an independently complete replacement.
+  const statusConflicts = attendanceStatusConflicts(eligibleSnapshots);
+  const conflictedPeriods = new Set<string>();
+  for (const conflict of statusConflicts) {
+    const clinicianId = mappedId(conflict.clinician);
+    if (clinicianId === null) continue;
+    const period = canonicalServicePeriod(conflict.serviceDate);
+    const key = `${clinicianId}:${period.start}`;
+    if (conflictedPeriods.has(key)) continue;
+    conflictedPeriods.add(key);
+    incompletePeriods.push({ ...period, kind: "attendance", clinicianId, conflictKind: "attendance-status",
+      reason: "Conflicting attendance statuses among complete reports; this provider period is withheld, not zero. Original rows and independent billing evidence are retained for reconciliation." });
+  }
+  if (conflictedPeriods.size) {
+    for (const row of eligibleAttendanceRows) {
+      const id = mappedId(row.clinician);
+      if (id !== null && conflictedPeriods.has(`${id}:${periodStart(row.serviceDate)}`)) eligibleAttendanceRows.delete(row);
+    }
+    const retainedCoverage = completeAttendanceCoverage.filter((row) => !conflictedPeriods.has(`${row.clinicianId}:${row.start}`));
+    completeAttendanceCoverage.splice(0, completeAttendanceCoverage.length, ...retainedCoverage);
+    const retainedSnapshots = eligibleSnapshots.filter((snapshot) => snapshot.kind !== "attendance" || !snapshot.coverageClinicians?.some((label) => {
+      const id = mappedId(label);
+      return id !== null && conflictedPeriods.has(`${id}:${snapshot.coverageStart}`);
+    }));
+    eligibleSnapshots.splice(0, eligibleSnapshots.length, ...retainedSnapshots);
+  }
   for (const kind of ["attendance", "billing"] as const) for (const clinicianId of ids) {
     if (!providerRanges.has(`${kind}:${clinicianId}`)) incompletePeriods.push({ start: null, end: null, kind, clinicianId,
       reason: "No valid explicit report proof attributable to this provider; missing reporting cannot establish zero activity." });
@@ -145,6 +174,7 @@ export function completeReportCoverage(
   return { eligibleSnapshots, eligibleBillingRows: [...eligibleBillingRows], eligibleAttendanceRows: [...eligibleAttendanceRows],
     completeAttendanceCoverage, completeBillingCoverage, attendanceThrough, billingThrough,
     dataThrough: attendanceThrough && billingThrough ? (attendanceThrough < billingThrough ? attendanceThrough : billingThrough) : null,
+    attendanceStatusConflictCount: statusConflicts.length,
     incompletePeriods: incompletePeriods.map((period) => ({ ...period,
       ...(period.clinicianId === undefined ? {} : { clinicianLabel: clinicians.find((person) => person.id === period.clinicianId)?.label }),
     })), excludedRowsCount: [...allRows].filter((row) => !includedRows.has(row)).length, limits };

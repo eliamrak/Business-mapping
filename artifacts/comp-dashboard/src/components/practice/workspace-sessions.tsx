@@ -1200,7 +1200,7 @@ export default function WorkspaceSessions({
           </LineChart>
         </ResponsiveContainer>
       </div>}
-    {!chartData.some((point) => point.completed !== null || point.observedCompleted !== null || point.periodRate !== null) && <p className="pw-note">No observed sessions in this date range.</p>}
+    {!chartData.some((point) => point.completed !== null || point.observedCompleted !== null || point.periodRate !== null) && <p className="pw-note">Eligible complete-period observations are unavailable for these dates.</p>}
     <details onToggle={(event) => setCompactDetailsOpen(event.currentTarget.open)}>
       <summary>Session entry, history and hiring</summary>
       {compactDetailsOpen && fullView}

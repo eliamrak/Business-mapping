@@ -32,8 +32,8 @@ roster AS (
     WHEN exact_name_id_matches = 1 THEN 'exact_other_roster_name'
     WHEN main_field_matches_target_numeric_id THEN 'requested_numeric_id_in_name_field_requires_schema_crosswalk'
     WHEN main_field_matches_any_numeric_roster_id THEN 'other_numeric_roster_id_in_name_field_requires_schema_crosswalk'
-    WHEN source_key LIKE target_name_key || ' %' THEN 'requested_name_token_prefix_candidate_not_verified'
-    WHEN target_name_key LIKE source_key || ' %' THEN 'source_token_prefix_candidate_not_verified'
+    WHEN left(source_key, length(target_name_key) + 1) = target_name_key || ' ' THEN 'requested_name_token_prefix_candidate_not_verified'
+    WHEN left(target_name_key, length(source_key) + 1) = source_key || ' ' THEN 'source_token_prefix_candidate_not_verified'
     ELSE 'unmapped_main_clinician_field' END AS category
   FROM matches
 ), distribution AS (

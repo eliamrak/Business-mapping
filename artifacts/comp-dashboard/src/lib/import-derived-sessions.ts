@@ -1,8 +1,9 @@
 import { dateRangeSchema, type SessionRecord, rangesOverlap } from "@workspace/practice";
-import { reconcileBillingEvidence, type Context, type ImportedBillingActual } from "@workspace/practice/hub";
+import { canonicalServicePeriod, reconcileBillingEvidence, type Context, type ImportedBillingActual } from "@workspace/practice/hub";
 import type { SessionAttendanceCoverage } from "./session-trend.ts";
 import {
   isPhoneOnlyConsultAttendanceRow,
+  attendanceStatusConflicts,
   isPhoneConsultBillingRow,
   sameDayVisitKey,
   type AttendanceRow,
@@ -29,6 +30,7 @@ export type ImportedSessionDiagnostic = {
   rawAttendedRows: number;
   collapsedDuplicateShowRows: number;
   sameDayVisitOverrideCount: number;
+  attendanceStatusConflictCount: number;
 };
 
 export type ImportedSessionOverlay = {
@@ -106,6 +108,8 @@ export function buildImportedSessionOverlay(
   }
 
   const missingClinicianLabels = new Set<string>();
+  const statusConflicts = attendanceStatusConflicts(snapshots);
+  const conflictedRows = new Set(statusConflicts.flatMap((group) => group.rows));
   const ambiguousClinicianLabels = new Set<string>();
   const missingBillingClinicianLabels = new Set<string>();
   const ambiguousBillingClinicianLabels = new Set<string>();
@@ -154,6 +158,7 @@ export function buildImportedSessionOverlay(
       }
     }
     for (const row of snapshot.rows) {
+      if (conflictedRows.has(row)) continue;
       if (seenAttendanceRows.has(row.sourceRowHash)) continue;
       seenAttendanceRows.add(row.sourceRowHash);
       const matches =
@@ -187,6 +192,16 @@ export function buildImportedSessionOverlay(
       current.rows.push(row);
       attendedByClinicianDate.set(key, current);
     }
+  }
+  for (const conflict of statusConflicts) {
+    const matches = cliniciansByLabel.get(normalizeLabel(conflict.clinician)) ?? [];
+    if (matches.length !== 1 || !dateRangeSchema.safeParse({ start: conflict.serviceDate, end: conflict.serviceDate }).success) continue;
+    const period = canonicalServicePeriod(conflict.serviceDate);
+    const retained = scopedAttendanceCoverage.flatMap((range) => range.clinicianId !== matches[0].id || range.end < period.start || range.start > period.end ? [range] : [
+      ...(range.start < period.start ? [{ ...range, end: new Date(Date.parse(period.start + "T12:00:00Z") - 86400000).toISOString().slice(0, 10) }] : []),
+      ...(range.end > period.end ? [{ ...range, start: new Date(Date.parse(period.end + "T12:00:00Z") + 86400000).toISOString().slice(0, 10) }] : []),
+    ]);
+    scopedAttendanceCoverage.splice(0, scopedAttendanceCoverage.length, ...retained);
   }
   for (const snapshot of snapshots) {
     if (snapshot.kind !== "billing") continue;
@@ -357,6 +372,7 @@ export function buildImportedSessionOverlay(
       rawAttendedRows,
       collapsedDuplicateShowRows,
       sameDayVisitOverrideCount,
+      attendanceStatusConflictCount: statusConflicts.filter((group) => cliniciansByLabel.has(normalizeLabel(group.clinician))).length,
     },
   };
 }

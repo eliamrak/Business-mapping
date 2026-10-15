@@ -87,7 +87,7 @@ type StoredImportHistory = {
 };
 
 type ImportResponse = StoredImportHistory & {
-  status: "added" | "duplicate" | "replaced";
+  status: "added" | "duplicate" | "replaced" | "retained";
 };
 
 type CoverageConfirmation = {
@@ -249,11 +249,12 @@ async function getStoredHistory() {
 async function importStoredPackage(
   packageData: unknown,
   replaceOverlaps = false,
+  retainOverlaps = false,
 ) {
   try {
     return await customFetch<ImportResponse>("/api/practice-imports/package", {
       method: "POST",
-      body: JSON.stringify({ package: packageData, replaceOverlaps }),
+      body: JSON.stringify({ package: packageData, replaceOverlaps, retainOverlaps }),
     });
   } catch (error) {
     if (error instanceof ApiError && error.status === 409)
@@ -435,7 +436,7 @@ export default function LocalRetentionWorkspace({
             warnings: parsed.warnings,
           });
           setStatus(
-            "This package overlaps saved converted history. Review before replacing overlapping snapshots.",
+            "This package overlaps saved converted history. Keep both sources for reconciliation, or explicitly replace overlapping snapshots.",
           );
           if (parsed.warnings.length) setError(parsed.warnings.join(" "));
           return;
@@ -454,17 +455,21 @@ export default function LocalRetentionWorkspace({
     }
   }
 
-  function replacePending() {
-    if (!pending) return;
+  function savePending(mode: "retain" | "replace") {
+    if (!pending || busy) return;
     setBusy(true);
-    importStoredPackage(pending.packageData, true)
+    importStoredPackage(pending.packageData, mode === "replace", mode === "retain")
       .then((saved) => {
         setSnapshots(saved.snapshots);
         setPackages(saved.packages ?? []);
         setBillingCodeMinutes(saved.billingCodeMinutes);
         setSameDayVisitOverrides(saved.sameDayVisitOverrides ?? {});
         setStatus(
-          `Replaced overlapping converted snapshots with package ${pending.packageId}.`,
+          saved.status === "duplicate"
+            ? `Package ${pending.packageId} is already loaded. Nothing was added.`
+            : mode === "retain"
+            ? `Kept existing history and saved package ${pending.packageId} for overlap reconciliation. Matching rows are reconciled independently; conflicting facts remain reviewable. Existing settings are unchanged.`
+            : `Replaced overlapping converted snapshots with package ${pending.packageId}.`,
         );
         setError(pending.warnings.length ? pending.warnings.join(" ") : "");
         setPending(null);
@@ -581,6 +586,7 @@ export default function LocalRetentionWorkspace({
         <h3>Data covers through {dateLabel(verifiedCoverage.dataThrough)}</h3>
         <p>Attendance: {dateLabel(verifiedCoverage.attendanceThrough)} · Billing: {dateLabel(verifiedCoverage.billingThrough)}</p>
         <p>{verifiedCoverage.excludedRowsCount} raw rows excluded from eligible actual totals and historical averages. Raw rows remain available for reconciliation and review; they are not certified actual totals.</p>
+        {verifiedCoverage.attendanceStatusConflictCount > 0 && <p>{verifiedCoverage.attendanceStatusConflictCount} conflicting attendance status groups. Affected complete provider periods are withheld, not zero; review matching diagnostics below.</p>}
         <p>Imported coverage proof does not certify separate manual-source session history.</p>
         {!coverageSummary && <p>Provider roster scope is unavailable. Actual metrics remain withheld until mapped complete-report coverage is supplied.</p>}
         {recentCoverageGaps.length > 0 && <ul aria-label="Most recent incomplete report periods">
@@ -663,17 +669,18 @@ export default function LocalRetentionWorkspace({
             <p>
               Incoming package {pending.packageId} overlaps{" "}
               {pending.existing.length} saved snapshot
-              {pending.existing.length === 1 ? "" : "s"}. Replacing archives
-              only the overlapping converted snapshots before loading the
-              package; unrelated history stays in place.
+              {pending.existing.length === 1 ? "" : "s"}. Keeping history preserves both sources and existing settings. Matching facts are reconciled independently; changed fees or other conflicting facts remain reviewable, not silently overwritten. Replacing archives the entire overlapping snapshots, including their non-overlapping dates; unrelated snapshots stay in place.
             </p>
           </div>
           <div>
-            <button className="pw-button" onClick={keepExisting}>
-              Keep existing
+            <button className="pw-button pw-primary" disabled={busy} onClick={() => savePending("retain")}>
+              Keep history and reconcile overlap
             </button>
-            <button className="pw-button pw-primary" onClick={replacePending}>
+            <button className="pw-button" disabled={busy} onClick={() => savePending("replace")}>
               Replace overlapping data
+            </button>
+            <button className="pw-button" disabled={busy} onClick={keepExisting}>
+              Cancel import
             </button>
           </div>
         </div>
@@ -903,8 +910,9 @@ export default function LocalRetentionWorkspace({
                         : row.status === "billing_only"
                           ? "Billing only"
                           : "Ambiguous same-day pairing"}
+                    {row.reviewReason && <small>{row.reviewReason}</small>}
                   </td>
-                  <td data-label="Attendance">{row.attendanceRows.length}</td>
+                  <td data-label="Attendance">{row.attendanceRows.length}<small>{[...new Set(row.attendanceRows.map((fact) => fact.status))].join(", ")}</small></td>
                   <td data-label="Billing">{row.billingRows.length}</td>
                   <td data-label="Billed fee">
                     {row.totalFeeCharged === null

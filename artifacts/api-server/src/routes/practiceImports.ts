@@ -131,8 +131,10 @@ const importBodySchema = z
   .object({
     package: packageSchema,
     replaceOverlaps: z.boolean().default(false),
+    retainOverlaps: z.boolean().default(false),
   })
-  .strict();
+  .strict()
+  .refine((body) => !(body.replaceOverlaps && body.retainOverlaps), { message: "Choose either retain or replace, not both." });
 const minutesBodySchema = z
   .object({ billingCodeMinutes: billingCodeMinutesSchema })
   .strict();
@@ -445,6 +447,10 @@ router.post("/practice-imports/package", async (req, res) => {
           eq(practiceImportSnapshotsTable.active, 1),
         ),
       );
+    if (body.data.retainOverlaps && snapshots.some((snapshot) => active.some((row) =>
+      snapshot.kind === row.kind && snapshot.sourceHash === row.sourceHash
+      && stableJson(snapshot.reportCoverage ?? null) !== stableJson(row.reportCoverage ?? null),
+    ))) return { status: "coverage-review" as const };
     const activePackages = await tx
       .select()
       .from(practiceImportPackagesTable)
@@ -477,7 +483,7 @@ router.post("/practice-imports/package", async (req, res) => {
     const overlapping = active.filter((row) =>
       snapshotsToInsert.some((snapshot) => overlaps(row, snapshot)),
     );
-    if (overlapping.length && !body.data.replaceOverlaps)
+    if (overlapping.length && !body.data.replaceOverlaps && !body.data.retainOverlaps)
       return {
         status: "overlap" as const,
         existing: overlapping.map((row) => ({
@@ -494,7 +500,9 @@ router.post("/practice-imports/package", async (req, res) => {
         })),
       };
     const packageImportId = randomUUID();
-    const replacementOverrides = overlapping.length
+    const replacing = overlapping.length > 0 && body.data.replaceOverlaps;
+    const retaining = overlapping.length > 0 && body.data.retainOverlaps;
+    const replacementOverrides = replacing
       ? reconcileSameDayVisitOverrides(
           mergeSameDayVisitOverrides(activePackages),
           [
@@ -510,7 +518,7 @@ router.post("/practice-imports/package", async (req, res) => {
           ],
         )
       : {};
-    if (overlapping.length)
+    if (replacing)
       await tx
         .update(practiceImportSnapshotsTable)
         .set({ active: 0 })
@@ -521,7 +529,7 @@ router.post("/practice-imports/package", async (req, res) => {
           ),
         );
     const replacedPackageIds = [
-      ...new Set(overlapping.map((row) => row.packageImportId)),
+      ...new Set(replacing ? overlapping.map((row) => row.packageImportId) : []),
     ];
     if (replacedPackageIds.length) {
       const retainedPackageRows = await tx
@@ -560,7 +568,7 @@ router.post("/practice-imports/package", async (req, res) => {
       contentHash,
       exportedAt: new Date(input.exportedAt),
       importedBy: actor,
-      billingCodeMinutes: input.billingCodeMinutes ?? {},
+      billingCodeMinutes: body.data.retainOverlaps ? {} : input.billingCodeMinutes ?? {},
       sameDayVisitOverrides: replacementOverrides,
     });
     for (const snapshot of snapshotsToInsert) {
@@ -581,10 +589,11 @@ router.post("/practice-imports/package", async (req, res) => {
       practiceId,
       accountId,
       packageId: input.packageId,
-      action: overlapping.length ? "replace-overlap" : "import",
+      action: replacing ? "replace-overlap" : retaining ? "retain-overlap" : "import",
       actor,
       detail: {
-        replacedSnapshotCount: overlapping.length,
+        replacedSnapshotCount: replacing ? overlapping.length : 0,
+        retainedOverlapSnapshotCount: retaining ? overlapping.length : 0,
         skippedDuplicateSnapshotCount:
           snapshots.length - snapshotsToInsert.length,
         attendanceRows:
@@ -596,7 +605,7 @@ router.post("/practice-imports/package", async (req, res) => {
       },
     });
     return {
-      status: overlapping.length ? ("replaced" as const) : ("added" as const),
+      status: replacing ? ("replaced" as const) : retaining ? ("retained" as const) : ("added" as const),
     };
   });
   if (result.status === "migration-required")
@@ -609,6 +618,11 @@ router.post("/practice-imports/package", async (req, res) => {
       code: "PACKAGE_ID_CHANGED_CONTENT",
       error:
         "This package ID was already imported with different contents. Create a corrected package with a new package ID.",
+    });
+  if (result.status === "coverage-review")
+    return res.status(409).json({
+      code: "COVERAGE_REVIEW_REQUIRED",
+      error: "This source is already loaded with different report coverage. Review or revise the existing import in Confirm report coverage before importing again; retaining cannot create another active copy of the same source.",
     });
   if (result.status === "overlap")
     return res.status(409).json({
