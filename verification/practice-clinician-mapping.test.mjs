@@ -54,3 +54,14 @@ test("named confirmation query allows professional identity only and retains exp
   assert.match(named, /EXACT_NORMALIZED_LABEL_CANDIDATE_NOT_CONFIRMED_IDENTITY/);
   assert.match(named, /NO_EXACT_CANDIDATE_REQUIRES_OWNER_REVIEW/);
 });
+
+test("corrected source-label audit is aggregate-only and cannot attribute a person", () => {
+  const corrected = readFileSync(new URL("./practice-requested-source-audit.sql", import.meta.url), "utf8").replace(/^\s*--.*$/gm, "");
+  assert.equal(corrected.split(";").filter((part) => part.trim()).length, 1);
+  assert.match(corrected, /'elia mrakovich'::text AS source_label/);
+  assert.doesNotMatch(corrected, /\b(insert|update|delete|create|alter|drop|truncate|copy|commit|call|set_config|dblink)\b/i);
+  assert.doesNotMatch(corrected, /clientId|client_id|share_token|source_hash|session_records|serviceDate|totalFee/);
+  assert.match(corrected, /count\(\*\) FROM active_scopes\) = 1/);
+  assert.match(corrected, /SOURCE_LABEL_ONLY_CROSSWALK_PENDING_NOT_PERSON_ACTIVITY_OR_CLINICAL_RATE/);
+  assert.doesNotMatch(corrected.slice(corrected.lastIndexOf("\nSELECT ")), /r\.id\s+AS|c\.id\s+AS|source_label\s+AS|fact\s+AS/i);
+});

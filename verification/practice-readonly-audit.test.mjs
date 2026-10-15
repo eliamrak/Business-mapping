@@ -114,6 +114,9 @@ test("read-only proof failure and query errors roll back without retrieving sour
 });
 test("explicit dates and source guard fail safely before any connection; CLI does not expose errors", () => {
   assertCandidateSource();
+  const dates = { AUDIT_AS_OF: "2026-10-15", AUDIT_WINDOW_START: "2026-01-01", AUDIT_WINDOW_END: "2026-10-15" };
+  assert.throws(() => auditOptions(dates), /explicit_clinician_label_required/);
+  assert.equal(auditOptions({ ...dates, AUDIT_CLINICIAN_LABEL: " Synthetic Full Name " }).targetLabel, "Synthetic Full Name");
   assert.throws(() => auditOptions({ AUDIT_AS_OF: "2026-02-30", AUDIT_WINDOW_START: "2026-01-01", AUDIT_WINDOW_END: "2026-02-20" }));
   const child = spawnSync(process.execPath, [new URL("./practice-readonly-audit.mjs", import.meta.url).pathname], { encoding: "utf8", env: { ...process.env, DATABASE_URL: "SECRET_CONNECTION_STRING" } });
   assert.equal(child.status, 1);

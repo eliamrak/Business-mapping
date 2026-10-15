@@ -22,7 +22,7 @@ No SQL here has been executed against real data by the author. The production SQ
 From the repository root, supply explicit UTC service-date boundaries and the exact existing clinician-card label. The following is an example window; choose the actual agreed audit as-of/window, do not infer it from upload time:
 
 ```sh
-AUDIT_AS_OF=2026-10-15 AUDIT_WINDOW_START=2026-01-01 AUDIT_WINDOW_END=2026-10-15 AUDIT_CLINICIAN_LABEL=Elia node verification/practice-readonly-audit.mjs --ack-existing-db-read-only
+AUDIT_AS_OF=2026-10-15 AUDIT_WINDOW_START=2026-01-01 AUDIT_WINDOW_END=2026-10-15 AUDIT_CLINICIAN_LABEL='Elia Mrakovich' node verification/practice-readonly-audit.mjs --ack-existing-db-read-only
 ```
 
 The script uses the existing configured scope exactly as the API: normalized EMC_PRACTICE_ID, otherwise EMC_OWNER_EMAIL, otherwise default-practice; practice_id and account_id are equal in this existing app. It does not print that scope, the database URL, labels or account information. Do not override these existing configuration values to broaden scope.

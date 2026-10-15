@@ -97,7 +97,7 @@ SELECT count(*) AS raw_billing_rows_in_lexical_date_window,
 
 -- 4. Requested clinician's raw positive-evidence counts and exact all-null-proof candidate implications.
 -- Client keys remain inside CTEs; only aggregates leave this statement. No absent days become verified misses.
-WITH input AS (SELECT DATE '2026-01-01' AS start_date, DATE '2026-10-15' AS end_date, DATE '2026-10-15' AS as_of, 'elia'::text AS target),
+WITH input AS (SELECT DATE '2026-01-01' AS start_date, DATE '2026-10-15' AS end_date, DATE '2026-10-15' AS as_of, 'elia mrakovich'::text AS target),
 active_scopes AS (
   SELECT practice_id, account_id FROM practice_import_snapshots WHERE active = 1
   UNION SELECT practice_id, account_id FROM practice_import_packages WHERE active = 1

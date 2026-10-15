@@ -18,7 +18,8 @@ const date = (value) => typeof value === "string" && /^\d{4}-\d{2}-\d{2}$/.test(
 export function auditOptions(env) {
   const { AUDIT_AS_OF: asOf, AUDIT_WINDOW_START: start, AUDIT_WINDOW_END: end } = env;
   if (![asOf, start, end].every(date) || start > end || end > asOf || +asOf.slice(0, 4) < 2000 || +asOf.slice(0, 4) > 2200 || Date.parse(end) - Date.parse(start) > 3660 * 86400000) throw new Error("invalid_explicit_audit_dates");
-  const targetLabel = env.AUDIT_CLINICIAN_LABEL?.trim() || "Elia";
+  const targetLabel = env.AUDIT_CLINICIAN_LABEL?.trim();
+  if (!targetLabel) throw new Error("explicit_clinician_label_required");
   const scope = (env.EMC_PRACTICE_ID?.trim() || env.EMC_OWNER_EMAIL?.trim() || "default-practice").toLowerCase();
   return { asOf, start, end, targetLabel, scope };
 }
