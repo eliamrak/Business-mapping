@@ -38,3 +38,19 @@ test("lineage diagnostic distinguishes main roster configuration copies from sce
   assert.match(lineage, /LEFT JOIN roster r ON r\.id = sc\.source_clinician_id/);
   assert.match(lineage, /known_identity_column_presence/);
 });
+
+const named = readFileSync(new URL("./practice-named-mapping-review.sql", import.meta.url), "utf8").replace(/^\s*--.*$/gm, "");
+test("named confirmation query allows professional identity only and retains explicit review status", () => {
+  assert.equal(named.split(";").filter((part) => part.trim()).length, 1);
+  assert.match(named.trim(), /^WITH /);
+  assert.doesNotMatch(named, /\b(insert|update|delete|create|alter|drop|truncate|copy|commit|call|set_config|dblink)\b/i);
+  assert.doesNotMatch(named, /clientId|client_id|share_token|source_hash|sourceHash|session_records|serviceDate|fee|notes/);
+  assert.deepEqual([...named.matchAll(/fact\s*->>?\s*'([^']+)'/g)].map((m) => m[1]), Array(4).fill("clinician"));
+  assert.match(named, /count\(\*\) FROM active_scopes\) = 1/);
+  assert.match(named, /count\(\*\) FROM sources\) BETWEEN 1 AND 20/);
+  assert.match(named, /count\(\*\) FROM roster\) <= 200/);
+  assert.match(named, /r\.id AS candidate_clinician_id, r\.label AS candidate_professional_name/);
+  assert.match(named, /LEFT JOIN roster r ON r\.name_key = s\.name_key/);
+  assert.match(named, /EXACT_NORMALIZED_LABEL_CANDIDATE_NOT_CONFIRMED_IDENTITY/);
+  assert.match(named, /NO_EXACT_CANDIDATE_REQUIRES_OWNER_REVIEW/);
+});
