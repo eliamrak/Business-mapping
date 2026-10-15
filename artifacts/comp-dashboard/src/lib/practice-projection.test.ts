@@ -132,7 +132,7 @@ test("disjoint complete provider periods cannot invent a common practice forecas
   assert.equal(actual.forecastStart, null);
   assert.deepEqual(actual.months, []);
 });
-test("future card and dated listed fees replace no historical charges and do not change contractual percentage-pay basis", () => {
+test("future card fees never replace historic charges and are the same estimate used for percentage pay", () => {
   const { workspace, context } = setup();
   context.sessions = [record(8), record(16, 2)];
   workspace.clinicians.push(clinicianSettingSchema.parse({ id: crypto.randomUUID(), clinicianId: 1, start: "2026-01-01", desiredWeeklySessions: 20, expectedSessionRevenue: 50 }));
@@ -142,7 +142,7 @@ test("future card and dated listed fees replace no historical charges and do not
   const before = structuredClone({ workspace, context });
   const actual = buildPracticeProjection(workspace, context, "actual", "2026-10-14");
   closeTo(actual.months[0].values.revenue, 2000);
-  closeTo(actual.months[0].values.clinicianPay, (4 * 25 + 8 * 200) * 0.6);
+  closeTo(actual.months[0].values.clinicianPay, 2000 * 0.6);
   closeTo(actual.months[1].values.revenue, (4 * 120 + 8 * 200) * 31 / 7);
   assert.deepEqual({ workspace, context }, before);
 });
