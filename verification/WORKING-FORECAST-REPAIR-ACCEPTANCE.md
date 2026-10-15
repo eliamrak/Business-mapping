@@ -2,6 +2,12 @@
 
 Base: f2be9f19d87b1d12285b66c31cd8f5e24386497a, explicitly blocked by independent external review. This is a replacement review candidate, not approval to publish. No main change, deployment, migration or business-record edit was performed.
 
+## Benchmark Follow-up After 58c9ec2 Re-review
+
+The external re-review verified the eight repairs, 590 tests and 68 captures, but found one further P2: selected Jan-Feb profit $3,000 was compared with latest February-only profit $2,000. The Money profit bar now withholds that comparator entirely and states: "Practice benchmark withheld: no independent comparator with identical dates and accounting basis is configured." No normalization or replacement comparison was invented.
+
+The targeted browser regression selects Jan1-Feb28, asserts $3,000 profit, zero benchmark markers, no benchmark legend entry, and the explicit withholding explanation. Desktop/mobile captures are money-two-month-benchmark-withheld-desktop-1280.png and money-two-month-benchmark-withheld-mobile-390.png. The period/year harness now has eight captures rather than six. Parent must obtain re-review of the resulting exact SHA; the prior 58c9ec2 result is not release clearance.
+
 ## Eight Findings
 
 1. Overlapping billing exports: reconcile encounter coordinates and source hashes globally before team/date filtering. Shifted parser row indexes produce $150, not $250. Conflicting amounts or indistinguishable repeated encounters are unknown. Distinct codes remain distinct. Raw snapshots remain unchanged. Tests: parser-billing-evidence.test.ts; reported-billing.test.ts.
@@ -55,6 +61,17 @@ PRACTICE_PREVIEW_URL=http://127.0.0.1:4318 node verification/revenue-repair-rend
 4. Nonzero PHONE revenue classification: whether paid consultations belong in billable consultation revenue requires business/source evidence. Zero PHONE never erases treatment income; unapproved paid consultation model revenue is withheld. Reported-charge facts remain separate.
 
 The referral and dated-membership issues are repaired defects, not deferred questions. Negative-fee CSV/package ingestion remains unsupported; core signed arithmetic is not an end-to-end import claim.
+
+### Withholding Matrix
+
+These are candidate behaviors only. No new code is deployed, and no assertion is made that the existing live version already applies these holds.
+
+| Remaining decision | Current implementation | Affected candidate values withheld? |
+| --- | --- | --- |
+| Latest-report versus common today/staleness anchor | Each clinician uses latest available report/coverage endpoint; dates and available-calendar-week basis are disclosed. Later unreported days are not zeros. | No, not solely for this undecided policy. Available working pace and forward estimates remain visible as provisional estimates. Absent/overlapping/unallocatable history is independently withheld. |
+| Per-visit versus verified complete-day fee replacement | A whole treatment-day replacement requires complete matching evidence; partial evidence cannot replace the modeled day. | Yes: unsupported replacement makes affected modeled revenue/profit and dependent values unknown. Reported fee facts remain separately visible. Pure future configured-fee estimates are not withheld merely because a past replacement is unresolved. |
+| Percentage compensation fee basis | Models follow configured contractual rates/terms; charged-fee-based agreements are not inferred. Future summaries disclose this assumption. | No, not solely for this undecided policy. Configured-term compensation and otherwise known estimates remain visible; they are not certified as the actual charged-fee agreement. Separately recorded actual payroll remains actual evidence. |
+| Nonzero PHONE revenue classification | Zero PHONE cannot suppress treatment. Nonzero PHONE remains a reported charge fact, not automatically classified as treatment revenue. | Yes: unapproved paid PHONE modeled revenue is withheld for the affected period, with dependent financial values as applicable. Raw reported charges and independently finalized actual ledger amounts are not erased. |
 
 ## Publication Hold
 

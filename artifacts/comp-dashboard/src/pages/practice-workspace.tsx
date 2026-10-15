@@ -5800,8 +5800,9 @@ export default function PracticeWorkspace() {
                       value={moneyValues.profit}
                       valueLabel="Selected period"
                       goal={null}
-                      benchmark={recordedFinancialPeriods[0]?.values.profit}
+                      benchmark={null}
                     />
+                    <p className="pw-note">Practice benchmark withheld: no independent comparator with identical dates and accounting basis is configured.</p>
                     <p className="pw-note">
                       Historical dates use actual financial records only. Future dates use the available-history working model at configured fees. Actual records and future estimates do not overlap; unknown actual costs are never replaced by modeled costs. Charges are not cash collected.
                     </p>

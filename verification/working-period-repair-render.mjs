@@ -39,6 +39,13 @@ try {
   assert.equal(await flow.locator(".pw-flow-profit strong").innerText(), await bridge.locator(".pw-bridge-profit strong").innerText());
   await capture("money-selected-february-desktop", 1280, 900);
   await capture("money-selected-february-mobile", 390, 900);
+  await selectRange("2026-01-01", "2026-02-28");
+  assert.equal(await bridge.locator(".pw-bridge-profit strong").innerText(), "$3,000", "two-month actual profit aggregates both finalized months");
+  assert.equal(await bridge.locator(".pw-benchmark-marker").count(), 0, "February-only profit cannot benchmark a two-month selected total");
+  assert.doesNotMatch(await bridge.locator(".pw-marker-legend").innerText(), /Practice benchmark/, "unsupported comparator is absent from the legend");
+  assert.match(await bridge.innerText(), /Practice benchmark withheld: no independent comparator with identical dates and accounting basis/);
+  await capture("money-two-month-benchmark-withheld-desktop", 1280, 900);
+  await capture("money-two-month-benchmark-withheld-mobile", 390, 900);
   await clickSection("Overview");
   await page.getByLabel("Shared reporting period", { exact: true }).selectOption("year");
   const annual = await page.getByLabel("Overview financial summary", { exact: true }).innerText();
