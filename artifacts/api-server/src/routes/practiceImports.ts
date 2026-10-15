@@ -139,6 +139,13 @@ const minutesBodySchema = z
 const sameDayVisitOverridesBodySchema = z
   .object({ sameDayVisitOverrides: sameDayVisitOverridesSchema })
   .strict();
+const coverageConfirmationSchema = z.object({
+  snapshotId: z.string().regex(/^(attendance|billing)-[0-9a-f]{8,64}$/),
+  reportCoverage: reportCoverageSchema,
+  expectedReportCoverage: reportCoverageSchema.nullable(),
+  sourceBasis: z.enum(["source-report", "owner-confirmation"]),
+  confirmed: z.literal(true),
+}).strict();
 
 const stableJson = (value: unknown): string => {
   if (Array.isArray(value)) return `[${value.map(stableJson).join(",")}]`;
@@ -614,6 +621,61 @@ router.post("/practice-imports/package", async (req, res) => {
     status: result.status,
     ...(await historyFor(practiceId, accountId)),
   });
+});
+
+router.put("/practice-imports/report-coverage", async (req, res) => {
+  const body = coverageConfirmationSchema.safeParse(req.body);
+  if (!body.success) return res.status(400).json({ error: "Enter report dates, source basis, explicit confirmation and the expected prior coverage." });
+  const { practiceId, accountId, actor } = scope(res);
+  const proof = body.data.reportCoverage;
+  if (proof.end > new Date().toISOString().slice(0, 10))
+    return res.status(400).json({ error: "Confirmed report coverage cannot end in the future." });
+  const result = await db.transaction(async (tx) => {
+    await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtext(${practiceId}), hashtext(${accountId}))`);
+    const availability = await tx.execute(sql`
+      SELECT EXISTS (SELECT 1 FROM pg_attribute
+        WHERE attrelid = to_regclass('practice_import_snapshots')
+          AND attname = 'report_coverage' AND NOT attisdropped) AS available
+    `);
+    if (availability.rows[0]?.available !== true) return { status: "migration-required" as const };
+    const active = await tx.select(snapshotColumns).from(practiceImportSnapshotsTable).where(and(
+      eq(practiceImportSnapshotsTable.practiceId, practiceId),
+      eq(practiceImportSnapshotsTable.accountId, accountId),
+      eq(practiceImportSnapshotsTable.active, 1),
+    ));
+    const matches = active.filter((row) => `${row.kind}-${row.sourceHash}` === body.data.snapshotId);
+    if (!matches.length) return { status: "not-found" as const };
+    if (matches.length !== 1) return { status: "ambiguous" as const };
+    const snapshot = matches[0];
+    const oldReportCoverage = snapshot.reportCoverage ?? null;
+    if (stableJson(oldReportCoverage) !== stableJson(body.data.expectedReportCoverage)) return { status: "stale" as const };
+    const rows = snapshot.rows as Array<{ serviceDate: string }>;
+    if (!dateSchema.safeParse(snapshot.coverageStart).success || !dateSchema.safeParse(snapshot.coverageEnd).success
+      || snapshot.coverageStart > snapshot.coverageEnd || proof.start > snapshot.coverageStart || proof.end < snapshot.coverageEnd
+      || !Array.isArray(rows) || rows.some((row) => !dateSchema.safeParse(row?.serviceDate).success || row.serviceDate < proof.start || row.serviceDate > proof.end))
+      return { status: "invalid-range" as const };
+    const updated = await tx.update(practiceImportSnapshotsTable).set({ reportCoverage: proof }).where(and(
+      eq(practiceImportSnapshotsTable.id, snapshot.id),
+      eq(practiceImportSnapshotsTable.practiceId, practiceId),
+      eq(practiceImportSnapshotsTable.accountId, accountId),
+      eq(practiceImportSnapshotsTable.active, 1),
+      sql`${practiceImportSnapshotsTable.reportCoverage} IS NOT DISTINCT FROM ${oldReportCoverage === null ? null : JSON.stringify(oldReportCoverage)}::jsonb`,
+    )).returning({ id: practiceImportSnapshotsTable.id });
+    if (updated.length !== 1) return { status: "stale" as const };
+    await tx.insert(practiceImportAuditTable).values({
+      id: randomUUID(), practiceId, accountId, packageId: body.data.snapshotId,
+      action: "confirm-report-coverage", actor,
+      detail: { snapshotId: body.data.snapshotId, oldReportCoverage, newReportCoverage: proof,
+        sourceBasis: body.data.sourceBasis, confirmed: true },
+    });
+    return { status: "saved" as const };
+  });
+  if (result.status === "migration-required") return res.status(503).json({ code: "REPORT_COVERAGE_MIGRATION_REQUIRED", error: "Report coverage cannot be saved until migration 008_practice_report_coverage.sql is applied." });
+  if (result.status === "not-found") return res.status(404).json({ error: "That active import was not found in this practice." });
+  if (result.status === "ambiguous") return res.status(409).json({ code: "AMBIGUOUS_SNAPSHOT_ID", error: "Multiple active imports share this identity. Resolve the duplicate before confirming coverage." });
+  if (result.status === "stale") return res.status(409).json({ code: "STALE_REPORT_COVERAGE", error: "Report coverage changed. Reload import history before confirming again." });
+  if (result.status === "invalid-range") return res.status(400).json({ error: "Report coverage must contain the observed bounds and every valid service date. Contradictory or invalid source dates require source review." });
+  return res.json(await historyFor(practiceId, accountId));
 });
 
 router.put("/practice-imports/billing-code-minutes", async (req, res) => {

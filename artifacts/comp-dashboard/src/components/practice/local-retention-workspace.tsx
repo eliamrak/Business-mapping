@@ -7,7 +7,7 @@ import {
   useState,
 } from "react";
 import { ApiError, customFetch } from "@workspace/api-client-react";
-import { Download, ShieldCheck, Upload } from "lucide-react";
+import { Download, Save, ShieldCheck, Upload } from "lucide-react";
 import { completeReportCoverage, type CompleteReportCoverage } from "@/lib/complete-report-coverage";
 import { summarizeReportedBilling } from "@/lib/reported-billing";
 import {
@@ -89,6 +89,48 @@ type StoredImportHistory = {
 type ImportResponse = StoredImportHistory & {
   status: "added" | "duplicate" | "replaced";
 };
+
+type CoverageConfirmation = {
+  snapshotId: string;
+  reportCoverage: { start: string; end: string; complete: true };
+  expectedReportCoverage: LocalSnapshot["reportCoverage"] | null;
+  sourceBasis: "source-report" | "owner-confirmation";
+  confirmed: true;
+};
+
+function SnapshotCoverageConfirmation({ snapshot, today, disabled, onSave }: {
+  snapshot: LocalSnapshot;
+  today: string;
+  disabled: boolean;
+  onSave: (confirmation: CoverageConfirmation) => Promise<void>;
+}) {
+  const [start, setStart] = useState("");
+  const [end, setEnd] = useState("");
+  const [sourceBasis, setSourceBasis] = useState<CoverageConfirmation["sourceBasis"] | "">("");
+  const [confirmed, setConfirmed] = useState(false);
+  const [expectedReportCoverage] = useState(() => structuredClone(snapshot.reportCoverage ?? null));
+  const ready = !!start && !!end && start <= end && end <= today && !!sourceBasis && confirmed;
+  return <details className="pw-import-source">
+    <summary>{snapshot.kind} · {snapshot.sourceHash.slice(0, 12)} · {snapshot.reportCoverage ? "coverage declaration recorded" : "coverage unverified"}</summary>
+    <p>Observed rows: {snapshot.coverageStart} through {snapshot.coverageEnd}. Observed bounds do not establish complete reporting.</p>
+    {snapshot.reportCoverage && <p>Current declaration: {snapshot.reportCoverage.start} through {snapshot.reportCoverage.end}.</p>}
+    <form aria-label={`Report coverage for ${snapshot.id}`} onSubmit={(event) => {
+      event.preventDefault();
+      if (!ready || disabled || !sourceBasis) return;
+      void onSave({ snapshotId: snapshot.id, reportCoverage: { start, end, complete: true }, expectedReportCoverage, sourceBasis, confirmed: true });
+    }}>
+      <fieldset disabled={disabled} style={{ border: 0, padding: 0, minWidth: 0, display: "grid", gap: 12 }}>
+        <label style={{ display: "grid", gap: 4 }}>Report start<input style={{ width: "100%", minWidth: 0, boxSizing: "border-box" }} aria-label="Report start" type="date" value={start} required max={today} onChange={(event) => { setStart(event.target.value); setConfirmed(false); }} /></label>
+        <label style={{ display: "grid", gap: 4 }}>Report end<input style={{ width: "100%", minWidth: 0, boxSizing: "border-box" }} aria-label="Report end" type="date" value={end} required max={today} onChange={(event) => { setEnd(event.target.value); setConfirmed(false); }} /></label>
+        <label style={{ display: "grid", gap: 4 }}>Confirmation basis<select style={{ width: "100%", minWidth: 0 }} aria-label="Confirmation basis" value={sourceBasis} required onChange={(event) => { setSourceBasis(event.target.value as CoverageConfirmation["sourceBasis"] | ""); setConfirmed(false); }}>
+          <option value="">Choose basis</option><option value="source-report">Source report</option><option value="owner-confirmation">Owner confirmation</option>
+        </select></label>
+        <label style={{ display: "flex", alignItems: "flex-start", gap: 8 }}><input style={{ flexShrink: 0 }} type="checkbox" checked={confirmed} onChange={(event) => setConfirmed(event.target.checked)} /><span>I confirm this import is a complete report for the entire entered date range, including days with no activity.</span></label>
+        <button className="pw-button" type="submit" disabled={!ready || disabled}><Save aria-hidden="true" />Save coverage</button>
+      </fieldset>
+    </form>
+  </details>;
+}
 
 class ImportConflict extends Error {
   code?: string;
@@ -442,6 +484,26 @@ export default function LocalRetentionWorkspace({
     setPending(null);
   }
 
+  async function confirmSnapshotCoverage(confirmation: CoverageConfirmation) {
+    if (busy) return;
+    setBusy(true);
+    setError("");
+    try {
+      const saved = await customFetch<StoredImportHistory>("/api/practice-imports/report-coverage", {
+        method: "PUT", body: JSON.stringify(confirmation),
+      });
+      setSnapshots(saved.snapshots);
+      setPackages(saved.packages);
+      setBillingCodeMinutes(saved.billingCodeMinutes);
+      setSameDayVisitOverrides(saved.sameDayVisitOverrides);
+      setStatus("Saved report coverage confirmation. Original rows, hashes and observed bounds are unchanged.");
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Report coverage could not be confirmed. Reload history if another confirmation changed it.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
   function addBillingCodeMinutes() {
     const code = codeDraft.code.trim();
     const minutes = Number(codeDraft.minutes);
@@ -530,6 +592,14 @@ export default function LocalRetentionWorkspace({
           {verifiedCoverage.incompletePeriods.map((period, index) => <p key={index}>{gapDescription(period)}</p>)}
           {verifiedCoverage.limits.map((limit) => <p key={limit}>{limit}</p>)}
         </details>
+      </section>
+      <section className="pw-import-provenance" aria-label="Confirm individual import coverage">
+        <h3>Confirm report coverage</h3>
+        <p>Enter dates from the source report or an explicit owner confirmation. Dates are never filled from occupied service dates. This saves coverage metadata only; it does not alter source facts or establish a provider roster.</p>
+        {snapshots.map((snapshot) => <SnapshotCoverageConfirmation key={`${snapshot.id}:${JSON.stringify(snapshot.reportCoverage ?? null)}`} snapshot={snapshot} today={today}
+          disabled={busy || snapshots.filter((item) => item.id === snapshot.id).length !== 1} onSave={confirmSnapshotCoverage} />)}
+        {snapshots.some((snapshot) => snapshots.filter((item) => item.id === snapshot.id).length !== 1) && <p>Duplicate import identities must be resolved before coverage can be confirmed.</p>}
+        {!snapshots.length && <p>No saved imports to confirm.</p>}
       </section>
       <details className="pw-import-provenance" aria-label="Saved import provenance">
         <summary>Saved packages and observed service dates ({snapshots.length} snapshots)</summary>
