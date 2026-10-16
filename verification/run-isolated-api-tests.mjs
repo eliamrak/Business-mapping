@@ -1,14 +1,13 @@
 import { spawn, spawnSync } from "node:child_process";
 import { mkdtempSync, writeFileSync, rmSync } from "node:fs";
-import { createRequire } from "node:module";
 import { tmpdir, userInfo } from "node:os";
 import path from "node:path";
 import net from "node:net";
 import { fileURLToPath } from "node:url";
+import { syntheticClerkFixture } from "../artifacts/api-server/test/synthetic-clerk.mjs";
 
 const root = fileURLToPath(new URL("../", import.meta.url));
-const apiRequire = createRequire(new URL("../artifacts/api-server/package.json", import.meta.url));
-const { build } = apiRequire("esbuild");
+const clerk = syntheticClerkFixture();
 const dir = mkdtempSync(path.join(tmpdir(), "practice-isolated-api-"));
 const results = { isolation: "fresh loopback-only cluster; synthetic fixtures; no inherited credentials", suites: [] };
 const env = {
@@ -20,8 +19,7 @@ const env = {
   SEED_DEMO_DATA: "false",
   EMC_OWNER_EMAIL: "owner@example.test",
   EMC_PRACTICE_ID: "isolated-service-test",
-  CLERK_PUBLISHABLE_KEY: `pk_test_${Buffer.from("clerk.127.0.0.1$").toString("base64")}`,
-  CLERK_SECRET_KEY: "sk_test_isolated_noncredential",
+  ...clerk.env,
 };
 let started = false;
 let child;
@@ -120,27 +118,11 @@ try {
   run("psql", [adminUrl.href, "-v", "ON_ERROR_STOP=1", "-c", "CREATE DATABASE isolated_schema"]);
   run("corepack", ["pnpm", "--filter", "@workspace/db", "push"], { DATABASE_URL: url });
   run("corepack", ["pnpm", "--filter", "@workspace/api-server", "build"]);
-  await runSuite(process.execPath, ["--test", "--test-reporter=tap", "artifacts/api-server/test/hub.integration.test.mjs"], { EMC_TEST_DATABASE_URL: url }, "hub-original");
+  await runSuite(process.execPath, ["--test", "--test-reporter=tap", "artifacts/api-server/test/hub.integration.test.mjs"], { EMC_TEST_DATABASE_URL: url }, "hub-clerk-auth");
   await runSuite(process.execPath, ["--test", "--test-reporter=tap", "artifacts/api-server/test/practice-imports.integration.test.mjs"], { EMC_TEST_DATABASE_URL: url }, "practice-imports-original");
   await runSuite(process.execPath, ["--test", "--test-reporter=tap", "artifacts/api-server/test/session-goals.persistence.test.mjs"], { DATABASE_URL: url }, "session-goals-original");
   const base = await startApi("artifacts/api-server/dist/index.mjs", url);
-  await runSuite(process.execPath, ["--test", "--test-reporter=tap", "artifacts/api-server/test/sessions.integration.test.mjs"], { EMC_TEST_API_URL: `${base}/api` }, "sessions-original-auth");
-  await stopApi();
-  // This adapter exercises real routes and SQL, not Clerk authentication.
-  const bundled = await build({
-    stdin: { contents: `import express from "express";
-      import router from "./artifacts/api-server/src/routes/index.ts";
-      const app = express(); app.use(express.json());
-      app.use((req,res,next)=>{res.locals.role="owner";res.locals.actor="owner@example.test";next();});
-      app.use("/api",router); app.listen(Number(process.env.PORT),"127.0.0.1");`, resolveDir: root, sourcefile: "isolated-service-adapter.ts", loader: "ts" },
-    bundle: true, platform: "node", format: "cjs", write: false,
-    nodePaths: [path.join(root, "artifacts/api-server/node_modules")], external: ["pg-native"],
-    define: { "import.meta.url": JSON.stringify(new URL("../artifacts/api-server/package.json", import.meta.url).href) },
-  });
-  const adapter = path.join(dir, "synthetic-owner.cjs");
-  writeFileSync(adapter, bundled.outputFiles[0].contents);
-  const syntheticBase = await startApi(adapter, url, { NODE_ENV: "production" });
-  await runSuite(process.execPath, ["--test", "--test-reporter=tap", "artifacts/api-server/test/sessions.integration.test.mjs"], { EMC_TEST_API_URL: `${syntheticBase}/api` }, "sessions-synthetic-owner");
+  await runSuite(process.execPath, ["--test", "--test-reporter=tap", "artifacts/api-server/test/sessions.integration.test.mjs"], { EMC_TEST_API_URL: `${base}/api`, EMC_TEST_SESSION_TOKEN: clerk.token("owner@example.test") }, "sessions-clerk-auth");
 } catch (error) {
   results.setupError = error.stack;
   console.error(error);

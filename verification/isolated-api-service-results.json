@@ -2,15 +2,15 @@
   "isolation": "fresh loopback-only cluster; synthetic fixtures; no inherited credentials",
   "suites": [
     {
-      "name": "hub-original",
-      "exitCode": 1,
+      "name": "hub-clerk-auth",
+      "exitCode": 0,
       "summary": [
-        "# tests 13",
-        "# pass 0",
-        "# fail 13",
+        "# tests 16",
+        "# pass 16",
+        "# fail 0",
         "# cancelled 0",
         "# skipped 0",
-        "# duration_ms 544.034917"
+        "# duration_ms 2014.738917"
       ]
     },
     {
@@ -22,7 +22,7 @@
         "# fail 0",
         "# cancelled 0",
         "# skipped 0",
-        "# duration_ms 386.738875"
+        "# duration_ms 363.354042"
       ]
     },
     {
@@ -34,23 +34,11 @@
         "# fail 0",
         "# cancelled 0",
         "# skipped 0",
-        "# duration_ms 134.070542"
+        "# duration_ms 132.865209"
       ]
     },
     {
-      "name": "sessions-original-auth",
-      "exitCode": 1,
-      "summary": [
-        "# tests 12",
-        "# pass 0",
-        "# fail 12",
-        "# cancelled 0",
-        "# skipped 0",
-        "# duration_ms 73.053167"
-      ]
-    },
-    {
-      "name": "sessions-synthetic-owner",
+      "name": "sessions-clerk-auth",
       "exitCode": 0,
       "summary": [
         "# tests 12",
@@ -58,11 +46,11 @@
         "# fail 0",
         "# cancelled 0",
         "# skipped 0",
-        "# duration_ms 104.515125"
+        "# duration_ms 121.781"
       ]
     }
   ],
-  "candidate": "58949e42c294dae368820f2fe21341156ed0067a",
+  "candidate": "ad3ae2e532b5744de4ae941ace5f7066752d2bf9",
   "clusterStopped": true,
   "syntheticDatabaseDeleted": true
 }

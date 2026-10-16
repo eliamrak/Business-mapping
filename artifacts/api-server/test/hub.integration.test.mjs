@@ -1,6 +1,7 @@
 import { before, after, test } from "node:test";
 import assert from "node:assert/strict";
-import { randomUUID, randomBytes, scryptSync } from "node:crypto";
+import { randomUUID, randomBytes } from "node:crypto";
+import { syntheticClerkFixture } from "./synthetic-clerk.mjs";
 import { spawn, execFileSync } from "node:child_process";
 import { createRequire } from "node:module";
 import net from "node:net";
@@ -27,8 +28,8 @@ if (!source || !["127.0.0.1", "localhost"].includes(new URL(source).hostname))
 let admin,
   child,
   base,
-  cookie,
-  entryCookie,
+  ownerToken,
+  entryToken,
   state,
   clinician,
   period,
@@ -37,21 +38,21 @@ let admin,
   testDatabaseUrl,
   log = "";
 const databaseName = `emc_hub_test_${Date.now()}_${process.pid}`;
+const clerk = syntheticClerkFixture();
 const ownerEmail = "owner@example.test",
-  password = randomBytes(24).toString("hex"),
   entryPassword = randomBytes(24).toString("hex");
 async function call(
   path,
   body,
   method = body ? "POST" : "GET",
-  auth = cookie,
+  auth = ownerToken,
   origin = base,
 ) {
   const response = await fetch(`${base}/api${path}`, {
     method,
     headers: {
       ...(body ? { "content-type": "application/json" } : {}),
-      ...(auth ? { cookie: auth } : {}),
+      ...(auth ? { authorization: `Bearer ${auth}` } : {}),
       ...(origin ? { origin } : {}),
     },
     body: body ? JSON.stringify(body) : undefined,
@@ -102,11 +103,10 @@ before(async () => {
     });
   });
   base = `http://127.0.0.1:${port}`;
-  const salt = randomBytes(16).toString("hex"),
-    encoded = salt + ":" + scryptSync(password, salt, 64).toString("hex");
   child = spawn(process.execPath, ["artifacts/api-server/dist/index.mjs"], {
     env: {
       ...process.env,
+      ...clerk.env,
       DATABASE_URL: url.toString(),
       NODE_ENV: "development",
       HOST: "127.0.0.1",
@@ -114,7 +114,6 @@ before(async () => {
       LOCAL_PREVIEW: "false",
       SEED_DEMO_DATA: "false",
       EMC_OWNER_EMAIL: ownerEmail,
-      EMC_OWNER_PASSWORD_HASH: encoded,
       APP_ORIGIN: base,
     },
     stdio: ["ignore", "pipe", "pipe"],
@@ -129,9 +128,10 @@ before(async () => {
     if (i === 99) throw new Error(log);
   }
   assert.equal((await call("/hub", undefined, "GET", null)).status, 401);
-  const login = await call("/auth/login", { email: ownerEmail, password });
-  assert.equal(login.status, 200);
-  cookie = login.headers.get("set-cookie").split(";")[0];
+  ownerToken = clerk.token(ownerEmail);
+  const me = await call("/auth/me");
+  assert.equal(me.status, 200, JSON.stringify(me.data));
+  assert.deepEqual(me.data, { actor: ownerEmail, role: "owner" });
   state = (await call("/hub")).data;
   assert.equal(state.revision, 0);
   clinician = (
@@ -177,6 +177,48 @@ after(async () => {
     await admin.end();
   }
 });
+test("Clerk verifies signatures and lifetime before private application access", async () => {
+  const otherIssuer = syntheticClerkFixture();
+  for (const invalid of [
+    "not-a-token",
+    otherIssuer.token(ownerEmail),
+    clerk.token(ownerEmail, { exp: Math.floor(Date.now() / 1000) - 60 }),
+    clerk.token(ownerEmail, { nbf: Math.floor(Date.now() / 1000) + 600 }),
+    clerk.token(ownerEmail, { sts: "pending" }),
+  ]) {
+    assert.equal((await call("/hub", undefined, "GET", invalid)).status, 401);
+  }
+  for (const path of ["/hub", "/session-records", "/practice-imports", "/auth/users", "/auth/me"])
+    assert.equal((await call(path, undefined, "GET", null)).status, 401, path);
+  const spoof = await fetch(`${base}/api/hub`, { headers: { "x-synthetic-actor": ownerEmail, "x-synthetic-role": "owner" } });
+  assert.equal(spoof.status, 401);
+  assert.deepEqual((await call("/auth/me", undefined, "GET", clerk.token("OWNER@EXAMPLE.TEST"))).data, { actor: ownerEmail, role: "owner" });
+});
+
+test("signed second-owner identity needs an invitation and disabled access is revoked", async () => {
+  const secondEmail = "other-owner@example.test";
+  const secondToken = clerk.token(secondEmail, { role: "owner" });
+  for (const path of ["/hub", "/practice-imports", "/auth/me", "/auth/users"]) {
+    const rejected = await call(path, undefined, "GET", secondToken);
+    assert.equal(rejected.status, 403, path);
+    assert.equal(rejected.data.code, "INVITATION_REQUIRED");
+  }
+  assert.equal((await call("/auth/users", { email: secondEmail, name: "Synthetic invited owner", password: entryPassword, role: "owner" })).status, 201);
+  assert.deepEqual((await call("/auth/me", undefined, "GET", secondToken)).data, { actor: secondEmail, role: "owner" });
+  // Invited owners intentionally share this single-practice workspace.
+  assert.deepEqual((await call("/hub", undefined, "GET", secondToken)).data, (await call("/hub")).data);
+  const invited = (await call("/auth/users")).data.find(user => user.email === secondEmail);
+  assert.equal((await call(`/auth/users/${invited.id}`, { disabled: true }, "PATCH")).status, 200);
+  assert.equal((await call("/hub", undefined, "GET", secondToken)).status, 403);
+});
+
+test("authenticated writes still require the configured origin", async () => {
+  for (const origin of [null, "https://untrusted.example"]) {
+    assert.equal((await call("/hub", { requestId: randomUUID(), expectedRevision: state.revision, action: "Rejected origin", data: state.data }, "POST", ownerToken, origin)).status, 403);
+  }
+  assert.deepEqual((await call("/hub")).data, state);
+});
+
 test("workspace saves are idempotent, revision-guarded and preserve numeric-looking names", async () => {
   const context = await call("/hub/context");
   assert.equal(context.data.clinicians[0].label, "123");
@@ -377,11 +419,7 @@ test("owner-only boundaries and the restricted data-entry workflow are enforced 
     ).status,
     201,
   );
-  const login = await call("/auth/login", {
-    email: "entry@example.test",
-    password: entryPassword,
-  });
-  entryCookie = login.headers.get("set-cookie").split(";")[0];
+  entryToken = clerk.token("entry@example.test");
   for (const path of [
     "/hub",
     "/hub/context",
@@ -392,16 +430,16 @@ test("owner-only boundaries and the restricted data-entry workflow are enforced 
     "/auth/users",
   ])
     assert.equal(
-      (await call(path, undefined, "GET", entryCookie)).status,
+      (await call(path, undefined, "GET", entryToken)).status,
       403,
       path,
     );
-  const info = await call("/hub/entry", undefined, "GET", entryCookie);
+  const info = await call("/hub/entry", undefined, "GET", entryToken);
   assert.equal(info.status, 200);
   assert.equal(info.data.settings, undefined);
   assert.equal(info.data.clinicians[0].sessionRate, undefined);
   assert.equal(
-    (await call("/session-records?goalId=999", undefined, "GET", entryCookie))
+    (await call("/session-records?goalId=999", undefined, "GET", entryToken))
       .status,
     403,
   );
@@ -424,7 +462,7 @@ test("owner-only boundaries and the restricted data-entry workflow are enforced 
         "/session-records",
         { requestId: randomUUID(), expectedRevision: null, entry },
         "POST",
-        entryCookie,
+        entryToken,
       )
     ).status,
     200,
@@ -433,7 +471,7 @@ test("owner-only boundaries and the restricted data-entry workflow are enforced 
     "/session-records?goalId=unassigned",
     undefined,
     "GET",
-    entryCookie,
+    entryToken,
   );
   assert.equal(savedSessions.status, 200);
   assert.equal(savedSessions.data[0].scheduled, 25);
@@ -441,7 +479,7 @@ test("owner-only boundaries and the restricted data-entry workflow are enforced 
     `/session-records/${savedSessions.data[0].id}/history`,
     undefined,
     "GET",
-    entryCookie,
+    entryToken,
   );
   assert.equal(sessionHistory.status, 200);
   assert.ok(sessionHistory.data[0].actor.includes("entry@example.test"));
@@ -455,7 +493,7 @@ test("owner-only boundaries and the restricted data-entry workflow are enforced 
           entry: { ...entry, start: period.start, end: period.end },
         },
         "POST",
-        entryCookie,
+        entryToken,
       )
     ).status,
     403,
@@ -481,7 +519,7 @@ test("owner-only boundaries and the restricted data-entry workflow are enforced 
           entry: funnel,
         },
         "POST",
-        entryCookie,
+        entryToken,
       )
     ).status,
     200,
@@ -497,7 +535,7 @@ test("owner-only boundaries and the restricted data-entry workflow are enforced 
           data: state.data,
         },
         "POST",
-        cookie,
+        ownerToken,
         "https://untrusted.example",
       )
     ).status,
@@ -692,7 +730,7 @@ test("business-data backup excludes access credentials and refuses nonempty rest
   assert.equal(backup.data.tables.hub_users, undefined);
   assert.equal(backup.data.tables.hub_auth_sessions, undefined);
   assert.equal(
-    (await call("/hub/backup", undefined, "GET", entryCookie)).status,
+    (await call("/hub/backup", undefined, "GET", entryToken)).status,
     403,
   );
   const preview = await call("/hub/backup/preview", backup.data);
