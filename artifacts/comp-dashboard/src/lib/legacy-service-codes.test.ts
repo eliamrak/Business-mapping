@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { legacyConverterFixture } from "../../../../verification/legacy-converter-fixture.mjs";
+import { legacyConverterFixture, zeroCodeConverterFixture } from "../../../../verification/legacy-converter-fixture.mjs";
 import { legacyServiceDefinition, isTreatmentService, isConsultationService, isDocumentationService, isFreePhoneService } from "@workspace/practice/hub";
 import { importLocalPackage, importAttendanceCsv, buildLocalRetentionMetrics, treatmentAttendanceRows, phoneChargeAnomalies, exportLocalBackup, importLocalBackup, consultAttendanceClassifier } from "./retention-local.ts";
 import { buildImportedSessionOverlay } from "./import-derived-sessions.ts";
@@ -21,6 +21,21 @@ test("all six owner codes preserve meaning independently of misleading consultat
     assert.equal(legacyServiceDefinition(code), undefined);
     assert.equal(isConsultationService({ billingCode: code, visitKind: "consultation" }), true);
   }
+});
+
+test("numeric 0, string 0, explicit 00000, blank and null survive XLSX conversion distinctly", () => {
+  const payload = zeroCodeConverterFixture();
+  assert.deepEqual(payload.collections.billing.rows.map((row: any) => row.billingCode), ["0", "0", "00000", null, null]);
+  assert.deepEqual(payload.collections.attendance.rows.map((row: any) => row.billingCode ?? null), ["0", "0", "00000", null, null]);
+  assert.deepEqual(payload.collections.billing.rows.map((row: any) => row.totalFeeCharged), [11, 22, 33, 44, 55]);
+  assert.equal(Object.hasOwn(payload.billingCodeMinutes, "0"), false);
+  assert.equal(payload.billingCodeMinutes["00000"], 15);
+  assert.equal(legacyServiceDefinition("0"), undefined);
+  const imported = importLocalPackage(payload);
+  assert.equal(summarizeReportedBilling(imported.snapshots, "2026-10-16").months[0].charges, 165);
+  const metric = buildLocalRetentionMetrics(imported.snapshots, imported.billingCodeMinutes).billingByClinician[0];
+  assert.equal(metric.configuredMinuteRows, 1);
+  assert.equal(metric.estimatedBillingHours, 0.25);
 });
 
 test("synthetic files flow through converter, strict Practice package validation and metrics", () => {

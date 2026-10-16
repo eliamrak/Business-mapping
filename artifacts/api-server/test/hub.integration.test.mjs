@@ -188,7 +188,7 @@ test("Clerk verifies signatures and lifetime before private application access",
   ]) {
     assert.equal((await call("/hub", undefined, "GET", invalid)).status, 401);
   }
-  for (const path of ["/hub", "/session-records", "/practice-imports", "/auth/users", "/auth/me"])
+  for (const path of ["/hub", "/session-records", "/practice-imports", "/practice-imports/capabilities", "/auth/users", "/auth/me"])
     assert.equal((await call(path, undefined, "GET", null)).status, 401, path);
   const spoof = await fetch(`${base}/api/hub`, { headers: { "x-synthetic-actor": ownerEmail, "x-synthetic-role": "owner" } });
   assert.equal(spoof.status, 401);
@@ -198,7 +198,7 @@ test("Clerk verifies signatures and lifetime before private application access",
 test("signed second-owner identity needs an invitation and disabled access is revoked", async () => {
   const secondEmail = "other-owner@example.test";
   const secondToken = clerk.token(secondEmail, { role: "owner" });
-  for (const path of ["/hub", "/practice-imports", "/auth/me", "/auth/users"]) {
+  for (const path of ["/hub", "/practice-imports", "/practice-imports/capabilities", "/auth/me", "/auth/users"]) {
     const rejected = await call(path, undefined, "GET", secondToken);
     assert.equal(rejected.status, 403, path);
     assert.equal(rejected.data.code, "INVITATION_REQUIRED");
@@ -210,6 +210,19 @@ test("signed second-owner identity needs an invitation and disabled access is re
   const invited = (await call("/auth/users")).data.find(user => user.email === secondEmail);
   assert.equal((await call(`/auth/users/${invited.id}`, { disabled: true }, "PATCH")).status, 200);
   assert.equal((await call("/hub", undefined, "GET", secondToken)).status, 403);
+});
+
+test("owner can visibly inspect uncached reader capabilities without changing workspace", async () => {
+  const before = (await call("/hub")).data;
+  const capabilities = await call("/practice-imports/capabilities");
+  assert.equal(capabilities.status, 200);
+  assert.equal(capabilities.headers.get("cache-control"), "no-store");
+  assert.equal(capabilities.data.readerProtocol, "legacy-codes-late-cancellation-v1");
+  assert.deepEqual(capabilities.data.cancellationSubtypes, ["late_cancelled"]);
+  assert.deepEqual(capabilities.data.unclassifiedZero, { storedCode: "0", defaultMinutes: null, equivalentToFiveZeros: false });
+  assert.deepEqual(capabilities.data.serviceCodes["4"], { kind: "treatment", minutes: 30 });
+  assert.deepEqual(capabilities.data.serviceCodes["2"], { kind: "documentation", minutes: 0 });
+  assert.deepEqual((await call("/hub")).data, before);
 });
 
 test("authenticated writes still require the configured origin", async () => {
@@ -423,6 +436,7 @@ test("owner-only boundaries and the restricted data-entry workflow are enforced 
   for (const path of [
     "/hub",
     "/hub/context",
+    "/practice-imports/capabilities",
     "/hub/export",
     "/clinicians",
     "/staff",

@@ -803,8 +803,6 @@ def billing_code_text(value: Any, cell_meta: dict[str, Any] | None = None) -> tu
         style = (cell_meta or {}).get("style") or ""
         if re.fullmatch(r"0+", style):
             return str(int(value)).zfill(len(style)), None
-        if int(value) == 0:
-            return "", "billing code is numeric zero; enter it as text to preserve leading zeros"
         return str(int(value) if float(value).is_integer() else value), None
     return str(value), None
 

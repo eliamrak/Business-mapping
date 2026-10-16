@@ -30,3 +30,9 @@ export function legacyConverterFixture(options = {}) {
     return JSON.parse(readFileSync(output, "utf8"));
   } finally { rmSync(dir, { recursive: true, force: true }); }
 }
+
+export function zeroCodeConverterFixture(options = {}) {
+  const core = options.corePath ?? fileURLToPath(new URL("../tools/practice-converter/Resources/converter_core.py", import.meta.url));
+  const fixture = fileURLToPath(new URL("../tools/practice-converter/Tests/zero_code_fixture.py", import.meta.url));
+  return JSON.parse(execFileSync(options.python ?? "python3", [fixture, "--core", core], { encoding: "utf8", env: options.env ?? process.env }));
+}

@@ -5,14 +5,16 @@ import { homedir, tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import assert from "node:assert/strict";
-import { legacyConverterFixture } from "./legacy-converter-fixture.mjs";
+import { legacyConverterFixture, zeroCodeConverterFixture } from "./legacy-converter-fixture.mjs";
 import { importLocalPackage, treatmentAttendanceRows } from "../artifacts/comp-dashboard/src/lib/retention-local.ts";
 import { summarizeReportedBilling } from "../artifacts/comp-dashboard/src/lib/reported-billing.ts";
 
 const root = fileURLToPath(new URL("../", import.meta.url));
 const git = args => execFileSync("git", args, { cwd: root, encoding: "utf8" }).trim();
 const sha = git(["rev-parse", `${process.argv[2] ?? "HEAD"}^{commit}`]);
-git(["diff", "--quiet", sha, "--", "tools/practice-converter/Resources", "lib/practice/src", "artifacts/api-server/src", "artifacts/comp-dashboard/src"]);
+const converterSha = git(["rev-parse", `${process.argv[3] ?? "HEAD"}^{commit}`]);
+git(["diff", "--quiet", sha, "--", "lib/practice/src", "artifacts/api-server/src", "artifacts/comp-dashboard/src", ":(exclude)**/*.test.ts"]);
+git(["diff", "--quiet", converterSha, "--", "tools/practice-converter/Resources"]);
 const installed = path.join(homedir(), "Applications", "Practice Converter.app");
 const hash = file => createHash("sha256").update(readFileSync(file)).digest("hex");
 const installedBinary = path.join(installed, "Contents/MacOS/PracticeConverter");
@@ -44,8 +46,16 @@ assert.equal(treatmentAttendanceRows(imported.snapshots).filter(row => row.statu
 assert.equal(summarizeReportedBilling(imported.snapshots, "2026-10-16").months[0].charges, 650);
 assert.deepEqual(payload.collections.billing.rows.map(row => row.billingCode), ["1", "30001", "30002", "30003", "4", "2", "PHONE", "90837", "90837", "90837"]);
 assert.equal(payload.collections.attendance.rows[7].cancellationSubtype, "late_cancelled");
+const zeroPayload = zeroCodeConverterFixture({ corePath: core, python: path.join(home, "bin/python3"), env: {
+  PATH: "/usr/bin:/bin", HOME: dir, TMPDIR: dir,
+  PYTHONHOME: home, PYTHONDONTWRITEBYTECODE: "1", PYTHONNOUSERSITE: "1",
+} });
+assert.deepEqual(zeroPayload.collections.billing.rows.map(row => row.billingCode), ["0", "0", "00000", null, null]);
+assert.equal(Object.hasOwn(zeroPayload.billingCodeMinutes, "0"), false);
+assert.equal(summarizeReportedBilling(importLocalPackage(zeroPayload).snapshots, "2026-10-16").months[0].charges, 165);
 const manifest = {
   readerCommit: sha, readerTree: git(["rev-parse", `${sha}^{tree}`]),
+  converterCommit: converterSha,
   packagerSha256: hash(fileURLToPath(import.meta.url)),
   fixtureSha256: hash(path.join(root, "verification/legacy-converter-fixture.mjs")),
   candidate, parserSha256: hash(core),
@@ -54,6 +64,7 @@ const manifest = {
   nativeCodeUnchangedAfterSignatureRemoval: true,
   originalInstalledParserSha256: hash(path.join(installed, "Contents/Resources/converter_core.py")),
   codesign: "deep-strict-pass", bundledPythonRoundtrip: "pass", syntheticBilledFees: 650, treatmentVisits: 4,
+  numericZeroRoundtrip: "pass; 0 distinct from 00000; blank/null retained; fees165; no 0 duration assumed",
   installed: false, productionReaderVerified: false,
 };
 writeFileSync(path.join(dir, "manifest.json"), JSON.stringify(manifest, null, 2));

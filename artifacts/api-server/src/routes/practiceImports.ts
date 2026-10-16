@@ -10,7 +10,7 @@ import {
 } from "@workspace/db";
 import { z } from "@workspace/practice";
 import { importDeclarationsSchema, normalizeProviderLabel, prepareBillingChargeResolution, reconcileBillingEvidence,
-  resolveImportedProvider, bindBillingResolutions, billingChargeResolutionSchema, type StoredImportDeclarations } from "@workspace/practice/hub";
+  resolveImportedProvider, bindBillingResolutions, billingChargeResolutionSchema, legacyServiceCodes, type StoredImportDeclarations } from "@workspace/practice/hub";
 
 const router = Router();
 
@@ -540,6 +540,19 @@ router.put("/practice-imports/declarations", async (req, res) => {
   if (result === "stale") return res.status(409).json({ error: "Import declarations changed. Reload before confirming." });
   if (result !== "saved") return res.status(400).json({ error: result === "range" ? "Source-set coverage must contain every member's valid service dates." : "A provider target, explicit source scope or source-set member needs review." });
   return res.json(await historyFor(practiceId, accountId));
+});
+
+router.get("/practice-imports/capabilities", (_req, res) => {
+  res.set("Cache-Control", "no-store");
+  return res.json({
+    readerProtocol: "legacy-codes-late-cancellation-v1",
+    packageFormat: "emc-practice-local-import-package",
+    packageVersion: 1,
+    cancellationSubtypes: ["late_cancelled"],
+    billingCodeEncoding: "string-or-null",
+    unclassifiedZero: { storedCode: "0", defaultMinutes: null, equivalentToFiveZeros: false },
+    serviceCodes: legacyServiceCodes,
+  });
 });
 
 router.get("/practice-imports", async (_req, res) => {

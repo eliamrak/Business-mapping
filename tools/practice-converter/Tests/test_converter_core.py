@@ -62,7 +62,7 @@ def sheet_xml(rows: list[list[object]], formulas: dict[tuple[int, int], str] | N
                 cells.append(f'<c r="{ref}"><f>{escape(formulas[(r_idx, c_idx)])}</f><v></v></c>')
                 continue
             value = row[c_idx - 1] if c_idx <= len(row) else ""
-            if value == "":
+            if value in (None, ""):
                 continue
             if isinstance(value, (int, float)):
                 cells.append(f'<c r="{ref}"><v>{value}</v></c>')
@@ -115,6 +115,14 @@ class ConverterCoreTests(unittest.TestCase):
 
     def tearDown(self) -> None:
         shutil.rmtree(self.tmp)
+
+    def test_numeric_zero_is_not_assumed_to_be_five_zero_code(self) -> None:
+        from zero_code_fixture import zero_code_fixture
+        data = zero_code_fixture(CORE)
+        self.assertEqual([row["billingCode"] for row in data["collections"]["billing"]["rows"]], ["0", "0", "00000", None, None])
+        self.assertEqual([row["totalFeeCharged"] for row in data["collections"]["billing"]["rows"]], [11, 22, 33, 44, 55])
+        self.assertNotIn("0", data["billingCodeMinutes"])
+        self.assertEqual(data["billingCodeMinutes"]["00000"], 15)
 
     def valid_csv_inputs(self) -> tuple[Path, Path]:
         attendance = self.tmp / "attendance.csv"

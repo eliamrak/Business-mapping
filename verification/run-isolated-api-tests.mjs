@@ -5,6 +5,7 @@ import path from "node:path";
 import net from "node:net";
 import { fileURLToPath } from "node:url";
 import { syntheticClerkFixture } from "../artifacts/api-server/test/synthetic-clerk.mjs";
+import { verifyLegacyImpact } from "./verify-legacy-impact.mjs";
 
 const root = fileURLToPath(new URL("../", import.meta.url));
 const clerk = syntheticClerkFixture();
@@ -119,6 +120,9 @@ try {
   run("corepack", ["pnpm", "--filter", "@workspace/db", "push"], { DATABASE_URL: url });
   run("psql", [url, "-v", "ON_ERROR_STOP=1", "-f", path.join(root, "verification/paired-repair-preservation.sql")]);
   results.preservationSql = "parsed-and-executed-on-empty-synthetic-schema";
+  run("psql", [url, "-v", "ON_ERROR_STOP=1", "-f", path.join(root, "verification/legacy-code-impact.sql")]);
+  results.legacyImpactSql = "parsed-and-executed-on-empty-synthetic-schema";
+  results.legacyImpactFixtures = await verifyLegacyImpact(url);
   run("corepack", ["pnpm", "--filter", "@workspace/api-server", "build"]);
   await runSuite(process.execPath, ["--test", "--test-reporter=tap", "artifacts/api-server/test/hub.integration.test.mjs"], { EMC_TEST_DATABASE_URL: url }, "hub-clerk-auth");
   await runSuite(process.execPath, ["--test", "--test-reporter=tap", "artifacts/api-server/test/practice-imports.integration.test.mjs"], { EMC_TEST_DATABASE_URL: url }, "practice-imports-original");

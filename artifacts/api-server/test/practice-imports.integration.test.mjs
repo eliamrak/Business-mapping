@@ -1,5 +1,5 @@
 import { before, after, test } from "node:test";
-import { legacyConverterFixture } from "../../../verification/legacy-converter-fixture.mjs";
+import { legacyConverterFixture, zeroCodeConverterFixture } from "../../../verification/legacy-converter-fixture.mjs";
 import assert from "node:assert/strict";
 import { createRequire } from "node:module";
 import { readFileSync, writeFileSync } from "node:fs";
@@ -672,6 +672,19 @@ test("converted legacy files persist actual codes, fees and late cancellation th
   invalid.packageId += "-invalid";
   invalid.collections.attendance.rows[7].status = "show";
   assert.equal((await call("/practice-imports/package", { package: invalid }, "POST", options)).status, 400);
+});
+
+test("converted numeric zero is not 00000 and missing codes retain fees through API reload", async () => {
+  const payload = zeroCodeConverterFixture();
+  const options = { practice: "zero-code-converter@example.test" };
+  const saved = await call("/practice-imports/package", { package: payload }, "POST", options);
+  assert.equal(saved.status, 200, JSON.stringify(saved.data));
+  const reloaded = await call("/practice-imports", undefined, "GET", options);
+  const billing = reloaded.data.snapshots.find(snapshot => snapshot.kind === "billing");
+  assert.deepEqual(billing.rows.map(row => row.billingCode), ["0", "0", "00000", null, null]);
+  assert.deepEqual(billing.rows.map(row => row.totalFeeCharged), [11, 22, 33, 44, 55]);
+  assert.equal(Object.hasOwn(reloaded.data.billingCodeMinutes, "0"), false);
+  assert.equal(reloaded.data.billingCodeMinutes["00000"], 15);
 });
 
 test("partial overlap replacement keeps retained package metadata and code minutes", async () => {
