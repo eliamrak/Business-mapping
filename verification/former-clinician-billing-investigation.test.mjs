@@ -7,8 +7,9 @@ import { summarizeReportedBilling } from '../artifacts/comp-dashboard/src/lib/re
 import { practiceFinancialRange } from '../artifacts/comp-dashboard/src/lib/practice-financial-range.ts';
 import { currentPracticeClinicians } from '../artifacts/comp-dashboard/src/lib/practice-scope.ts';
 import { completeReportCoverage } from '../artifacts/comp-dashboard/src/lib/complete-report-coverage.ts';
+import { historicalBillingLedger } from '../artifacts/comp-dashboard/src/lib/historical-billing-ledger.ts';
 
-// Investigation/characterization only: these tests do not implement billing-only identities.
+// Preserve the original operating-scope boundary while testing the separate historical ledger.
 const current = 'Synthetic Current';
 const former = 'Synthetic Former';
 const bill = rows => importBillingCsv('Client,Clinician,Date of service,Total fee,Billing code\n' + rows.join('\n')).snapshot;
@@ -22,7 +23,7 @@ function fixture() {
   return { workspace, context };
 }
 
-test('current historical Money path excludes a cardless former provider: requirement is NOT implemented', () => {
+test('current-team operating scope stays separate while confirmed cardless historical charges are included', () => {
   const { workspace, context } = fixture();
   const snapshot = bill([`Synthetic A,${current},2025-07-16,100,90837`, `Synthetic B,${former},2025-07-16,175,90837`]);
   snapshot.reportCoverage = { start: '2025-07-01', end: '2026-10-12', complete: true };
@@ -30,29 +31,26 @@ test('current historical Money path excludes a cardless former provider: require
   const raw = summarizeReportedBilling([snapshot], '2026-10-16', { start: '2025-07-01', end: '2025-07-31' });
   const selected = practiceFinancialRange(workspace, context, [snapshot], '2026-10-16', { start: '2025-07-01', end: '2025-07-31' });
   assert.equal(raw.months[0].charges, 275);
-  assert.equal(selected.actual.reportedCharges, 100, '175 former-provider charges are not yet represented in historical Money scope');
+  assert.equal(selected.actual.reportedCharges, 100, 'former-provider charges remain outside the current-team operating scope');
+  const declarations = { version: 1, mappings: [{ sourceLabel: current, clinicianLabel: current, clinicianId: 1, teamId: null }], sourceSets: [],
+    historicalBillingProviders: [{ id: '00000000-0000-4000-8000-000000000001', sourceLabel: former,
+      sourceSets: [{ snapshotIds: [snapshot.id], start: '2025-07-01', end: '2026-10-12', complete: true }] }] };
+  const history = historicalBillingLedger([snapshot], context.clinicians, null, declarations, '2026-10-16', { start: '2025-07-01', end: '2025-07-31' });
+  assert.equal(history.reportedCharges, 275); assert.equal(history.coverageComplete, true);
   assert.deepEqual(currentPracticeClinicians(workspace, context, '2026-10-16').map(c => c.label), [current]);
   assert.equal(context.clinicians.length, 1, 'do not create a clinician card to hide the unsupported billing-only identity');
   assert.deepEqual({ workspace, context, snapshot }, before);
 });
 
-test('an unknown deleted JSON marker is rejected; a name suffix is not guessed or stripped', () => {
+test('unknown deleted JSON fields and provider-name suffixes require review, not guessing', () => {
   const pkg = JSON.parse(readFileSync(new URL('../docs/practice-local-import-package-v1.golden.json', import.meta.url), 'utf8'));
   pkg.collections.billing.rows[0].deleted = true;
-  assert.throws(() => importLocalPackage(pkg), /deleted|unsupported|unknown/i);
-  const snapshot = bill([`Synthetic A,${current} (deleted),2026-10-10,100,90837`]);
-  const { workspace, context } = fixture();
-  snapshot.reportCoverage = { start: '2026-09-24', end: '2026-10-21', complete: true };
-  assert.equal(snapshot.rows[0].clinician, current + ' (deleted)');
-  const proof = completeReportCoverage([snapshot], context.clinicians, '2026-10-22', context.clinicians, { teamId: workspace.settings.teamId });
-  assert.equal(proof.eligibleBillingRows.length, 0);
+  assert.throws(() => importLocalPackage(pkg), /Unverified deletion marker/);
+  assert.throws(() => bill([`Synthetic A,${current} (deleted),2026-10-10,100,90837`]), /Unverified deletion marker/);
 });
 
-test('legacy CSV ignores an unknown deleted column: direct import is NOT a verified marker workflow', () => {
-  const result = importBillingCsv(`Client,Clinician,Date of service,Total fee,Billing code,Deleted\nSynthetic A,${current},2026-10-10,100,90837,true`);
-  assert.equal(result.snapshot.rows[0].clinician, current);
-  assert.ok(!Object.hasOwn(result.snapshot.rows[0], 'deleted'));
-  assert.deepEqual(result.warnings, [], 'current parser does not surface the unverified marker; do not treat this as support');
+test('legacy CSV no longer silently discards an unknown deleted column', () => {
+  assert.throws(() => importBillingCsv(`Client,Clinician,Date of service,Total fee,Billing code,Deleted\nSynthetic A,${current},2026-10-10,100,90837,true`), /Unverified deletion marker/);
 });
 
 test('October10-12 overlay counts October10 once and adds11-12 despite shifted source row hashes', () => {
@@ -94,6 +92,13 @@ test('four source-pinned two-charge approvals survive an unrelated overlapping O
   assert.equal(result.evidence.resolvedCaseCount, 4);
   assert.equal(result.evidence.staleResolutionCount, 0);
   assert.equal(result.evidence.duplicateRowCount, 1);
+  const historicalSource = bill([`Synthetic retired,${former},2026-10-12,0,90837`]);
+  const history = historicalBillingLedger([old, incoming, historicalSource], context.clinicians, null, {
+    ...declarations, billingResolutions: approvals,
+    historicalBillingProviders: [{ id: '00000000-0000-4000-8000-000000000099', sourceLabel: former,
+      sourceSets: [{ snapshotIds: [historicalSource.id], start: '2026-10-10', end: '2026-10-12', complete: true }] }],
+  }, '2026-10-16', { start: '2025-11-01', end: '2026-10-12' });
+  assert.equal(history.reportedCharges, 1750); assert.equal(history.evidence.resolvedCaseCount, 4); assert.equal(history.evidence.staleResolutionCount, 0);
   assert.deepEqual({ old, incoming, approvals, declarations }, before);
 });
 

@@ -29,6 +29,8 @@ Frozen runtime candidate: `3f5ad92c5bebedc2d740b9ebb8c88b84abf2f689`, tree `808c
 
 ## Existing-Environment Release
 
+Cloud follow-up, October 16 at 16:08 UTC: the exact reviewed production SELECT completed READY. All 14 January selected-retention coverage flags are true, and all six legacy clinician flags are false because their excluded partial follow-up rows all fall after the admitted attendance cutoff (Erin 6, Elia 4, Natalie 4, Michele 5, Jessica Cockrum 2, Jessica Yates 2; practice deduplicates to 22). This confirms the exact production mechanism previously established only by source/synthetic evidence. January numbers, declaration revision 1, four approvals and zero original gate/PHONE anomalies are unchanged. Cloud is proceeding with only frozen `d8d67f8` / runtime `3f5ad92`; newer historical-billing code is explicitly excluded. Completed deployment/new-asset/live-label verification remains a separate result not yet supplied locally.
+
 1. Confirm the extra production provenance aggregate and review the candidate's synthetic desktop/mobile states. Preserve current runtime and all existing source/declaration/journal fingerprints.
 2. Publish only the reviewed runtime candidate to the existing app. No migration, source import, balance/goal update, approval reapplication or workspace save is required.
 3. Recheck January 15-28 and January 1-31, all six clinicians and Whole Practice. Initial retention labels must agree with the selected coverage calculation; a genuine follow-up gap must still say unverified. Full January is not partial; biweekly January is a partial selection. Selected limitations must not contain unrelated October unfinished-period or rolling-baseline claims.

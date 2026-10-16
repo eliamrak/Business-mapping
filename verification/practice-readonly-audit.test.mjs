@@ -118,6 +118,22 @@ test("confirmed declarations resolve copied identities in the exact-model aggreg
   assert.deepEqual(input, before);
 });
 
+test("aggregate replay restores separate historical metadata and exports only historical charge aggregates", () => {
+  const input = fixture();
+  const billing = input.snapshots[1]; billing.id = "billing-bbbbbbbb"; billing.sourceHash = "bbbbbbbb";
+  billing.rows.push({ clientId: "SECRET_FORMER_CLIENT", clinician: "Synthetic Former", serviceDate: "2026-01-31", totalFeeCharged: 75, billingCode: "90837", sourceRowHash: "SECRET_FORMER_HASH" });
+  input.declarations = { version: 1, mappings: [{ sourceLabel: "Elia", clinicianId: 1, clinicianLabel: "Elia", teamId: null }], sourceSets: [] };
+  input.declarationRevision = 2;
+  input.historicalBillingJournal = [{ version: 1, declarationRevision: 2, providers: [{ id: "00000000-0000-4000-8000-000000000001", sourceLabel: "Synthetic Former",
+    sourceSets: [{ snapshotIds: [billing.id], start: "2026-01-01", end: "2026-05-06", complete: true }] }] }];
+  const before = structuredClone(input); const result = aggregateAudit(input, options);
+  assert.equal(result.financial.actual.revenue, 140, "historical charges never feed current-team operating actuals");
+  assert.equal(result.historicalBilling.reportedCharges, 215);
+  assert.equal(result.historicalBilling.historicalProviderCount, 1);
+  assert.doesNotMatch(JSON.stringify(result), /SECRET_|clientId|sourceRowHash|sourceHash|snapshotId|clinicianId/);
+  assert.deepEqual(input, before);
+});
+
 function fakeClient({ mode = "on", fail = false } = {}) {
   const calls = [];
   return { calls, async query(sql, params) {
@@ -138,7 +154,7 @@ test("database snapshot is scoped, read-only, bounded, and always rolled back wi
   assert.ok(client.calls.every(({ sql }) => !/\b(INSERT|UPDATE|DELETE|CREATE|ALTER|DROP|TRUNCATE|COMMIT|COPY)\b/i.test(sql)));
   for (const { sql, params } of client.calls.filter(({ sql }) => /FROM practice_import_/.test(sql))) {
     assert.match(sql, /practice_id = \$1 AND account_id = \$2/);
-    if (sql.includes("FROM practice_import_audit")) assert.match(sql, /action = 'accept-billing-charge-exception' LIMIT 1001/);
+    if (sql.includes("FROM practice_import_audit")) assert.match(sql, /action = '(accept-billing-charge-exception|confirm-historical-billing-providers)' LIMIT 1001/);
     else assert.match(sql, /AND active = 1/);
     assert.deepEqual(params, ["SECRET_SCOPE", "SECRET_SCOPE"]);
     assert.doesNotMatch(sql, /SECRET_SCOPE/);

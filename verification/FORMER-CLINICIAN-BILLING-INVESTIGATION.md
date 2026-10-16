@@ -1,5 +1,7 @@
 # Former Clinician Historical Billing: Not Implemented
 
+Historical baseline note: this document records investigation commit `fdbe612`, before implementation was authorized. A subsequent separate historical-billing candidate implements the explicit registry/ledger path and marker review guards; see `FORMER-CLINICIAN-BILLING-SUPPORT.md`. The actual forthcoming export format is still unverified, and no real import is certified. The observations below describe the earlier baseline rather than the new candidate's behavior.
+
 ## Owner Requirement And Current Boundary
 
 Owner instruction relayed October 16: preserve former clinicians' historical billed charges from July 1, 2025 in historical monthly totals, without creating clinician cards or including them in forecasts/current-team metrics. A possible `deleted` marker is expected in forthcoming exports, but its format and semantics are **unverified**. No new report has been received, parsed, imported, uploaded or written to production by this task.

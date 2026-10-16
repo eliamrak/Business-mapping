@@ -301,14 +301,16 @@ workspace.proposals.push({
 const attendance = (clientId, clinician, serviceDate, phone = false) => ({
   clientId, clinician, serviceDate, location: null, status: "show", billingCode: phone ? "PHONE" : "90837", visitKind: phone ? "consultation" : "treatment", sourceRowHash: `${clientId}-${clinician}-${serviceDate}`,
 });
-const snapshots = [{ id: "synthetic-attendance", kind: "attendance", importedAt: today + "T00:00:00.000Z", coverageStart: "2026-01-02", coverageEnd: "2026-06-15", reportCoverage: { start: "2026-01-01", end: today, complete: true }, sourceHash: "synthetic-only", rows: [
+const snapshots = [{ id: "attendance-aaaaaaaa", kind: "attendance", importedAt: today + "T00:00:00.000Z", coverageStart: "2026-01-02", coverageEnd: "2026-06-15", reportCoverage: { start: "2026-01-01", end: today, complete: true }, sourceHash: "aaaaaaaa", rows: [
   attendance("converted", "Elia", "2026-01-02", true), attendance("converted", "Erin", "2026-01-08"),
   attendance("mature-miss", "Elia", "2026-01-03", true),
   attendance("ended", "Erin", "2026-06-01"), attendance("ended", "Erin", "2026-06-08"), attendance("ended", "Erin", "2026-06-15"),
 ] }];
-snapshots.push({ id: "synthetic-billing", kind: "billing", importedAt: today + "T00:00:00.000Z", coverageStart: "2026-01-01", coverageEnd: "2026-10-09", sourceHash: "synthetic-billing-only", rows: [33035,31370,37480,31655,31927.5,32261.5,30810,33310,32850,11440].map((totalFeeCharged, index) => ({ clientId: `synthetic-billing-${index}`, clinician: "Elia", serviceDate: `2026-${String(index + 1).padStart(2, "0")}-${index === 9 ? "09" : "15"}`, totalFeeCharged, billingCode: "90837", sourceRowHash: `synthetic-month-${index}` })) });
+snapshots.push({ id: "billing-bbbbbbbb", kind: "billing", importedAt: today + "T00:00:00.000Z", coverageStart: "2026-01-01", coverageEnd: "2026-10-09", sourceHash: "bbbbbbbb", rows: [33035,31370,37480,31655,31927.5,32261.5,30810,33310,32850,11440].map((totalFeeCharged, index) => ({ clientId: `synthetic-billing-${index}`, clinician: "Elia", serviceDate: `2026-${String(index + 1).padStart(2, "0")}-${index === 9 ? "09" : "15"}`, totalFeeCharged, billingCode: "90837", sourceRowHash: `synthetic-month-${index}` })) });
 snapshots[1].reportCoverage = { start: "2026-01-01", end: today, complete: true };
 snapshots[1].rows.push({ clientId: "synthetic-zero-fee-scope", clinician: "Erin", serviceDate: "2026-01-05", totalFeeCharged: 0, billingCode: "90837", sourceRowHash: "synthetic-zero-fee-scope" });
+const originalRenderContext = structuredClone(context);
+const originalRenderSnapshots = structuredClone(snapshots);
 
 const browser = await chromium.launch({
   executablePath: browserPath,
@@ -334,6 +336,7 @@ const browserErrors = [];
 page.on("pageerror", (error) => browserErrors.push(error.message));
 let revision = 1;
 let importReads = 0;
+let declarations = null;
 const packages = [{ packageId: "synthetic-only-package", importedAt: today + "T12:00:00.000Z", exportedAt: today + "T11:00:00.000Z", contentHash: "synthetic-only-content-hash" }];
 
 await page.route("**/api/**", async (route) => {
@@ -343,13 +346,18 @@ await page.route("**/api/**", async (route) => {
     revision++;
   }
   if (url.pathname === "/api/practice-imports") importReads++;
+  if (url.pathname === "/api/practice-imports/declarations" && route.request().method() === "PUT") {
+    const body = route.request().postDataJSON();
+    assert.equal(body.confirmed, true);
+    declarations = { revision: (declarations?.revision ?? 0) + 1, data: body.data, confirmedAt: today + "T00:00:00Z" };
+  }
   const body =
     url.pathname === "/api/hub"
       ? { revision, data: workspace, updatedAt: "2026-10-14T00:00:00.000Z" }
       : url.pathname === "/api/hub/context"
         ? context
-        : url.pathname === "/api/practice-imports"
-          ? { snapshots, billingCodeMinutes: {}, sameDayVisitOverrides: {}, packages }
+        : ["/api/practice-imports", "/api/practice-imports/declarations"].includes(url.pathname)
+          ? { snapshots, billingCodeMinutes: {}, sameDayVisitOverrides: {}, packages, declarations }
         : url.pathname === "/api/practice-imports/billing-resolution-candidates"
           ? { revision: 0, candidates: [] }
         : url.pathname === "/api/business-goals"
@@ -692,6 +700,62 @@ const ambiguousConsults = page.getByLabel("Consult metric comparison", { exact: 
 assert.ok((await ambiguousConsults.locator(".pw-metric-comparison-heading span").allTextContents()).slice(0, 2).every((text) => text.includes("Unknown")), "ambiguous imported closer metrics are withheld");
 await capture("ambiguous-consult-compare-desktop", 1280, 900);
 await capture("ambiguous-consult-compare-mobile", 390, 900);
+Object.assign(context, structuredClone(originalRenderContext));
+snapshots.splice(0, snapshots.length, ...structuredClone(originalRenderSnapshots), {
+  id: "billing-cccccccc", kind: "billing", sourceHash: "cccccccc", importedAt: today + "T00:00:00Z", coverageStart: "2026-07-01", coverageEnd: "2026-07-16",
+  rows: [{ clientId: "synthetic-former-first", clinician: "Synthetic Former", serviceDate: "2026-07-01", totalFeeCharged: 25, billingCode: "90837", sourceRowHash: "synthetic-former-first" },
+    { clientId: "synthetic-former-later", clinician: "Synthetic Former", serviceDate: "2026-07-16", totalFeeCharged: 175, billingCode: "90837", sourceRowHash: "synthetic-former-later" }],
+});
+await page.reload();
+await clickSection("Money");
+await page.getByLabel("Shared reporting period", { exact: true }).selectOption("custom");
+await page.getByLabel("From", { exact: true }).fill("2026-07-01");
+await page.getByLabel("Through", { exact: true }).fill("2026-07-31");
+const unconfirmedHistory = page.getByLabel("Historical practice billed charges", { exact: true });
+assert.equal(await unconfirmedHistory.locator(".pw-bridge-step strong").first().innerText(), "--", "unconfirmed historical identities cannot silently disappear from a practice total");
+await unconfirmedHistory.getByText("Billing evidence and review", { exact: true }).click();
+assert.match(await unconfirmedHistory.innerText(), /2 unconfirmed provider rows/);
+await capture("historical-unconfirmed-desktop", 1280, 900);
+await capture("historical-unconfirmed-mobile", 390, 900);
+await page.getByRole("button", { name: "Data & imports", exact: true }).click();
+const providerReview = page.getByLabel("Provider mappings and source-set coverage", { exact: true });
+assert.equal(await providerReview.getByLabel("Map Synthetic Former", { exact: true }).inputValue(), "", "historical classification is never inferred");
+await providerReview.getByLabel("Map Elia", { exact: true }).selectOption("1");
+await providerReview.getByLabel("Map Erin", { exact: true }).selectOption("2");
+await providerReview.getByLabel("Map Synthetic Former", { exact: true }).selectOption("historical");
+const billingSet = providerReview.getByRole("group", { name: "Billing source set", exact: true });
+for (const checkbox of await billingSet.getByRole("checkbox").all()) await checkbox.check();
+await providerReview.getByLabel("billing source-set start", { exact: true }).fill("2026-01-01");
+await providerReview.getByLabel("billing source-set end", { exact: true }).fill(today);
+await providerReview.getByRole("checkbox", { name: /I confirm these provider identities/ }).check();
+await providerReview.getByRole("button", { name: "Save confirmed declarations", exact: true }).click();
+await page.waitForLoadState("networkidle");
+assert.equal(declarations.data.historicalBillingProviders.length, 1);
+assert.equal(declarations.data.historicalBillingProviders[0].sourceLabel, "Synthetic Former");
+assert.equal(context.clinicians.length, 2, "confirmation creates no clinician card");
+await page.reload();
+await page.getByRole("button", { name: "Data & imports", exact: true }).click();
+assert.equal(await page.getByLabel("Map Synthetic Former", { exact: true }).inputValue(), "historical", "confirmed billing-only classification survives reload");
+await capture("historical-provider-confirmation-desktop", 1280, 900);
+await capture("historical-provider-confirmation-mobile", 390, 900);
+await page.getByLabel("Provider mappings and source-set coverage", { exact: true }).screenshot({ path: path.join(outDir, "historical-provider-confirmation-detail-mobile.png") });
+await clickSection("Money");
+await page.getByLabel("Shared reporting period", { exact: true }).selectOption("custom");
+await page.getByLabel("From", { exact: true }).fill("2026-07-01");
+await page.getByLabel("Through", { exact: true }).fill("2026-07-31");
+const historicalLedger = page.getByLabel("Historical practice billed charges", { exact: true });
+assert.match(await historicalLedger.innerText(), /\$31,010/);
+assert.match(await historicalLedger.innerText(), /July 2026 · 3 accepted charge rows/);
+assert.match(await historicalLedger.innerText(), /Verified/);
+assert.match(await page.getByLabel("Reported charged fees", { exact: true }).innerText(), /Current-team complete-period charged fees[\s\S]*\$30,810/);
+await capture("historical-billing-ledger-desktop", 1280, 900);
+await capture("historical-billing-ledger-mobile", 390, 900);
+await historicalLedger.screenshot({ path: path.join(outDir, "historical-billing-ledger-detail-mobile.png") });
+await clickSection("Team");
+assert.equal(await page.getByRole("heading", { name: "Synthetic Former", exact: true }).count(), 0);
+assert.equal(context.clinicians.length, 2);
+await capture("historical-excluded-team-desktop", 1280, 900);
+await capture("historical-excluded-team-mobile", 390, 900);
 const localAuthErrors = browserErrors.filter((error) => error.includes("Clerk: Failed to load Clerk JS") && error.includes("clerk.127.0.0.1"));
 assert.deepEqual(browserErrors.filter((error) => !localAuthErrors.includes(error)), [], "no application browser exceptions");
 
