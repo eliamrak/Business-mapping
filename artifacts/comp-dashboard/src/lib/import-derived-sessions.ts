@@ -1,8 +1,9 @@
 import { dateRangeSchema, type SessionRecord, rangesOverlap } from "@workspace/practice";
-import { canonicalServicePeriod, reconcileBillingEvidence, resolveImportedProvider, bindBillingResolutions, type ImportEvidenceDeclarations, type Context, type ImportedBillingActual } from "@workspace/practice/hub";
+import { canonicalServicePeriod, reconcileBillingEvidence, resolveImportedProvider, bindBillingResolutions, isDocumentationService, isTreatmentService, isRecognizedTreatmentCode, type ImportEvidenceDeclarations, type Context, type ImportedBillingActual } from "@workspace/practice/hub";
 import type { SessionAttendanceCoverage } from "./session-trend.ts";
 import {
   consultAttendanceClassifier,
+  documentationAttendanceClassifier,
   attendanceStatusConflicts,
   isPhoneConsultBillingRow,
   sameDayVisitKey,
@@ -130,6 +131,7 @@ export function buildImportedSessionOverlay(
   const billingActuals: ImportedBillingActual[] = [];
   let excludedNonShowRows = 0;
   const isConsultation = consultAttendanceClassifier(snapshots);
+  const isDocumentation = documentationAttendanceClassifier(snapshots);
 
   for (const snapshot of snapshots) {
     if (snapshot.kind !== "attendance") continue;
@@ -177,7 +179,7 @@ export function buildImportedSessionOverlay(
         ambiguousClinicianLabels.add(row.clinician);
         continue;
       }
-      if (isConsultation(row)) continue;
+      if (isDocumentation(row) || isConsultation(row)) continue;
       if (row.status !== "show") {
         excludedNonShowRows++;
         continue;
@@ -277,13 +279,13 @@ export function buildImportedSessionOverlay(
     }
   }
   for (const actual of billingActuals) {
-    if (actual.evidenceUnknown || isPhoneConsultBillingRow({ billingCode: actual.billingCode ?? null, visitKind: actual.visitKind })) continue;
+    if (actual.evidenceUnknown || !isTreatmentService(actual)) continue;
     const day = attendedByClinicianDate.get(`${actual.clinicianId}\u0000${actual.serviceDate}`);
     const covered = scopedAttendanceCoverage.some((range) => range.clinicianId === actual.clinicianId && range.start <= actual.serviceDate && range.end >= actual.serviceDate);
-    const charged = billingActuals.filter((row) => row.clinicianId === actual.clinicianId && row.serviceDate === actual.serviceDate && !isPhoneConsultBillingRow({ billingCode: row.billingCode ?? null, visitKind: row.visitKind }));
+    const charged = billingActuals.filter((row) => row.clinicianId === actual.clinicianId && row.serviceDate === actual.serviceDate && isTreatmentService(row));
     const clients = new Set(day?.rows.map((row) => row.clientId.trim()));
     const billedClients = new Set(charged.map((row) => row.clientId!.trim()));
-    if (covered && day && day.visits > 0 && charged.every((row) => !row.evidenceUnknown && /^\d{5}$/.test(row.billingCode?.trim() ?? "")) && clients.size === billedClients.size && [...clients].every((client) => billedClients.has(client)))
+    if (covered && day && day.visits > 0 && charged.every((row) => !row.evidenceUnknown && isRecognizedTreatmentCode(row.billingCode)) && clients.size === billedClients.size && [...clients].every((client) => billedClients.has(client)))
       actual.replacementSessionCount = day.visits;
   }
   for (const record of context.sessions) {

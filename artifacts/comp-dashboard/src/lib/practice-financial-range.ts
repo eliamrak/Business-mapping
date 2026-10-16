@@ -5,6 +5,7 @@ import type { LocalSnapshot } from "./retention-local.ts";
 import { moneyBridgeSummary } from "./money-bridge.ts";
 import { completeReportCoverage } from "./complete-report-coverage.ts";
 import { completePeriodSessionSummary } from "./complete-session-summary.ts";
+import { isFreePhoneService } from "@workspace/practice/hub";
 
 type Range = { start: string; end: string };
 type Values = ForecastMonth["values"];
@@ -59,7 +60,7 @@ export function practiceFinancialRange(workspace: Workspace, context: Context, s
   const complete = !!actualRange && ledgerComplete && billingComplete;
   const actualObserved = actualRange ? observed(workspace, context, actualRange.start, actualRange.end) : null;
   const actualValues: Values = actualObserved ? Object.fromEntries(sumKeys.map((key) => [key, ledgerComplete ? actualObserved.values[key] ?? null : null])) : {};
-  const paidConsultationUnclassified = !!actualRange && reports.eligibleBillingRows.some((row) => row.serviceDate >= actualRange.start && row.serviceDate <= actualRange.end && row.totalFeeCharged !== 0 && (row.billingCode?.trim().toUpperCase() === "PHONE" || row.visitKind === "consultation"));
+  const paidConsultationUnclassified = !!actualRange && reports.eligibleBillingRows.some((row) => row.serviceDate >= actualRange.start && row.serviceDate <= actualRange.end && row.totalFeeCharged !== 0 && isFreePhoneService(row));
   if (actualRange) {
     const ledger = actualObserved!.values;
     const otherCosts = ledgerComplete && [ledger.revenue, ledger.clinicianPay, ledger.profit].every((value) => value != null)

@@ -1,4 +1,5 @@
 export * from "./model.ts";
+export * from "./service-codes.ts";
 export * from "./engine.ts";
 export * from "./references.ts";
 export * from "./conditions.ts";

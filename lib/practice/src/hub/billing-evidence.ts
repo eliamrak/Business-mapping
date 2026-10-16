@@ -1,4 +1,5 @@
 import type { BillingChargeResolution, BillingChargeResolutionEvidence } from "./billing-resolution.ts";
+import { legacyServiceDefinition } from "./service-codes.ts";
 
 export type EncounterBillingRow = {
   clientId: string;
@@ -11,7 +12,10 @@ export type EncounterBillingRow = {
 };
 const normalize = (value: string) => value.trim().replace(/\s+/g, " ").toLowerCase();
 const code = (row: EncounterBillingRow) => normalize(row.billingCode ?? "");
-const kind = (row: EncounterBillingRow) => row.visitKind ?? (code(row) === "phone" ? "consultation" : "");
+const kind = (row: EncounterBillingRow) => {
+  const legacy = legacyServiceDefinition(row.billingCode);
+  return legacy ? legacy.kind === "treatment" ? "" : legacy.kind : row.visitKind ?? (code(row) === "phone" ? "consultation" : "");
+};
 const identity = (row: EncounterBillingRow) => JSON.stringify([row.clientId.trim(), normalize(row.clinician), row.serviceDate, code(row)]);
 const same = (a: EncounterBillingRow, b: EncounterBillingRow) => identity(a) === identity(b)
   && kind(a) === kind(b) && Object.is(a.totalFeeCharged, b.totalFeeCharged);

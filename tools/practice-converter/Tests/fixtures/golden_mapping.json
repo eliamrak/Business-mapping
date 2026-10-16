@@ -1,0 +1,18 @@
+{
+  "ambiguousNames": [],
+  "clients": {
+    "name:ALPHA CLIENT": {
+      "approvedAt": "2026-01-01T00:00:00Z",
+      "clientId": "client_alpha_0001",
+      "createdAt": "2026-01-01T00:00:00Z",
+      "displayName": "Alpha Client",
+      "keyType": "name",
+      "normalizedName": "ALPHA CLIENT"
+    }
+  },
+  "clinicians": {},
+  "createdAt": "2026-01-01T00:00:00Z",
+  "pendingClients": {},
+  "updatedAt": "2026-01-01T00:00:00Z",
+  "version": 1
+}

@@ -1,0 +1,50 @@
+{
+  "billingCodeMinutes": {
+    "00000": 15,
+    "90791": 75,
+    "90833": 30,
+    "90834": 45,
+    "90835": 75,
+    "90837": 60,
+    "90837 + 99345": 90,
+    "90838": 80,
+    "90846": 25,
+    "90847": 60,
+    "90848": 75,
+    "Phone": 15
+  },
+  "collections": {
+    "attendance": {
+      "coverageEnd": "2026-01-07",
+      "coverageStart": "2026-01-07",
+      "rowCount": 1,
+      "rows": [
+        {
+          "clientId": "client_alpha_0001",
+          "clinician": "Clinician A",
+          "location": "Room 1",
+          "serviceDate": "2026-01-07",
+          "status": "show"
+        }
+      ]
+    },
+    "billing": {
+      "coverageEnd": "2026-01-07",
+      "coverageStart": "2026-01-07",
+      "rowCount": 1,
+      "rows": [
+        {
+          "billingCode": "90837",
+          "clientId": "client_alpha_0001",
+          "clinician": "Clinician A",
+          "serviceDate": "2026-01-07",
+          "totalFeeCharged": 150.0
+        }
+      ]
+    }
+  },
+  "exportedAt": "2026-01-07T12:00:00Z",
+  "format": "emc-practice-local-import-package",
+  "packageId": "pkg_0e5286b2671c0cb001e44f46",
+  "version": 1
+}
