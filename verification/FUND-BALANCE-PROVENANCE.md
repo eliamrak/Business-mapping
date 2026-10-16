@@ -25,3 +25,11 @@ No stored value, date, schema, save action, actual fee, compensation, expense, c
 No owner input is required for this repair. If the owner wants a dated balance to count as recorded evidence, the exact actual balance and its observation date belong in the existing Current balance/Balance date fields. Do not fill them from goals, allocations, billed fees, assumed zero or sample data. This audit does not claim those records are absent in the production account.
 
 The prioritized `PRACTICE-ACCEPTANCE-CHECKLIST.md` separately identifies verified scope, this baseline failure, untested acceptance and actual/configuration evidence unavailable to the local audit. Real bank/payroll/expense reconciliation and owner visual acceptance remain outside a synthetic test PASS. No production connection, mutation, approval application, deployment or main promotion is performed here.
+
+## Exact Independent Review
+
+Runtime: `f64aa0fc1fd9ff8d8ec842f673c6c2b812ce9d62`, tree `f96dfa6a2a7e36001f715f2ea4996789d711b78a`.
+
+Independent read-only Newton worker `01a13c09-3ccf-7641-a5bc-5e2a89f4d0f9`: **PASS**, no findings. The reviewer confirmed all four display states, explicit zero, inclusive date-boundary behavior, unchanged amounts/projections/achievement/save paths and the checklist's separation of evidence bases. Independently executed: 29 focused fund/overhead/achievement tests, dashboard typecheck and diff validation. Browser captures were not independently rerun. No reviewer edits or production calls.
+
+The following verification-only checkpoint pins the aggregate audit to this runtime; all 16 aggregate/identity-audit tests pass. Runtime code is unchanged by that checkpoint. Source comparison to baseline confirms no shared practice engine, API or database changes.
