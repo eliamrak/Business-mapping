@@ -436,4 +436,21 @@ SELECT gate.status,
       'billedCharges',CASE WHEN m.billing_days=m.calendar_days AND m.unknown_groups=0 AND NOT EXISTS(SELECT 1 FROM hash_collisions) THEN m.charged END
     ) ORDER BY m.window,m.clinician_id) FROM metrics m CROSS JOIN input i)
   END AS aggregate_metrics
+  ,CASE WHEN gate.status='READY_AGGREGATE_DIAGNOSTIC_NOT_UI_CERTIFICATION' THEN
+    (SELECT jsonb_agg(jsonb_build_object(
+      'clinician',g.label,'window',g.window,
+      'unresolvedPartialFollowupRows',(SELECT count(*) FROM clinical_partial x WHERE x.clinician_id=g.clinician_id),
+      'partialFollowupAfterAdmittedThroughRows',(SELECT count(*) FROM clinical_partial x WHERE x.clinician_id=g.clinician_id
+        AND x.day>(SELECT max(day) FROM entity_coverage c WHERE c.kind='attendance' AND c.clinician_id=g.clinician_id)),
+      'legacyClinicianLabelVerified',CASE WHEN g.clinician_id=0 THEN NULL ELSE
+        NOT EXISTS(SELECT 1 FROM clinical_partial x WHERE x.clinician_id=g.clinician_id)
+        AND EXISTS(SELECT 1 FROM clinical_ranges c WHERE c.clinician_id=g.clinician_id
+          AND c.start_day<=(SELECT min(day) FROM entity_treatment t WHERE t.clinician_id=g.clinician_id)
+          AND c.end_day>=(SELECT max(day) FROM entity_treatment t WHERE t.clinician_id=g.clinician_id)) END,
+      'selectedRetentionCoverageVerified',EXISTS(SELECT 1 FROM clinical_ranges c WHERE c.clinician_id=g.clinician_id AND c.start_day<=g.start_day AND c.end_day>=g.end_day)
+        AND NOT EXISTS(SELECT 1 FROM initial_outcomes r WHERE r.clinician_id=g.clinician_id AND r.first_day BETWEEN g.start_day AND g.end_day
+          AND NOT EXISTS(SELECT 1 FROM clinical_ranges c WHERE c.clinician_id=g.clinician_id AND c.start_day<=r.first_day
+            AND c.end_day>=CASE WHEN r.retained THEN r.days[3] ELSE r.initial_deadline END))
+    ) ORDER BY g.window,g.clinician_id) FROM grid g)
+  END AS retention_provenance
 FROM gate;

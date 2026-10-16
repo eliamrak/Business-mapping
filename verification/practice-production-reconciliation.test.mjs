@@ -168,6 +168,11 @@ test('unproved later return blocks an ending but does not add visits', async () 
   const result = await run();
   assert.equal(row(result).sessions, 4); assert.equal(row(result, names[0]).endingEvents, null);
   assert.equal(row(result, names[0]).positiveMatureEndingEvents, 0); assert.equal(row(result, names[0]).endingMatureMonths, 0);
+  const provenance = result.retention_provenance.find(r => r.clinician === names[0] && r.window === 'month');
+  assert.equal(provenance.unresolvedPartialFollowupRows, 1);
+  assert.equal(provenance.partialFollowupAfterAdmittedThroughRows, 1);
+  assert.equal(provenance.legacyClinicianLabelVerified, false);
+  assert.equal(provenance.selectedRetentionCoverageVerified, true);
 });
 test('right-censored consults and retention remain pending, never failed', async () => {
   await fixture(s => { for (const set of s.declarations.sourceSets) set.end = '2026-01-31'; });
@@ -176,6 +181,7 @@ test('right-censored consults and retention remain pending, never failed', async
   assert.equal(month.sessions, null); assert.equal(month.consultConverted, 1); assert.equal(month.consultEvaluated, 1); assert.equal(month.consultPending, 1);
   assert.equal(row(result, names[0]).retained, 0); assert.equal(row(result, names[0]).retentionPending, 1);
   assert.equal(row(result, names[0]).endingEvents, null);
+  assert.equal(result.retention_provenance.find(r => r.clinician === names[0] && r.window === 'month').selectedRetentionCoverageVerified, false);
 });
 test('roster changes, scope ambiguity and unsupported attendance identities fail closed', async () => {
   await fixture(); await client.query("INSERT INTO clinicians VALUES(99,1,'Synthetic extra')");
