@@ -25,6 +25,8 @@ The partial-month cause is directly established by the live symptom and source c
 - Independent review and final desktop/mobile render results accompany the frozen candidate handoff.
 - Render verification completed: 51 synthetic captures at desktop 1280x900 and mobile 390x900, including six focused full-January/partial-selection/individual-retention states. No horizontal overflow; focused desktop Money and mobile retention screenshots visually inspected. Evidence: `/tmp/practice-provenance-render/metrics.json` and adjacent PNGs. This is mocked UI verification, not production auth or real-data acceptance.
 
+Frozen runtime candidate: `3f5ad92c5bebedc2d740b9ebb8c88b84abf2f689`, tree `808cc4e9c0df1e75eb6ea8175ca2d52d67b4ad01`. Independent reviewer Newton reports PASS/no blockers on that exact candidate, independently ran 98/98 focused tests and dashboard TypeScript validation, verified reviewed runtime matches HEAD and inspected the 51-state/no-overflow render metrics. It did not independently rerun the browser captures or authenticate production. Some synthetic captures contain the expected local Clerk script-loading failure; production auth is not certified by those screenshots. Subsequent changes update verification source pins/docs only.
+
 ## Existing-Environment Release
 
 1. Confirm the extra production provenance aggregate and review the candidate's synthetic desktop/mobile states. Preserve current runtime and all existing source/declaration/journal fingerprints.
