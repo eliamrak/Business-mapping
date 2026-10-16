@@ -2,7 +2,7 @@
 
 ## Finding
 
-P1, reproduced against release `37179df3b5ac7db7a89fdeae2a86a9aaede8badb`: select Sessions, choose Custom dates, clear From. The shared handler sends an empty start date directly into the range-dependent models. `buildSessionTrend` eventually formats an invalid date and the entire workspace unmounts with `Invalid time value`. The browser body was reduced to a leftover chart tooltip rather than a usable app. No save or business-data edit was required to trigger it.
+P1, reproduced against release `37179df3b5ac7db7a89fdeae2a86a9aaede8badb`: select Sessions, choose Custom dates, clear From. The shared handler sends an empty start date directly into the range-dependent models. The captured pre-repair Vite trace reaches `periodOverheadSummary` through `calendarMonthEnd` and `addMonths` in `practice-money-visuals.ts:417`, where formatting the invalid date throws `Invalid time value`. The entire workspace unmounts; the browser body was reduced to a leftover chart tooltip rather than a usable app. No save or business-data edit was required to trigger it.
 
 Requirements reviewed: `EXPANSION_PLAN.md`, `BUILD_STATUS.md` (historical checkpoint), current metric traceability and complete-period acceptance documents, and [Practice UX Working Map](https://chatgpt.com/space/page_2f40d53a52288191865b6bb9b3d11cf7), sequence 27. Current deployment/approval status comes from the parent deployment worker, not older Page release checkpoints. The four live charge approvals and declaration revision 1 are not changed or reapplied.
 
