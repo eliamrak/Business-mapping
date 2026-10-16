@@ -7,6 +7,16 @@ type Person = { id: number; label: string; goalId?: number | null };
 const validDate = (value: string) => /^\d{4}-\d{2}-\d{2}$/.test(value)
   && Number.isFinite(Date.parse(value + "T00:00:00Z")) && new Date(value + "T00:00:00Z").toISOString().slice(0, 10) === value;
 const shift = (value: string) => new Date(Date.parse(value + "T00:00:00Z") + 86400000).toISOString().slice(0, 10);
+export function historicalBillingOverallStart(snapshots: readonly LocalSnapshot[], declarations: ImportEvidenceDeclarations, fallback: string) {
+  return [
+    ...declarations.sourceSets.filter(set => set.kind === "billing").map(set => set.start),
+    ...(declarations.historicalBillingProviders ?? []).flatMap(provider => provider.sourceSets.map(set => set.start)),
+    ...snapshots.filter(source => source.kind === "billing").flatMap(source => [
+      source.coverageStart, ...(source.reportCoverage?.complete ? [source.reportCoverage.start] : []),
+      ...source.rows.map(row => row.serviceDate),
+    ]),
+  ].filter(validDate).sort()[0] ?? fallback;
+}
 const covers = (ranges: { start: string; end: string }[], start: string, end: string) => {
   let cursor = start;
   for (const range of [...ranges].sort((a, b) => a.start.localeCompare(b.start))) {

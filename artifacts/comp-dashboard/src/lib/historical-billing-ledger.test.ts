@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { emptyWorkspace, importDeclarationsSchema, resolveHistoricalBillingProvider, restoreHistoricalBillingProviders,
   prepareBillingChargeResolution, type ImportEvidenceDeclarations, type Context } from "@workspace/practice/hub";
-import { historicalBillingLedger } from "./historical-billing-ledger.ts";
+import { historicalBillingLedger, historicalBillingOverallStart } from "./historical-billing-ledger.ts";
 import { completeReportCoverage } from "./complete-report-coverage.ts";
 import { buildImportedSessionOverlay } from "./import-derived-sessions.ts";
 import { currentPracticeClinicians } from "./practice-scope.ts";
@@ -58,6 +58,17 @@ test("unconfirmed provider never silently disappears from a claimed practice tot
   const f = fixture(); delete f.declarations.historicalBillingProviders;
   const result = ledger(f); assert.equal(result.reportedCharges, null); assert.equal(result.unknownProviderRows, 2);
   assert.equal(result.months[0].charges, null); assert.equal(result.coverageComplete, false);
+});
+test("Overall includes retained older billing dates before confirmed proof and withholds unknown providers", () => {
+  const f = fixture();
+  f.declarations.sourceSets[0].start = "2026-01-01";
+  delete f.declarations.historicalBillingProviders;
+  const start = historicalBillingOverallStart(f.snapshots, f.declarations, "2026-01-01");
+  assert.equal(start, "2025-07-01");
+  const result = ledger(f, { start, end: "2026-10-12" });
+  assert.equal(result.reportedCharges, null);
+  assert.equal(result.coverageComplete, false);
+  assert.equal(result.unknownProviderRows, 2);
 });
 test("stored full-history shape preserves three prefixed identities, late cancellations and frozen admission", () => {
   const f = fixture();

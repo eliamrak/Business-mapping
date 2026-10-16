@@ -120,7 +120,7 @@ import { planRevisionSignature, planFocusHighlights } from "@/lib/plan-focus";
 import { overviewClientFlow } from "@/lib/practice-overview";
 import { moneyBridgeSummary } from "@/lib/money-bridge";
 import { summarizeReportedBilling, billingMonthSelectionLabel } from "@/lib/reported-billing";
-import { historicalBillingLedger } from "@/lib/historical-billing-ledger";
+import { historicalBillingLedger, historicalBillingOverallStart } from "@/lib/historical-billing-ledger";
 import { HistoricalBillingSummary } from "@/components/practice/historical-billing-summary";
 import { practicePeriodRange } from "@/lib/practice-period";
 import { currentPracticeClinicians, configuredRoomsAtDate, snapshotsForClinicians } from "@/lib/practice-scope";
@@ -1082,9 +1082,7 @@ export default function PracticeWorkspace() {
     const declarations = importEvidenceDeclarations ?? { version: 1 as const, mappings: [], sourceSets: [] };
     const range = { ...financialRangeReports.selected.range };
     if (periodRange.start.startsWith("0000-")) {
-      range.start = [...declarations.sourceSets.filter((set) => set.kind === "billing").map((set) => set.start),
-        ...(declarations.historicalBillingProviders ?? []).flatMap((provider) => provider.sourceSets.map((set) => set.start)),
-        ...localRetentionState.snapshots.filter((source) => source.kind === "billing" && source.reportCoverage?.complete).map((source) => source.reportCoverage!.start)].sort()[0] ?? range.start;
+      range.start = historicalBillingOverallStart(localRetentionState.snapshots, declarations, range.start);
     }
     const unknown = localRetentionState.snapshots.some((source) => source.kind === "billing" && source.rows.some((row) => row.serviceDate >= range.start && row.serviceDate <= range.end && row.serviceDate <= today
       && resolveImportedProvider(row.clinician, context.clinicians, workspace.settings.teamId, declarations) === null
