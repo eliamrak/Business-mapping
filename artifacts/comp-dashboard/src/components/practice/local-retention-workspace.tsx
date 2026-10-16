@@ -12,6 +12,7 @@ import type { StoredImportDeclarations, BillingChargeResolution } from "@workspa
 import { bindBillingResolutions } from "@workspace/practice/hub";
 import { ImportDeclarationReview } from "./import-declaration-review";
 import { BillingResolutionReview } from "./billing-resolution-review";
+import { ReaderStatus } from "./reader-status";
 import { completeReportCoverage, type CompleteReportCoverage } from "@/lib/complete-report-coverage";
 import { summarizeReportedBilling } from "@/lib/reported-billing";
 import {
@@ -612,6 +613,7 @@ export default function LocalRetentionWorkspace({
         </div>
         <ShieldCheck aria-hidden="true" />
       </div>
+      <ReaderStatus />
       <section className="pw-import-provenance" aria-label="Verified complete report coverage">
         <h3>Data covers through {dateLabel(verifiedCoverage.dataThrough)}</h3>
         <p>Attendance: {dateLabel(verifiedCoverage.attendanceThrough)} · Billing: {dateLabel(verifiedCoverage.billingThrough)}</p>
