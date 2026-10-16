@@ -13,6 +13,6 @@ const schema = z.object({
 
 export function compatibleReaderCapabilities(value: unknown) {
   const parsed = schema.safeParse(value);
-  return parsed.success && Object.entries(legacyServiceCodes).every(([code, definition]) =>
+  return parsed.success && !Object.keys(parsed.data.serviceCodes).some(code => code.trim() === "0") && Object.entries(legacyServiceCodes).every(([code, definition]) =>
     parsed.data.serviceCodes[code]?.kind === definition.kind && parsed.data.serviceCodes[code]?.minutes === definition.minutes);
 }

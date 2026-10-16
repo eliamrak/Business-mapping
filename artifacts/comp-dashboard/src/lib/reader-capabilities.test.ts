@@ -9,6 +9,7 @@ test("reader status requires the full supported protocol and code semantics", ()
 });
 test("zero cannot silently become 00000 and a wrong legacy duration cannot certify compatibility", () => {
   assert.equal(compatibleReaderCapabilities({ ...valid(), unclassifiedZero: { storedCode: "0", defaultMinutes: 15, equivalentToFiveZeros: true } }), false);
+  for (const code of ["0", " 0 "]) assert.equal(compatibleReaderCapabilities({ ...valid(), serviceCodes: { ...valid().serviceCodes, [code]: { kind: "treatment", minutes: 15 } } }), false);
   const wrong = valid(); wrong.serviceCodes["4"].minutes = 15;
   assert.equal(compatibleReaderCapabilities(wrong), false);
 });
