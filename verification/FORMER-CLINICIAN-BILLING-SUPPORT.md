@@ -1,5 +1,7 @@
 # Historical Billing-Only Provider Candidate
 
+Current combined-reader handoff supersedes this earlier branch record: see `HISTORICAL-CURRENT-READER-HANDOFF.md`, runtime `046a8e7440474abbcd3b56aa29daa49f8cf8ea2b`. The following verification chronology is historical, not permission to deploy an older reader.
+
 ## Scope And Isolation
 
 This candidate is developed on `codex/historical-billing-only`, separately from label-only main `fdbe612` / runtime `3f5ad92`. It supports explicitly confirmed historical billed-charge identities without adding clinician cards, compensation terms, current-team clinical facts, forecast volume or capacity. No real export has been received or imported. No database, declaration, approval, balance, goal, staff or room setting has been changed in production.
@@ -19,7 +21,7 @@ The optional `historicalBillingProviders` field is composed in memory for the ne
 
 Registry and declaration confirmation share the existing practice/account advisory lock, optimistic declaration revision and transaction. Audit failure rolls back both. Older clients omitting the new field preserve the existing registry. Journal replay is bounded, validated, scoped, rejects conflicting revisions/identity reuse and never exports client keys. Exact source rows, hashes, approval anchors and clinician records remain unchanged by confirmation.
 
-Rollback to the label-only release ignores the new audit action and retains all metadata and raw history. Historical-only reporting is unavailable there; a newly mixed source set may conservatively withhold current facts because an older release cannot recognize the excluded historical identity. That is unknown, not zero. Do not delete historical records, clear approvals or rewrite sources to back out.
+Backout must retain a compatible reader. The former label-only release cannot parse newly stored late-cancellation subtype rows; the current-reader release `a49372e` cannot parse historical approval entries containing `historicalProviderId`. After those records exist, neither is a safe rollback target. Preserve subtype and historical-approval schema support in any forward repair or feature-disabled backout. Never delete historical records, clear approvals, strip fields or rewrite sources to make an old reader load.
 
 ## Reconciliation And Completeness
 
