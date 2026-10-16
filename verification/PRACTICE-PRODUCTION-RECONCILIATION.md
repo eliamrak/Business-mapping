@@ -1,0 +1,75 @@
+# Independent Production Aggregate Diagnostic
+
+## Execution Boundary
+
+`practice-production-reconciliation.sql` is one SELECT-only statement for the existing authorized **production SQL UI**. It must not run against the known empty Replit development shell database. It does not create functions/tables, change settings, write metadata, apply approvals or return source rows. Do not export patient rows, identifiers, hashes or credentials. No new production access route or owner decision is needed.
+
+Dates are confirmed by the cloud audit worker: **January 15-28, 2026** and **January 1-31, 2026**, observed as of **October 16, 2026**. The statement's `input` CTE is the only date/team parameter surface. It refuses noncanonical biweekly dates, a non-enclosing/incomplete month, changed scope/roster/mappings, stale source sets and invalid journal structure. It expects the six already approved Year 1 Baseline identities (IDs 8-13), selected configuration 1. These are audit assertions, not seeds or new mapping writes.
+
+Before execution, coordinate the shared browser and confirm live `61fc038` / `index-Chaf82Hs.js`, existing fingerprints, declaration and journal. Parent/cloud supplied live checks are not a new local verification. Run the entire unmodified statement once. If status begins `STOP_`, or the UI times out, do not reuse partial output or remove gates. Report only the safe status/error category; do not paste database error details containing source values. The local synthetic runner's 30-second statement timeout is a test safeguard, not a production setting change.
+
+## Independent Basis
+
+The SQL independently implements rules with relational grouping and calendar-day evidence. It does not invoke the app's metric functions. Tests use hand-calculated synthetic expectations; no real business totals are embedded. Compare three things separately: this diagnostic's expected aggregates, exact candidate model results where authorized execution exists, and actual visible live-screen values. A model/UI match does not validate canonical source arithmetic by itself.
+
+The output is a single aggregate-only result with 14 metric objects: six clinicians plus Whole Practice, each for biweekly and month. Clinician labels are fixed approved staff labels; **no client/source identifiers or arbitrary source strings** are returned. Even aggregate small groups remain private. The final `aggregate_metrics` is null for a failed scope/policy gate. Zero positive observations is not proof of completeness: inspect covered-day fields and null rates/totals.
+
+## Admission And Reconciliation
+
+- Frozen source sets must find every unique active member of the right kind. All member rows must have valid dates inside the declared range and resolve via a still-valid scoped mapping. Every declared clinician must occur in the set. Missing/renamed/moved targets or stale membership stop the comparison. Valid individual source proofs can also admit only their own facts. Observed date spans never prove completeness.
+- Attendance and billing coverage remain independent. A proof must enclose an entire ended Jan1-anchored 14-day service period; adjacent partial proofs cannot combine. Complete source-set quiet periods are supported, not filled with synthetic visits.
+- Admission happens before selection: eligible January 29-31 facts remain part of January even though their source period runs January 29-February 11. The query does not require that period to fit inside January; it requires the source proof to cover it and the period to have ended by as-of.
+- Cross-export attendance status **sets** must agree for each same-day encounter and consultation/treatment class. One export may contain multiple statuses legitimately. A disagreement withholds that provider's entire canonical attendance period, not its independent fees.
+- Treatment visits group by client, normalized clinician and service date after PHONE classification. A billing-only PHONE group also classifies linked unmarked attendance as consultation. PHONE attendance cannot become treatment. Overlapping exports do not multiply visits.
+- Billing groups use trimmed client identity, normalized provider/code and service date, preserving visit-kind/amount payload conflicts. Repeated identical encounters collapse across exports; multiple hashes within one source or indistinguishable uncoded repeats withhold fees unless explicitly approved. Signed adjustments remain charges, not assumed zero.
+- Existing separate billing-approval journal must have contiguous revisions, unique approval IDs/tokens and valid selected mappings. A valid two-charge approval requires both exact original snapshot/hash/amount anchors, two distinct slots, matching encounter/kind and no unexpected fee/count evidence. A stale/duplicate approval withholds affected charges. The January 21 Michele exception must remain two fees without creating a second visit. This audit never reapplies an approval.
+- With zero unknown fee groups and no cross-encounter hash collisions, expected accepted charge rows are `billingEncounterGroups + approvedTwoChargeGroups`; collapsed duplicate rows are `billingAdmittedRawRows` minus that count. Compare the accepted count, not raw export rows, to Money's displayed source-row count. Positive zero-fee PHONE groups can contribute charge rows without treatment visits.
+
+## Clinical Denominators
+
+- **Practice conversion:** earliest eligible consult per client in the current six-clinician cohort. One treatment start within one clamped calendar month is one practice conversion. Converted plus mature nonconverted journeys form the denominator. An unconverted journey is pending if the deadline has not elapsed, complete attendance follow-up is missing, or excluded partial positive evidence falls within its window.
+- **Clinician conversion:** only saved `confirmed_closer` or mature `missed_owner` credit enters that clinician's evaluated denominator. A single treatment-start clinician without confirmed credit is only a candidate. Attribution-pending and internal-referrer protection are separate. Practice percentages are not averages or sums of clinician percentages. Saved active target names outside the approved roster stop this bounded diagnostic rather than guessing attribution.
+- **Initial retention:** distinct treatment dates, three initial visits, each initial gap at most 28 days. A break ends the initial episode even if a later return exists. Positive retained outcomes need positive evidence; an initial failure needs complete observation from first treatment through 28 days after its last qualifying initial visit. Otherwise it is pending. Initial starts are selected by first treatment date, not by the dates of their later qualifying visits.
+- **Whole Practice versus clinician retention:** practice uses unique clients across clinicians; clinician rows use client-clinician relationships. Totals need not sum when transfers occur. Whole-practice absence coverage requires all six clinicians' reports. Excluded partial follow-up removes unsafe absence days and blocks final endings for affected clients without adding visits.
+- **Attrition:** an established client has at least three distinct treatment dates. Only the latest treatment date in all available eligible history can become an ending, after 90 covered follow-up days; later returns remove earlier final-ending claims. `endingEvents` is null unless the exact selected event window and its full follow-up are covered and no unresolved later return undermines it. `positiveMatureEndingEvents` is a diagnostic positive count, not a complete-window total when `endingEvents` is null.
+- **Monthly attrition:** only full calendar months contained in the selected event range, with complete 90-day follow-up and no unresolved ending evidence, enter `endingMatureMonths`. January 15-28 contains no whole month: its monthly average must be null, even when exact-date ending events exist. January's monthly average denominator can be one. An empty/no-treatment clinician's count can be a proved zero only with complete relevant coverage; the live UI may instead not expose that metric.
+
+## Deliberate Limits
+
+- Stored same-day multiplicity overrides use API-clamped hashed keys. This first independent SQL diagnostic does **not** replay that key algorithm: any nonempty stored overrides withhold session totals/rates and report their package count. Distinct-date retention, endings and conversion do not depend on multiplicity. Do not call a null session comparison a pass.
+- Global billing hash reuse across encounter identities withholds **all** diagnostic fee totals. This is conservative, not an exact recursive reconstruction of the app's connected conflict components. If this count is nonzero, fee comparison is blocked.
+- Sessions require every calendar day of the selected window covered. With complete coverage, weekly rates are visits * 7 / 14 or visits * 7 / 31. This diagnostic does not allocate partial manual period counts or compute a separate manual-only session history. Incomplete imported coverage remains null, not prorated fallback.
+- `retentionLeftBoundaryStarts` flags starts on the earliest covered day; it does not invent pre-import history. This is observed initial retention, not lifetime-client inception. Right censoring is reported as pending/unverified, not failure. Confirmed positive conversions do not require absence proof; a complete negative conclusion does.
+- No elapsed follow-up can be created by choosing a later as-of date without source coverage. Full follow-up history stays in the CTEs; do not prefilter source rows to January.
+- Fees are **billed charges**, never collections, payroll, take-home or profit. This query makes no cost/cash certification.
+- The diagnostic does not fix UI labels or certify the provenance of owner-confirmed declarations. A displayed metric based on a different window, current-cohort roster, as-of date or denominator must be reported as incomparable until aligned.
+
+## Verification And Handoff
+
+Local tests use an isolated temporary PostgreSQL cluster on a private Unix socket with synthetic tables/rows only. They ignore DATABASE_URL and shut down/remove the cluster. On macOS the sandbox may require ordinary execution approval for PostgreSQL shared memory.
+
+```sh
+node --test verification/practice-production-reconciliation.test.mjs
+```
+
+Author run: 17 SQL tests pass, including SELECT-only structure/privacy, six-provider scope, independent session/fee counts, linked PHONE, closer/referrer handling, overlap deduplication, approved/stale anchors, missing/stale proof, cross-export status conflicts, 28/29-day gaps, 90-day maturity/later returns, right censoring, null status/malformed journal schema/timestamps, multiplicity/hash limits and a larger synthetic source set. Two provenance-label characterization tests also pass. Existing audit/mapping suites remain green. Independent review and final commit evidence accompany the delivered revision.
+
+Independent reviewer Newton reports PASS with no remaining blockers in the bounded diagnostic review and independently reran 19/19 tests (17 SQL plus two characterization checks). Earlier null-status, journal-revision/schema/timestamp and clinician attribution-pending findings were corrected before handoff. Reviewed SQL SHA-256: `0991252864d8f5b56abccf009e3d1081494bcc664098d00cd15b895414725fbc`. This is approval for the documented read-only diagnostic, not production-data or full UI parity certification.
+
+Production execution, actual expected-versus-displayed comparisons and any resulting discrepancies remain the cloud worker's next step. No production reads, writes, migration or deployment were performed by the local author.
+
+## Retention Label Investigation
+
+Cloud supplied (not independently recounted locally) screen values: biweekly 94 visits/14 days, retention 4/6, practice consults 5/6, four exact-date endings and no eligible full attrition month; January 207 visits/31 days, retention 10/15, consults 17/21 and seven endings/one mature month. These are comparison targets, not expected source totals embedded in SQL.
+
+`retention-coverage-label-reproduction.test.mjs` reproduces the reported provenance mismatch using only six synthetic providers, explicit crosswalks and copied future identities. Complete admitted coverage ends October 7; unadmitted positive October 9 tail evidence belongs to existing clients. All clinician `coverageVerified` values become false while practice `coverageVerified` remains true; January retention numerators/denominators stay unchanged. Without tail evidence the six clinician flags are true.
+
+The concrete differing rules are `buildLocalRetentionMetrics`: clinician `coverageVerified` requires **no excluded follow-up anywhere** (`excludedFollowUp.length === 0`) plus continuous observed treatment-date coverage; `estimateLocalClientActivity` checks its covered interval, whose October 9 tail exclusion is outside the admitted October 7 boundary. The UI directly consumes those flags in both Team and Sessions. The synthetic reproduction does not implicate the explicit mapping itself. Confirm whether this exact tail condition occurs in the real account before declaring the production root cause. No runtime fix is included in this diagnostic-only change. Do not discard excluded follow-up evidence globally: it still protects absence/ending claims.
+
+Cloud also reports Money January as `(partial)` despite full selected billing coverage. The second characterization reproduces the source-level cause: `practiceFinancialRange` calls `summarizeReportedBilling` with `actualEnd` (January 31), whose `fullyElapsed` comparison is `month < asOf.slice(0, 7)`. January is not less than January, so the UI appends `(partial)` even for a fully selected elapsed January. Passing the actual October observation date makes the flag true with unchanged charges. This is a display-basis finding, not independent certification of the real $15,035/$33,035 charges or reported source-row counts. No runtime correction is bundled here.
+
+Money's generic proof/unfinished-period/rolling-baseline warnings also have a broader source scope than the selected January actual range. `practiceFinancialRange` unconditionally appends every `reports.incompletePeriods` reason and every `projection.clinicianPace` basis after calculating the selected range. The reports and projection were built with the current observation date, not clipped to January. Thus an incomplete first source period, unfinished October period or July-October rolling baseline can appear under January's limitations without establishing a January coverage gap. This is confirmed warning propagation in source, not a separate claim about real source completeness. Compare the diagnostic's selected-window coverage fields before classifying any numeric discrepancy.
+
+```sh
+node --test verification/retention-coverage-label-reproduction.test.mjs
+```
