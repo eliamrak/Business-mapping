@@ -131,7 +131,9 @@ export function resolveImportedProvider(
 export function bindBillingResolutions(resolutions: readonly BillingChargeResolution[], roster: readonly { id: number; label: string; goalId?: number | null }[], declarations?: ImportDeclarations | null): BillingChargeResolutionEvidence[] {
   return resolutions.map((resolution) => {
     const mappings = declarations?.mappings.filter((row) => normalizeProviderLabel(row.sourceLabel) === normalizeProviderLabel(resolution.clinicianLabel)) ?? [];
-    const valid = mappings.length === 1 && resolveImportedProvider(resolution.clinicianLabel, roster, mappings[0].teamId, declarations) === resolution.clinicianId;
+    const valid = resolution.historicalProviderId !== undefined
+      ? resolution.clinicianId === undefined && resolveHistoricalBillingProvider(resolution.clinicianLabel, roster, declarations) === resolution.historicalProviderId
+      : mappings.length === 1 && resolveImportedProvider(resolution.clinicianLabel, roster, mappings[0].teamId, declarations) === resolution.clinicianId;
     return { ...resolution, ...(!valid ? { mappingInvalid: true as const } : {}) };
   });
 }

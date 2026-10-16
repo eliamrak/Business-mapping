@@ -225,6 +225,49 @@ test("billing approval appends a separate scoped journal without changing declar
     assert.equal(reread.body.candidates[0].canAccept, false); assert.ok(reread.body.candidates[0].resolutionId);
   }
 });
+test("historical-only fifth approval requires explicit identity and preserves four prior approvals", async () => {
+  billingReset([110, 150]);
+  const currentRows = structuredClone(state.snapshots[0].rows);
+  state.snapshots[0].rows = Array.from({ length: 4 }, (_, i) => currentRows.map(row => ({
+    ...row, serviceDate: `2026-01-0${i + 2}`, sourceRowHash: row.sourceRowHash + i,
+  }))).flat();
+  for (let i = 0; i < 4; i++) {
+    const cases = await billingCall(candidatesHandler);
+    const next = cases.body.candidates.find(row => row.canAccept);
+    const saved = await billingCall(acceptanceHandler, { expectedRevision: cases.body.revision, caseToken: next.caseToken,
+      clinicianLabel: next.clinicianLabel, serviceDate: next.serviceDate, amounts: next.amounts,
+      confirmed: true, approvalNote: "Synthetic original approval" });
+    assert.equal(saved.statusCode, 200);
+  }
+  const originalApprovals = structuredClone(state.audits);
+  const historicalLabel = "(deleted) Synthetic Former";
+  state.snapshots[0].rows.push(...currentRows.map(row => ({ ...row, clinician: historicalLabel, serviceDate: "2025-10-03", sourceRowHash: row.sourceRowHash + "former" })));
+  let cases = await billingCall(candidatesHandler);
+  assert.equal(cases.body.candidates.find(row => row.clinicianLabel === historicalLabel).canAccept, false);
+  const providerId = "00000000-0000-4000-8000-000000000099";
+  state.saved.revision = 2;
+  state.audits.push({ practiceId: "synthetic", accountId: "synthetic", action: "confirm-historical-billing-providers",
+    detail: { version: 1, declarationRevision: 2, providers: [{ id: providerId, sourceLabel: historicalLabel,
+      sourceSets: [{ snapshotIds: ["billing-0123456789abcdef"], start: "2025-07-01", end: "2026-10-12", complete: true }] }] } });
+  const before = structuredClone({ saved: state.saved, snapshots: state.snapshots, roster: state.roster });
+  cases = await billingCall(candidatesHandler);
+  const next = cases.body.candidates.find(row => row.clinicianLabel === historicalLabel);
+  assert.equal(next.canAccept, true);
+  const payload = { expectedRevision: 4, caseToken: next.caseToken, clinicianLabel: next.clinicianLabel,
+    serviceDate: next.serviceDate, amounts: next.amounts, confirmed: true, approvalNote: "Synthetic owner-authorized fifth approval" };
+  const result = await billingCall(acceptanceHandler, payload);
+  assert.equal(result.statusCode, 200); assert.equal(result.body.billingResolutionRevision, 5);
+  const approval = result.body.billingResolutions[4];
+  assert.equal(approval.historicalProviderId, providerId); assert.equal(approval.clinicianId, undefined);
+  assert.deepEqual(state.audits.slice(0, 4), originalApprovals);
+  assert.deepEqual({ saved: state.saved, snapshots: state.snapshots, roster: state.roster }, before);
+  assert.equal((await billingCall(acceptanceHandler, payload)).body.resolutionStatus, "duplicate");
+  assert.equal((await billingCall(candidatesHandler)).body.candidates.find(row => row.clinicianLabel === historicalLabel).stale, false);
+  state.saved.revision = 3;
+  state.audits.push({ practiceId: "synthetic", accountId: "synthetic", action: "confirm-historical-billing-providers",
+    detail: { version: 1, declarationRevision: 3, providers: [] } });
+  assert.equal((await billingCall(candidatesHandler)).body.candidates.find(row => row.clinicianLabel === historicalLabel).stale, true);
+});
 test("billing approval rejects missing confirmation, wrong provider/day/amount, stale token or revision without writes", async () => {
   for (const mutate of [p => { p.confirmed = false; }, p => { p.expectedRevision = 1; }, p => { p.caseToken = "b".repeat(64); },
     p => { p.clinicianLabel = "Other"; }, p => { p.serviceDate = "2026-01-03"; }, p => { p.amounts = [135, 160]; },

@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { emptyWorkspace, importDeclarationsSchema, resolveHistoricalBillingProvider, restoreHistoricalBillingProviders,
+import { emptyWorkspace, importDeclarationsSchema, billingChargeResolutionSchema, resolveHistoricalBillingProvider, restoreHistoricalBillingProviders,
   prepareBillingChargeResolution, type ImportEvidenceDeclarations, type Context } from "@workspace/practice/hub";
 import { historicalBillingLedger, historicalBillingOverallStart } from "./historical-billing-ledger.ts";
 import { completeReportCoverage } from "./complete-report-coverage.ts";
@@ -150,6 +150,22 @@ test("approved charge pair stays pinned and cannot become extra clinical visits"
   source.id = "billing-bbbbbbbb";
   f.declarations.sourceSets[0].snapshotIds = [source.id]; f.declarations.historicalBillingProviders![0].sourceSets[0].snapshotIds = [source.id];
   assert.equal(ledger(f).reportedCharges, null, "changing source anchors never transfers the old approval");
+});
+test("historical approval binds exact registry identity without a clinician card and invalidates when removed", () => {
+  const f = fixture(); const source = f.snapshots[0] as Extract<LocalSnapshot, { kind: "billing" }>;
+  source.rows.push({ ...source.rows[2], totalFeeCharged: 150, sourceRowHash: "second-former-charge" });
+  const draft = prepareBillingChargeResolution(source.rows.filter(row => row.clientId === "synthetic-former").map(row => ({ row, snapshotId: source.id })))!;
+  const approval = { ...draft, id: uuid, approvalToken: "a".repeat(64), historicalProviderId: uuid,
+    confirmedAt: "2026-10-16T00:00:00Z", approvalNote: "Synthetic explicit historical approval" };
+  assert.equal(billingChargeResolutionSchema.safeParse(approval).success, true);
+  assert.equal(billingChargeResolutionSchema.safeParse({ ...approval, clinicianId: 1 }).success, false);
+  const { historicalProviderId: _, ...missing } = approval;
+  assert.equal(billingChargeResolutionSchema.safeParse(missing).success, false);
+  f.declarations.billingResolutions = [approval];
+  assert.equal(ledger(f).reportedCharges, 450);
+  assert.equal(f.context.clinicians.length, 1);
+  delete f.declarations.historicalBillingProviders;
+  assert.equal(ledger(f).reportedCharges, null);
 });
 test("metadata defaults are backward compatible and registry journal replays without mutating strict declaration JSON", () => {
   const f = fixture(); const { historicalBillingProviders, ...original } = f.declarations;

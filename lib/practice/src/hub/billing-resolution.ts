@@ -5,7 +5,8 @@ const charge = z.object({ amount: z.number().finite().positive().max(Number.MAX_
 export const billingChargeResolutionSchema = z.object({
   id: z.uuid(),
   approvalToken: z.string().regex(/^[0-9a-f]{64}$/),
-  clinicianId: z.number().int().positive(),
+  clinicianId: z.number().int().positive().optional(),
+  historicalProviderId: z.uuid().optional(),
   clinicianLabel: z.string().trim().min(1).max(200),
   /** Existing de-identified key, retained internally; never displayed in candidate/review output. */
   clientId: z.string().trim().min(1).max(200),
@@ -15,7 +16,9 @@ export const billingChargeResolutionSchema = z.object({
   charges: z.tuple([charge, charge]),
   confirmedAt: z.iso.datetime(),
   approvalNote: z.string().trim().min(1).max(2000),
-}).strict();
+}).strict().refine(row => (row.clinicianId !== undefined) !== (row.historicalProviderId !== undefined), {
+  message: "An approval requires exactly one clinician or historical billing identity.",
+});
 export type BillingChargeResolution = z.infer<typeof billingChargeResolutionSchema>;
 /** Derived validation only; never persisted as part of an approval. */
 export type BillingChargeResolutionEvidence = BillingChargeResolution & { mappingInvalid?: true };

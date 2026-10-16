@@ -430,11 +430,12 @@ router.get("/practice-imports/billing-resolution-candidates", async (_req, res) 
     if (!group.conflicting && !group.ambiguous && !state.resolutionId && !state.resolutionStale) return [];
     const mapping = draft && data?.mappings.find((row) => normalizeProviderLabel(row.sourceLabel) === normalizeProviderLabel(draft.clinicianLabel));
     const clinicianId = mapping ? resolveImportedProvider(draft!.clinicianLabel, roster, mapping.teamId, data) : null;
+    const historicalProviderId = draft ? resolveHistoricalBillingProvider(draft.clinicianLabel, roster, data) : null;
     return [{ caseToken, clinicianLabel: group.row.clinician, serviceDate: group.row.serviceDate,
       billingCode: group.row.billingCode, amounts: draft?.charges.map((row) => row.amount) ?? null,
       rawRowCount: group.rows.length, sourceCount: new Set(members.map((row) => row.snapshotId)).size,
       conflicting: group.conflicting, ambiguous: group.ambiguous, resolutionId: state.resolutionId ?? null,
-      stale: !!state.resolutionStale, canAccept: !!draft && clinicianId !== null && !state.resolutionId && !state.resolutionStale }];
+      stale: !!state.resolutionStale, canAccept: !!draft && (clinicianId !== null || historicalProviderId !== null) && !state.resolutionId && !state.resolutionStale }];
   });
   return res.json({ revision: history.billingResolutionRevision, candidates });
 });
@@ -481,8 +482,10 @@ router.post("/practice-imports/billing-resolutions", async (req, res) => {
       && row.serviceDate === draft.serviceDate && row.billingCode === draft.billingCode)) return "stale";
     const mapping = old.data.mappings.find((row) => normalizeProviderLabel(row.sourceLabel) === normalizeProviderLabel(draft.clinicianLabel));
     const clinicianId = mapping ? resolveImportedProvider(draft.clinicianLabel, roster, mapping.teamId, old.data) : null;
-    if (clinicianId === null) return "mapping";
-    const resolution = { ...draft, id: randomUUID(), approvalToken: body.data.caseToken, clinicianId,
+    const historicalProviderId = resolveHistoricalBillingProvider(draft.clinicianLabel, roster, old.data);
+    if (clinicianId === null && historicalProviderId === null) return "mapping";
+    const resolution = { ...draft, id: randomUUID(), approvalToken: body.data.caseToken,
+      ...(clinicianId !== null ? { clinicianId } : { historicalProviderId: historicalProviderId! }),
       confirmedAt: new Date().toISOString(), approvalNote: body.data.approvalNote };
     await tx.insert(practiceImportAuditTable).values({ id: randomUUID(), practiceId, accountId, packageId: "billing-resolution:" + resolution.id,
       action: "accept-billing-charge-exception", actor,
