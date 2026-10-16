@@ -366,6 +366,8 @@ fee_counts AS (
 gate AS (
   SELECT CASE WHEN (SELECT count(*) FROM active_scopes)<>1 THEN 'STOP_SCOPE_NOT_UNIQUE'
     WHEN (SELECT count(*) FROM workspace)<>1 OR (SELECT count(*) FROM declaration)<>1 THEN 'STOP_WORKSPACE_OR_DECLARATION'
+    WHEN EXISTS(SELECT 1 FROM practice_import_audit a JOIN scope USING(practice_id,account_id)
+      WHERE a.action='confirm-historical-billing-providers') THEN 'STOP_HISTORICAL_BILLING_SCOPE_REQUIRES_LEDGER_AUDIT'
     WHEN EXISTS(SELECT 1 FROM declaration WHERE data->'version' IS DISTINCT FROM '1'::jsonb
       OR jsonb_typeof(data->'mappings') IS DISTINCT FROM 'array' OR jsonb_typeof(data->'sourceSets') IS DISTINCT FROM 'array')
       OR EXISTS(SELECT 1 FROM sources WHERE jsonb_typeof(rows) IS DISTINCT FROM 'array')
