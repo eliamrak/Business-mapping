@@ -7,10 +7,16 @@ if (!base || !["127.0.0.1", "localhost"].includes(new URL(base).hostname))
   throw new Error(
     "Set EMC_TEST_API_URL to the isolated local test API. Never run against production.",
   );
-const call = async (path, body, method = body ? "POST" : "GET") => {
+const token = process.env.EMC_TEST_SESSION_TOKEN;
+if (!token) throw new Error("Set EMC_TEST_SESSION_TOKEN to a session signed by the isolated test issuer.");
+const call = async (path, body, method = body ? "POST" : "GET", auth = token, origin = new URL(base).origin) => {
   const response = await fetch(base + path, {
     method,
-    headers: body ? { "content-type": "application/json" } : {},
+    headers: {
+      ...(body ? { "content-type": "application/json" } : {}),
+      ...(auth ? { authorization: `Bearer ${auth}` } : {}),
+      ...(origin ? { origin } : {}),
+    },
     body: body ? JSON.stringify(body) : undefined,
   });
   return {
@@ -20,6 +26,8 @@ const call = async (path, body, method = body ? "POST" : "GET") => {
 };
 let goal, clinician, entry, initial;
 before(async () => {
+  assert.equal((await call("/session-records", undefined, "GET", null)).status, 401);
+  assert.equal((await call("/auth/me")).status, 200);
   goal = (
     await call("/business-goals", { name: `Session integration ${Date.now()}` })
   ).data;

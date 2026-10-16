@@ -4,9 +4,9 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { execFileSync } from "node:child_process";
 
-export function legacyConverterFixture() {
+export function legacyConverterFixture(options = {}) {
   const dir = mkdtempSync(path.join(tmpdir(), "legacy-converter-synthetic-"));
-  const core = fileURLToPath(new URL("../tools/practice-converter/Resources/converter_core.py", import.meta.url));
+  const core = options.corePath ?? fileURLToPath(new URL("../tools/practice-converter/Resources/converter_core.py", import.meta.url));
   const cases = [
     ["1", "Show", 125], ["30001", "Show", 151], ["30002", "Show", 210],
     ["30003", "Show", 60], ["4", "Show", 44], ["2", "Show", 25],
@@ -26,7 +26,7 @@ export function legacyConverterFixture() {
   writeFileSync(attendance, attendanceRows.join("\n")); writeFileSync(billing, billingRows.join("\n"));
   const output = path.join(dir, "package.json");
   try {
-    execFileSync("python3", [core, "export", "--attendance", attendance, "--billing", billing, "--state-dir", path.join(dir, "state"), "--approve-new", "--output", output], { stdio: "pipe" });
+    execFileSync(options.python ?? "python3", [core, "export", "--attendance", attendance, "--billing", billing, "--state-dir", path.join(dir, "state"), "--approve-new", "--output", output], { stdio: "pipe", env: options.env ?? process.env });
     return JSON.parse(readFileSync(output, "utf8"));
   } finally { rmSync(dir, { recursive: true, force: true }); }
 }
