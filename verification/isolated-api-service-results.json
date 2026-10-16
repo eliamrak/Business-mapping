@@ -10,19 +10,19 @@
         "# fail 0",
         "# cancelled 0",
         "# skipped 0",
-        "# duration_ms 2014.738917"
+        "# duration_ms 2252.901917"
       ]
     },
     {
       "name": "practice-imports-original",
       "exitCode": 0,
       "summary": [
-        "# tests 8",
-        "# pass 8",
+        "# tests 9",
+        "# pass 9",
         "# fail 0",
         "# cancelled 0",
         "# skipped 0",
-        "# duration_ms 363.354042"
+        "# duration_ms 471.878417"
       ]
     },
     {
@@ -34,7 +34,7 @@
         "# fail 0",
         "# cancelled 0",
         "# skipped 0",
-        "# duration_ms 132.865209"
+        "# duration_ms 135.782375"
       ]
     },
     {
@@ -46,11 +46,11 @@
         "# fail 0",
         "# cancelled 0",
         "# skipped 0",
-        "# duration_ms 121.781"
+        "# duration_ms 126.717625"
       ]
     }
   ],
-  "candidate": "ad3ae2e532b5744de4ae941ace5f7066752d2bf9",
+  "candidate": "a915dd3e73725f2ab1038886785f2e4ddb27fba1",
   "clusterStopped": true,
   "syntheticDatabaseDeleted": true
 }

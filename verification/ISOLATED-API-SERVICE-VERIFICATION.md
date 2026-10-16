@@ -1,5 +1,7 @@
 # Isolated API Service Verification
 
+Latest paired code/cancellation candidate: `a915dd3e73725f2ab1038886785f2e4ddb27fba1`, with **38/38** service tests (Hub16/imports9/goals1/Sessions12), successful cleanup and exact-SHA evidence in `isolated-api-service-results.json`. See `LEGACY-CODE-CANDIDATE.md` for scope and release gates. The auth-gap closure and initial baseline sections below retain their earlier runtime/evidence context.
+
 Runtime candidate: `58949e42c294dae368820f2fe21341156ed0067a`, with frozen runtime `42c4b33b6826ceb36da54606e7e4639b53147d28`. Only verification tooling and one test fixture changed during this check. Historical billing remains on `codex/historical-billing-only`, separate from main and production.
 
 ## Reproduce

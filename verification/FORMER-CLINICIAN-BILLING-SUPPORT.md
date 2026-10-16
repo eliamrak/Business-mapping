@@ -31,6 +31,8 @@ Source-date proof is checked independently of the canonical 14-day rule. July 1 
 
 ## Verification And Limits
 
+Latest paired legacy-code/cancellation implementation is frozen at `a915dd3e73725f2ab1038886785f2e4ddb27fba1`, tree `b8679235e144c50a6c21042846ad72d7b5b11b9f`. See `LEGACY-CODE-CANDIDATE.md` for its 687 domain tests,21 converter tests,38 service tests,27 source-pin checks and exact-SHA independent review. It supersedes the prior runtime pin below for this feature branch only; no main/production merge or converter installation occurred. The new optional cancellation detail requires paired compatible readers. The earlier historical-only evidence below retains its original scope.
+
 - 683 domain/dashboard tests pass, including 11 new historical-ledger/identity/marker controls.
 - 39 mocked API controls pass, including registry separate-journal persistence, strict-JSON backout compatibility, stale/rollback/older-client preservation, identity collisions, source bounds, deletion-marker preflight and permanent identity reservation after removal.
 - Eight updated former-billing/overlap controls pass, including four synthetic pinned pairs and frozen source membership. Exact-candidate aggregate replay additionally exposes only historical dates/amounts/counts, not client/source keys.
