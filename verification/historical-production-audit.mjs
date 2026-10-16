@@ -1,6 +1,6 @@
 import { createRequire } from "node:module";
 import { fileURLToPath, pathToFileURL } from "node:url";
-import { assertCandidateSource, auditOptions, readOnlyInput } from "./practice-readonly-audit.mjs";
+import { CANDIDATE, assertCandidateSource, auditOptions, readOnlyInput } from "./practice-readonly-audit.mjs";
 export async function loadHistoricalAudit() {
   const require = createRequire(new URL("../artifacts/api-server/package.json", import.meta.url));
   const { outputFiles } = await require("esbuild").build({ entryPoints: [fileURLToPath(new URL("./historical-production-audit-model.ts", import.meta.url))], bundle: true, platform: "node", format: "esm", write: false, logLevel: "silent" });
@@ -19,7 +19,7 @@ async function main() {
       options: "-c default_transaction_read_only=on", application_name: "historical-readonly-aggregate-audit" });
     pool.on("error", () => {}); client = await pool.connect();
     const input = await readOnlyInput(client, options.scope); client.release(); client = null;
-    process.stdout.write(JSON.stringify({ runtime: "046a8e7440474abbcd3b56aa29daa49f8cf8ea2b", readOnlyTransactionVerified: true, alwaysRolledBack: true,
+    process.stdout.write(JSON.stringify({ runtime: CANDIDATE, readOnlyTransactionVerified: true, alwaysRolledBack: true,
       ...historicalProductionAudit(input, options) }, null, 2) + "\n");
   } catch {
     process.stderr.write('{"status":"historical_audit_failed_no_report","detailsWithheld":true}\n'); process.exitCode = 1;
