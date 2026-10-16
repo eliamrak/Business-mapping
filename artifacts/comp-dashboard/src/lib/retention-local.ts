@@ -1,3 +1,5 @@
+import { isConsultationService, isDocumentationService, isTreatmentService, isFreePhoneService, legacyServiceDefinition } from "@workspace/practice/hub";
+
 export type LocalFactKind = "attendance" | "billing";
 export type ReportCoverage = { start: string; end: string; complete: true };
 
@@ -21,6 +23,7 @@ export type AttendanceRow = {
   serviceDate: string;
   location: string | null;
   status: AttendanceStatus;
+  cancellationSubtype?: "late_cancelled";
   billingCode?: string | null;
   visitKind?: VisitKind;
   sourceRowHash: string;
@@ -437,26 +440,16 @@ export function sameDayVisitKey(
   ]);
 }
 
-function isConsultationVisitKind(row: { visitKind?: VisitKind | null }) {
-  return row.visitKind === "consultation";
-}
-
 export function isPhoneConsultBillingRow(
   row: Pick<BillingRow, "billingCode" | "visitKind">,
 ) {
-  return (
-    normalizeBillingCode(row.billingCode) === "phone" ||
-    isConsultationVisitKind(row)
-  );
+  return isConsultationService(row);
 }
 
 function isPhoneConsultAttendanceRow(
   row: Pick<AttendanceRow, "billingCode" | "visitKind">,
 ) {
-  return (
-    normalizeBillingCode(row.billingCode ?? null) === "phone" ||
-    isConsultationVisitKind(row)
-  );
+  return isConsultationService(row);
 }
 
 function factGroupKey(
@@ -481,6 +474,7 @@ function phoneOnlyConsultKeys(snapshots: LocalSnapshot[]) {
     if (snapshot.kind !== "billing") continue;
     const seenRows = new Set<string>();
     for (const row of snapshot.rows) {
+      if (isDocumentationService(row)) continue;
       if (seenRows.has(row.sourceRowHash)) continue;
       seenRows.add(row.sourceRowHash);
       const key = factGroupKey(row);
@@ -499,12 +493,39 @@ function phoneOnlyConsultKeys(snapshots: LocalSnapshot[]) {
 
 export function consultAttendanceClassifier(snapshots: LocalSnapshot[]) {
   const consultKeys = phoneOnlyConsultKeys(snapshots);
+  const isDocumentation = documentationAttendanceClassifier(snapshots);
+  const billed = new Map<string, BillingRow[]>();
+  for (const snapshot of snapshots) if (snapshot.kind === "billing") for (const row of snapshot.rows) {
+    const key = factGroupKey(row);
+    billed.set(key, [...(billed.get(key) ?? []), row]);
+  }
+  const legacyTreatmentKeys = new Set([...billed].filter(([, rows]) => rows.some(row => legacyServiceDefinition(row.billingCode)?.kind === "treatment") && rows.every(row => isTreatmentService(row) || isDocumentationService(row))).map(([key]) => key));
   return (
     row: Pick<
       AttendanceRow,
       "billingCode" | "clientId" | "clinician" | "serviceDate" | "visitKind"
     >,
-  ) => isPhoneConsultAttendanceRow(row) || consultKeys.has(factGroupKey(row));
+  ) => {
+    if (isDocumentation(row)) return false;
+    if (!row.billingCode?.trim() && legacyTreatmentKeys.has(factGroupKey(row))) return false;
+    return isPhoneConsultAttendanceRow(row) || (!legacyServiceDefinition(row.billingCode) && consultKeys.has(factGroupKey(row)));
+  };
+}
+
+export function documentationAttendanceClassifier(snapshots: LocalSnapshot[]) {
+  const kinds = new Map<string, { documentation: boolean; other: boolean }>();
+  for (const snapshot of snapshots) if (snapshot.kind === "billing") for (const row of snapshot.rows) {
+    const key = factGroupKey(row);
+    const group = kinds.get(key) ?? { documentation: false, other: false };
+    if (isDocumentationService(row)) group.documentation = true;
+    else group.other = true;
+    kinds.set(key, group);
+  }
+  return (row: Pick<AttendanceRow, "clientId" | "clinician" | "serviceDate" | "billingCode">) => {
+    if (row.billingCode?.trim()) return isDocumentationService(row);
+    const group = kinds.get(factGroupKey(row));
+    return !!group?.documentation && !group.other;
+  };
 }
 
 export function isPhoneOnlyConsultAttendanceRow(
@@ -519,13 +540,14 @@ export function isPhoneOnlyConsultAttendanceRow(
 
 export function treatmentAttendanceRows(snapshots: LocalSnapshot[]) {
   const isConsult = consultAttendanceClassifier(snapshots);
+  const isDocumentation = documentationAttendanceClassifier(snapshots);
   const conflicted = new Set(attendanceStatusConflicts(snapshots).flatMap((group) => group.rows));
   const seenNonShows = new Set<string>();
   return snapshots.flatMap((snapshot) =>
     snapshot.kind === "attendance"
       ? snapshot.rows.filter(
           (row) => {
-            if (isConsult(row) || conflicted.has(row)) return false;
+            if (isDocumentation(row) || isConsult(row) || conflicted.has(row)) return false;
             if (row.status === "show") return true;
             const key = `${factGroupKey(row)}\u0000${row.status}`;
             if (seenNonShows.has(key)) return false;
@@ -540,8 +562,10 @@ export function treatmentAttendanceRows(snapshots: LocalSnapshot[]) {
 /** Name/date coordinates cannot establish which contradictory appointment status is authoritative. */
 export function attendanceStatusConflicts(snapshots: LocalSnapshot[]) {
   const isConsult = consultAttendanceClassifier(snapshots);
+  const isDocumentation = documentationAttendanceClassifier(snapshots);
   const groups = new Map<string, { clientId: string; clinician: string; serviceDate: string; kind: "consultation" | "treatment"; rows: AttendanceRow[]; snapshotIds: string[]; statusesBySource: Map<string, Set<AttendanceStatus>> }>();
   for (const snapshot of snapshots) if (snapshot.kind === "attendance") for (const row of snapshot.rows) {
+    if (isDocumentation(row)) continue;
     const kind = isConsult(row) ? "consultation" : "treatment";
     const key = `${factGroupKey(row)}\u0000${kind}`;
     const group = groups.get(key) ?? { clientId: row.clientId, clinician: row.clinician, serviceDate: row.serviceDate, kind, rows: [], snapshotIds: [], statusesBySource: new Map<string, Set<AttendanceStatus>>() };
@@ -559,14 +583,14 @@ export function attendanceStatusConflicts(snapshots: LocalSnapshot[]) {
 
 export function phoneChargeAnomalies(snapshots: readonly LocalSnapshot[]) {
   return snapshots.flatMap((snapshot) => snapshot.kind === "billing"
-    ? snapshot.rows.filter((row) => isPhoneConsultBillingRow(row) && (!Number.isFinite(row.totalFeeCharged) || row.totalFeeCharged !== 0))
+    ? snapshot.rows.filter((row) => isFreePhoneService(row) && (!Number.isFinite(row.totalFeeCharged) || row.totalFeeCharged !== 0))
     : []);
 }
 
 export function treatmentBillingRows(snapshots: LocalSnapshot[]) {
   return snapshots.flatMap((snapshot) =>
     snapshot.kind === "billing"
-      ? snapshot.rows.filter((row) => !isPhoneConsultBillingRow(row))
+      ? snapshot.rows.filter(isTreatmentService)
       : [],
   );
 }
@@ -738,7 +762,7 @@ function parseStatus(value: string): AttendanceStatus {
     .replace(/\s+/g, " ")
     .trim();
   if (key === "show") return "show";
-  if (key === "cancelled" || key === "canceled") return "cancelled";
+  if (key === "cancelled" || key === "canceled" || /^late cancel(?:led|ed|lation)?(?: by client)?$/.test(key)) return "cancelled";
   if (key === "no show" || key === "noshow") return "no show";
   if (key === "clinician cancelled" || key === "clinician canceled")
     return "clinician cancelled";
@@ -777,13 +801,18 @@ export function importAttendanceCsv(
       throw new Error(`Row ${index + 2}: Client and Clinician are required.`);
     const serviceDate = parseServiceDate(cell(row, headers, "dateofservice"));
     const location = cell(row, headers, "location") || null;
-    const status = parseStatus(cell(row, headers, "status"));
+    const rawStatus = cell(row, headers, "status");
+    const status = parseStatus(rawStatus);
+    const cancellationSubtype = /^late[ _-]+cancel/i.test(rawStatus.trim()) ? "late_cancelled" as const : undefined;
+    const billingCode = cell(row, headers, "billingcode") || undefined;
     return {
       clientId,
       clinician,
       serviceDate,
       location,
       status,
+      ...(billingCode ? { billingCode } : {}),
+      ...(cancellationSubtype ? { cancellationSubtype } : {}),
       sourceRowHash: rowHash([
         "attendance",
         clientId,
@@ -791,6 +820,8 @@ export function importAttendanceCsv(
         serviceDate,
         location,
         status,
+        ...(billingCode ? [billingCode] : []),
+        ...(cancellationSubtype ? [cancellationSubtype] : []),
         index,
       ]),
     };
@@ -1049,14 +1080,14 @@ export function buildLocalVisitReconciliation(
   for (const group of groups.values()) {
     const attendanceCount = group.attendanceRows.length;
     const treatmentBillingRows = group.billingRows.filter(
-      (row) => !isPhoneConsultBillingRow(row),
+      isTreatmentService,
     );
     const billingCount = treatmentBillingRows.length;
     const isPhoneOnlyConsult =
       group.billingRows.length > 0 && treatmentBillingRows.length === 0;
     const treatmentAttendanceRowsForGroup = isPhoneOnlyConsult
       ? []
-      : group.attendanceRows.filter((row) => !isPhoneConsultAttendanceRow(row));
+      : group.attendanceRows.filter(isTreatmentService);
     const treatmentAttendanceCount = treatmentAttendanceRowsForGroup.length;
     const showRows = treatmentAttendanceRowsForGroup.filter(
       (row) => row.status === "show",
@@ -2295,7 +2326,7 @@ export function buildLocalRetentionMetrics(
     if (!displayLabels.has(key)) displayLabels.set(key, row.clinician.trim().replace(/\s+/g, " "));
   }
   const billingByClinician = new Map<string, ClinicianBillingMetric>();
-  for (const row of treatmentBilling) {
+  for (const row of billing.filter((row) => !isConsultationService(row) || legacyServiceDefinition(row.billingCode)?.kind === "consultation")) {
     const clinicianKey = normalizeClinician(row.clinician);
     const metric = billingByClinician.get(clinicianKey) ?? {
       clinician: displayLabels.get(clinicianKey)!,
@@ -2770,6 +2801,8 @@ function billingCodeMinutesFor(
   code: string | null,
 ) {
   if (!code) return null;
+  const legacy = legacyServiceDefinition(code);
+  if (legacy?.kind === "documentation") return 0;
   const direct = billingCodeMinutes[code];
   if (direct !== undefined) return direct;
   const normalizedCode = normalizeBillingCode(code);
@@ -2777,7 +2810,7 @@ function billingCodeMinutesFor(
     ([configuredCode]) =>
       normalizeBillingCode(configuredCode) === normalizedCode,
   );
-  return match ? match[1] : null;
+  return match ? match[1] : legacy?.minutes ?? null;
 }
 
 function validatePackageCollectionBase(
@@ -2866,6 +2899,7 @@ function validatePackageAttendanceRows(rows: unknown[]) {
         "serviceDate",
         "location",
         "status",
+        "cancellationSubtype",
         "billingCode",
         "visitKind",
       ],
@@ -2875,6 +2909,9 @@ function validatePackageAttendanceRows(rows: unknown[]) {
     const status = value.status;
     if (!isAttendanceStatus(status))
       invalidPackage(`attendance row ${index + 1} has an invalid status`);
+    const cancellationSubtype = value.cancellationSubtype;
+    if (cancellationSubtype !== undefined && (cancellationSubtype !== "late_cancelled" || status !== "cancelled"))
+      invalidPackage(`attendance row ${index + 1} has an invalid cancellation subtype`);
     const clientId = packageString(
       value,
       "clientId",
@@ -2916,6 +2953,7 @@ function validatePackageAttendanceRows(rows: unknown[]) {
       serviceDate,
       location,
       status,
+      ...(cancellationSubtype ? { cancellationSubtype: cancellationSubtype as "late_cancelled" } : {}),
       ...(billingCode !== undefined ? { billingCode } : {}),
       ...(visitKind !== undefined ? { visitKind } : {}),
       sourceRowHash: rowHash([
@@ -2927,6 +2965,7 @@ function validatePackageAttendanceRows(rows: unknown[]) {
         status,
         billingCode,
         visitKind,
+        ...(cancellationSubtype ? [cancellationSubtype] : []),
         index,
       ]),
     };
@@ -3193,6 +3232,9 @@ function validateAttendanceBackupRow(
   const status = value.status;
   if (!isAttendanceStatus(status))
     invalidBackup(`attendance row ${index + 1} has an invalid status`);
+  const cancellationSubtype = value.cancellationSubtype;
+  if (cancellationSubtype !== undefined && (cancellationSubtype !== "late_cancelled" || status !== "cancelled"))
+    invalidBackup(`attendance row ${index + 1} has an invalid cancellation subtype`);
   const billingCode =
     "billingCode" in value
       ? trimNullableBillingCode(
@@ -3230,6 +3272,7 @@ function validateAttendanceBackupRow(
       `attendance row ${index + 1} location`,
     ),
     status,
+    ...(cancellationSubtype ? { cancellationSubtype: cancellationSubtype as "late_cancelled" } : {}),
     ...(billingCode !== undefined ? { billingCode } : {}),
     ...(visitKind !== undefined ? { visitKind } : {}),
     sourceRowHash: backupString(

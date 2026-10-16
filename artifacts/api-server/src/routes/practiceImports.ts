@@ -27,6 +27,7 @@ type AttendanceRow = {
   serviceDate: string;
   location: string | null;
   status: (typeof attendanceStatuses)[number];
+  cancellationSubtype?: "late_cancelled";
   billingCode?: string | null;
   visitKind?: "consultation";
   sourceRowHash: string;
@@ -85,10 +86,11 @@ const attendanceRowSchema = z
     serviceDate: dateSchema,
     location: nonEmpty.nullable(),
     status: z.enum(attendanceStatuses),
+    cancellationSubtype: z.literal("late_cancelled").optional(),
     billingCode: nonEmpty.nullable().optional(),
     visitKind: visitKindSchema,
   })
-  .strict();
+  .strict().refine(row => row.cancellationSubtype === undefined || row.status === "cancelled", { message: "Late cancellation detail requires cancelled status." });
 const billingRowSchema = z
   .object({
     clientId: nonEmpty,

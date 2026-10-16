@@ -1,4 +1,5 @@
 import { before, after, test } from "node:test";
+import { legacyConverterFixture } from "../../../verification/legacy-converter-fixture.mjs";
 import assert from "node:assert/strict";
 import { createRequire } from "node:module";
 import { readFileSync, writeFileSync } from "node:fs";
@@ -644,6 +645,26 @@ test("same-day visit confirmations persist across authenticated history reloads"
     { practice: "practice-same-day@example.test" },
   );
   assert.equal(bad.status, 400);
+});
+
+test("converted legacy files persist actual codes, fees and late cancellation through strict API validation", async () => {
+  const payload = legacyConverterFixture();
+  const options = { practice: "legacy-converter@example.test" };
+  const saved = await call("/practice-imports/package", { package: payload }, "POST", options);
+  assert.equal(saved.status, 200, JSON.stringify(saved.data));
+  const reloaded = await call("/practice-imports", undefined, "GET", options);
+  assert.equal(reloaded.status, 200);
+  const attendance = reloaded.data.snapshots.find(snapshot => snapshot.kind === "attendance");
+  const billing = reloaded.data.snapshots.find(snapshot => snapshot.kind === "billing");
+  assert.equal(attendance.rows[7].status, "cancelled");
+  assert.equal(attendance.rows[7].cancellationSubtype, "late_cancelled");
+  assert.deepEqual(billing.rows.map(row => row.billingCode), ["1", "30001", "30002", "30003", "4", "2", "PHONE", "90837", "90837", "90837"]);
+  assert.deepEqual(billing.rows.map(row => row.totalFeeCharged), [125, 151, 210, 60, 44, 25, 0, 35, 0, 0]);
+  assert.equal((await call("/practice-imports/package", { package: payload }, "POST", options)).data.status, "duplicate");
+  const invalid = structuredClone(payload);
+  invalid.packageId += "-invalid";
+  invalid.collections.attendance.rows[7].status = "show";
+  assert.equal((await call("/practice-imports/package", { package: invalid }, "POST", options)).status, 400);
 });
 
 test("partial overlap replacement keeps retained package metadata and code minutes", async () => {

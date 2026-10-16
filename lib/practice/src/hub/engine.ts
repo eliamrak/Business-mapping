@@ -20,6 +20,7 @@ import type {
 import { conditionResult } from "./conditions.ts";
 import { estimateW2NetPay } from "./family-pay.ts";
 import { reconcileBillingEvidence } from "./billing-evidence.ts";
+import { isFreePhoneService, isTreatmentService, isRecognizedTreatmentCode } from "./service-codes.ts";
 import type { BillingChargeResolution } from "./billing-resolution.ts";
 export { reconcileBillingEvidence } from "./billing-evidence.ts";
 
@@ -188,12 +189,11 @@ export const summarizeImportedBillingActuals = (
   for (const row of resolved) {
     if (!selectedIds.has(row.clinicianId)) continue;
     const code = row.billingCode?.trim().toUpperCase();
-    const consultation = code === "PHONE" || row.visitKind === "consultation";
-    if (consultation) {
-      if (row.totalFeeCharged !== 0) unknownDates.push({ clinicianId: row.clinicianId, date: row.serviceDate, reason: "Nonzero PHONE/consultation charge violates the confirmed zero-fee policy; source review is required and charges cannot replace treatment estimates." });
+    if (!isTreatmentService(row)) {
+      if (isFreePhoneService(row) && row.totalFeeCharged !== 0) unknownDates.push({ clinicianId: row.clinicianId, date: row.serviceDate, reason: "Nonzero PHONE/consultation charge violates the confirmed zero-fee policy; source review is required and charges cannot replace treatment estimates." });
       continue;
     }
-    if (row.clientId !== undefined && !/^\d{5}$/.test(code ?? "")) {
+    if (row.clientId !== undefined && !isRecognizedTreatmentCode(code)) {
       unknownDates.push({ clinicianId: row.clinicianId, date: row.serviceDate, reason: "Unclassified charges cannot establish a complete treatment-day replacement." });
       continue;
     }
