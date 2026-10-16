@@ -34,7 +34,7 @@ The 21-day denominator is shared calendar coverage, not 6 x 21 provider-days and
 
 The current real selected-30-day `144 / 21` is UI-reported and unverified. The synthetic `126 / 21` is an invented control, not an expected replacement for the real number. Real current-six and Whole Practice imported treatment counts, denominator days, and source/status reconciliation still require an independently reviewed cloud read-only SQL result without identifiers. Billing SQL totals alone do not certify attendance.
 
-No attendance SQL extension is included here. The existing `historical-production-reconciliation.sql` explicitly disclaims clinical attendance-count certification; extending its billing CTEs requires independently checking treatment classification, canonical coverage, duplicate visits, status conflicts, and any supported same-day overrides. That work is deferred rather than treating raw attendance candidates as certified treatment totals. The three billing-only former providers must not be inferred to have zero attendance or complete attendance coverage.
+The later reviewed `post-import-attendance-reconciliation.sql` now supplies that independent production check; see `POST-IMPORT-ATTENDANCE-SQL.md` for its gates and exact window. The original `historical-production-reconciliation.sql` still disclaims clinical attendance-count certification. The three billing-only former providers must not be inferred to have zero attendance or complete attendance coverage. No actual production attendance result has been observed by this local task.
 
 ## Separate Reachability Correction
 
