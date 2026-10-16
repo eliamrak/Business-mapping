@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { emptyWorkspace, periodSchema, type Context } from "@workspace/practice/hub";
+import { emptyWorkspace, periodSchema, budgetSchema, budgetAmount, categorySchema, type Context } from "@workspace/practice/hub";
 import { practiceFinancialRange, financialRangeBridge } from "./practice-financial-range.ts";
 import type { LocalSnapshot } from "./retention-local.ts";
 
@@ -42,6 +42,50 @@ test("shared January versus February dates select different actual fees and neve
   assert.equal(january.values.profit, null);
   assert.equal(february.values.revenue, 300, "complete billed source establishes historical income independently of missing costs");
   assert.deepEqual({ workspace, context, snapshots }, before);
+});
+test("financial completeness requires known operating costs, not merely finalized date coverage", () => {
+  for (const missing of ["expenses", "payroll", "burden", "staff", "owner"] as const) {
+    const { workspace, context, snapshots } = fixture();
+    const period = periodSchema.parse({ id: crypto.randomUUID(), name: "Synthetic actual January", start: "2026-01-01", end: "2026-01-31", status: "finalized",
+      earnedRevenue: 100, revenue: 25, clinicianPay: 30, employerBurden: 5, staffPay: 10, ownerPay: 5, expensesComplete: true });
+    if (missing === "expenses") period.expensesComplete = false;
+    else {
+      const fields = { payroll: "clinicianPay", burden: "employerBurden", staff: "staffPay", owner: "ownerPay" } as const;
+      period[fields[missing]] = null;
+    }
+    workspace.periods.push(period);
+    const before = structuredClone({ workspace, context, snapshots });
+    const result = practiceFinancialRange(workspace, context, snapshots, "2026-10-16", { start: "2026-01-01", end: "2026-01-31" });
+    assert.equal(result.actual.billingComplete, true);
+    assert.equal(result.actual.values.revenue, 100);
+    assert.equal(result.actual.values.collections, 25, "recorded collected cash is not replaced by billed fees");
+    assert.equal(result.actual.values.profit, null);
+    assert.equal(result.actual.complete, false, `${missing}: incomplete costs cannot certify a financial observation`);
+    assert.match(result.warnings.join(" "), /financial-cost coverage is incomplete/);
+    assert.deepEqual({ workspace, context, snapshots }, before);
+  }
+});
+test("known operating coverage does not invent missing cash or separate processing fees", () => {
+  const { workspace, context, snapshots } = fixture();
+  workspace.periods.push(periodSchema.parse({ id: crypto.randomUUID(), name: "Synthetic known operating costs", start: "2026-01-01", end: "2026-01-31", status: "finalized",
+    earnedRevenue: 100, clinicianPay: 30, employerBurden: 5, staffPay: 10, ownerPay: 5, expensesComplete: true }));
+  const result = practiceFinancialRange(workspace, context, snapshots, "2026-10-16", { start: "2026-01-01", end: "2026-01-31" });
+  assert.equal(result.actual.complete, true);
+  assert.equal(result.actual.values.profit, 50);
+  assert.equal(result.actual.values.collections, null);
+  assert.equal(result.actual.values.fees, null);
+  assert.equal(result.actual.values.ownerDistributionsPretax, null);
+});
+test("an annual budget starting November 15 remains an accrual estimate, not a payment", () => {
+  const { workspace } = fixture();
+  const category = categorySchema.parse({ id: crypto.randomUUID(), name: "Synthetic operating expense", kind: "expense" });
+  const budget = budgetSchema.parse({ id: crypto.randomUUID(), name: "Synthetic annual service", categoryId: category.id, amount: 350, cadence: "annual", start: "2026-11-15" });
+  workspace.categories.push(category); workspace.budgets.push(budget);
+  const before = structuredClone(workspace);
+  near(budgetAmount(budget, "2026-10-01", "2026-10-31"), 0);
+  near(budgetAmount(budget, "2026-11-01", "2026-11-30"), 350 * 16 / 365);
+  assert.equal(workspace.transactions.length, 0);
+  assert.deepEqual(workspace, before);
 });
 
 test("current year composes finalized actual YTD and dated forward remainder once, never a next-twelve-month replacement", () => {

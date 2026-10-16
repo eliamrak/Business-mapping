@@ -57,7 +57,6 @@ export function practiceFinancialRange(workspace: Workspace, context: Context, s
   const reportedCharges = charges.evidence.invalidDateRowCount === 0 && charges.months.every((row) => row.charges !== null)
     ? charges.months.length ? charges.months.reduce((total, row) => total + row.charges!, 0) : billingComplete ? 0 : null : null;
   const ledgerComplete = actualRange ? financialCoverage(workspace, actualRange) : true;
-  const complete = !!actualRange && ledgerComplete && billingComplete;
   const actualObserved = actualRange ? observed(workspace, context, actualRange.start, actualRange.end) : null;
   const actualValues: Values = actualObserved ? Object.fromEntries(sumKeys.map((key) => [key, ledgerComplete ? actualObserved.values[key] ?? null : null])) : {};
   const paidConsultationUnclassified = !!actualRange && reports.eligibleBillingRows.some((row) => row.serviceDate >= actualRange.start && row.serviceDate <= actualRange.end && row.totalFeeCharged !== 0 && isFreePhoneService(row));
@@ -71,6 +70,8 @@ export function practiceFinancialRange(workspace: Workspace, context: Context, s
     const sessions = completePeriodSessionSummary(context.sessions, roster.map((person) => person.id), actualRange, coverage, asOf);
     actualValues.sessions = sessions.coverageComplete ? sessions.observedCompleted : null;
   }
+  const complete = !!actualRange && ledgerComplete && billingComplete
+    && [actualValues.revenue, actualValues.clinicianPay, actualValues.profit].every(value => value != null);
   const warnings = [...(actualObserved?.warnings ?? []), ...charges.evidence.warnings.filter((warning) => !warning.startsWith("Elapsed months"))];
   const selectedProofIssues = reports.incompletePeriods.filter((period) => !period.start || !period.end || (period.start <= range.end && period.end >= range.start));
   const sourceHistoryWarnings = reports.incompletePeriods.filter((period) => !selectedProofIssues.includes(period))
