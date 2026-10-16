@@ -5,24 +5,24 @@
       "name": "hub-clerk-auth",
       "exitCode": 0,
       "summary": [
-        "# tests 16",
-        "# pass 16",
+        "# tests 17",
+        "# pass 17",
         "# fail 0",
         "# cancelled 0",
         "# skipped 0",
-        "# duration_ms 2153.570042"
+        "# duration_ms 2325.338334"
       ]
     },
     {
       "name": "practice-imports-original",
       "exitCode": 0,
       "summary": [
-        "# tests 9",
-        "# pass 9",
+        "# tests 10",
+        "# pass 10",
         "# fail 0",
         "# cancelled 0",
         "# skipped 0",
-        "# duration_ms 473.702458"
+        "# duration_ms 626.454125"
       ]
     },
     {
@@ -34,7 +34,7 @@
         "# fail 0",
         "# cancelled 0",
         "# skipped 0",
-        "# duration_ms 138.943792"
+        "# duration_ms 131.906958"
       ]
     },
     {
@@ -46,12 +46,18 @@
         "# fail 0",
         "# cancelled 0",
         "# skipped 0",
-        "# duration_ms 128.266459"
+        "# duration_ms 128.137167"
       ]
     }
   ],
-  "candidate": "0e11ab484b1eee36a717d90ddef12ba06feab41f",
+  "candidate": "0f6d7d5be1ebaeda2a9185db428d9098ab5216e5",
   "preservationSql": "parsed-and-executed-on-empty-synthetic-schema",
+  "legacyImpactSql": "parsed-and-executed-on-empty-synthetic-schema",
+  "legacyImpactFixtures": {
+    "status": "pass",
+    "controls": "populated scope/type/date/classification/fee/dedup/privacy and multi-practice fail-closed",
+    "writesRolledBack": true
+  },
   "clusterStopped": true,
   "syntheticDatabaseDeleted": true
 }
