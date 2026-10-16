@@ -20,7 +20,9 @@ No tabs, calculation formulas, source admission, goals, monetary units, persiste
 
 The fixture has six treatment visits over 14 covered days, two retained relationships, two zero-fee PHONE consultations and $600 billed charges. A successful range change to the subsequent fully covered quiet period changes eligible visits from six to zero. That is a sourced zero, not an unknown observation. Tests also assert contributor/date carry behavior, eight desktop/mobile captures, no horizontal overflow, intact top navigation, zero API writes and unchanged workspace/context/import facts. Screenshots and JSON are in the existing untracked `verification/practice-workspace-render/` directory (`custom-date-*`, `timeframe-input-results.json`).
 
-Coordinator checks: 656 domain/dashboard-library tests and 33 mocked import API tests pass. Dashboard typecheck and production build pass with existing nonfatal Vite notices. The 45 existing workspace render states are rerun separately. Exact-runtime independent review and audit-source pin are recorded in the following verification-only checkpoint.
+Coordinator checks: 656 domain/dashboard-library tests, 33 mocked import API tests, 19 aggregate/identity/fee-diagnostic tests and three frozen-reference scale checks pass (711 total). Dashboard typecheck and production build pass with existing nonfatal Vite notices. The 45 existing workspace render states pass separately, for 53 rendered states including the eight new captures.
+
+Runtime: `cb052f1d2506352e11b494af6cb544e2c1767d85`, tree `b005f6893203b3cea11ddb8d08dcead4a06d01bf`. Independent bounded review PASS, no findings; the reviewer reran dashboard typecheck, seven date/session tests and diff validation, and reviewed the 28-case harness. Browser captures were not independently rerun. See `CUSTOM-DATE-REVIEW.md`. The following verification-only checkpoint pins the read-only audit to this exact runtime. No calculation or journal code changed from the preceding approved release.
 
 ## Acceptance Limits And Next Checks
 
