@@ -1,5 +1,7 @@
 # Paired Repair Release Handoff
 
+**Superseding visible gate:** deploy reviewed UI follow-up `67500ad8e1bb05e3b13b8b194473f42fbbc64104`, tree `4d0cc7faba49433fc7c519eff3d916e73af31ac5`, then use Overview → Open Imports → Reader status. See `READER-STATUS-UI-GATE.md`. Direct capability navigation was blocked by the cloud browser tool; do not bypass it. The normal app GET-based status panel replaces that navigation step. Backend/calculations/converter remain unchanged from0f6. Converter installation still waits for production Compatible plus preservation PASS.
+
 ## Exact Scope And Hashes
 
 Deploy **only** reader commit `0f6d7d5be1ebaeda2a9185db428d9098ab5216e5`, tree `6c9269d1701a3d4f7f864c0044929745136037bb`, from `codex/legacy-code-paired-repair`. It supersedes `0e11` by adding an owner-only read-only capabilities GET; the converter also fixes numeric-zero rejection. The original extraction is `c0e8cb1`. Verification-only followups do not change the pinned reader.
