@@ -1,0 +1,68 @@
+{
+  "isolation": "fresh loopback-only cluster; synthetic fixtures; no inherited credentials",
+  "suites": [
+    {
+      "name": "hub-original",
+      "exitCode": 1,
+      "summary": [
+        "# tests 13",
+        "# pass 0",
+        "# fail 13",
+        "# cancelled 0",
+        "# skipped 0",
+        "# duration_ms 544.034917"
+      ]
+    },
+    {
+      "name": "practice-imports-original",
+      "exitCode": 0,
+      "summary": [
+        "# tests 8",
+        "# pass 8",
+        "# fail 0",
+        "# cancelled 0",
+        "# skipped 0",
+        "# duration_ms 386.738875"
+      ]
+    },
+    {
+      "name": "session-goals-original",
+      "exitCode": 0,
+      "summary": [
+        "# tests 1",
+        "# pass 1",
+        "# fail 0",
+        "# cancelled 0",
+        "# skipped 0",
+        "# duration_ms 134.070542"
+      ]
+    },
+    {
+      "name": "sessions-original-auth",
+      "exitCode": 1,
+      "summary": [
+        "# tests 12",
+        "# pass 0",
+        "# fail 12",
+        "# cancelled 0",
+        "# skipped 0",
+        "# duration_ms 73.053167"
+      ]
+    },
+    {
+      "name": "sessions-synthetic-owner",
+      "exitCode": 0,
+      "summary": [
+        "# tests 12",
+        "# pass 12",
+        "# fail 0",
+        "# cancelled 0",
+        "# skipped 0",
+        "# duration_ms 104.515125"
+      ]
+    }
+  ],
+  "candidate": "58949e42c294dae368820f2fe21341156ed0067a",
+  "clusterStopped": true,
+  "syntheticDatabaseDeleted": true
+}

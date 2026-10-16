@@ -323,6 +323,8 @@ test("same-practice authorized actors share converted history while actor stays 
 });
 
 test("package import accepts coordinated optional consultation metadata", async () => {
+  const consultCall = (path, body) =>
+    call(path, body, "POST", { practice: "consultation-metadata@example.test" });
   const packageData = packageFor({
     packageId: "pkg-consultation-metadata",
     attendanceStart: "2026-11-01",
@@ -332,7 +334,7 @@ test("package import accepts coordinated optional consultation metadata", async 
   packageData.collections.attendance.rows[0].visitKind = "consultation";
   packageData.collections.billing.rows[0].visitKind = "consultation";
 
-  const imported = await call("/practice-imports/package", {
+  const imported = await consultCall("/practice-imports/package", {
     package: packageData,
   });
   assert.equal(imported.status, 200, JSON.stringify(imported.data));
@@ -349,35 +351,35 @@ test("package import accepts coordinated optional consultation metadata", async 
 
   const invalid = packageFor({ packageId: "pkg-invalid-visit-kind" });
   invalid.collections.attendance.rows[0].visitKind = "treatment";
-  const rejected = await call("/practice-imports/package", {
+  const rejected = await consultCall("/practice-imports/package", {
     package: invalid,
   });
   assert.equal(rejected.status, 400);
 
   const leaked = packageFor({ packageId: "pkg-title-leak" });
   leaked.collections.attendance.rows[0].appointmentTitle = "Client name";
-  const titleRejected = await call("/practice-imports/package", {
+  const titleRejected = await consultCall("/practice-imports/package", {
     package: leaked,
   });
   assert.equal(titleRejected.status, 400);
 
   const titledBilling = packageFor({ packageId: "pkg-billing-title-leak" });
   titledBilling.collections.billing.rows[0].appointmentTitle = "Client name";
-  const billingTitleRejected = await call("/practice-imports/package", {
+  const billingTitleRejected = await consultCall("/practice-imports/package", {
     package: titledBilling,
   });
   assert.equal(billingTitleRejected.status, 400);
 
   const timed = packageFor({ packageId: "pkg-time-leak" });
   timed.collections.attendance.rows[0].appointmentTime = "09:00";
-  const timeRejected = await call("/practice-imports/package", {
+  const timeRejected = await consultCall("/practice-imports/package", {
     package: timed,
   });
   assert.equal(timeRejected.status, 400);
 
   const timedBilling = packageFor({ packageId: "pkg-billing-time-leak" });
   timedBilling.collections.billing.rows[0].appointmentTime = "09:00";
-  const billingTimeRejected = await call("/practice-imports/package", {
+  const billingTimeRejected = await consultCall("/practice-imports/package", {
     package: timedBilling,
   });
   assert.equal(billingTimeRejected.status, 400);
