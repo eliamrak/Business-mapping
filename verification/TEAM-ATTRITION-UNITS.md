@@ -20,4 +20,12 @@ The synthetic fixture has three distinct clients established in December and end
 
 The preceding independently reviewed custom-date release was normally fast-forwarded to established main at `b78d1ac6dfe56f4240db11c5883c3e7d0b40916a`, tree `8904e984d8404d69d30770c5b23a02143f541585`. GitHub's advertised main hash was read back and matched. Its independent review executed dashboard typecheck, seven date/session tests and diff validation; the 28-case browser harness was reviewed but browser captures were not independently rerun.
 
-This label correction is a separate candidate, not a main promotion or deployment. No production read/write, approval application or business-record change is performed. The four live billing exception approvals are untouched. No migration or data rollback is needed; reverting this candidate would only restore the old wording. Exact candidate/review/source-pin evidence is recorded in the following verification-only checkpoint.
+This label correction is a separate candidate, not a main promotion or deployment. No production read/write, approval application or business-record change is performed. The four live billing exception approvals are untouched. No migration or data rollback is needed; reverting this candidate would only restore the old wording.
+
+## Exact Independent Review
+
+Runtime candidate: `45320e4211cc29ecbc3a97dbe06f9479ef9bc2b0`, tree `e6bf209af62ad5ac899b2bed8f0da76c31741093`.
+
+Independent read-only Newton worker `01a13c09-3ccf-7641-a5bc-5e2a89f4d0f9`: **PASS**, no findings. The reviewer traced the mature-calendar-month denominator, confirmed that only runtime text changes, and independently ran both new tests (2/2) and diff validation. Browser captures were not independently rerun. No reviewer edits, production calls or promotion.
+
+The subsequent verification-only checkpoint pins the read-only audit to this runtime; all 16 aggregate/identity-audit tests pass. Runtime code is unchanged by that checkpoint.
