@@ -59,6 +59,47 @@ test("unconfirmed provider never silently disappears from a claimed practice tot
   const result = ledger(f); assert.equal(result.reportedCharges, null); assert.equal(result.unknownProviderRows, 2);
   assert.equal(result.months[0].charges, null); assert.equal(result.coverageComplete, false);
 });
+test("stored full-history shape preserves three prefixed identities, late cancellations and frozen admission", () => {
+  const f = fixture();
+  const former = ["(deleted) Synthetic Former A", "(deleted) Synthetic Former B", "(deleted) Synthetic Former C"];
+  const billingId = "billing-1111222233334444", attendanceId = "attendance-5555666677778888";
+  const billing: BillingRow[] = Array.from({ length: 3681 }, (_, i) => ({
+    clientId: `synthetic-billing-${i}`, clinician: i < 3 ? former[i] : "Current",
+    serviceDate: i === 0 ? "2025-07-01" : i === 3680 ? "2026-10-12" : "2026-10-10",
+    totalFeeCharged: 100, billingCode: "90837", sourceRowHash: `synthetic-b-${i}`,
+  }));
+  billing[4] = { ...billing[3], totalFeeCharged: 150, sourceRowHash: "synthetic-unresolved-fee" };
+  const attendance: Extract<LocalSnapshot, { kind: "attendance" }> = {
+    id: attendanceId, kind: "attendance", sourceHash: "5555666677778888", importedAt: "2026-10-16T20:00:55Z",
+    coverageStart: "2025-07-01", coverageEnd: "2026-10-12",
+    rows: Array.from({ length: 4823 }, (_, i) => ({ clientId: `synthetic-attendance-${i}`,
+      clinician: i < 3 ? former[i] : "Current", serviceDate: i === 0 ? "2025-07-01" : "2026-10-12",
+      location: null, status: i < 47 ? "cancelled" : "show", ...(i < 47 ? { cancellationSubtype: "late_cancelled" as const } : {}), sourceRowHash: `synthetic-a-${i}` })),
+  };
+  const previousSources = structuredClone(f.snapshots);
+  f.snapshots.push(attendance, { id: billingId, kind: "billing", sourceHash: "1111222233334444",
+    importedAt: "2026-10-16T20:00:55Z", coverageStart: "2025-07-01", coverageEnd: "2026-10-12", rows: billing });
+  const before = structuredClone(f.snapshots);
+  const window = { start: "2025-07-01", end: "2026-10-12" };
+  assert.equal(ledger(f, window).reportedCharges, null);
+  const frozen = completeReportCoverage(f.snapshots, f.context.clinicians, "2026-10-16", f.context.clinicians, { declarations: f.declarations, teamId: null });
+  assert.ok(!frozen.eligibleSnapshots.some(source => source.id === billingId || source.id === attendanceId));
+  // Synthetic explicit confirmation only; exact prefix remains part of each identity.
+  f.declarations.historicalBillingProviders!.push(...former.map((sourceLabel, i) => ({
+    id: `00000000-0000-4000-8000-${String(i + 2).padStart(12, "0")}`, sourceLabel,
+    sourceSets: [{ snapshotIds: [billingId], start: window.start, end: window.end, complete: true as const }],
+  })));
+  f.declarations.sourceSets.push({ kind: "billing", snapshotIds: [billingId], clinicianIds: [1], ...window, complete: true });
+  const result = ledger(f, window);
+  assert.equal(result.unknownProviderRows, 0);
+  assert.equal(result.reportedCharges, null, "unresolved changed fee never becomes a complete amount after identity confirmation");
+  assert.equal(result.evidence.conflictingHashCount, 1);
+  assert.equal(f.context.clinicians.length, 1);
+  assert.deepEqual(f.snapshots, before);
+  assert.deepEqual(f.snapshots.slice(0, previousSources.length), previousSources);
+  assert.equal(attendance.rows.filter(row => row.cancellationSubtype === "late_cancelled").length, 47);
+  assert.equal(attendance.rows.length, 4823); assert.equal(billing.length, 3681);
+});
 test("a former label colliding with any current or planning clinician needs review, not automatic matching", () => {
   const f = fixture(); f.context.clinicians.push({ ...f.context.clinicians[0], id: 99, goalId: 7, label: " FORMER " });
   assert.equal(resolveHistoricalBillingProvider("Former", f.context.clinicians, f.declarations), null);
