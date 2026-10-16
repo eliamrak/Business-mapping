@@ -1,0 +1,57 @@
+{
+  "isolation": "fresh loopback-only cluster; synthetic fixtures; no inherited credentials",
+  "suites": [
+    {
+      "name": "hub-clerk-auth",
+      "exitCode": 0,
+      "summary": [
+        "# tests 16",
+        "# pass 16",
+        "# fail 0",
+        "# cancelled 0",
+        "# skipped 0",
+        "# duration_ms 2153.570042"
+      ]
+    },
+    {
+      "name": "practice-imports-original",
+      "exitCode": 0,
+      "summary": [
+        "# tests 9",
+        "# pass 9",
+        "# fail 0",
+        "# cancelled 0",
+        "# skipped 0",
+        "# duration_ms 473.702458"
+      ]
+    },
+    {
+      "name": "session-goals-original",
+      "exitCode": 0,
+      "summary": [
+        "# tests 1",
+        "# pass 1",
+        "# fail 0",
+        "# cancelled 0",
+        "# skipped 0",
+        "# duration_ms 138.943792"
+      ]
+    },
+    {
+      "name": "sessions-clerk-auth",
+      "exitCode": 0,
+      "summary": [
+        "# tests 12",
+        "# pass 12",
+        "# fail 0",
+        "# cancelled 0",
+        "# skipped 0",
+        "# duration_ms 128.266459"
+      ]
+    }
+  ],
+  "candidate": "0e11ab484b1eee36a717d90ddef12ba06feab41f",
+  "preservationSql": "parsed-and-executed-on-empty-synthetic-schema",
+  "clusterStopped": true,
+  "syntheticDatabaseDeleted": true
+}

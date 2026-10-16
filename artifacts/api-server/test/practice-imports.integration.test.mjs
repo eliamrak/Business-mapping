@@ -652,6 +652,11 @@ test("same-day visit confirmations persist across authenticated history reloads"
 test("converted legacy files persist actual codes, fees and late cancellation through strict API validation", async () => {
   const payload = legacyConverterFixture();
   const options = { practice: "legacy-converter@example.test" };
+  const rejectOnly = JSON.parse(readFileSync(new URL("../../../verification/paired-reader-reject-only-probe.json", import.meta.url), "utf8"));
+  const rejectedProbe = await call("/practice-imports/package", rejectOnly, "POST", options);
+  assert.equal(rejectedProbe.status, 400);
+  assert.equal(rejectedProbe.data.error, "Attendance coverage and row count must match its rows.");
+  assert.equal((await call("/practice-imports", undefined, "GET", options)).data.snapshots.length, 0);
   const saved = await call("/practice-imports/package", { package: payload }, "POST", options);
   assert.equal(saved.status, 200, JSON.stringify(saved.data));
   const reloaded = await call("/practice-imports", undefined, "GET", options);

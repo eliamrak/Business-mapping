@@ -1,0 +1,23 @@
+{
+  "package": {
+    "format": "emc-practice-local-import-package",
+    "version": 1,
+    "packageId": "synthetic-reader-reject-only-never-save",
+    "exportedAt": "2026-10-16T12:00:00.000Z",
+    "collections": {
+      "attendance": {
+        "coverageStart": "2026-01-01",
+        "coverageEnd": "2026-01-01",
+        "rowCount": 2,
+        "rows": [{ "clientId": "synthetic-never-save", "clinician": "Synthetic Reader Probe", "serviceDate": "2026-01-01", "location": null, "status": "cancelled", "cancellationSubtype": "late_cancelled", "billingCode": "4" }]
+      },
+      "billing": {
+        "coverageStart": "2026-01-01",
+        "coverageEnd": "2026-01-01",
+        "rowCount": 1,
+        "rows": [{ "clientId": "synthetic-never-save", "clinician": "Synthetic Reader Probe", "serviceDate": "2026-01-01", "totalFeeCharged": 1, "billingCode": "4" }]
+      }
+    },
+    "billingCodeMinutes": { "4": 30 }
+  }
+}

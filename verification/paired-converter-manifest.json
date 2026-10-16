@@ -1,0 +1,18 @@
+{
+  "readerCommit": "0e11ab484b1eee36a717d90ddef12ba06feab41f",
+  "readerTree": "49e2f765ef72851d93ad85b6866565a727fe7a21",
+  "packagerSha256": "804c2bc6dc3252628e29c0a53a070caa9d04ef29787435e8ebca912bc899a0fb",
+  "fixtureSha256": "682f28c0ebe69a62292ab36dce30e1797a244e19251d1336bfe804a6215989e4",
+  "candidate": "/var/folders/v1/nrrw04y90g3b9s27scm3_f1r0000gn/T/practice-paired-release-94fp8e/Practice Converter.app",
+  "parserSha256": "4a9d2960dfa2fe33f92488f38a5b5dd6583565aae50dd93590e82ba94b99a5fa",
+  "nativeBinarySha256": "db30a0ec718277bcc889079a810b1d36135c8ed09546be1e4bca2c705f23cdcf",
+  "originalNativeBinarySha256": "a8ccf4f6b896ff182cbaada93fbbd8d0fabcead78e8e6c7fc8119990c40bada4",
+  "nativeCodeUnchangedAfterSignatureRemoval": true,
+  "originalInstalledParserSha256": "a6d6fd2254295c0ea69c16bb54dee7ce70bdd68f1bceb4a32fc0365e1a34cbd3",
+  "codesign": "deep-strict-pass",
+  "bundledPythonRoundtrip": "pass",
+  "syntheticBilledFees": 650,
+  "treatmentVisits": 4,
+  "installed": false,
+  "productionReaderVerified": false
+}
