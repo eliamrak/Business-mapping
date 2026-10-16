@@ -3,13 +3,14 @@ import { createHash } from "node:crypto";
 import { createRequire } from "node:module";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
-export const CANDIDATE = "7e097b37c271fcac18394e48ef96d0e0f844a8f2";
-const TREE = "4e3ebf8f65fbd31ad735ef82ef03a6590e68b5b5";
+export const CANDIDATE = "54a8d48dcf5ad646d2f0d5537fee41defb1a8519";
+const TREE = "a07d31fb8e448767f5a4649138aff18956f0777a";
 const root = fileURLToPath(new URL("../", import.meta.url));
 export function assertCandidateSource() {
   const options = { cwd: root, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] };
   if (execFileSync("git", ["rev-parse", `${CANDIDATE}^{tree}`], options).trim() !== TREE) throw new Error("candidate_source_mismatch");
-  const calculationPaths = ["lib/practice/src", "artifacts/comp-dashboard/src/lib", "artifacts/comp-dashboard/src/pages/practice-workspace.tsx"];
+  const calculationPaths = ["lib/practice/src", "artifacts/comp-dashboard/src/lib", "artifacts/comp-dashboard/src/pages/practice-workspace.tsx",
+    "artifacts/api-server/src/routes/practiceImports.ts", "artifacts/comp-dashboard/src/components/practice/local-retention-workspace.tsx", "artifacts/comp-dashboard/src/components/practice/billing-resolution-review.tsx"];
   execFileSync("git", ["diff", "--quiet", CANDIDATE, "--", ...calculationPaths], options);
   const untracked = execFileSync("git", ["ls-files", "--others", "--exclude-standard", "--", ...calculationPaths], options).trim();
   if (untracked) throw new Error("unreviewed_candidate_source");
