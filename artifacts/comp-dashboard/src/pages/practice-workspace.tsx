@@ -3787,7 +3787,7 @@ export default function PracticeWorkspace() {
                               </strong>
                               <small>
                                 {importedActivity?.endingFullMonthDenominator
-                                  ? `${fmt(importedActivity.endingFullMonthDenominator)} observed client-months`
+                                  ? `${fmt(importedActivity.endingFullMonthDenominator)} fully observed mature month${importedActivity.endingFullMonthDenominator === 1 ? "" : "s"}`
                                   : "no mature observed months"}
                               </small>
                             </div>
