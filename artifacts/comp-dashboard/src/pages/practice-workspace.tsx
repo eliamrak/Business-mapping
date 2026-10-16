@@ -118,7 +118,7 @@ import { overviewClientFlow } from "@/lib/practice-overview";
 import { moneyBridgeSummary } from "@/lib/money-bridge";
 import { summarizeReportedBilling } from "@/lib/reported-billing";
 import { practicePeriodRange } from "@/lib/practice-period";
-import { currentPracticeClinicians, snapshotsForClinicians } from "@/lib/practice-scope";
+import { currentPracticeClinicians, configuredRoomsAtDate, snapshotsForClinicians } from "@/lib/practice-scope";
 import { linkedGoalFor, linkedFundGoalFor, type LinkedPracticeGoal, type LinkedFundGoal } from "@/lib/legacy-practice-goals";
 import { completedFundGoalStatus } from "@/lib/completed-fund-goals";
 import { newRecord } from "@/components/hub/config";
@@ -3006,8 +3006,8 @@ export default function PracticeWorkspace() {
     })
     .sort((a, b) => b.score - a.score);
   const roomCapacityDate = periodRange.end < today ? periodRange.end : today;
-  const roomCapacitySlots = active(workingWorkspace.rooms).reduce((sum, room) => {
-    if (room.planningOnly || room.start > roomCapacityDate || (room.end !== null && room.end < roomCapacityDate)) return sum;
+  const configuredRooms = configuredRoomsAtDate(workingWorkspace.rooms, roomCapacityDate);
+  const roomCapacitySlots = configuredRooms.reduce((sum, room) => {
     return (
       sum +
       (((roomHours(room) * 60) / Math.max(1, room.sessionMinutes)) *
@@ -3024,7 +3024,7 @@ export default function PracticeWorkspace() {
   const relevantAdoptedPlans = modeledGoalOptions.filter((option) => option.adoption && (
     section === "summary" || option.adoption.focusKpis.some((kpi) => focusViews[kpi]?.includes(section))
   ));
-  const roomAssignedHoursTotal = active(workingWorkspace.rooms).reduce(
+  const roomAssignedHoursTotal = configuredRooms.reduce(
     (sum, room) =>
       sum + (room.usage === "shared" ? assignedRoomHours(room) : roomHours(room)),
     0,

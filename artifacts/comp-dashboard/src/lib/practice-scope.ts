@@ -1,6 +1,9 @@
 import type { Context, Workspace } from "@workspace/practice/hub";
 import type { LocalSnapshot } from "./retention-local.ts";
 const normalize = (label: string) => label.trim().replace(/\s+/g, " ").toLowerCase();
+export function configuredRoomsAtDate(rooms: readonly Workspace["rooms"][number][], asOf: string) {
+  return rooms.filter((room) => !room.archived && !room.planningOnly && room.start <= asOf && (room.end === null || room.end >= asOf));
+}
 /** Current roster as of an inclusive calendar date; does not filter historical facts. */
 export function currentPracticeClinicians(workspace: Workspace, context: Context, asOf: string) {
   return context.clinicians.filter((person) => {

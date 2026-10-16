@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { emptyWorkspace, clinicianSettingSchema } from "@workspace/practice/hub";
-import { currentPracticeClinicians, snapshotsForClinicians } from "./practice-scope.ts";
+import { emptyWorkspace, clinicianSettingSchema, roomSchema } from "@workspace/practice/hub";
+import { currentPracticeClinicians, configuredRoomsAtDate, snapshotsForClinicians } from "./practice-scope.ts";
 test("current consultation scope excludes former staff without deleting historical facts", () => {
   const workspace = emptyWorkspace("2026-10-01");
   const context = { clinicians: [{ id: 1, label: "Current", goalId: null }, { id: 2, label: "Former", goalId: null }], staff: [], sessions: [] } as any;
@@ -40,4 +40,28 @@ test("current roster honors team, status, onTeam and inclusive start/end dates w
   assert.deepEqual(ids("2026-11-01"), [1, 3, 7, 9]);
   assert.deepEqual(ids("2026-09-30"), [1, 2, 8, 9], "onTeam true cannot override dated membership");
   assert.deepEqual({ workspace, context }, before);
+});
+
+test("room headline sources share inclusive dated eligibility, excluding future, expired and review-only records", () => {
+  const room = (name: string, patch = {}) => roomSchema.parse({ id: crypto.randomUUID(), name, start: "2026-01-01", weeklyHours: 10, ...patch });
+  const rooms = [room("Current"), room("Future", { start: "2026-11-01" }), room("Expired", { end: "2026-09-30" }),
+    room("Review only", { planningOnly: true }), room("Archived", { archived: true })];
+  const before = structuredClone(rooms);
+  const names = (date: string) => configuredRoomsAtDate(rooms, date).map((row) => row.name);
+  assert.deepEqual(names("2026-10-14"), ["Current"]);
+  assert.deepEqual(names("2026-09-30"), ["Current", "Expired"]);
+  assert.deepEqual(names("2026-10-01"), ["Current"]);
+  assert.deepEqual(names("2026-11-01"), ["Current", "Future"]);
+  assert.deepEqual(names("2026-01-01"), ["Current", "Expired"]);
+  assert.deepEqual(names("2025-12-31"), []);
+  assert.deepEqual(rooms, before);
+  assert.strictEqual(configuredRoomsAtDate(rooms, "2026-10-14")[0], rooms[0]);
+});
+
+test("configured room scope never invents a usable room or changes source records", () => {
+  const review = roomSchema.parse({ id: crypto.randomUUID(), name: "Imported location", start: "2026-01-01", weeklyHours: 0, planningOnly: true });
+  assert.deepEqual(configuredRoomsAtDate([], "2026-10-14"), []);
+  assert.deepEqual(configuredRoomsAtDate([review], "2026-10-14"), []);
+  assert.equal(review.planningOnly, true);
+  assert.equal(review.weeklyHours, 0);
 });
