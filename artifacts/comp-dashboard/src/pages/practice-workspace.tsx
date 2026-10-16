@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useEffect, useId, useMemo, useRef, useState, type ReactNode } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   customFetch,
@@ -66,7 +66,7 @@ import {
   type Values,
   type ForecastMonth,
 } from "@workspace/practice/hub";
-import { daysInclusive } from "@workspace/practice";
+import { dateRangeSchema, daysInclusive } from "@workspace/practice";
 import {
   calculateClinicianMetrics,
   calculateStaffMemberCost,
@@ -566,6 +566,16 @@ function SharedPeriodControls({
   onCustom: (range: { start: string; end: string }) => void;
   note?: string;
 }) {
+  const [draft, setDraft] = useState(custom);
+  const messageId = useId();
+  useEffect(() => { setDraft(custom); }, [custom.start, custom.end, period]);
+  const valid = dateRangeSchema.safeParse(draft).success;
+  function editDate(key: "start" | "end", value: string) {
+    const next = { ...draft, [key]: value };
+    setDraft(next);
+    // Date inputs can be empty while editing; calculations keep the last valid range.
+    if (dateRangeSchema.safeParse(next).success) onCustom(next);
+  }
   return (
     <div className="pw-shared-period">
       <p>{note ?? "Reporting period carries across tabs; monthly forecasts retain their labeled month."}</p>
@@ -589,22 +599,23 @@ function SharedPeriodControls({
             From
             <input
               type="date"
-              value={custom.start}
-              onChange={(event) =>
-                onCustom({ ...custom, start: event.target.value })
-              }
+              value={draft.start}
+              aria-invalid={!valid}
+              aria-describedby={!valid ? messageId : undefined}
+              onChange={(event) => editDate("start", event.target.value)}
             />
           </label>
           <label>
             Through
             <input
               type="date"
-              value={custom.end}
-              onChange={(event) =>
-                onCustom({ ...custom, end: event.target.value })
-              }
+              value={draft.end}
+              aria-invalid={!valid}
+              aria-describedby={!valid ? messageId : undefined}
+              onChange={(event) => editDate("end", event.target.value)}
             />
           </label>
+          {!valid && <p id={messageId} role="status">Custom dates are incomplete or reversed. Showing {custom.start} to {custom.end}.</p>}
         </div>
       )}
     </div>
