@@ -223,3 +223,11 @@ test('bounded larger synthetic source sets retain exact totals', async () => {
   const result = await run(); assert.equal(row(result).sessions, 1204); assert.equal(row(result).billedCharges, 120450);
   assert.equal(row(result).retained, 401);
 });
+
+test('legacy current-roster diagnostic cannot certify historical billing-only ledger totals', async () => {
+  await fixture();
+  await client.query("INSERT INTO practice_import_audit VALUES('synthetic','synthetic','confirm-historical-billing-providers',$1)", [{ version: 1, declarationRevision: 1, providers: [] }]);
+  const result = await run();
+  assert.equal(result.status, 'STOP_HISTORICAL_BILLING_SCOPE_REQUIRES_LEDGER_AUDIT');
+  assert.equal(result.aggregate_metrics, null); assert.equal(result.retention_provenance, null);
+});
