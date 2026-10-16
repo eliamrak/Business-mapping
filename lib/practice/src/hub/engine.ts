@@ -20,6 +20,7 @@ import type {
 import { conditionResult } from "./conditions.ts";
 import { estimateW2NetPay } from "./family-pay.ts";
 import { reconcileBillingEvidence } from "./billing-evidence.ts";
+import type { BillingChargeResolution } from "./billing-resolution.ts";
 export { reconcileBillingEvidence } from "./billing-evidence.ts";
 
 export type Clinician = ClinicianMetricsInput & {
@@ -50,6 +51,7 @@ export type Context = {
   staff: Staff[];
   sessions: SessionRecord[];
   importedBillingActuals?: ImportedBillingActual[];
+  billingChargeResolutions?: (BillingChargeResolution & { mappingInvalid?: true })[];
 };
 
 export function overheadGoalAllowance(
@@ -165,10 +167,11 @@ export const summarizeImportedBillingActuals = (
   }
   const unknownDates: Array<{ clinicianId: number; date: string; reason?: string }> = [];
   const resolved: ImportedBillingActual[] = [];
-  for (const group of reconcileBillingEvidence(enriched.map((row) => ({ row: { ...row, clientId: row.clientId!, clinician: String(row.clinicianId) }, snapshotId: row.sourceSnapshotId ?? "context" })))) {
+  for (const group of reconcileBillingEvidence(enriched.map((row) => ({ row: { ...row, clientId: row.clientId!, clinician: String(row.clinicianId) }, snapshotId: row.sourceSnapshotId ?? "context" })),
+    context.billingChargeResolutions?.map((resolution) => ({ ...resolution, clinicianLabel: String(resolution.clinicianId) })))) {
     if (!group.known || group.rows.some((row) => row.evidenceUnknown)) {
       unknownDates.push(...group.rows.map((row) => ({ clinicianId: row.clinicianId, date: row.serviceDate, reason: "Billing encounter identity or amount is ambiguous; no duplicate or conflicting payload is authoritative." })));
-    } else resolved.push(group.row);
+    } else resolved.push(...(group.acceptedRows ?? [group.row]));
   }
   for (const [hash, rows] of groups) {
     const row = rows[0];

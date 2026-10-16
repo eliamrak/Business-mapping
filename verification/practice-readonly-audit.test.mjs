@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import { readFileSync } from "node:fs";
-import { emptyWorkspace } from "../lib/practice/src/hub/index.ts";
+import { emptyWorkspace, prepareBillingChargeResolution } from "../lib/practice/src/hub/index.ts";
 import { assertCandidateSource, auditOptions, loadAuditModel, readOnlyInput } from "./practice-readonly-audit.mjs";
 
 const { aggregateAudit } = await loadAuditModel();
@@ -34,6 +34,26 @@ test("aggregate output excludes raw identifiers, source strings and input mutati
   assert.equal(result.comparison.candidateSessions, 4);
   assert.equal(result.financial.actual.revenue, 140);
   assert.equal(result.financial.actual.profit, null);
+});
+
+test("aggregate audit uses the same separate approval journal without leaking source bindings or certifying costs", () => {
+  const input = fixture();
+  const billing = input.snapshots[1];
+  billing.rows.push({ ...billing.rows[0], sourceRowHash: "SECRET_EXCEPTION_SECOND", totalFeeCharged: 150 });
+  const draft = prepareBillingChargeResolution(billing.rows.filter(row => row.serviceDate === billing.rows[0].serviceDate).map(row => ({ row, snapshotId: billing.id })));
+  assert.ok(draft);
+  input.declarations = { version: 1, mappings: [{ sourceLabel: "Elia", clinicianId: 1, clinicianLabel: "Elia", teamId: null }], sourceSets: [] };
+  input.billingResolutions = [{ ...draft, id: "00000000-0000-4000-8000-000000000001", approvalToken: "a".repeat(64), clinicianId: 1, confirmedAt: "2026-10-16T00:00:00Z", approvalNote: "SECRET_OWNER_APPROVAL" }];
+  const before = structuredClone(input);
+  const result = aggregateAudit(input, options);
+  assert.equal(result.comparison.admittedReconciledChargedFees, 290);
+  assert.equal(result.financial.actual.revenue, 290);
+  assert.equal(result.comparison.candidateSessions, 4);
+  assert.equal(result.evidenceIssues.admittedBillingResolvedCases, 1);
+  assert.equal(result.evidenceIssues.originalRawBillingConflicts, 1);
+  assert.equal(result.financial.actual.profit, null);
+  assert.doesNotMatch(JSON.stringify(result), /SECRET_|approvalToken|sourceRowHash|clientId|snapshotId/);
+  assert.deepEqual(input, before);
 });
 
 test("one practice conversion can coexist with zero confirmed closer credits and one pending retention start", () => {
@@ -117,7 +137,9 @@ test("database snapshot is scoped, read-only, bounded, and always rolled back wi
   assert.ok(client.calls.every(({ sql }) => /^(BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY|SET LOCAL |SELECT |ROLLBACK)/.test(sql)));
   assert.ok(client.calls.every(({ sql }) => !/\b(INSERT|UPDATE|DELETE|CREATE|ALTER|DROP|TRUNCATE|COMMIT|COPY)\b/i.test(sql)));
   for (const { sql, params } of client.calls.filter(({ sql }) => /FROM practice_import_/.test(sql))) {
-    assert.match(sql, /practice_id = \$1 AND account_id = \$2 AND active = 1/);
+    assert.match(sql, /practice_id = \$1 AND account_id = \$2/);
+    if (sql.includes("FROM practice_import_audit")) assert.match(sql, /action = 'accept-billing-charge-exception' LIMIT 1001/);
+    else assert.match(sql, /AND active = 1/);
     assert.deepEqual(params, ["SECRET_SCOPE", "SECRET_SCOPE"]);
     assert.doesNotMatch(sql, /SECRET_SCOPE/);
   }

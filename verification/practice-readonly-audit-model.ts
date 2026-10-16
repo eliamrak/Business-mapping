@@ -1,4 +1,4 @@
-import { completeServicePeriodState, workspaceSchema, importDeclarationsSchema, resolveImportedProvider, type ImportDeclarations, type Context } from "../lib/practice/src/hub/index.ts";
+import { completeServicePeriodState, workspaceSchema, importDeclarationsSchema, billingChargeResolutionSchema, bindBillingResolutions, resolveImportedProvider, type BillingChargeResolution, type ImportDeclarations, type Context } from "../lib/practice/src/hub/index.ts";
 import { completeReportCoverage } from "../artifacts/comp-dashboard/src/lib/complete-report-coverage.ts";
 import { buildImportedSessionOverlay } from "../artifacts/comp-dashboard/src/lib/import-derived-sessions.ts";
 import { completePeriodSessionSummary } from "../artifacts/comp-dashboard/src/lib/complete-session-summary.ts";
@@ -26,12 +26,13 @@ function retentionNumbers(metric: ReturnType<typeof buildLocalRetentionMetrics>[
 }
 
 /** Only this explicit numeric/date projection may leave the process. No source strings, keys or rows. */
-export function aggregateAudit(input: { workspace: unknown; context: Context; goals: CompensationGoal[]; snapshots: LocalSnapshot[]; overrides: SameDayVisitOverrides; declarations?: ImportDeclarations | null }, options: { asOf: string; start: string; end: string; targetLabel: string }) {
+export function aggregateAudit(input: { workspace: unknown; context: Context; goals: CompensationGoal[]; snapshots: LocalSnapshot[]; overrides: SameDayVisitOverrides; declarations?: ImportDeclarations | null; billingResolutions?: BillingChargeResolution[] }, options: { asOf: string; start: string; end: string; targetLabel: string }) {
   const { context, snapshots, overrides } = input;
   if (snapshots.some((snapshot) => snapshot.kind !== "attendance" && snapshot.kind !== "billing")) throw new Error("unsupported_snapshot_kind");
   const resolved = resolveWorkspaceDefaults(workspaceSchema.parse(input.workspace), context, input.goals);
   const workspace = resolved.workspace;
-  const declarations = input.declarations ? importDeclarationsSchema.parse(input.declarations) : null;
+  const billingResolutions = bindBillingResolutions((input.billingResolutions ?? []).map((row) => billingChargeResolutionSchema.parse(row)), context.clinicians, input.declarations);
+  const declarations = input.declarations ? { ...importDeclarationsSchema.parse(input.declarations), ...(billingResolutions.length ? { billingResolutions } : {}) } : null;
   const admission = { declarations, teamId: workspace.settings.teamId };
   const ids = context.clinicians.filter((person) => (person.goalId ?? null) === workspace.settings.teamId).map((person) => person.id);
   const selected = context.clinicians.filter((person) => ids.includes(person.id));
@@ -47,8 +48,8 @@ export function aggregateAudit(input: { workspace: unknown; context: Context; go
   const sessionSummary = completePeriodSessionSummary(modelContext.sessions, ids, range, state.eligibleCoverage, options.asOf);
   const financial = practiceFinancialRange(resolved.forecastWorkspace, modelContext, snapshots, options.asOf, range, state.eligibleCoverage, declarations);
   const projection = buildPracticeProjection(resolved.forecastWorkspace, modelContext, "actual", options.asOf, state.eligibleCoverage, currentProof.billingThrough);
-  const rawCharges = summarizeReportedBilling(snapshots, options.asOf, { ...range, clinicianLabels: selected.map((person) => person.label) });
-  const admittedCharges = summarizeReportedBilling(snapshots, options.asOf, { ...range, clinicianLabels: selected.map((person) => person.label), eligibleRows: new Set(proof.eligibleBillingRows) });
+  const rawCharges = summarizeReportedBilling(snapshots, options.asOf, { ...range, clinicianLabels: selected.map((person) => person.label), billingResolutions });
+  const admittedCharges = summarizeReportedBilling(snapshots, options.asOf, { ...range, clinicianLabels: selected.map((person) => person.label), eligibleRows: new Set(proof.eligibleBillingRows), billingResolutions });
   const billingWindowProved = selected.length > 0 && selected.every((person) => {
     for (let stamp = Date.parse(range.start + "T12:00:00Z"); stamp <= Date.parse(range.end + "T12:00:00Z"); stamp += 86400000) {
       const date = new Date(stamp).toISOString().slice(0, 10);
@@ -118,6 +119,9 @@ export function aggregateAudit(input: { workspace: unknown; context: Context; go
     financial: { actualCoverageComplete: financial.actual.complete, billingCoverageComplete: financial.actual.billingComplete,
       actual: numberValues(financial.actual.values), forecast: numberValues(financial.forward.values), combined: numberValues(financial.values) },
     evidenceIssues: { admittedBillingConflicts: admittedCharges.evidence.conflictingHashCount, admittedBillingAmbiguities: admittedCharges.evidence.ambiguousEncounterCount,
+      rawBillingResolvedCases: rawCharges.evidence.resolvedCaseCount, admittedBillingResolvedCases: admittedCharges.evidence.resolvedCaseCount,
+      rawBillingStaleResolutions: rawCharges.evidence.staleResolutionCount, admittedBillingStaleResolutions: admittedCharges.evidence.staleResolutionCount,
+      originalRawBillingConflicts: rawCharges.evidence.originalConflictingCaseCount, originalRawBillingAmbiguities: rawCharges.evidence.originalAmbiguousCaseCount,
       rawBillingConflicts: rawCharges.evidence.conflictingHashCount, rawBillingAmbiguities: rawCharges.evidence.ambiguousEncounterCount,
       rawInvalidFeeRows: rawCharges.evidence.invalidFeeRowCount, rawInvalidDateRows: rawCharges.evidence.invalidDateRowCount,
       admittedNonzeroPhoneChargeRows: proof.eligibleBillingRows.filter((row) => row.serviceDate >= range.start && row.serviceDate <= range.end && row.totalFeeCharged !== 0 && (row.billingCode?.trim().toUpperCase() === "PHONE" || row.visitKind === "consultation")).length,

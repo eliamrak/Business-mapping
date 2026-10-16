@@ -9,7 +9,8 @@ import {
   cliniciansTable,
 } from "@workspace/db";
 import { z } from "@workspace/practice";
-import { importDeclarationsSchema, normalizeProviderLabel, type StoredImportDeclarations } from "@workspace/practice/hub";
+import { importDeclarationsSchema, normalizeProviderLabel, prepareBillingChargeResolution, reconcileBillingEvidence,
+  resolveImportedProvider, bindBillingResolutions, billingChargeResolutionSchema, type StoredImportDeclarations } from "@workspace/practice/hub";
 
 const router = Router();
 
@@ -355,6 +356,7 @@ async function historyFor(practiceId: string, accountId: string) {
   ]);
   const historySnapshots = snapshots.map(snapshotFromRow);
   return {
+    ...(await readBillingResolutionJournal(db, practiceId, accountId)),
     declarations: await readDeclarations(db, practiceId, accountId),
     snapshots: historySnapshots,
     billingCodeMinutes: packages.reduce<Record<string, number>>(
@@ -387,6 +389,107 @@ async function readDeclarations(connection: Pick<typeof db, "execute">, practice
   if (!parsed.success) throw new Error("Invalid saved import declarations require review.");
   return { revision: Number(row.revision), data: parsed.data, confirmedAt: new Date(String(row.confirmed_at)).toISOString() };
 }
+
+async function readBillingResolutionJournal(connection: Pick<typeof db, "execute">, practiceId: string, accountId: string) {
+  const result = await connection.execute(sql`SELECT detail FROM practice_import_audit
+    WHERE practice_id = ${practiceId} AND account_id = ${accountId} AND action = 'accept-billing-charge-exception' LIMIT 1001`);
+  const events = result.rows.map((row) => z.object({ revision: z.number().int().positive(), resolution: billingChargeResolutionSchema }).passthrough().parse(row.detail))
+    .sort((a, b) => a.revision - b.revision);
+  if (events.length > 1000 || events.some((row, i) => row.revision !== i + 1)
+    || new Set(events.map((row) => row.resolution.id)).size !== events.length
+    || new Set(events.map((row) => row.resolution.approvalToken)).size !== events.length) throw new Error("Billing resolution journal requires review.");
+  return { billingResolutionRevision: events.length, billingResolutions: events.map((row) => row.resolution) };
+}
+
+function billingApprovalCases(snapshots: Snapshot[], practiceId: string, accountId: string) {
+  const entries = snapshots.flatMap((source) => source.kind === "billing"
+    ? (source.rows as BillingRow[]).map((row) => ({ row, snapshotId: source.id })) : []);
+  const byRow = new Map(entries.map((entry) => [entry.row, entry]));
+  return reconcileBillingEvidence(entries).map((group) => {
+    const members = group.rows.map((row) => byRow.get(row)!);
+    const caseToken = sha256([practiceId, accountId, members.map((entry) => stableJson(entry)).sort()]);
+    return { group, members, caseToken, draft: prepareBillingChargeResolution(members) };
+  });
+}
+
+router.get("/practice-imports/billing-resolution-candidates", async (_req, res) => {
+  const { practiceId, accountId } = scope(res);
+  const history = await historyFor(practiceId, accountId);
+  const roster = await db.select().from(cliniciansTable);
+  const data = history.declarations?.data;
+  const effective = reconcileBillingEvidence(history.snapshots.flatMap((source) => source.kind === "billing"
+    ? (source.rows as BillingRow[]).map((row) => ({ row, snapshotId: source.id })) : []), bindBillingResolutions(history.billingResolutions, roster, data));
+  const states = new Map(effective.map((group) => [group.row, group]));
+  const candidates = billingApprovalCases(history.snapshots, practiceId, accountId).flatMap(({ group, members, caseToken, draft }) => {
+    const state = states.get(group.row)!;
+    if (!group.conflicting && !group.ambiguous && !state.resolutionId && !state.resolutionStale) return [];
+    const mapping = draft && data?.mappings.find((row) => normalizeProviderLabel(row.sourceLabel) === normalizeProviderLabel(draft.clinicianLabel));
+    const clinicianId = mapping ? resolveImportedProvider(draft!.clinicianLabel, roster, mapping.teamId, data) : null;
+    return [{ caseToken, clinicianLabel: group.row.clinician, serviceDate: group.row.serviceDate,
+      billingCode: group.row.billingCode, amounts: draft?.charges.map((row) => row.amount) ?? null,
+      rawRowCount: group.rows.length, sourceCount: new Set(members.map((row) => row.snapshotId)).size,
+      conflicting: group.conflicting, ambiguous: group.ambiguous, resolutionId: state.resolutionId ?? null,
+      stale: !!state.resolutionStale, canAccept: !!draft && clinicianId !== null && !state.resolutionId && !state.resolutionStale }];
+  });
+  return res.json({ revision: history.billingResolutionRevision, candidates });
+});
+
+const billingAcceptanceSchema = z.object({
+  caseToken: z.string().regex(/^[0-9a-f]{64}$/), expectedRevision: z.number().int().nonnegative(), confirmed: z.literal(true),
+  clinicianLabel: nonEmpty, serviceDate: dateSchema, amounts: z.tuple([z.number().finite().positive(), z.number().finite().positive()]),
+  approvalNote: z.string().trim().min(1).max(2000),
+}).strict();
+router.post("/practice-imports/billing-resolutions", async (req, res) => {
+  const body = billingAcceptanceSchema.safeParse(req.body);
+  if (!body.success) return res.status(400).json({ error: "Select the exact two-charge case, expected metadata revision, approval note and explicit confirmation." });
+  const { practiceId, accountId, actor } = scope(res);
+  const result = await db.transaction(async (tx) => {
+    await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtext(${practiceId}), hashtext(${accountId}))`);
+    const old = await readDeclarations(tx, practiceId, accountId);
+    if (!old) return "declarations";
+    const active = await tx.select(snapshotColumns).from(practiceImportSnapshotsTable).where(and(
+      eq(practiceImportSnapshotsTable.practiceId, practiceId), eq(practiceImportSnapshotsTable.accountId, accountId), eq(practiceImportSnapshotsTable.active, 1),
+    ));
+    const snapshots = active.map(snapshotFromRow);
+    const cases = billingApprovalCases(snapshots, practiceId, accountId);
+    const journal = await readBillingResolutionJournal(tx, practiceId, accountId);
+    const stored = journal.billingResolutions;
+    const roster = await tx.select().from(cliniciansTable);
+    const exact = cases.find((row) => row.caseToken === body.data.caseToken);
+    const previous = stored.find((row) => row.approvalToken === body.data.caseToken);
+    const effective = reconcileBillingEvidence(snapshots.flatMap((source) => source.kind === "billing"
+      ? (source.rows as BillingRow[]).map((row) => ({ row, snapshotId: source.id })) : []), bindBillingResolutions(stored, roster, old.data));
+    const applied = previous ? effective.find((group) => group.resolutionId === previous.id)
+      : exact ? effective.find((group) => group.row === exact.group.row) : undefined;
+    const selector = (row: { clinicianLabel: string; serviceDate: string; charges: Array<{ amount: number }> }) =>
+      normalizeProviderLabel(row.clinicianLabel) === normalizeProviderLabel(body.data.clinicianLabel) && row.serviceDate === body.data.serviceDate
+      && stableJson(row.charges.map((charge) => charge.amount).sort((a, b) => a - b)) === stableJson([...body.data.amounts].sort((a, b) => a - b));
+    if (previous && applied?.resolutionId === previous.id && selector(previous)) return "duplicate";
+    if (exact && applied?.resolutionId) {
+      const resolution = stored.find((row) => row.id === applied.resolutionId)!;
+      if (selector(resolution)) return "duplicate";
+    }
+    if (journal.billingResolutionRevision !== body.data.expectedRevision || !exact) return "stale";
+    if (!exact.draft || !selector(exact.draft) || (!exact.group.conflicting && !exact.group.ambiguous)) return "invalid";
+    const draft = exact.draft;
+    if (stored.some((row) => row.clientId === draft.clientId && normalizeProviderLabel(row.clinicianLabel) === normalizeProviderLabel(draft.clinicianLabel)
+      && row.serviceDate === draft.serviceDate && row.billingCode === draft.billingCode)) return "stale";
+    const mapping = old.data.mappings.find((row) => normalizeProviderLabel(row.sourceLabel) === normalizeProviderLabel(draft.clinicianLabel));
+    const clinicianId = mapping ? resolveImportedProvider(draft.clinicianLabel, roster, mapping.teamId, old.data) : null;
+    if (clinicianId === null) return "mapping";
+    const resolution = { ...draft, id: randomUUID(), approvalToken: body.data.caseToken, clinicianId,
+      confirmedAt: new Date().toISOString(), approvalNote: body.data.approvalNote };
+    await tx.insert(practiceImportAuditTable).values({ id: randomUUID(), practiceId, accountId, packageId: "billing-resolution:" + resolution.id,
+      action: "accept-billing-charge-exception", actor,
+      detail: { resolution, oldRevision: journal.billingResolutionRevision, revision: journal.billingResolutionRevision + 1, rawRowCount: exact.members.length,
+        basis: "owner-confirmation", affectsAttendance: false } });
+    return "saved";
+  });
+  if (result === "declarations" || result === "mapping") return res.status(409).json({ error: "An existing confirmed provider mapping is required before accepting this billing case." });
+  if (result === "stale") return res.status(409).json({ error: "The case, pinned evidence or metadata revision changed. Reload and review; no exception was saved." });
+  if (result === "invalid") return res.status(400).json({ error: "This is not the exact eligible two-charge case. No attendance count or source facts were changed." });
+  return res.json({ ...(await historyFor(practiceId, accountId)), resolutionStatus: result });
+});
 
 router.put("/practice-imports/declarations", async (req, res) => {
   const parsed = z.object({ expectedRevision: z.number().int().nonnegative(), confirmed: z.literal(true), data: importDeclarationsSchema }).strict().safeParse(req.body);

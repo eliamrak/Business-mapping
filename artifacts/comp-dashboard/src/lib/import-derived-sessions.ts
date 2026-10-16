@@ -1,5 +1,5 @@
 import { dateRangeSchema, type SessionRecord, rangesOverlap } from "@workspace/practice";
-import { canonicalServicePeriod, reconcileBillingEvidence, resolveImportedProvider, type ImportDeclarations, type Context, type ImportedBillingActual } from "@workspace/practice/hub";
+import { canonicalServicePeriod, reconcileBillingEvidence, resolveImportedProvider, bindBillingResolutions, type ImportEvidenceDeclarations, type Context, type ImportedBillingActual } from "@workspace/practice/hub";
 import type { SessionAttendanceCoverage } from "./session-trend.ts";
 import {
   consultAttendanceClassifier,
@@ -91,7 +91,7 @@ export function buildImportedSessionOverlay(
   teamId: number | null,
   sameDayVisitOverrides: SameDayVisitOverrides = {},
   options: {
-    declarations?: ImportDeclarations | null;
+    declarations?: ImportEvidenceDeclarations | null;
     clinicianActiveRanges?: Array<{ clinicianId: number; start: string; end: string | null }>;
     /** Workspace compensation effective dates must never restrict attendance coverage. */
     clinicianActiveRangesBasis?: "employment" | "compensation";
@@ -212,7 +212,7 @@ export function buildImportedSessionOverlay(
   for (const snapshot of snapshots) {
     if (snapshot.kind !== "billing") continue;
     for (const row of snapshot.rows) {
-      billingEntries.push({ row, snapshotId: snapshot.id });
+      billingEntries.push({ row, snapshotId: snapshot.sourceSnapshotId ?? snapshot.id });
       const matches =
         cliniciansByLabel.get(normalizeLabel(row.clinician)) ?? [];
       if (matches.length === 0) {
@@ -225,10 +225,11 @@ export function buildImportedSessionOverlay(
       }
     }
   }
-  const billingGroups = reconcileBillingEvidence(billingEntries).filter((group) => group.rows.some((row) => cliniciansByLabel.get(normalizeLabel(row.clinician))?.length === 1));
+  const resolutions = bindBillingResolutions(options.declarations?.billingResolutions ?? [], context.clinicians, options.declarations);
+  const billingGroups = reconcileBillingEvidence(billingEntries, resolutions).filter((group) => group.rows.some((row) => cliniciansByLabel.get(normalizeLabel(row.clinician))?.length === 1));
   for (const group of billingGroups) {
     const payloads = new Set<string>();
-    for (const row of group.known ? [group.row] : group.rows) {
+    for (const row of group.known ? group.acceptedRows ?? [group.row] : group.rows) {
       const matches = cliniciansByLabel.get(normalizeLabel(row.clinician));
       if (matches?.length !== 1) continue;
       const payload = JSON.stringify(row);
@@ -349,6 +350,7 @@ export function buildImportedSessionOverlay(
         ...(context.importedBillingActuals ?? []),
         ...billingActuals,
       ],
+      ...(resolutions.length ? { billingChargeResolutions: resolutions } : {}),
     },
     derivedSessions,
     attendanceCoverage: scopedAttendanceCoverage,
@@ -371,7 +373,7 @@ export function buildImportedSessionOverlay(
       ].sort(),
       billedRows: billingActuals.length,
       billedFees: billingGroups.some((group) => !group.known) ? null : billingGroups.reduce(
-        (sum, group) => sum + group.row.totalFeeCharged,
+        (sum, group) => sum + (group.acceptedRows ?? [group.row]).reduce((n, row) => n + row.totalFeeCharged, 0),
         0,
       ),
       billingConflictCount: billingGroups.filter((group) => !group.known).length,

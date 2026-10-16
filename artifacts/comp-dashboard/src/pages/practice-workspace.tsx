@@ -818,15 +818,19 @@ export default function PracticeWorkspace() {
   const workspace = resolved?.workspace;
   const workingWorkspace = stagedWorkspace ?? workspace!;
   const forecastWorkspace = resolved?.forecastWorkspace;
+  const importEvidenceDeclarations = useMemo(() => localRetentionState.declarations
+    ? localRetentionState.billingResolutions.length ? { ...localRetentionState.declarations.data, billingResolutions: localRetentionState.billingResolutions }
+      : localRetentionState.declarations.data : undefined,
+  [localRetentionState.declarations, localRetentionState.billingResolutions]);
   const completeClinicalReports = useMemo(() => {
     if (!context || !workspace) return null;
     return completeReportCoverage(localRetentionState.snapshots, context.clinicians.filter((person) => (person.goalId ?? null) === workspace.settings.teamId), today, context.clinicians,
-      { declarations: localRetentionState.declarations?.data, teamId: workspace.settings.teamId });
-  }, [context, workspace?.settings.teamId, localRetentionState.snapshots, localRetentionState.declarations, today]);
+      { declarations: importEvidenceDeclarations, teamId: workspace.settings.teamId });
+  }, [context, workspace?.settings.teamId, localRetentionState.snapshots, importEvidenceDeclarations, today]);
   const currentReportCoverage = useMemo(() => context && workspace
     ? completeReportCoverage(localRetentionState.snapshots, currentPracticeClinicians(workingWorkspace, context, today), today, context.clinicians,
-      { declarations: localRetentionState.declarations?.data, teamId: workspace.settings.teamId }) : null,
-  [context, workspace, stagedWorkspace, localRetentionState.snapshots, localRetentionState.declarations, today]);
+      { declarations: importEvidenceDeclarations, teamId: workspace.settings.teamId }) : null,
+  [context, workspace, stagedWorkspace, localRetentionState.snapshots, importEvidenceDeclarations, today]);
   const rawImportedSessionOverlay = useMemo(
     () =>
       !sandbox && context && workspace
@@ -835,7 +839,7 @@ export default function PracticeWorkspace() {
             localRetentionState.snapshots,
             workspace.settings.teamId,
             localRetentionState.sameDayVisitOverrides,
-            { declarations: localRetentionState.declarations?.data },
+            { declarations: importEvidenceDeclarations },
           )
         : null,
     [
@@ -844,13 +848,13 @@ export default function PracticeWorkspace() {
       workspace?.settings.teamId,
       localRetentionState.snapshots,
       localRetentionState.sameDayVisitOverrides,
-      localRetentionState.declarations,
+      importEvidenceDeclarations,
     ],
   );
   const importedSessionOverlay = useMemo(() => {
     if (!rawImportedSessionOverlay || !context || !workspace) return null;
     const ids = context.clinicians.filter((person) => (person.goalId ?? null) === workspace.settings.teamId).map((person) => person.id);
-    const accepted = buildImportedSessionOverlay(context, completeClinicalReports?.eligibleSnapshots ?? [], workspace.settings.teamId, localRetentionState.sameDayVisitOverrides, { declarations: localRetentionState.declarations?.data });
+    const accepted = buildImportedSessionOverlay(context, completeClinicalReports?.eligibleSnapshots ?? [], workspace.settings.teamId, localRetentionState.sameDayVisitOverrides, { declarations: importEvidenceDeclarations });
     const proof = completeClinicalReports?.completeAttendanceCoverage.filter((range) => ids.includes(range.clinicianId)) ?? [];
     const state = completeServicePeriodState(accepted.context.sessions, ids, today, proof);
     return { ...accepted, diagnostic: { ...rawImportedSessionOverlay.diagnostic,
@@ -858,7 +862,7 @@ export default function PracticeWorkspace() {
       manualImportOverrideCount: accepted.diagnostic.manualImportOverrideCount,
       manualImportConflictCount: accepted.diagnostic.manualImportConflictCount,
     }, context: { ...accepted.context, sessions: state.eligibleRecords }, attendanceCoverage: state.eligibleCoverage };
-  }, [rawImportedSessionOverlay, completeClinicalReports, context, workspace?.settings.teamId, localRetentionState.sameDayVisitOverrides, localRetentionState.declarations, today]);
+  }, [rawImportedSessionOverlay, completeClinicalReports, context, workspace?.settings.teamId, localRetentionState.sameDayVisitOverrides, importEvidenceDeclarations, today]);
   const historicalClinicalSnapshots = useMemo(() => context && workspace
     ? snapshotsForClinicians(completeClinicalReports?.eligibleSnapshots ?? [], context.clinicians.filter((person) => (person.goalId ?? null) === workspace.settings.teamId)) : [],
   [context, workspace?.settings.teamId, completeClinicalReports]);
@@ -1043,14 +1047,14 @@ export default function PracticeWorkspace() {
   const financialRangeReports = useMemo(() => {
     if (!workspace || !modelContext) return null;
     const report = (range: { start: string; end: string }) => practiceFinancialRange(moneyFlowWorkspace ?? workingWorkspace,
-      modelContext, localRetentionState.snapshots, today, range, importedSessionOverlay?.attendanceCoverage, localRetentionState.declarations?.data);
+      modelContext, localRetentionState.snapshots, today, range, importedSessionOverlay?.attendanceCoverage, importEvidenceDeclarations);
     const monthDate = summaryMonth?.date ?? today;
     return {
       selected: report({ start: periodRange.start, end: periodRange.end }),
       summary: report({ start: monthDate.slice(0, 7) + "-01", end: new Date(Date.UTC(Number(monthDate.slice(0, 4)), Number(monthDate.slice(5, 7)), 0)).toISOString().slice(0, 10) }),
       year: report({ start: today.slice(0, 4) + "-01-01", end: today.slice(0, 4) + "-12-31" }),
     };
-  }, [workspace, workingWorkspace, moneyFlowWorkspace, modelContext, localRetentionState.snapshots, localRetentionState.declarations,
+  }, [workspace, workingWorkspace, moneyFlowWorkspace, modelContext, localRetentionState.snapshots, importEvidenceDeclarations,
     today, periodRange.start, periodRange.end, summaryMonth?.date, importedSessionOverlay?.attendanceCoverage]);
   const baselineMonths = useMemo(
     () =>
@@ -1209,11 +1213,11 @@ export default function PracticeWorkspace() {
       if (!row.periodStart) return [];
       const period = canonicalServicePeriod(row.periodStart);
       if (period.start !== row.periodStart || period.end !== row.date) return [];
-      const report = practiceFinancialRange(workspace, modelContext, localRetentionState.snapshots, today, period, importedSessionOverlay?.attendanceCoverage, localRetentionState.declarations?.data);
+      const report = practiceFinancialRange(workspace, modelContext, localRetentionState.snapshots, today, period, importedSessionOverlay?.attendanceCoverage, importEvidenceDeclarations);
       return report.actual.complete && !report.forward.range
         ? [{ source: "actual" as const, start: period.start, end: period.end, basis: "period" as const, values: report.actual.values }] : [];
     });
-  }, [workspace, modelContext, sandbox, recordedFinancialPeriods, localRetentionState.snapshots, localRetentionState.declarations, today, importedSessionOverlay?.attendanceCoverage]);
+  }, [workspace, modelContext, sandbox, recordedFinancialPeriods, localRetentionState.snapshots, importEvidenceDeclarations, today, importedSessionOverlay?.attendanceCoverage]);
   const moneyYtd = useMemo(
     () =>
       workspace && modelContext

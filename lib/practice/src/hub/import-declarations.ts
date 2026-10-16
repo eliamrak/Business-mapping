@@ -1,4 +1,5 @@
 import { z } from "zod/v4";
+import type { BillingChargeResolution, BillingChargeResolutionEvidence } from "./billing-resolution.ts";
 
 const date = z.string().regex(/^\d{4}-\d{2}-\d{2}$/).refine((value) => {
   const parsed = new Date(value + "T00:00:00Z");
@@ -32,6 +33,8 @@ export const importDeclarationsSchema = z.object({
   }
 });
 export type ImportDeclarations = z.infer<typeof importDeclarationsSchema>;
+/** In-memory composition only. Billing approvals are stored in their separate audit journal. */
+export type ImportEvidenceDeclarations = ImportDeclarations & { billingResolutions?: readonly BillingChargeResolutionEvidence[] };
 export type ProviderMapping = z.infer<typeof providerMappingSchema>;
 export type SourceSetCoverage = z.infer<typeof sourceSetCoverageSchema>;
 export type StoredImportDeclarations = {
@@ -56,4 +59,12 @@ export function resolveImportedProvider(
   }
   const matches = [...new Map(roster.filter((row) => normalizeProviderLabel(row.label) === key).map((row) => [row.id, row])).values()];
   return matches.length === 1 && (matches[0].goalId ?? null) === teamId ? matches[0].id : null;
+}
+
+export function bindBillingResolutions(resolutions: readonly BillingChargeResolution[], roster: readonly { id: number; label: string; goalId?: number | null }[], declarations?: ImportDeclarations | null): BillingChargeResolutionEvidence[] {
+  return resolutions.map((resolution) => {
+    const mappings = declarations?.mappings.filter((row) => normalizeProviderLabel(row.sourceLabel) === normalizeProviderLabel(resolution.clinicianLabel)) ?? [];
+    const valid = mappings.length === 1 && resolveImportedProvider(resolution.clinicianLabel, roster, mappings[0].teamId, declarations) === resolution.clinicianId;
+    return { ...resolution, ...(!valid ? { mappingInvalid: true as const } : {}) };
+  });
 }

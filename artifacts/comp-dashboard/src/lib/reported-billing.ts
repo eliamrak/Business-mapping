@@ -1,5 +1,6 @@
 import type { BillingRow, LocalSnapshot } from "./retention-local.ts";
 import { reconcileBillingEvidence } from "@workspace/practice/hub";
+import type { BillingChargeResolutionEvidence } from "@workspace/practice/hub";
 
 export type ReportedBillingMonth = {
   month: string;
@@ -43,7 +44,7 @@ const normalizedLabel = (label: string) => label.trim().replace(/\s+/g, " ").toL
 export function summarizeReportedBilling(
   snapshots: readonly LocalSnapshot[],
   asOf: string,
-  options: { clinicianLabel?: string; clinicianLabels?: readonly string[]; start?: string; end?: string; eligibleRows?: ReadonlySet<BillingRow> } = {},
+  options: { clinicianLabel?: string; clinicianLabels?: readonly string[]; start?: string; end?: string; eligibleRows?: ReadonlySet<BillingRow>; billingResolutions?: readonly BillingChargeResolutionEvidence[] } = {},
 ) {
   if (!validDate(asOf)) throw new Error("Reported billing requires a valid as-of date.");
   if ((options.start !== undefined && !validDate(options.start)) || (options.end !== undefined && !validDate(options.end)) || (options.start && options.end && options.start > options.end))
@@ -54,7 +55,7 @@ export function summarizeReportedBilling(
   if (teamScope?.has("")) throw new Error("Selected clinician labels must not be blank.");
   const matches = (row: BillingRow) => (scope === null || normalizedLabel(row.clinician) === scope) && (teamScope === null || teamScope.has(normalizedLabel(row.clinician)));
   const billingSnapshots = snapshots.filter((snapshot) => snapshot.kind === "billing");
-  const groups = reconcileBillingEvidence(billingSnapshots.flatMap((snapshot) => snapshot.rows.filter((row) => options.eligibleRows === undefined || options.eligibleRows.has(row)).map((row) => ({ row, snapshotId: snapshot.id }))));
+  const groups = reconcileBillingEvidence(billingSnapshots.flatMap((snapshot) => snapshot.rows.filter((row) => options.eligibleRows === undefined || options.eligibleRows.has(row)).map((row) => ({ row, snapshotId: snapshot.sourceSnapshotId ?? snapshot.id }))), options.billingResolutions);
   const evidence = {
     billingSnapshotCount: billingSnapshots.length,
     rawRowCount: 0,
@@ -62,6 +63,10 @@ export function summarizeReportedBilling(
     duplicateRowCount: 0,
     conflictingHashCount: 0,
     ambiguousEncounterCount: 0,
+    resolvedCaseCount: 0,
+    staleResolutionCount: 0,
+    originalConflictingCaseCount: 0,
+    originalAmbiguousCaseCount: 0,
     invalidFeeRowCount: 0,
     invalidDateRowCount: 0,
     missingHashRowCount: 0,
@@ -75,13 +80,20 @@ export function summarizeReportedBilling(
     const rows = group.rows;
     const scopedRows = rows.filter(matches).filter((row) => options.eligibleRows === undefined || options.eligibleRows.has(row)).filter((row) => !validDate(row.serviceDate) || ((!options.start || row.serviceDate >= options.start) && (!options.end || row.serviceDate <= options.end)));
     if (!scopedRows.length) continue;
-    const conflicting = group.conflicting;
+    const conflicting = group.conflicting && !group.resolutionId;
+    const ambiguous = group.ambiguous && !group.resolutionId;
+    const acceptedRows = (group.acceptedRows ?? [group.row]).filter((row) => scopedRows.includes(row));
+    const acceptedCount = group.known ? acceptedRows.length : 1;
     const missingHash = group.missingHash;
     evidence.rawRowCount += scopedRows.length;
-    evidence.uniqueRowCount++;
-    evidence.duplicateRowCount += scopedRows.length - 1;
+    evidence.uniqueRowCount += acceptedCount;
+    evidence.duplicateRowCount += scopedRows.length - acceptedCount;
     if (conflicting) evidence.conflictingHashCount++;
-    if (group.ambiguous) evidence.ambiguousEncounterCount++;
+    if (ambiguous) evidence.ambiguousEncounterCount++;
+    if (group.resolutionId) evidence.resolvedCaseCount++;
+    if (group.resolutionStale) evidence.staleResolutionCount++;
+    if (group.conflicting) evidence.originalConflictingCaseCount++;
+    if (group.ambiguous) evidence.originalAmbiguousCaseCount++;
     if (missingHash) evidence.missingHashRowCount += scopedRows.length;
     const byMonth = new Map<string, BillingRow[]>();
     for (const row of scopedRows) {
@@ -104,17 +116,19 @@ export function summarizeReportedBilling(
         firstServiceDate: dates[0], latestServiceDate: dates.at(-1)!,
         fullyElapsed: month < asOf.slice(0, 7), coverage: "reported-rows-only" as const,
       };
-      aggregate.rowCount++;
+      const acceptedMonthRows = acceptedRows.filter((row) => row.serviceDate.slice(0, 7) === month);
+      const monthCount = group.known ? acceptedMonthRows.length : 1;
+      aggregate.rowCount += monthCount;
       aggregate.rawRowCount += monthRows.length;
-      aggregate.duplicateRowCount += monthRows.length - 1;
+      aggregate.duplicateRowCount += monthRows.length - monthCount;
       aggregate.conflictingHashCount += Number(conflicting);
-      aggregate.ambiguousEncounterCount += Number(group.ambiguous);
+      aggregate.ambiguousEncounterCount += Number(ambiguous);
       aggregate.invalidFeeRowCount += monthRows.filter((row) => !Number.isFinite(row.totalFeeCharged)).length;
       aggregate.firstServiceDate = aggregate.firstServiceDate < dates[0] ? aggregate.firstServiceDate : dates[0];
       aggregate.latestServiceDate = aggregate.latestServiceDate > dates.at(-1)! ? aggregate.latestServiceDate : dates.at(-1)!;
       // Signed adjustments and PHONE fees are included. Bad fees and conflicting
       // hash payloads invalidate the affected total instead of becoming zero.
-      const sum = aggregate.charges === null ? null : aggregate.charges + monthRows[0].totalFeeCharged;
+      const sum = aggregate.charges === null ? null : aggregate.charges + acceptedMonthRows.reduce((total, row) => total + row.totalFeeCharged, 0);
       aggregate.charges = !group.known || monthRows.some((row) => !Number.isFinite(row.totalFeeCharged))
         || sum === null || !Number.isFinite(sum) ? null : sum;
       months.set(month, aggregate);
@@ -122,6 +136,8 @@ export function summarizeReportedBilling(
   }
   if (evidence.conflictingHashCount) evidence.warnings.push("Conflicting encounter/source identities make affected monthly charges unknown; no payload was selected as authoritative.");
   if (evidence.ambiguousEncounterCount) evidence.warnings.push("Indistinguishable repeated encounters cannot establish separate charges; affected totals remain unknown.");
+  if (evidence.resolvedCaseCount) evidence.warnings.push("Explicit owner-approved billing exceptions retain two pinned charges each, not two treatment visits. Original source signals and records remain unchanged.");
+  if (evidence.staleResolutionCount) evidence.warnings.push("A billing exception no longer matches its pinned evidence; affected charges require review and remain unknown.");
   if (evidence.invalidFeeRowCount) evidence.warnings.push("Nonfinite charged fees make affected monthly charges unknown.");
   if (evidence.missingHashRowCount) evidence.warnings.push("Rows without a stable source hash cannot be safely deduplicated; affected monthly charges are unknown.");
   if (unassignedRows) evidence.warnings.push("Invalid service dates cannot be assigned to a month; summary averages and charges to date are unknown.");

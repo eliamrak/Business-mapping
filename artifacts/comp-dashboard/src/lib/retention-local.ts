@@ -46,6 +46,8 @@ export type LocalSnapshot =
       reportCoverage?: ReportCoverage;
       /** Derived in-memory provider scope for quiet complete periods; never an imported/persisted field. */
       coverageClinicians?: string[];
+      /** Derived only: immutable original source identity for pinned billing approvals. */
+      sourceSnapshotId?: string;
       sourceHash: string;
       rows: AttendanceRow[];
     }
@@ -58,6 +60,7 @@ export type LocalSnapshot =
       reportCoverage?: ReportCoverage;
       /** Derived in-memory provider scope for quiet complete periods; never an imported/persisted field. */
       coverageClinicians?: string[];
+      sourceSnapshotId?: string;
       sourceHash: string;
       rows: BillingRow[];
     };

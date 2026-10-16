@@ -350,6 +350,8 @@ await page.route("**/api/**", async (route) => {
         ? context
         : url.pathname === "/api/practice-imports"
           ? { snapshots, billingCodeMinutes: {}, sameDayVisitOverrides: {}, packages }
+        : url.pathname === "/api/practice-imports/billing-resolution-candidates"
+          ? { revision: 0, candidates: [] }
         : url.pathname === "/api/business-goals"
           ? [{ id: 1, name: "Year 1 Baseline", ownerPayGoal: 90000, secondOwnerPayGoal: 80000, businessProfitGoal: 30000, desiredCliniciansCount: 6, overheadGoal: 120000, buildingFundGoal: 100000, emergencyReserveGoal: 20000, growthFundGoal: 30000 }]
           : url.pathname === "/api/scenarios"

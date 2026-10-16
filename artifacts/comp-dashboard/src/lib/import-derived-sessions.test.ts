@@ -4,7 +4,11 @@ import type { SessionRecord } from "@workspace/practice";
 import {
   emptyWorkspace,
   monthFlow,
+  forecast,
   type Context,
+  prepareBillingChargeResolution,
+  type BillingChargeResolution,
+  bindBillingResolutions,
 } from "@workspace/practice/hub";
 import { sameDayVisitKey, type LocalSnapshot } from "./retention-local.ts";
 import { buildImportedSessionOverlay } from "./import-derived-sessions.ts";
@@ -91,6 +95,49 @@ const billingSnapshot = (
     .at(-1)!,
   sourceHash: "billing-hash",
   rows,
+});
+
+test("owner-approved two charges agree across fee summary, overlay and percentage pay without adding a visit", () => {
+  for (const amounts of [[135, 150], [175, 175], [150, 150]]) {
+    const date = "2026-10-02";
+    const bill = billingSnapshot(amounts.map((totalFeeCharged, i) => ({ clientId: "synthetic", clinician: "Dr Lane", serviceDate: date, billingCode: "90837", totalFeeCharged, sourceRowHash: `bill-${i}` })));
+    const show = attendanceSnapshot([{ clientId: "synthetic", clinician: "Dr Lane", serviceDate: date, status: "show", location: "Room A", sourceRowHash: "attended-once" }]);
+    show.reportCoverage = { start: "2026-10-01", end: "2026-10-14", complete: true };
+    const draft = prepareBillingChargeResolution(bill.kind === "billing" ? bill.rows.map((row) => ({ row, snapshotId: bill.id })) : []);
+    assert.ok(draft);
+    const resolution: BillingChargeResolution = { ...draft, clinicianId: 1, id: "00000000-0000-4000-8000-000000000001", approvalToken: "a".repeat(64), confirmedAt: "2026-10-16T00:00:00Z", approvalNote: "Explicit synthetic owner approval" };
+    const declarations = { version: 1 as const, mappings: [{ sourceLabel: "Dr Lane", clinicianLabel: "Dr Lane", clinicianId: 1, teamId: 7 }], sourceSets: [], billingResolutions: [resolution] };
+    const source = context(); source.clinicians = [source.clinicians[0]];
+    const before = structuredClone({ source, bill, show, declarations });
+    const overlay = buildImportedSessionOverlay(source, [show, bill], 7, {}, { declarations });
+    assert.equal(overlay.derivedSessions.reduce((n, r) => n + r.completed, 0), 1);
+    assert.equal(overlay.importedBillingActuals.length, 2);
+    const fees = summarizeReportedBilling([bill], "2026-10-14", { billingResolutions: [resolution] });
+    const total = amounts[0] + amounts[1];
+    assert.equal(fees.currentMonth.chargesToDate, total);
+    assert.equal(fees.evidence.resolvedCaseCount, 1);
+    assert.equal(fees.evidence.ambiguousEncounterCount, 0);
+    assert.equal(fees.evidence.originalAmbiguousCaseCount, 1);
+    const workspace = emptyWorkspace("2026-10-01"); workspace.settings.teamId = 7;
+    const actual = monthFlow(workspace, overlay.context, "2026-10-01", date);
+    assert.equal(actual.sessions, 1);
+    assert.equal(actual.revenue, total);
+    workspace.settings.defaultInPersonPct = 0;
+    const earned = forecast(workspace, overlay.context, [], 1, false, { workingForecast: true, workingRange: { start: date, end: date }, baselineWeeklyByClinician: { 1: 7 }, useImportedBillingActuals: true })[0];
+    assert.equal(earned.values.revenue, total);
+    assert.equal(earned.values.clinicianPay, total * 0.6);
+    assert.deepEqual({ source, bill, show, declarations }, before);
+    const unresolved = buildImportedSessionOverlay(source, [show, bill], 7);
+    assert.equal(monthFlow(workspace, unresolved.context, "2026-10-01", date).revenue, null);
+    const moved = { ...declarations, mappings: [{ ...declarations.mappings[0], clinicianId: 2, teamId: 8 }] };
+    const movedContext = { ...source, clinicians: [{ ...source.clinicians[0], id: 2, goalId: 8 }] };
+    const rebound = buildImportedSessionOverlay(movedContext, [show, bill], 8, {}, { declarations: moved });
+    assert.equal(rebound.diagnostic.billedFees, null);
+    assert.equal(rebound.context.importedBillingActuals?.every((row) => row.evidenceUnknown), true);
+    const movedFees = summarizeReportedBilling([bill], "2026-10-14", { billingResolutions: bindBillingResolutions([resolution], movedContext.clinicians, moved) });
+    assert.equal(movedFees.currentMonth.chargesToDate, null);
+    assert.equal(movedFees.evidence.staleResolutionCount, 1);
+  }
 });
 
 test("attendance coverage belongs only to clinicians mapped in each snapshot", () => {

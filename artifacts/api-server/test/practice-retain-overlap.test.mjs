@@ -24,6 +24,7 @@ const bundled = await build({
       const tx = {
         async execute(statement) {
           const query = dialect.sqlToQuery(statement);
+          if (query.sql.startsWith("SELECT detail FROM practice_import_audit")) return { rows: [] };
           if (query.sql.includes("practice_import_declarations")) return { rows: [{ available: false }] };
           if (/INSERT INTO practice_import_snapshots/.test(query.sql)) {
             const [id, packageImportId, practiceId, accountId, kind, coverageStart, coverageEnd, sourceHash, rowCount, rows, proof] = query.params;

@@ -1,4 +1,4 @@
-import { completeServicePeriodState, forecast, observed, type Context, type ForecastMonth, type PaceCoverage, type Workspace, type ImportDeclarations } from "@workspace/practice/hub";
+import { completeServicePeriodState, forecast, observed, bindBillingResolutions, type Context, type ForecastMonth, type PaceCoverage, type Workspace, type ImportEvidenceDeclarations } from "@workspace/practice/hub";
 import { buildPracticeProjection } from "./practice-projection.ts";
 import { summarizeReportedBilling } from "./reported-billing.ts";
 import type { LocalSnapshot } from "./retention-local.ts";
@@ -23,7 +23,7 @@ function financialCoverage(workspace: Workspace, range: Range) {
 }
 
 /** Complete report history and the forecast after its covered period never overlap. */
-export function practiceFinancialRange(workspace: Workspace, context: Context, snapshots: LocalSnapshot[], asOf: string, requested: Range, coverage: PaceCoverage[] = [], declarations?: ImportDeclarations | null) {
+export function practiceFinancialRange(workspace: Workspace, context: Context, snapshots: LocalSnapshot[], asOf: string, requested: Range, coverage: PaceCoverage[] = [], declarations?: ImportEvidenceDeclarations | null) {
   const roster = context.clinicians.filter((person) => (person.goalId ?? null) === workspace.settings.teamId);
   const reports = completeReportCoverage(snapshots, roster, asOf, context.clinicians, { declarations, teamId: workspace.settings.teamId });
   const sessionProof = completeServicePeriodState(context.sessions, roster.map((person) => person.id), asOf, coverage);
@@ -47,7 +47,7 @@ export function practiceFinancialRange(workspace: Workspace, context: Context, s
   const forwardStart = forecastStart && range.start > forecastStart ? range.start : forecastStart;
   const forwardRange = forwardStart && forwardStart <= range.end ? { start: forwardStart, end: range.end } : null;
   const names = new Set(context.clinicians.filter((person) => (person.goalId ?? null) === workspace.settings.teamId).map((person) => person.label.trim().replace(/\s+/g, " ").toLowerCase()));
-  const charges = actualRange ? summarizeReportedBilling(snapshots, actualEnd, { start: range.start, end: actualEnd, clinicianLabels: [...names], eligibleRows: new Set(reports.eligibleBillingRows) }) : summarizeReportedBilling([], asOf);
+  const charges = actualRange ? summarizeReportedBilling(snapshots, actualEnd, { start: range.start, end: actualEnd, clinicianLabels: [...names], eligibleRows: new Set(reports.eligibleBillingRows), billingResolutions: bindBillingResolutions(declarations?.billingResolutions ?? [], context.clinicians, declarations) }) : summarizeReportedBilling([], asOf);
   const billingComplete = !!actualRange && roster.length > 0 && roster.every((person) => {
     for (let date = actualRange.start; date <= actualRange.end; date = shift(date, 1))
       if (!reports.completeBillingCoverage.some((proof) => proof.clinicianId === person.id && proof.start <= date && proof.end >= date)) return false;

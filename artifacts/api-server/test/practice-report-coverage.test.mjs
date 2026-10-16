@@ -33,6 +33,7 @@ const result = await build({
             async execute(statement) {
               const compiledQuery = new PgDialect().sqlToQuery(statement);
               mockState.statements.push(compiledQuery);
+              if (compiledQuery.sql.startsWith("SELECT detail FROM practice_import_audit")) return { rows: [] };
               if (compiledQuery.sql.includes("practice_import_declarations")) return { rows: [{ available: false }] };
               return { rows: [{ available: mockState.available }] };
             },

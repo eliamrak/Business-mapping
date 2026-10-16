@@ -21,7 +21,7 @@ const bundle = await build({
       export const mockState = { available: true, snapshots: [], packages: [], updates: [], audits: [], statements: [], reads: [], failAudit: false, failUpdate: false, failCas: false };
       const dialect = new PgDialect();
       const tx = {
-        async execute(statement) { const query = dialect.sqlToQuery(statement); mockState.statements.push(query); return { rows: [{ available: query.sql.includes("practice_import_declarations") ? false : mockState.available }] }; },
+        async execute(statement) { const query = dialect.sqlToQuery(statement); mockState.statements.push(query); if (query.sql.startsWith("SELECT detail FROM practice_import_audit")) return { rows: [] }; return { rows: [{ available: query.sql.includes("practice_import_declarations") ? false : mockState.available }] }; },
         select() { return { from(table) { this.table = table; return this; }, async where(condition) {
           const query = dialect.sqlToQuery(condition); mockState.reads.push(query);
           const rows = getTableName(this.table) === "practice_import_snapshots" ? mockState.snapshots : mockState.packages;

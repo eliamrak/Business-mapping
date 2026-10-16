@@ -1,4 +1,4 @@
-import { canonicalServicePeriod, resolveImportedProvider, type ImportDeclarations, type PaceCoverage } from "@workspace/practice/hub";
+import { canonicalServicePeriod, resolveImportedProvider, type ImportEvidenceDeclarations, type PaceCoverage } from "@workspace/practice/hub";
 import type { AttendanceRow, BillingRow, LocalFactKind, LocalSnapshot } from "./retention-local.ts";
 import { attendanceStatusConflicts } from "./retention-local.ts";
 
@@ -42,7 +42,7 @@ type Range = { start: string; end: string };
 export function completeReportCoverage(
   snapshots: readonly LocalSnapshot[], clinicians: readonly Clinician[], asOf: string,
   identityClinicians: readonly Clinician[] = clinicians,
-  options: { declarations?: ImportDeclarations | null; teamId?: number | null } = {},
+  options: { declarations?: ImportEvidenceDeclarations | null; teamId?: number | null } = {},
 ): CompleteReportCoverage {
   if (!validDate(asOf)) throw new Error("Complete report coverage requires a valid as-of date.");
   const labels = new Map<string, number[]>();
@@ -166,6 +166,7 @@ export function completeReportCoverage(
         else eligibleAttendanceRows.add(row as AttendanceRow);
       }
       eligibleSnapshots.push({ ...structuredClone(sourceMetadata), id: `${snapshot.id}:complete:${clinicianId}:${period.start}`,
+        ...(snapshot.kind === "billing" && options.declarations?.billingResolutions?.length ? { sourceSnapshotId: snapshot.sourceSnapshotId ?? snapshot.id } : {}),
         coverageStart: start, coverageEnd: end, reportCoverage: { start, end, complete: true },
         coverageClinicians: [clinicians.find((person) => person.id === clinicianId)!.label], rows: structuredClone(rows) } as LocalSnapshot);
     }
