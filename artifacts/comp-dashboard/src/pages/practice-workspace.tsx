@@ -117,7 +117,7 @@ import OverheadGoalEditor from "@/components/practice/overhead-goal-editor";
 import { planRevisionSignature, planFocusHighlights } from "@/lib/plan-focus";
 import { overviewClientFlow } from "@/lib/practice-overview";
 import { moneyBridgeSummary } from "@/lib/money-bridge";
-import { summarizeReportedBilling } from "@/lib/reported-billing";
+import { summarizeReportedBilling, billingMonthSelectionLabel } from "@/lib/reported-billing";
 import { practicePeriodRange } from "@/lib/practice-period";
 import { currentPracticeClinicians, configuredRoomsAtDate, snapshotsForClinicians } from "@/lib/practice-scope";
 import { linkedGoalFor, linkedFundGoalFor, type LinkedPracticeGoal, type LinkedFundGoal } from "@/lib/legacy-practice-goals";
@@ -2813,13 +2813,13 @@ export default function PracticeWorkspace() {
       value: kind === "retention" ? row?.initialRetentionPct : row?.averageClientEndingsPerFullMonth,
       detail: !unique ? "Unknown: clinician name maps to multiple IDs; resolve the import mapping."
         : kind === "retention"
-        ? `${fmt(row?.retainedClients)} retained / ${fmt(row?.initialRetentionDenominator)} evaluated starts; ${fmt(row?.pendingInitialClients)} pending${row?.coverageVerified ? "" : "; coverage unverified"}`
+        ? `${fmt(row?.retainedClients)} retained / ${fmt(row?.initialRetentionDenominator)} evaluated starts; ${fmt(row?.pendingInitialClients)} pending${row?.initialRetentionCoverageVerified ? "" : "; coverage unverified"}`
         : `${fmt(row?.endingFullMonthClientEnds)} relationship endings / ${fmt(row?.endingFullMonthDenominator)} mature months`,
     };
   }).concat([{ id: "practice", label: "Whole Practice",
     value: kind === "retention" ? clientActivityEstimate?.initialRetentionRate == null ? null : clientActivityEstimate.initialRetentionRate * 100 : clientActivityEstimate?.averageClientEndingsPerFullMonth,
     detail: kind === "retention"
-      ? `${fmt(clientActivityEstimate?.retainedClientPairs)} retained / ${fmt(clientActivityEstimate?.initialRetentionDenominator)} evaluated starts; ${fmt(clientActivityEstimate?.immatureClientPairsExcluded)} pending${clientActivityEstimate?.coverageVerified ? "" : "; coverage unverified"}`
+      ? `${fmt(clientActivityEstimate?.retainedClientPairs)} retained / ${fmt(clientActivityEstimate?.initialRetentionDenominator)} evaluated starts; ${fmt(clientActivityEstimate?.immatureClientPairsExcluded)} pending${clientActivityEstimate?.initialRetentionCoverageVerified ? "" : "; coverage unverified"}`
       : `${fmt(clientActivityEstimate?.endingFullMonthClientEnds)} unique client endings / ${fmt(clientActivityEstimate?.endingFullMonthDenominator)} mature months`,
   }]).map((row) => ({ ...row, practice: row.id === "practice" }));
   const consultComparisonRows = [...currentConsultPeople.map((person) => {
@@ -3777,7 +3777,7 @@ export default function PracticeWorkspace() {
                               <PercentageKpi label="Retention" value={importedActivity?.initialRetentionPct} benchmark={clientActivityEstimate?.initialRetentionRate == null ? null : clientActivityEstimate.initialRetentionRate * 100} />
                               <small>
                                 {importedActivity
-                                  ? `${fmt(importedActivity.initialRetentionDenominator)} evaluated starts; ${fmt(importedActivity.pendingInitialClients)} pending${importedActivity.coverageVerified ? "" : "; observed, coverage unverified"}`
+                                  ? `${fmt(importedActivity.initialRetentionDenominator)} evaluated starts; ${fmt(importedActivity.pendingInitialClients)} pending${importedActivity.initialRetentionCoverageVerified ? "" : "; observed, coverage unverified"}`
                                   : "no imported clinician data"}
                               </small>
                             </div>
@@ -4259,7 +4259,7 @@ export default function PracticeWorkspace() {
                           <p>{fmt(selectedContributorName === "Whole Practice" ? clientActivityEstimate?.immatureClientPairsExcluded : contributorActivity?.pendingInitialClients)} pending starts</p>
                           <PercentageKpi label="Observed retention" value={selectedContributorName === "Whole Practice" ? clientActivityEstimate?.initialRetentionRate == null ? null : clientActivityEstimate.initialRetentionRate * 100 : contributorActivity?.initialRetentionPct} benchmark={selectedContributorName === "Whole Practice" ? null : clientActivityEstimate?.initialRetentionRate == null ? null : clientActivityEstimate.initialRetentionRate * 100} />
                         </>}
-                      <details><summary>Source and calculation</summary><p>Imported treatment starts in {periodRange.start} to {periodRange.end}. Three attended treatment sessions with no initial gap over 28 days; PHONE excluded. Pending starts are not failures. {(selectedContributorName === "Whole Practice" ? clientActivityEstimate?.coverageVerified : contributorActivity?.coverageVerified) ? "Report coverage verified." : "Observed history; coverage unverified."}</p></details>
+                      <details><summary>Source and calculation</summary><p>Imported treatment starts in {periodRange.start} to {periodRange.end}. Three attended treatment sessions with no initial gap over 28 days; PHONE excluded. Pending starts are not failures. {(selectedContributorName === "Whole Practice" ? clientActivityEstimate?.initialRetentionCoverageVerified : contributorActivity?.initialRetentionCoverageVerified) ? "Selected starts and retention observation windows have verified report coverage." : "Observed history; selected retention coverage unverified."}</p></details>
                     </section>
                     <section className="pw-clinical-card" aria-label="Attrition card">
                       <h3>Attrition</h3>
@@ -5836,7 +5836,7 @@ export default function PracticeWorkspace() {
                       <div className="pw-bridge-step pw-bridge-in"><strong>{selectedMoneyRange.reports.billingThrough ?? "Unverified"}</strong><span>Complete billing data covers through · not upload date</span></div>
                     </div>
                     <details><summary>Monthly charges and source</summary>
-                      {reportedBilling.months.map((row) => <div className="pw-overview-total" key={row.month}><span>{row.label}{!row.fullyElapsed ? " (partial)" : ""} · {row.rowCount} source rows</span><strong>{money(row.charges)}</strong></div>)}
+                      {reportedBilling.months.map((row) => { const selection = billingMonthSelectionLabel(row.month, selectedMoneyRange.actual.range); return <div className="pw-overview-total" key={row.month}><span>{row.label}{selection ? ` (${selection})` : ""} · {row.rowCount} source rows</span><strong>{money(row.charges)}</strong></div>; })}
                       <p className="pw-note">Selected dates include reported rows only. Missing months are not zero. Elapsed months do not establish complete billing coverage. No desired sessions or projected fees are added to charges.</p>
                       {reportedBilling.evidence.warnings.filter((warning) => !warning.startsWith("Elapsed months")).map((warning) => <p className="pw-note" key={warning}>{warning}</p>)}
                     </details>
@@ -7075,7 +7075,7 @@ export default function PracticeWorkspace() {
                     </section>
                   </div>
                   <div className="pw-overview-clinical-grid">
-                    <section aria-label="Overview initial retention"><h3>Initial retention</h3><p>Recorded treatment history · {sharedPeriodLabel(sharedPeriod)}</p><div className="pw-metric-hero"><strong>{percent(clientActivityEstimate?.initialRetentionRate)}</strong></div><p>{fmt(clientActivityEstimate?.retainedClientPairs)} retained / {fmt(clientActivityEstimate?.initialRetentionDenominator)} evaluated starts · {fmt(clientActivityEstimate?.immatureClientPairsExcluded)} pending{clientActivityEstimate?.coverageVerified ? "" : " · observed, coverage unverified"}</p><button className="pw-button" onClick={() => { setSessionMetricView("retention"); setSection("sessions"); }}>Retention<ChevronRight /></button><details><summary>Details</summary><p>Three treatment sessions with initial gaps of no more than 28 days. PHONE consultations are excluded.</p></details></section>
+                    <section aria-label="Overview initial retention"><h3>Initial retention</h3><p>Recorded treatment history · {sharedPeriodLabel(sharedPeriod)}</p><div className="pw-metric-hero"><strong>{percent(clientActivityEstimate?.initialRetentionRate)}</strong></div><p>{fmt(clientActivityEstimate?.retainedClientPairs)} retained / {fmt(clientActivityEstimate?.initialRetentionDenominator)} evaluated starts · {fmt(clientActivityEstimate?.immatureClientPairsExcluded)} pending{clientActivityEstimate?.initialRetentionCoverageVerified ? "" : " · observed, selected retention coverage unverified"}</p><button className="pw-button" onClick={() => { setSessionMetricView("retention"); setSection("sessions"); }}>Retention<ChevronRight /></button><details><summary>Details</summary><p>Three treatment sessions with initial gaps of no more than 28 days. PHONE consultations are excluded.</p></details></section>
                     <section aria-label="Overview consult conversion"><h3>Consult close rate</h3><p>{sharedPeriodLabel(sharedPeriod)} · one calendar month</p><div className="pw-metric-hero"><strong>{fmt(consultConversionSummary.practice.conversionRate, "percent")}</strong></div><p>{fmt(consultConversionSummary.practice.converted)} treatment starts / {fmt(consultConversionSummary.practice.evaluated)} evaluated journeys · {fmt(consultConversionSummary.practice.pending)} pending{consultConversionSummary.coverageVerified ? "" : " · observed, coverage unverified"}</p><button className="pw-button" onClick={() => { setMarketingTab("results"); setSection("marketing"); }}>Growth<ChevronRight /></button><details><summary>Details</summary><p>The actual closer receives credit; internal referrals do not penalize the referring clinician. Each practice conversion is counted once.</p></details></section>
                   </div>
                   <details className="pw-overview-existing-details"><summary>Forecast and historical details</summary>

@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { completeReportCoverage } from '../artifacts/comp-dashboard/src/lib/complete-report-coverage.ts';
 import { buildLocalRetentionMetrics, estimateLocalClientActivity } from '../artifacts/comp-dashboard/src/lib/retention-local.ts';
-import { summarizeReportedBilling } from '../artifacts/comp-dashboard/src/lib/reported-billing.ts';
+import { summarizeReportedBilling, billingMonthSelectionLabel } from '../artifacts/comp-dashboard/src/lib/reported-billing.ts';
 
 // Characterizes the current discrepancy, not a repaired behavior or real-data finding.
 test('unadmitted later tail can mark every clinician unverified while practice coverage stays verified', () => {
@@ -34,6 +34,8 @@ test('unadmitted later tail can mark every clinician unverified while practice c
   assert.equal(practice.retainedClientPairs, 6);
   assert.equal(withTail.clientActivityByClinician.length, 6);
   assert.ok(withTail.clientActivityByClinician.every(r => !r.coverageVerified && r.retainedClients === 1 && r.initialRetentionDenominator === 1));
+  assert.ok(withTail.clientActivityByClinician.every(r => r.initialRetentionCoverageVerified));
+  assert.equal(practice.initialRetentionCoverageVerified, true);
   assert.ok(withoutTail.clientActivityByClinician.every(r => r.coverageVerified && r.retainedClients === 1));
   assert.deepEqual({ snapshots, declarations }, before);
 });
@@ -54,4 +56,7 @@ test('Money month-end summary as-of marks a full January partial without changin
   assert.equal(atObservationDate.months[0].fullyElapsed, true);
   assert.equal(atSelectedEnd.months[0].charges, 100);
   assert.equal(atSelectedEnd.months[0].charges, atObservationDate.months[0].charges);
+  assert.equal(billingMonthSelectionLabel('2026-01', range), null);
+  assert.equal(billingMonthSelectionLabel('2026-01', { start: '2026-01-15', end: '2026-01-28' }), 'partial selection');
+  assert.equal(billingMonthSelectionLabel('2026-01', null), 'selection unverified');
 });

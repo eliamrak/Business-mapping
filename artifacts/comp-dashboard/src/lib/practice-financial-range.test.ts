@@ -137,7 +137,7 @@ test("a later complete billing report keeps billed actuals visible without inven
   assert.equal(report.actual.values.sessions, null);
   assert.equal(report.actual.values.profit, null);
   assert.equal(report.forward.range, null);
-  assert.ok(report.warnings.some((warning) => warning.includes("Source dates differ")));
+  assert.ok(report.sourceHistoryWarnings.some((warning) => warning.includes("Source dates differ")));
   const future = practiceFinancialRange(workspace, context, snapshots, "2026-10-22", { start: "2026-10-22", end: "2026-10-28" });
   near(future.values.revenue, 700);
 });
@@ -150,4 +150,26 @@ test("later complete activity does not certify missing billing fees or forecast-
   assert.equal(report.actual.values.sessions, 14);
   assert.equal(report.actual.values.revenue, null);
   assert.equal(report.forward.range, null);
+});
+
+test("historical selections separate unrelated source gaps and current forecast bases from selected limitations", () => {
+  const { workspace, context, snapshots } = fixture();
+  const report = practiceFinancialRange(workspace, context, snapshots, "2026-10-16", { start: "2026-01-01", end: "2026-01-31" });
+  assert.equal(report.actual.reportedCharges, 100);
+  assert.equal(report.actual.billingComplete, true);
+  assert.equal(report.forward.range, null);
+  assert.ok(!report.warnings.some(w => /has not ended|three-month average/.test(w)));
+  assert.ok(report.sourceHistoryWarnings.some(w => /2026-10-08.*has not ended/.test(w)));
+  assert.ok(report.forecastWarnings.some(w => w.includes("three-month average")));
+  assert.ok(report.warnings.some(w => w.includes("financial-cost coverage is incomplete")), "missing selected actual costs stay disclosed");
+  const { values, actual, forward } = report;
+  assert.equal(values.revenue, 100); assert.equal(actual.values.profit, null); assert.deepEqual(forward.values, {});
+});
+
+test("a proof gap overlapping the selected dates stays in selected limitations", () => {
+  const { workspace, context, snapshots } = fixture();
+  snapshots[0].reportCoverage = { start: "2026-01-05", end: "2026-10-14", complete: true };
+  const report = practiceFinancialRange(workspace, context, snapshots, "2026-10-16", { start: "2026-01-01", end: "2026-01-31" });
+  assert.equal(report.actual.billingComplete, false); assert.equal(report.values.revenue, null);
+  assert.ok(report.warnings.some(w => /2026-01-01 to 2026-01-14.*No individual provider report proof/.test(w)));
 });

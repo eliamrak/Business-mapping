@@ -56,6 +56,8 @@ Author run: 17 SQL tests pass, including SELECT-only structure/privacy, six-prov
 
 Independent reviewer Newton reports PASS with no remaining blockers in the bounded diagnostic review and independently reran 19/19 tests (17 SQL plus two characterization checks). Earlier null-status, journal-revision/schema/timestamp and clinician attribution-pending findings were corrected before handoff. Reviewed SQL SHA-256: `0991252864d8f5b56abccf009e3d1081494bcc664098d00cd15b895414725fbc`. This is approval for the documented read-only diagnostic, not production-data or full UI parity certification.
 
+Audit-only `b93321c` adds a separately projected `retention_provenance` array; its SQL SHA-256 is `5d07ce2ead9db42f71ff0fad1465936701b461d17710c28a422d63df2a67e31a`. Original numeric aggregates and gates are unchanged. This independently reviewed extension reports only per-clinician/window aggregate counts of unresolved partial follow-up and rows after the admitted attendance cutoff, the legacy clinician label flag, and a selected-start/retention-observation coverage flag. Synthetic controls verify an unrelated late tail yields legacy false/selected true, while incomplete observation yields selected false. Cloud execution of this extension is still required before declaring the exact production tail condition confirmed. The frozen original production reconciliation remains documented separately.
+
 Production execution, actual expected-versus-displayed comparisons and any resulting discrepancies remain the cloud worker's next step. No production reads, writes, migration or deployment were performed by the local author.
 
 ## Retention Label Investigation

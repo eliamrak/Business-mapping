@@ -37,6 +37,13 @@ const monthLabel = (month: string) => new Date(month + "-01T12:00:00Z")
   .toLocaleDateString("en-US", { month: "long", year: "numeric", timeZone: "UTC" });
 const normalizedLabel = (label: string) => label.trim().replace(/\s+/g, " ").toLowerCase();
 
+/** Selection extent only; neither elapsed time nor report coverage is inferred here. */
+export function billingMonthSelectionLabel(month: string, range: { start: string; end: string } | null) {
+  if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(month) || !range || !validDate(range.start) || !validDate(range.end) || range.start > range.end) return "selection unverified";
+  const last = new Date(Date.UTC(Number(month.slice(0, 4)), Number(month.slice(5, 7)), 0)).toISOString().slice(0, 10);
+  return range.start <= month + "-01" && range.end >= last ? null : "partial selection";
+}
+
 /** Reported charged fees by service date, not cash, production projections or coverage claims.
  * Hash identity is global across snapshots. Conflicting identities never select a winner.
  * No client identifiers, clinician roster, hashes or raw rows leave this helper.

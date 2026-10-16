@@ -19,7 +19,7 @@ function consultNumbers(metric: ReturnType<typeof summarizeConsultConversions>["
 }
 function retentionNumbers(metric: ReturnType<typeof buildLocalRetentionMetrics>["clientActivityByClinician"][number] | undefined) {
   if (!metric) return null;
-  return { coverageVerified: metric.coverageVerified, retained: metric.retainedClients, evaluated: metric.initialRetentionDenominator,
+  return { coverageVerified: metric.coverageVerified, initialRetentionCoverageVerified: metric.initialRetentionCoverageVerified, retained: metric.retainedClients, evaluated: metric.initialRetentionDenominator,
     matureNonRetained: metric.matureNonRetainedClients, pending: metric.pendingInitialClients, percent: metric.initialRetentionPct,
     endingEventsInFullMonths: metric.endingFullMonthClientEnds, matureMonths: metric.endingFullMonthDenominator,
     endingsPerMatureMonth: metric.averageClientEndingsPerFullMonth };

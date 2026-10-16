@@ -91,6 +91,7 @@ export type ClinicianAttendanceMetric = {
 export type ClinicianClientActivityMetric = {
   clinician: string;
   coverageVerified: boolean;
+  initialRetentionCoverageVerified: boolean;
   initialRetentionGapDays: number;
   retainedClients: number;
   matureNonRetainedClients: number;
@@ -140,6 +141,7 @@ export type LocalRetentionMetrics = {
 
 export type LocalClientActivityEstimate = {
   coverageVerified: boolean;
+  initialRetentionCoverageVerified: boolean;
   endingEvents: { clientId: string; date: string }[];
   endingEventCoverageComplete: boolean;
   coverageStart: string;
@@ -1476,6 +1478,23 @@ function initialRetentionEpisode(
   return { initialEpisode, laterReturnAfterInitialGap };
 }
 
+/** Scope this label to the selected starts and their observation windows, not unrelated later activity. */
+function initialRetentionWindowCovered(
+  datesByClient: Map<string, string[]>, intervals: DateInterval[],
+  start: string, end: string, gapDays: number,
+) {
+  if (start > end || !intervalCoversRange(intervals, start, end)) return false;
+  for (const values of datesByClient.values()) {
+    const dates = [...new Set(values)].sort();
+    const first = dates[0];
+    if (!first || first < start || first > end) continue;
+    const { initialEpisode } = initialRetentionEpisode(dates, gapDays);
+    const through = initialEpisode.length >= 3 ? initialEpisode[2] : addDays(initialEpisode.at(-1)!, gapDays);
+    if (!intervalCoversRange(intervals, first, through)) return false;
+  }
+  return true;
+}
+
 function activeAtMonthStart(
   dates: string[],
   month: string,
@@ -1908,6 +1927,7 @@ export function estimateLocalClientActivity(
   );
   return {
     coverageVerified: intervalCoversRange(coverageIntervals, coverageStart, coverageEnd),
+    initialRetentionCoverageVerified: initialRetentionWindowCovered(practiceShowDates, coverageIntervals, eventStart, eventEnd, initialRetentionGapDays),
     coverageStart,
     coverageEnd,
     inactivityDays,
@@ -2362,6 +2382,7 @@ export function buildLocalRetentionMetrics(
     const activity = clientActivityByClinician.get(clinician) ?? {
       clinician: metric.clinician,
       coverageVerified: false,
+      initialRetentionCoverageVerified: false,
       initialRetentionGapDays: followUpDays,
       retainedClients: 0,
       matureNonRetainedClients: 0,
@@ -2414,6 +2435,7 @@ export function buildLocalRetentionMetrics(
     const activity = clientActivityByClinician.get(clinician);
     if (!activity) continue;
     const clinicianIntervals = coverageForClinician(clinician);
+    activity.initialRetentionCoverageVerified = initialRetentionWindowCovered(clientDates, clinicianIntervals, eventStart, eventEnd, followUpDays);
     const activityCoverageStart = clinicianIntervals[0]?.start;
     const activityCoverageEnd = clinicianIntervals.at(-1)?.end;
     if (!activityCoverageStart || !activityCoverageEnd) continue;

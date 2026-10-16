@@ -15,6 +15,8 @@ export default function MoneyRangeSummary({ report }: { report: PracticeFinancia
       <div className="pw-flow-row pw-flow-profit"><span>Operating profit</span><strong>{dollars(values.profit)}</strong></div>
       {[["Collections", "collections"], ["Tax allocation", "taxReserve"], ["Reserves", "reserves"], ["Distributions", "distributions"], ["Retained cash change", "retainedCash"]].map(([label, key]) => <div className="pw-flow-row" key={key}><span>{label}</span><strong>{dollars(values[key])}</strong></div>)}
     </div>
-    {report.warnings.length > 0 && <details><summary>Source and coverage limitations</summary>{report.warnings.map((warning) => <p key={warning}>{warning}</p>)}</details>}
+    {report.warnings.length > 0 && <details><summary>Selected-period source and coverage limitations</summary>{report.warnings.map((warning) => <p key={warning}>{warning}</p>)}</details>}
+    {report.sourceHistoryWarnings.length > 0 && <details><summary>Other source dates and report boundaries</summary>{report.sourceHistoryWarnings.map((warning) => <p key={warning}>{warning}</p>)}</details>}
+    {report.forecastWarnings.length > 0 && <details><summary>Current forecast baseline, not selected-period actuals</summary>{report.forecastWarnings.map((warning) => <p key={warning}>{warning}</p>)}</details>}
   </section>;
 }
