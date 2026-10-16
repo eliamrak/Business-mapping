@@ -22,7 +22,8 @@ const bundle = await build({ stdin: { contents: readFileSync(new URL("../src/rou
           if (q.sql.startsWith("SELECT revision")) return { rows: state.saved ? [structuredClone(state.saved)] : [] };
           if (q.sql.startsWith("SELECT detail FROM practice_import_audit")) {
             assertScope(q.params[0], q.params[1]);
-            return { rows: state.audits.filter(row => row.action === "accept-billing-charge-exception" && row.practiceId === q.params[0] && row.accountId === q.params[1]).map(row => ({ detail: structuredClone(row.detail) })) };
+            const action = q.sql.includes("confirm-historical-billing-providers") ? "confirm-historical-billing-providers" : "accept-billing-charge-exception";
+            return { rows: state.audits.filter(row => row.action === action && row.practiceId === q.params[0] && row.accountId === q.params[1]).map(row => ({ detail: structuredClone(row.detail) })) };
           }
           if (q.sql.startsWith("INSERT INTO practice_import_declarations")) {
             const [practice, account, revision, data, actor] = q.params;
@@ -108,6 +109,81 @@ test("out-of-range, invalid and future coverage cannot certify a set", async () 
 test("audit failure rolls metadata back with all source facts intact", async () => {
   reset(); state.failAudit = true; const original = structuredClone(state.snapshots);
   await assert.rejects(call(body()), /audit failure/); noWrites(); assert.deepEqual(state.snapshots, original);
+});
+
+function historicalBody() {
+  const payload = body();
+  state.snapshots.push({ ...structuredClone(state.snapshots[0]), kind: "billing", sourceHash: "bbbbbbbbbbbbbbbb",
+    rows: [{ clientId: "synthetic-former", clinician: "Former", serviceDate: "2026-01-02", totalFeeCharged: 100, billingCode: "90837", sourceRowHash: "former-source" }] });
+  payload.data.historicalBillingProviders = [{ id: "00000000-0000-4000-8000-000000000001", sourceLabel: "Former",
+    sourceSets: [{ snapshotIds: ["billing-bbbbbbbbbbbbbbbb"], start: "2026-01-01", end: "2026-01-14", complete: true }] }];
+  return payload;
+}
+test("historical identity saves to its own append-only journal, not strict declaration JSON or staff/source records", async () => {
+  reset(); const payload = historicalBody(); const before = structuredClone({ roster: state.roster, snapshots: state.snapshots });
+  const response = await call(payload);
+  assert.equal(response.statusCode, 200); assert.deepEqual(response.body.declarations.data.historicalBillingProviders, payload.data.historicalBillingProviders);
+  assert.ok(!Object.hasOwn(state.saved.data, "historicalBillingProviders"), "old strict readers can still parse original declaration JSON");
+  assert.deepEqual(state.saved.data, body().data);
+  assert.deepEqual({ roster: state.roster, snapshots: state.snapshots }, before);
+  assert.equal(state.audits.filter(row => row.action === "confirm-historical-billing-providers").length, 1);
+  assert.equal(state.audits.find(row => row.action === "confirm-historical-billing-providers").detail.declarationRevision, 1);
+  assert.ok(state.queries.filter(q => q.sql.includes("confirm-historical-billing-providers")).every(q => q.params[0] === "synthetic" && q.params[1] === "synthetic"));
+  const oldClient = body(); oldClient.expectedRevision = 1;
+  const second = await call(oldClient);
+  assert.equal(second.statusCode, 200); assert.deepEqual(second.body.declarations.data.historicalBillingProviders, payload.data.historicalBillingProviders);
+  assert.equal(state.audits.filter(row => row.action === "confirm-historical-billing-providers").length, 1, "older clients neither clear nor resave historical metadata");
+});
+test("historical metadata rejects missing/wrong-kind sources, name collisions, aliases and stale bounds without writes", async () => {
+  for (const change of [
+    p => { p.data.historicalBillingProviders[0].sourceSets[0].snapshotIds = ["billing-missing0"]; },
+    p => { p.data.historicalBillingProviders[0].sourceSets[0].start = "2026-01-03"; },
+    p => { p.data.historicalBillingProviders[0].sourceSets[0].end = "2099-01-01"; },
+    p => { p.data.historicalBillingProviders[0].sourceLabel = "Former guessed alias"; },
+    () => { state.roster.push({ id: 99, label: " FORMER ", goalId: 99 }); },
+    () => { state.snapshots.at(-1).kind = "attendance"; },
+  ]) {
+    reset(); const payload = historicalBody(); change(payload);
+    assert.equal((await call(payload)).statusCode, 400); noWrites();
+  }
+});
+test("historical metadata/audit failure rolls back atomically, stale writes cannot duplicate confirmation", async () => {
+  reset(); const payload = historicalBody(); state.failAudit = true; const before = structuredClone(state.snapshots);
+  await assert.rejects(call(payload), /audit failure/); noWrites(); assert.deepEqual(state.snapshots, before);
+  state.failAudit = false; assert.equal((await call(payload)).statusCode, 200);
+  const saved = structuredClone({ saved: state.saved, audits: state.audits });
+  assert.equal((await call(payload)).statusCode, 409); assert.deepEqual({ saved: state.saved, audits: state.audits }, saved);
+});
+test("confirmed historical UUID cannot be repurposed to a different provider label", async () => {
+  reset(); const payload = historicalBody(); await call(payload);
+  state.snapshots.at(-1).rows.push({ ...state.snapshots.at(-1).rows[0], clinician: "Different former", sourceRowHash: "different" });
+  payload.expectedRevision = 1; payload.data.historicalBillingProviders[0].sourceLabel = "Different former";
+  const saved = structuredClone(state.saved); assert.equal((await call(payload)).statusCode, 400); assert.deepEqual(state.saved, saved);
+});
+
+test("removing a registry entry does not release its historical UUID for a different identity", async () => {
+  reset(); const original = historicalBody(); await call(original);
+  const removal = body(); removal.expectedRevision = 1; removal.data.historicalBillingProviders = [];
+  assert.equal((await call(removal)).statusCode, 200);
+  state.snapshots.push({ ...structuredClone(state.snapshots.at(-1)), sourceHash: "dddddddddddddddd",
+    rows: [{ ...state.snapshots.at(-1).rows[0], clinician: "Different former", sourceRowHash: "different-provider" }] });
+  const reuse = structuredClone(original); reuse.expectedRevision = 2;
+  reuse.data.historicalBillingProviders[0].sourceLabel = "Different former";
+  reuse.data.historicalBillingProviders[0].sourceSets[0].snapshotIds = ["billing-dddddddddddddddd"];
+  const before = structuredClone({ saved: state.saved, audits: state.audits });
+  assert.equal((await call(reuse)).statusCode, 400); assert.deepEqual({ saved: state.saved, audits: state.audits }, before);
+  const next = body(); next.expectedRevision = 2;
+  const response = await call(next); assert.equal(response.statusCode, 200); assert.deepEqual(response.body.declarations.data.historicalBillingProviders, []);
+});
+
+test("API rejects unsupported deletion fields and name markers with clear guidance before writes", async () => {
+  const packageHandler = router.stack.find(layer => layer.route?.path === "/practice-imports/package").route.stack[0].handle;
+  for (const alter of [pkg => { pkg.collections.billing.rows[0].deleted = true; }, pkg => { pkg.collections.billing.rows[0].clinician = "Former (deleted)"; }]) {
+    reset(); const pkg = JSON.parse(readFileSync(new URL("../../../docs/practice-local-import-package-v1.golden.json", import.meta.url), "utf8")); alter(pkg);
+    const res = { locals: { actor: "synthetic-owner" }, statusCode: 200, status(code) { this.statusCode = code; return this; }, json(value) { this.body = value; return this; } };
+    await packageHandler({ body: { package: pkg } }, res);
+    assert.equal(res.statusCode, 400); assert.match(res.body.error, /Unverified deletion marker/); noWrites(); assert.deepEqual(state.queries, []);
+  }
 });
 
 const candidatesHandler = router.stack.find((layer) => layer.route?.path === "/practice-imports/billing-resolution-candidates").route.stack[0].handle;

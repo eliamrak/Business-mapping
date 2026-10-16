@@ -1,3 +1,5 @@
+import { unverifiedDeletionMarker, deletionMarkerGuidance } from "@workspace/practice/hub";
+
 export type LocalFactKind = "attendance" | "billing";
 export type ReportCoverage = { start: string; end: string; complete: true };
 
@@ -698,6 +700,16 @@ function requireHeaders(map: Map<string, number>, keys: readonly string[]) {
     throw new Error(`Missing required columns: ${missing.join(", ")}.`);
 }
 
+function reviewDeletionFields(rows: string[][], known: readonly string[]) {
+  const headers = rows[0] ?? [];
+  const unknown = headers.map((label, index) => ({ label, index, key: headerAliases.get(headerKey(label)) ?? headerKey(label) }))
+    .filter(({ key }) => !known.includes(key));
+  const statusColumns = headers.map((label, index) => ({ index, key: headerAliases.get(headerKey(label)) ?? headerKey(label) }))
+    .filter(({ key }) => key === "billingcode" || key === "status");
+  if (headers.some(unverifiedDeletionMarker) || unknown.some(({ key }) => /(?:provider|clinician).*status|status.*(?:provider|clinician)/i.test(key))
+    || [...unknown, ...statusColumns].some(({ index }) => rows.slice(1).some((row) => unverifiedDeletionMarker(row[index] ?? "")))) throw new Error(deletionMarkerGuidance);
+}
+
 export function parseServiceDate(value: string): string {
   const text = value.trim();
   const iso = text.match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/);
@@ -763,6 +775,7 @@ export function importAttendanceCsv(
   now = new Date().toISOString(),
 ): LocalImportResult<"attendance"> {
   const rows = parseCsv(text);
+  reviewDeletionFields(rows, [...requiredAttendanceHeaders, "location", "billingcode"]);
   const headers = headerMap(rows[0] ?? []);
   requireHeaders(headers, requiredAttendanceHeaders);
   const warnings: string[] = [];
@@ -773,6 +786,7 @@ export function importAttendanceCsv(
   const facts = rows.slice(1).map((row, index) => {
     const clientId = cell(row, headers, "client");
     const clinician = cell(row, headers, "clinician");
+    if (unverifiedDeletionMarker(clinician)) throw new Error(deletionMarkerGuidance);
     if (!clientId || !clinician)
       throw new Error(`Row ${index + 2}: Client and Clinician are required.`);
     const serviceDate = parseServiceDate(cell(row, headers, "dateofservice"));
@@ -816,11 +830,13 @@ export function importBillingCsv(
   now = new Date().toISOString(),
 ): LocalImportResult<"billing"> {
   const rows = parseCsv(text);
+  reviewDeletionFields(rows, [...requiredBillingHeaders, "billingcode"]);
   const headers = headerMap(rows[0] ?? []);
   requireHeaders(headers, requiredBillingHeaders);
   const facts = rows.slice(1).map((row, index) => {
     const clientId = cell(row, headers, "client");
     const clinician = cell(row, headers, "clinician");
+    if (unverifiedDeletionMarker(clinician)) throw new Error(deletionMarkerGuidance);
     if (!clientId || !clinician)
       throw new Error(`Row ${index + 2}: Client and Clinician are required.`);
     const serviceDate = parseServiceDate(cell(row, headers, "dateofservice"));
@@ -2640,6 +2656,7 @@ function rejectUnknownKeys(
 ) {
   const allowedSet = new Set(allowed);
   const unknown = Object.keys(record).filter((key) => !allowedSet.has(key));
+  if (unknown.some(unverifiedDeletionMarker)) fail(deletionMarkerGuidance);
   if (unknown.length)
     fail(`${label} contains unsupported fields: ${unknown.join(", ")}`);
 }
@@ -2652,6 +2669,7 @@ function packageString(
   const value = record[key];
   if (typeof value !== "string" || !value.trim())
     invalidPackage(`${label} must be a non-empty string`);
+  if (key === "clinician" && unverifiedDeletionMarker(value)) invalidPackage(deletionMarkerGuidance);
   return value;
 }
 
@@ -2661,6 +2679,7 @@ function packageNullableString(
   label: string,
 ) {
   const value = record[key];
+  if (key === "billingCode" && typeof value === "string" && unverifiedDeletionMarker(value)) invalidPackage(deletionMarkerGuidance);
   if (value === null) return null;
   if (typeof value === "string" && value.trim()) return value;
   invalidPackage(`${label} must be null or a non-empty string`);

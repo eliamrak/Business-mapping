@@ -1,4 +1,4 @@
-import { canonicalServicePeriod, resolveImportedProvider, type ImportEvidenceDeclarations, type PaceCoverage } from "@workspace/practice/hub";
+import { canonicalServicePeriod, resolveImportedProvider, resolveHistoricalBillingProvider, type ImportEvidenceDeclarations, type PaceCoverage } from "@workspace/practice/hub";
 import type { AttendanceRow, BillingRow, LocalFactKind, LocalSnapshot } from "./retention-local.ts";
 import { attendanceStatusConflicts } from "./retention-local.ts";
 
@@ -89,7 +89,8 @@ export function completeReportCoverage(
       && members.length > 0 && new Set(set.snapshotIds).size === set.snapshotIds.length
       && members.every((matches) => matches.length === 1 && matches[0].kind === set.kind)
       && members.flat().every((snapshot) => snapshot.rows.every((row) => validDate(row.serviceDate) && row.serviceDate >= set.start && row.serviceDate <= set.end
-        && set.clinicianIds.some((id) => resolveAny(row.clinician) === id)))
+        && (set.clinicianIds.some((id) => resolveAny(row.clinician) === id)
+          || resolveHistoricalBillingProvider(row.clinician, identityClinicians, options.declarations) !== null)))
       && set.clinicianIds.every((id) => members.flat().some((snapshot) => snapshot.rows.some((row) => resolveAny(row.clinician) === id)));
     if (!valid) {
       incompletePeriods.push({ start: set.start, end: set.end, kind: set.kind, reason: "Source-set declaration is stale, unmapped, contradictory or missing an active member; it is not admitted." });

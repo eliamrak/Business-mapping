@@ -10,7 +10,8 @@ export function assertCandidateSource() {
   const options = { cwd: root, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] };
   if (execFileSync("git", ["rev-parse", `${CANDIDATE}^{tree}`], options).trim() !== TREE) throw new Error("candidate_source_mismatch");
   const calculationPaths = ["lib/practice/src", "artifacts/comp-dashboard/src/lib", "artifacts/comp-dashboard/src/pages/practice-workspace.tsx",
-    "artifacts/api-server/src/routes/practiceImports.ts", "artifacts/comp-dashboard/src/components/practice/local-retention-workspace.tsx", "artifacts/comp-dashboard/src/components/practice/billing-resolution-review.tsx"];
+    "artifacts/api-server/src/routes/practiceImports.ts", "artifacts/comp-dashboard/src/components/practice/local-retention-workspace.tsx", "artifacts/comp-dashboard/src/components/practice/billing-resolution-review.tsx",
+    "artifacts/comp-dashboard/src/components/practice/import-declaration-review.tsx", "artifacts/comp-dashboard/src/components/practice/historical-billing-summary.tsx"];
   execFileSync("git", ["diff", "--quiet", CANDIDATE, "--", ...calculationPaths], options);
   const untracked = execFileSync("git", ["ls-files", "--others", "--exclude-standard", "--", ...calculationPaths], options).trim();
   if (untracked) throw new Error("unreviewed_candidate_source");
@@ -95,13 +96,16 @@ export async function readOnlyInput(client, scope) {
       reportCoverage: row.reportCoverage ?? null, sourceHash: row.sourceHash, rows: row.rows }));
     const overrides = reconcileOverrides(results.packages, snapshots);
     const declarationTable = (await client.query("SELECT to_regclass('practice_import_declarations') IS NOT NULL AS available")).rows[0]?.available === true;
-    const declarations = declarationTable ? (await client.query("SELECT data FROM practice_import_declarations WHERE practice_id = $1 AND account_id = $2", [scope, scope])).rows[0]?.data ?? null : null;
+    const declarationRow = declarationTable ? (await client.query("SELECT revision, data FROM practice_import_declarations WHERE practice_id = $1 AND account_id = $2", [scope, scope])).rows[0] ?? null : null;
+    const declarations = declarationRow?.data ?? null;
+    const historicalBillingJournal = (await client.query("SELECT detail FROM practice_import_audit WHERE practice_id = $1 AND account_id = $2 AND action = 'confirm-historical-billing-providers' LIMIT 1001", [scope, scope])).rows.map(row => row.detail);
+    if (historicalBillingJournal.length > 1000 || (historicalBillingJournal.length && !declarationRow)) throw new Error("historical_billing_metadata_requires_review");
     const journal = (await client.query("SELECT detail FROM practice_import_audit WHERE practice_id = $1 AND account_id = $2 AND action = 'accept-billing-charge-exception' LIMIT 1001", [scope, scope])).rows.map(row => row.detail).sort((a, b) => a.revision - b.revision);
     if (journal.length > 1000 || journal.some((row, i) => row.revision !== i + 1 || !row.resolution)
       || new Set(journal.map(row => row.resolution.id)).size !== journal.length
       || new Set(journal.map(row => row.resolution.approvalToken)).size !== journal.length) throw new Error("billing_resolution_journal_requires_review");
     return { workspace: results.workspace[0].data, context: { clinicians: results.clinicians.map(numeric), staff: results.staff.map(numeric), sessions: results.sessions.map((row) => ({ ...row, updatedAt: new Date(row.updatedAt).toISOString() })) },
-      goals: results.goals.map(numeric), snapshots, declarations, billingResolutions: journal.map(row => row.resolution), overrides: overrides.effective, storedOverrideCount: overrides.storedCount };
+      goals: results.goals.map(numeric), snapshots, declarations, historicalBillingJournal, declarationRevision: Number(declarationRow?.revision ?? 0), billingResolutions: journal.map(row => row.resolution), overrides: overrides.effective, storedOverrideCount: overrides.storedCount };
   } finally {
     if (began) await client.query("ROLLBACK");
   }

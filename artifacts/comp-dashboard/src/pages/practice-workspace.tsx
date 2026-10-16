@@ -58,6 +58,8 @@ import {
   termSchema,
   staffTermSchema,
   allocationSchema,
+  resolveImportedProvider,
+  resolveHistoricalBillingProvider,
   type Workspace,
   type Context,
   type Collection,
@@ -118,6 +120,8 @@ import { planRevisionSignature, planFocusHighlights } from "@/lib/plan-focus";
 import { overviewClientFlow } from "@/lib/practice-overview";
 import { moneyBridgeSummary } from "@/lib/money-bridge";
 import { summarizeReportedBilling, billingMonthSelectionLabel } from "@/lib/reported-billing";
+import { historicalBillingLedger } from "@/lib/historical-billing-ledger";
+import { HistoricalBillingSummary } from "@/components/practice/historical-billing-summary";
 import { practicePeriodRange } from "@/lib/practice-period";
 import { currentPracticeClinicians, configuredRoomsAtDate, snapshotsForClinicians } from "@/lib/practice-scope";
 import { linkedGoalFor, linkedFundGoalFor, type LinkedPracticeGoal, type LinkedFundGoal } from "@/lib/legacy-practice-goals";
@@ -1068,6 +1072,26 @@ export default function PracticeWorkspace() {
     };
   }, [workspace, workingWorkspace, moneyFlowWorkspace, modelContext, localRetentionState.snapshots, importEvidenceDeclarations,
     today, periodRange.start, periodRange.end, summaryMonth?.date, importedSessionOverlay?.attendanceCoverage]);
+  const billingIdentityNeedsReview = useMemo(() => !!context && !!workspace && localRetentionState.snapshots.some((source) => source.kind === "billing"
+    && source.rows.some((row) => row.serviceDate <= today
+      && resolveImportedProvider(row.clinician, context.clinicians, workspace.settings.teamId, importEvidenceDeclarations) === null
+      && resolveHistoricalBillingProvider(row.clinician, context.clinicians, importEvidenceDeclarations) === null)),
+  [context, workspace?.settings.teamId, localRetentionState.snapshots, importEvidenceDeclarations, today]);
+  const historicalBillingReport = useMemo(() => {
+    if (!context || !workspace || !financialRangeReports || sandbox) return null;
+    const declarations = importEvidenceDeclarations ?? { version: 1 as const, mappings: [], sourceSets: [] };
+    const range = { ...financialRangeReports.selected.range };
+    if (periodRange.start.startsWith("0000-")) {
+      range.start = [...declarations.sourceSets.filter((set) => set.kind === "billing").map((set) => set.start),
+        ...(declarations.historicalBillingProviders ?? []).flatMap((provider) => provider.sourceSets.map((set) => set.start)),
+        ...localRetentionState.snapshots.filter((source) => source.kind === "billing" && source.reportCoverage?.complete).map((source) => source.reportCoverage!.start)].sort()[0] ?? range.start;
+    }
+    const unknown = localRetentionState.snapshots.some((source) => source.kind === "billing" && source.rows.some((row) => row.serviceDate >= range.start && row.serviceDate <= range.end && row.serviceDate <= today
+      && resolveImportedProvider(row.clinician, context.clinicians, workspace.settings.teamId, declarations) === null
+      && resolveHistoricalBillingProvider(row.clinician, context.clinicians, declarations) === null));
+    return range.start <= today && (declarations.historicalBillingProviders?.length || unknown)
+      ? historicalBillingLedger(localRetentionState.snapshots, context.clinicians, workspace.settings.teamId, declarations, today, range) : null;
+  }, [context, workspace?.settings.teamId, financialRangeReports, sandbox, importEvidenceDeclarations, localRetentionState.snapshots, today, periodRange.start]);
   const baselineMonths = useMemo(
     () =>
       base && workspace
@@ -5828,8 +5852,9 @@ export default function PracticeWorkspace() {
                     onCustom={setCustomPeriod}
                     note="Selected dates govern charged fees, actual financial records, future estimates, and the money flow. Missing historical financial coverage stays unknown."
                   />
+                  {historicalBillingReport && <HistoricalBillingSummary report={historicalBillingReport} />}
                   <section className="pw-money-bridge-panel" aria-label="Reported charged fees">
-                    <div className="pw-section-heading"><div><h3>Reported charged fees</h3><p>{selectedMoneyRange.range.start} to {selectedMoneyRange.actual.range?.end ?? selectedMoneyRange.range.end} · imported service-date charges, not cash collected.</p></div></div>
+                    <div className="pw-section-heading"><div><h3>{historicalBillingReport || billingIdentityNeedsReview ? "Current-team complete-period charged fees" : "Reported charged fees"}</h3><p>{selectedMoneyRange.range.start} to {selectedMoneyRange.actual.range?.end ?? selectedMoneyRange.range.end} · imported service-date charges, not cash collected.</p></div></div>
                     <div className="pw-money-bridge">
                       <div className="pw-bridge-step pw-bridge-in"><strong>{money(selectedMoneyRange.actual.reportedCharges)}</strong><span>Selected-period reported charges</span></div>
                       <div className="pw-bridge-step pw-bridge-in"><strong>{selectedMoneyRange.reports.completeBillingCoverage.filter((proof) => proof.start <= selectedMoneyRange.range.end && proof.end >= selectedMoneyRange.range.start).length}</strong><span>Complete provider billing periods · incomplete periods excluded</span></div>
@@ -5844,7 +5869,7 @@ export default function PracticeWorkspace() {
                   <section className="pw-money-bridge-panel">
                     <div className="pw-section-heading">
                       <div>
-                        <h3>Selected period money bridge</h3>
+                        <h3>{historicalBillingReport || billingIdentityNeedsReview ? "Current-team period money bridge" : "Selected period money bridge"}</h3>
                         <p>
                           {selectedMoneyRange.range.start} to {selectedMoneyRange.range.end} · complete actual periods{selectedMoneyRange.forward.range ? " plus forecast after report coverage" : " only"}.
                         </p>
@@ -7044,7 +7069,7 @@ export default function PracticeWorkspace() {
                   </div>
                   <div className="pw-overview-composition">
                     <section aria-label="Overview financial summary">
-                      <h3>Financial summary</h3>
+                      <h3>{importEvidenceDeclarations?.historicalBillingProviders?.length || billingIdentityNeedsReview ? "Current-team financial summary" : "Financial summary"}</h3>
                       <p>{today.slice(0, 4)} current-year progress · complete report periods through {overviewYearRange.dataThrough ?? "unverified"}; forecast estimate {overviewYearRange.forward.range?.start ?? "unavailable"} to {today.slice(0, 4)}-12-31. Not collected cash.</p>
                       <div aria-label="Current year actual and forward split">
                         <div className="pw-overview-total"><span>Actual reported charged fees · {overviewYearRange.actual.range?.start} to {overviewYearRange.actual.range?.end} · billing coverage {overviewYearRange.actual.billingComplete ? "complete" : "incomplete or unverified"}</span><strong>{money(overviewYearRange.actual.reportedCharges)}</strong></div>

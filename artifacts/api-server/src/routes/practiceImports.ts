@@ -10,7 +10,8 @@ import {
 } from "@workspace/db";
 import { z } from "@workspace/practice";
 import { importDeclarationsSchema, normalizeProviderLabel, prepareBillingChargeResolution, reconcileBillingEvidence,
-  resolveImportedProvider, bindBillingResolutions, billingChargeResolutionSchema, type StoredImportDeclarations } from "@workspace/practice/hub";
+  resolveImportedProvider, bindBillingResolutions, billingChargeResolutionSchema, resolveHistoricalBillingProvider,
+  validateHistoricalBillingProviders, restoreHistoricalBillingProviders, unverifiedDeletionMarker, deletionMarkerGuidance, type StoredImportDeclarations } from "@workspace/practice/hub";
 
 const router = Router();
 
@@ -81,21 +82,21 @@ const sameDayVisitOverridesSchema = z
 const attendanceRowSchema = z
   .object({
     clientId: nonEmpty,
-    clinician: nonEmpty,
+    clinician: nonEmpty.refine((value) => !unverifiedDeletionMarker(value), { message: deletionMarkerGuidance }),
     serviceDate: dateSchema,
     location: nonEmpty.nullable(),
     status: z.enum(attendanceStatuses),
-    billingCode: nonEmpty.nullable().optional(),
+    billingCode: nonEmpty.refine((value) => !unverifiedDeletionMarker(value), { message: deletionMarkerGuidance }).nullable().optional(),
     visitKind: visitKindSchema,
   })
   .strict();
 const billingRowSchema = z
   .object({
     clientId: nonEmpty,
-    clinician: nonEmpty,
+    clinician: nonEmpty.refine((value) => !unverifiedDeletionMarker(value), { message: deletionMarkerGuidance }),
     serviceDate: dateSchema,
     totalFeeCharged: z.number().finite().min(0).max(Number.MAX_SAFE_INTEGER),
-    billingCode: nonEmpty.nullable(),
+    billingCode: nonEmpty.refine((value) => !unverifiedDeletionMarker(value), { message: deletionMarkerGuidance }).nullable(),
     visitKind: visitKindSchema,
   })
   .strict();
@@ -387,7 +388,9 @@ async function readDeclarations(connection: Pick<typeof db, "execute">, practice
   if (!row) return null;
   const parsed = importDeclarationsSchema.safeParse(row.data);
   if (!parsed.success) throw new Error("Invalid saved import declarations require review.");
-  return { revision: Number(row.revision), data: parsed.data, confirmedAt: new Date(String(row.confirmed_at)).toISOString() };
+  const journal = await connection.execute(sql`SELECT detail FROM practice_import_audit WHERE practice_id = ${practiceId} AND account_id = ${accountId} AND action = 'confirm-historical-billing-providers' LIMIT 1001`);
+  const historicalBillingProviders = restoreHistoricalBillingProviders(journal.rows.map((entry) => entry.detail), Number(row.revision));
+  return { revision: Number(row.revision), data: { ...parsed.data, ...(historicalBillingProviders ? { historicalBillingProviders } : {}) }, confirmedAt: new Date(String(row.confirmed_at)).toISOString() };
 }
 
 async function readBillingResolutionJournal(connection: Pick<typeof db, "execute">, practiceId: string, accountId: string) {
@@ -495,19 +498,26 @@ router.put("/practice-imports/declarations", async (req, res) => {
   const parsed = z.object({ expectedRevision: z.number().int().nonnegative(), confirmed: z.literal(true), data: importDeclarationsSchema }).strict().safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ error: "Enter explicit provider mappings, source-set dates and confirmation." });
   const { practiceId, accountId, actor } = scope(res);
-  const { data, expectedRevision } = parsed.data;
-  if (data.sourceSets.some((set) => set.end > new Date().toISOString().slice(0, 10))) return res.status(400).json({ error: "Coverage cannot end in the future." });
+  const { data: incomingData, expectedRevision } = parsed.data;
+  if ([...incomingData.sourceSets, ...(incomingData.historicalBillingProviders ?? []).flatMap((provider) => provider.sourceSets)].some((set) => set.end > new Date().toISOString().slice(0, 10))) return res.status(400).json({ error: "Coverage cannot end in the future." });
   const result = await db.transaction(async (tx) => {
     await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtext(${practiceId}), hashtext(${accountId}))`);
     const available = await tx.execute(sql`SELECT to_regclass('practice_import_declarations') IS NOT NULL AS available`);
     if (available.rows[0]?.available !== true) return "migration";
     const old = await readDeclarations(tx, practiceId, accountId);
     if ((old?.revision ?? 0) !== expectedRevision) return "stale";
+    const data = { ...incomingData, ...(incomingData.historicalBillingProviders === undefined && old?.data.historicalBillingProviders
+      ? { historicalBillingProviders: old.data.historicalBillingProviders } : {}) };
     const roster = await tx.select().from(cliniciansTable);
     const active = await tx.select(snapshotColumns).from(practiceImportSnapshotsTable).where(and(
       eq(practiceImportSnapshotsTable.practiceId, practiceId), eq(practiceImportSnapshotsTable.accountId, accountId), eq(practiceImportSnapshotsTable.active, 1),
     ));
     const snapshots = active.map(snapshotFromRow);
+    if (validateHistoricalBillingProviders(data, roster, snapshots).length) return "historical";
+    for (const provider of data.historicalBillingProviders ?? []) {
+      const prior = old?.data.historicalBillingProviders?.find((row) => row.id === provider.id);
+      if (prior && normalizeProviderLabel(prior.sourceLabel) !== normalizeProviderLabel(provider.sourceLabel)) return "historical";
+    }
     for (const mapping of data.mappings) {
       const target = roster.find((row) => row.id === mapping.clinicianId);
       if (!target || target.label !== mapping.clinicianLabel || (target.goalId ?? null) !== mapping.teamId
@@ -523,19 +533,30 @@ router.put("/practice-imports/declarations", async (req, res) => {
         if (!mappings.length || !mappings.some((mapping) => members.flat().some((snapshot) => snapshot.rows.some((row) => normalizeProviderLabel(row.clinician) === normalizeProviderLabel(mapping.sourceLabel))))) return "target";
       }
       // A declaration cannot silently certify a provider omitted from its explicit scope.
-      if (members.flat().some((snapshot) => snapshot.rows.some((row) => !data.mappings.some((mapping) => set.clinicianIds.includes(mapping.clinicianId) && normalizeProviderLabel(mapping.sourceLabel) === normalizeProviderLabel(row.clinician))))) return "target";
+      if (members.flat().some((snapshot) => snapshot.rows.some((row) => !data.mappings.some((mapping) => set.clinicianIds.includes(mapping.clinicianId) && normalizeProviderLabel(mapping.sourceLabel) === normalizeProviderLabel(row.clinician)) && resolveHistoricalBillingProvider(row.clinician, roster, data) === null))) return "target";
+    }
+    const { historicalBillingProviders, ...storedData } = data;
+    const historyChanged = stableJson(historicalBillingProviders ?? []) !== stableJson(old?.data.historicalBillingProviders ?? []);
+    if (historyChanged) {
+      const journal = await tx.execute(sql`SELECT detail FROM practice_import_audit WHERE practice_id = ${practiceId} AND account_id = ${accountId} AND action = 'confirm-historical-billing-providers' LIMIT 1001`);
+      try { restoreHistoricalBillingProviders([...journal.rows.map((entry) => entry.detail), { version: 1, declarationRevision: expectedRevision + 1, providers: historicalBillingProviders ?? [] }], expectedRevision + 1); }
+      catch { return "historical"; }
     }
     const saved = await tx.execute(sql`INSERT INTO practice_import_declarations (practice_id, account_id, revision, data, confirmed_at, confirmed_by)
-      VALUES (${practiceId}, ${accountId}, ${expectedRevision + 1}, ${JSON.stringify(data)}::jsonb, now(), ${actor})
+      VALUES (${practiceId}, ${accountId}, ${expectedRevision + 1}, ${JSON.stringify(storedData)}::jsonb, now(), ${actor})
       ON CONFLICT (practice_id, account_id) DO UPDATE SET revision = EXCLUDED.revision, data = EXCLUDED.data, confirmed_at = EXCLUDED.confirmed_at, confirmed_by = EXCLUDED.confirmed_by
       WHERE practice_import_declarations.revision = ${expectedRevision} RETURNING revision`);
     if (saved.rows.length !== 1) throw new Error("Import declaration revision changed during confirmation.");
+    if (historyChanged)
+      await tx.insert(practiceImportAuditTable).values({ id: randomUUID(), practiceId, accountId, packageId: "historical-billing-providers", action: "confirm-historical-billing-providers", actor,
+        detail: { version: 1, declarationRevision: expectedRevision + 1, providers: historicalBillingProviders ?? [] } });
     await tx.insert(practiceImportAuditTable).values({ id: randomUUID(), practiceId, accountId, packageId: "import-declarations", action: "confirm-import-declarations", actor,
-      detail: { oldDeclarations: old, newDeclarations: data, revision: expectedRevision + 1, basis: "owner-confirmation" } });
+      detail: { oldDeclarations: old, newDeclarations: storedData, revision: expectedRevision + 1, basis: "owner-confirmation" } });
     return "saved";
   });
   if (result === "migration") return res.status(503).json({ code: "IMPORT_DECLARATIONS_MIGRATION_REQUIRED", error: "Apply migration 009 before confirming mappings and source sets." });
   if (result === "stale") return res.status(409).json({ error: "Import declarations changed. Reload before confirming." });
+  if (result === "historical") return res.status(400).json({ error: "Historical billing identity or frozen source coverage needs review. Do not create a clinician card or reuse an active clinician name." });
   if (result !== "saved") return res.status(400).json({ error: result === "range" ? "Source-set coverage must contain every member's valid service dates." : "A provider target, explicit source scope or source-set member needs review." });
   return res.json(await historyFor(practiceId, accountId));
 });
@@ -547,10 +568,13 @@ router.get("/practice-imports", async (_req, res) => {
 
 router.post("/practice-imports/package", async (req, res) => {
   const body = importBodySchema.safeParse(req.body);
-  if (!body.success)
+  if (!body.success) {
+    const marker = body.error.issues.some((issue) => issue.message === deletionMarkerGuidance
+      || (issue.code === "unrecognized_keys" && issue.keys.some(unverifiedDeletionMarker)));
     return res
       .status(400)
-      .json({ error: "Choose a valid Practice import package." });
+      .json({ error: marker ? deletionMarkerGuidance : "Choose a valid Practice import package; review unsupported provider/status fields before import." });
+  }
   const { practiceId, accountId, actor } = scope(res);
   const input = body.data.package;
   let snapshots: Snapshot[];

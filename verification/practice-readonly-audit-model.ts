@@ -1,4 +1,5 @@
-import { completeServicePeriodState, workspaceSchema, importDeclarationsSchema, billingChargeResolutionSchema, bindBillingResolutions, resolveImportedProvider, type BillingChargeResolution, type ImportDeclarations, type Context } from "../lib/practice/src/hub/index.ts";
+import { completeServicePeriodState, workspaceSchema, importDeclarationsSchema, billingChargeResolutionSchema, bindBillingResolutions, resolveImportedProvider, restoreHistoricalBillingProviders, type BillingChargeResolution, type ImportDeclarations, type Context } from "../lib/practice/src/hub/index.ts";
+import { historicalBillingLedger } from "../artifacts/comp-dashboard/src/lib/historical-billing-ledger.ts";
 import { completeReportCoverage } from "../artifacts/comp-dashboard/src/lib/complete-report-coverage.ts";
 import { buildImportedSessionOverlay } from "../artifacts/comp-dashboard/src/lib/import-derived-sessions.ts";
 import { completePeriodSessionSummary } from "../artifacts/comp-dashboard/src/lib/complete-session-summary.ts";
@@ -26,13 +27,15 @@ function retentionNumbers(metric: ReturnType<typeof buildLocalRetentionMetrics>[
 }
 
 /** Only this explicit numeric/date projection may leave the process. No source strings, keys or rows. */
-export function aggregateAudit(input: { workspace: unknown; context: Context; goals: CompensationGoal[]; snapshots: LocalSnapshot[]; overrides: SameDayVisitOverrides; declarations?: ImportDeclarations | null; billingResolutions?: BillingChargeResolution[] }, options: { asOf: string; start: string; end: string; targetLabel: string }) {
+export function aggregateAudit(input: { workspace: unknown; context: Context; goals: CompensationGoal[]; snapshots: LocalSnapshot[]; overrides: SameDayVisitOverrides; declarations?: ImportDeclarations | null; historicalBillingJournal?: unknown[]; declarationRevision?: number; billingResolutions?: BillingChargeResolution[] }, options: { asOf: string; start: string; end: string; targetLabel: string }) {
   const { context, snapshots, overrides } = input;
   if (snapshots.some((snapshot) => snapshot.kind !== "attendance" && snapshot.kind !== "billing")) throw new Error("unsupported_snapshot_kind");
   const resolved = resolveWorkspaceDefaults(workspaceSchema.parse(input.workspace), context, input.goals);
   const workspace = resolved.workspace;
-  const billingResolutions = bindBillingResolutions((input.billingResolutions ?? []).map((row) => billingChargeResolutionSchema.parse(row)), context.clinicians, input.declarations);
-  const declarations = input.declarations ? { ...importDeclarationsSchema.parse(input.declarations), ...(billingResolutions.length ? { billingResolutions } : {}) } : null;
+  const restored = input.historicalBillingJournal?.length ? restoreHistoricalBillingProviders(input.historicalBillingJournal, input.declarationRevision ?? 0) : undefined;
+  const declared = input.declarations ? importDeclarationsSchema.parse({ ...input.declarations, ...(restored ? { historicalBillingProviders: restored } : {}) }) : null;
+  const billingResolutions = bindBillingResolutions((input.billingResolutions ?? []).map((row) => billingChargeResolutionSchema.parse(row)), context.clinicians, declared);
+  const declarations = declared ? { ...declared, ...(billingResolutions.length ? { billingResolutions } : {}) } : null;
   const admission = { declarations, teamId: workspace.settings.teamId };
   const ids = context.clinicians.filter((person) => (person.goalId ?? null) === workspace.settings.teamId).map((person) => person.id);
   const selected = context.clinicians.filter((person) => ids.includes(person.id));
@@ -76,6 +79,7 @@ export function aggregateAudit(input: { workspace: unknown; context: Context; go
   const targetConsult = (summary: typeof consultation) => target ? summary.byClinician.find((row) => normalize(row.clinician ?? "") === normalize(target.label)) : undefined;
   const periodEnds = [...new Set([...proof.completeAttendanceCoverage, ...proof.completeBillingCoverage, ...state.eligibleCoverage].map((row) => `${row.start}/${row.end}`))].sort();
   const numberValues = (values: typeof financial.values) => Object.fromEntries(["sessions", "revenue", "clinicianPay", "profit", "collections"].map((key) => [key, count(values[key])]));
+  const historicalLedger = declarations?.historicalBillingProviders?.length ? historicalBillingLedger(snapshots, context.clinicians, workspace.settings.teamId, declarations, options.asOf, range) : null;
   const gapGroups = new Map<string, { kind: string; start: string | null; end: string | null; occurrences: number }>();
   for (const gap of proof.incompletePeriods) {
     const key = JSON.stringify([gap.kind, gap.start, gap.end]);
@@ -118,6 +122,11 @@ export function aggregateAudit(input: { workspace: unknown; context: Context; go
       candidateSessions: sessionSummary.observedCompleted, candidateIncludedDays: sessionSummary.observedCoverageDays, candidateWeekly: sessionSummary.completedWeekly },
     financial: { actualCoverageComplete: financial.actual.complete, billingCoverageComplete: financial.actual.billingComplete,
       actual: numberValues(financial.actual.values), forecast: numberValues(financial.forward.values), combined: numberValues(financial.values) },
+    historicalBilling: historicalLedger ? { reportedCharges: historicalLedger.reportedCharges, coverageComplete: historicalLedger.coverageComplete,
+      historicalProviderCount: historicalLedger.historicalProviderCount, unknownProviderRows: historicalLedger.unknownProviderRows,
+      unconfirmedSourceRows: historicalLedger.unconfirmedSourceRows, resolvedCases: historicalLedger.evidence.resolvedCaseCount,
+      staleResolutions: historicalLedger.evidence.staleResolutionCount, conflictingGroups: historicalLedger.evidence.conflictingHashCount,
+      months: historicalLedger.months.map(row => ({ month: row.month, charges: row.charges, acceptedRows: row.rowCount, duplicateRows: row.duplicateRowCount })) } : null,
     evidenceIssues: { admittedBillingConflicts: admittedCharges.evidence.conflictingHashCount, admittedBillingAmbiguities: admittedCharges.evidence.ambiguousEncounterCount,
       rawBillingResolvedCases: rawCharges.evidence.resolvedCaseCount, admittedBillingResolvedCases: admittedCharges.evidence.resolvedCaseCount,
       rawBillingStaleResolutions: rawCharges.evidence.staleResolutionCount, admittedBillingStaleResolutions: admittedCharges.evidence.staleResolutionCount,
