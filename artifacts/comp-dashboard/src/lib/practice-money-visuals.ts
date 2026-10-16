@@ -286,6 +286,17 @@ export interface FundProjectionSummary {
   assumptions: string[];
 }
 
+/** Display provenance only. A blank projection balance is not a recorded observation. */
+export function fundBalanceEvidence(
+  goal: Pick<Workspace["fundGoals"][number], "currentBalance" | "balanceDate"> | undefined,
+  periodEnd?: string,
+): { current: number | null; state: "assumed-zero" | "recorded-dated" | "entered-undated" | "after-period"; date: string | null } {
+  const date = goal?.balanceDate ?? null;
+  if (date && periodEnd && date > periodEnd) return { current: null, state: "after-period", date };
+  const blank = goal?.currentBalance == null;
+  return { current: goal?.currentBalance ?? 0, state: blank ? "assumed-zero" : date ? "recorded-dated" : "entered-undated", date };
+}
+
 export function fundProjectionSummary(
   goal: Pick<Workspace["fundGoals"][number], "name" | "amount" | "currentBalance" | "balanceDate"> | undefined,
   allocations: Workspace["allocations"],
@@ -352,7 +363,7 @@ export function fundProjectionSummary(
       : null;
   if (remaining <= 0) {
     assumptions.push(
-      "The recorded balance already meets the goal; no additional contributions are projected.",
+      "The starting balance already meets the goal; no additional contributions are projected.",
     );
   } else if (contribution === null) {
     assumptions.push(

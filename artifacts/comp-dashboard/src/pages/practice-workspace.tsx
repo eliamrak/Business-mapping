@@ -106,6 +106,7 @@ import {
   summarizeOperatingPlan,
 } from "@/lib/operating-plan";
 import {
+  fundBalanceEvidence,
   fundProjectionSummary,
   periodOverheadSummary,
 } from "@/lib/practice-money-visuals";
@@ -3192,12 +3193,14 @@ export default function PracticeWorkspace() {
   const fundChartRows = fundGoalRows.map((name) => {
     const goal = findFundGoal(name);
     const projection = fundProjection(goal);
-    const balanceAfterRange = mode === "practice" && !!goal?.balanceDate && goal.balanceDate > selectedMoneyRange.range.end;
-    const current = balanceAfterRange ? null : goal?.currentBalance ?? 0;
+    const balance = fundBalanceEvidence(goal, mode === "practice" ? selectedMoneyRange.range.end : undefined);
+    const balanceAfterRange = balance.state === "after-period";
+    const current = balance.current;
     const target = goal?.amount ?? 0;
     return {
       name,
       current,
+      balanceState: balance.state,
       target,
       date: balanceAfterRange ? `${goal?.balanceDate} is after selected period; historical balance unavailable` : goal?.balanceDate ?? "date not recorded",
       assumptions: projection?.assumptions ?? [],
@@ -5960,7 +5963,13 @@ export default function PracticeWorkspace() {
                           <div>
                             <strong>{row.name}</strong>
                             <span>
-                              {money(row.current)} recorded anchor · {row.date}
+                              {row.balanceState === "assumed-zero"
+                                ? `Assumed ${money(row.current)} · no balance entered`
+                                : row.balanceState === "entered-undated"
+                                  ? `${money(row.current)} entered balance · date not recorded`
+                                  : row.balanceState === "after-period"
+                                    ? `Historical balance unavailable · ${row.date}`
+                                    : `${money(row.current)} recorded balance · ${row.date}`}
                             </span>
                           </div>
                           <div className="pw-dated-fund-chart" aria-label={`${row.name} dated balance trajectory`}>
@@ -7830,6 +7839,7 @@ export default function PracticeWorkspace() {
                         {fundGoalRows.map((name) => {
                           const goal = findFundGoal(name);
                           const projection = fundProjection(goal);
+                          const balance = fundBalanceEvidence(goal);
                           return (
                             <div className="pw-goal-fund" key={name}>
                               <strong>{name}</strong>
@@ -7872,20 +7882,19 @@ export default function PracticeWorkspace() {
                                 }
                               />
                               <small>
-                                Current recorded balance:{" "}
-                                {fmt(goal?.currentBalance ?? 0, "currency")}
-                                {goal?.balanceDate
-                                  ? ` as of ${goal.balanceDate}`
-                                  : " when blank"}
+                                {balance.state === "assumed-zero" ? "Assumed current balance: " : balance.state === "entered-undated" ? "Entered current balance: " : "Current recorded balance: "}
+                                {fmt(balance.current, "currency")}
+                                {balance.state === "assumed-zero" ? " · no balance entered" : balance.state === "entered-undated" ? " · date not recorded" : ` as of ${balance.date}`}
                               </small>
                               <MetricTargetBar
                                 value={goal?.currentBalance ?? 0}
                                 goal={goal?.amount ?? 0}
+                                valueLabel={balance.state === "assumed-zero" ? "Assumed" : balance.state === "entered-undated" ? "Entered (undated)" : "Recorded"}
                               />
                               <small>
                                 Dotted projection:{" "}
                                 {(goal?.amount ?? 0) <= 0 ? "no positive fund goal set" : projection && projection.remaining <= 0
-                                  ? "target already funded or no remaining gap"
+                                  ? "no remaining gap against the entered balance"
                                   : projection?.contribution === null
                                   ? "add a matching monthly contribution in Money"
                                   : projection?.eta

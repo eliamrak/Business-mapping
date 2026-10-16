@@ -8,9 +8,46 @@ import {
   type ForecastMonth,
 } from "@workspace/practice/hub";
 import {
+  fundBalanceEvidence,
   fundProjectionSummary,
   periodOverheadSummary,
 } from "./practice-money-visuals.ts";
+
+test("fund display distinguishes assumed zero, entered undated values and dated recorded zero", () => {
+  const blank = { currentBalance: null, balanceDate: null };
+  const entered = { currentBalance: 125, balanceDate: null };
+  const recordedZero = { currentBalance: 0, balanceDate: "2026-10-01" };
+  const before = structuredClone({ blank, entered, recordedZero });
+  assert.deepEqual(fundBalanceEvidence(blank), { current: 0, state: "assumed-zero", date: null });
+  assert.deepEqual(fundBalanceEvidence(undefined), { current: 0, state: "assumed-zero", date: null });
+  assert.deepEqual(fundBalanceEvidence(entered), { current: 125, state: "entered-undated", date: null });
+  assert.deepEqual(fundBalanceEvidence({ currentBalance: 0, balanceDate: null }), { current: 0, state: "entered-undated", date: null });
+  assert.deepEqual(fundBalanceEvidence(recordedZero), { current: 0, state: "recorded-dated", date: "2026-10-01" });
+  assert.deepEqual(fundBalanceEvidence({ ...recordedZero, currentBalance: null }), { current: 0, state: "assumed-zero", date: "2026-10-01" });
+  assert.deepEqual({ blank, entered, recordedZero }, before);
+});
+
+test("fund display withholds balances after the selected period and includes an observation on its boundary", () => {
+  const balance = { currentBalance: 0, balanceDate: "2026-10-01" };
+  assert.deepEqual(fundBalanceEvidence(balance, "2026-09-30"), { current: null, state: "after-period", date: "2026-10-01" });
+  assert.deepEqual(fundBalanceEvidence(balance, "2026-10-01"), { current: 0, state: "recorded-dated", date: "2026-10-01" });
+  assert.equal(fundBalanceEvidence({ ...balance, currentBalance: 500 }, "2026-09-30").current, null);
+  assert.equal(balance.currentBalance, 0);
+});
+
+test("assumed and entered-zero fund projections keep identical arithmetic but distinct observation kinds", () => {
+  const goal = { name: "Growth Fund", amount: 800, currentBalance: null, balanceDate: "2026-01-01" };
+  const allocation = { id: "growth", name: "Growth Fund", kind: "retained" as const, percent: 20, start: "2026-01-01", end: null, archived: false, household: false, notes: "", sourceAttachmentId: null };
+  const values = { retainedCash: 400, taxReserve: 0, reserves: 0, distributions: 0 };
+  const assumed = fundProjectionSummary(goal, [allocation], values, "2026-01-01")!;
+  const recorded = fundProjectionSummary({ ...goal, currentBalance: 0 }, [allocation], values, "2026-01-01")!;
+  assert.equal(assumed.current, recorded.current);
+  assert.equal(assumed.remaining, recorded.remaining);
+  assert.equal(assumed.contribution, recorded.contribution);
+  assert.equal(assumed.eta, recorded.eta);
+  assert.equal(assumed.trajectory[0].kind, "projected");
+  assert.equal(recorded.trajectory[0].kind, "actual");
+});
 
 test("named retained funds use their own share, not all retained cash", () => {
   const workspace = emptyWorkspace("2026-01-01");
