@@ -1,5 +1,16 @@
 # Practice Acceptance Checklist
 
+## October 17 Interactive Workflow Candidate
+
+Runtime `a5121c47a01a07ff0e6917f8dd75b3c21bc14003` extends reviewed/released `7d8ac067` with configured-marketing accrual and full durable-import backup coverage. `INTERACTIVE-WORKFLOW-ACCEPTANCE.md` records the exact evidence and remaining release boundary.
+
+- [x] **AUTOMATED UI, SYNTHETIC TRANSPORT:** Lead year/month editing, save/reload, invalid/discard, held response, unconfirmed-save payload protection, lost-response idempotent retry and stale-revision recovery.
+- [x] **AUTOMATED UI, SYNTHETIC TRANSPORT:** Package failure/cancel, retained overlap, identical repeat, interrupted retry, changed-ID-content refusal and five-approval/declaration preservation.
+- [x] **AUTOMATED UI, SYNTHETIC TRANSPORT:** Actual JSON/attachment downloads and recovery review/confirmation/nonempty refusal/expired preview/error retry/disposable restoration. Twelve desktop/mobile captures; no production records involved.
+- [x] **AUTOMATED SOURCE/ROUTE:** 745 domain/dashboard and 49 database-free API tests pass; nine exercise the actual backup router. Marketing budgets accrue without unrelated acquisition inputs; full business backup includes all four durable import tables. Independent frozen review has no findings in its scope.
+- [ ] **NEW POSTGRESQL ASSERTIONS:** Expanded 17-table recovery must be checked in the disposable Replit PostgreSQL environment. Prior baseline suites passed there per parent; new code has not been certified merely by that prior pass.
+- [ ] **RELEASE/LIVE:** This candidate is not deployed; subsequent fixed-window verification belongs to release coordination. Synthetic UI acceptance is not fresh owner-account acceptance.
+
 ## October 17 Scope Supersession
 
 The owner clarified that Money and financial Goals are **estimates**, based on accepted discounted billed charges, compensation rules and configured expense assumptions. Exact bank, collection, payroll or accounting reconciliation is **not** a prerequisite for that estimate or for completing the app. Earlier cash/payroll certification gates below are historical audit boundaries, not current estimate-delivery blockers.
