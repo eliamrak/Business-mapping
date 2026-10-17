@@ -158,6 +158,8 @@ import {
 import MoneyFlowToday from "@/components/practice/money-flow-today";
 import MoneyRangeSummary from "@/components/practice/money-range-summary";
 import { practiceFinancialRange, financialRangeBridge } from "@/lib/practice-financial-range";
+import { practiceFinancialEstimateRange } from "@/lib/practice-financial-estimate";
+import { financialEstimateDisplay, financialEstimateBridge } from "@/lib/financial-estimate-display";
 import WeeklyBlocks from "@/components/practice/weekly-blocks";
 import SandboxView from "@/components/sandbox-view";
 import BusinessGoalsTab from "@/components/tabs/business-goals-tab";
@@ -870,7 +872,7 @@ export default function PracticeWorkspace() {
   const importedSessionOverlay = useMemo(() => {
     if (!rawImportedSessionOverlay || !context || !workspace) return null;
     const ids = context.clinicians.filter((person) => (person.goalId ?? null) === workspace.settings.teamId).map((person) => person.id);
-    const accepted = buildImportedSessionOverlay(context, completeClinicalReports?.eligibleSnapshots ?? [], workspace.settings.teamId, localRetentionState.sameDayVisitOverrides, { declarations: importEvidenceDeclarations });
+    const accepted = buildImportedSessionOverlay(context, completeClinicalReports?.eligibleSnapshots ?? [], workspace.settings.teamId, localRetentionState.sameDayVisitOverrides, { declarations: importEvidenceDeclarations, classificationSnapshots: localRetentionState.snapshots });
     const proof = completeClinicalReports?.completeAttendanceCoverage.filter((range) => ids.includes(range.clinicianId)) ?? [];
     const state = completeServicePeriodState(accepted.context.sessions, ids, today, proof);
     return { ...accepted, diagnostic: { ...rawImportedSessionOverlay.diagnostic,
@@ -878,7 +880,7 @@ export default function PracticeWorkspace() {
       manualImportOverrideCount: accepted.diagnostic.manualImportOverrideCount,
       manualImportConflictCount: accepted.diagnostic.manualImportConflictCount,
     }, context: { ...accepted.context, sessions: state.eligibleRecords }, attendanceCoverage: state.eligibleCoverage };
-  }, [rawImportedSessionOverlay, completeClinicalReports, context, workspace?.settings.teamId, localRetentionState.sameDayVisitOverrides, importEvidenceDeclarations, today]);
+  }, [rawImportedSessionOverlay, completeClinicalReports, context, workspace?.settings.teamId, localRetentionState.snapshots, localRetentionState.sameDayVisitOverrides, importEvidenceDeclarations, today]);
   const historicalClinicalSnapshots = useMemo(() => context && workspace
     ? snapshotsForClinicians(completeClinicalReports?.eligibleSnapshots ?? [], context.clinicians.filter((person) => (person.goalId ?? null) === workspace.settings.teamId)) : [],
   [context, workspace?.settings.teamId, completeClinicalReports]);
@@ -902,10 +904,11 @@ export default function PracticeWorkspace() {
         90,
         periodRange.start,
         periodRange.end,
-        { excludedFollowUpEvidence },
+        { excludedFollowUpEvidence, classificationSnapshots: localRetentionState.snapshots },
       ),
     [
       historicalClinicalSnapshots,
+      localRetentionState.snapshots,
       excludedFollowUpEvidence,
       localRetentionState.sameDayVisitOverrides,
       periodRange.start,
@@ -924,10 +927,11 @@ export default function PracticeWorkspace() {
         90,
         periodRange.start,
         periodRange.end,
-        { excludedFollowUpEvidence },
+        { excludedFollowUpEvidence, classificationSnapshots: localRetentionState.snapshots },
       ),
     [
       historicalClinicalSnapshots,
+      localRetentionState.snapshots,
       excludedFollowUpEvidence,
       localRetentionState.billingCodeMinutes,
       localRetentionState.sameDayVisitOverrides,
@@ -955,7 +959,7 @@ export default function PracticeWorkspace() {
         periodRange.end,
         today,
         (stagedWorkspace ?? workspace)?.consultAttributionOverrides ?? [],
-        { cohortClinicianNames: currentConsultCohort, excludedFollowUpEvidence },
+        { cohortClinicianNames: currentConsultCohort, excludedFollowUpEvidence, classificationSnapshots: localRetentionState.snapshots },
       ),
     [
       completeClinicalReports,
@@ -972,8 +976,8 @@ export default function PracticeWorkspace() {
     ],
   );
   const overviewFlowMemo = useMemo(() => overviewClientFlow(historicalClinicalSnapshots, localRetentionState.sameDayVisitOverrides,
-    periodRange.start, periodRange.end, today, { excludedFollowUpEvidence }),
-  [historicalClinicalSnapshots, localRetentionState.sameDayVisitOverrides, periodRange.start, periodRange.end, today, excludedFollowUpEvidence]);
+    periodRange.start, periodRange.end, today, { excludedFollowUpEvidence, classificationSnapshots: localRetentionState.snapshots }),
+  [historicalClinicalSnapshots, localRetentionState.snapshots, localRetentionState.sameDayVisitOverrides, periodRange.start, periodRange.end, today, excludedFollowUpEvidence]);
   const modelContext = importedSessionOverlay?.context ?? context;
   const planProjection = useMemo(
     () =>
@@ -1072,6 +1076,23 @@ export default function PracticeWorkspace() {
     };
   }, [workspace, workingWorkspace, moneyFlowWorkspace, modelContext, localRetentionState.snapshots, importEvidenceDeclarations,
     today, periodRange.start, periodRange.end, summaryMonth?.date, importedSessionOverlay?.attendanceCoverage]);
+  const financialEstimates = useMemo(() => {
+    if (!financialRangeReports || !context || !storedWorkspace || !workspace) return null;
+    // A compensation target inherited for planning is not an extra salary expense.
+    const estimateWorkspace = { ...workingWorkspace, settings: { ...workingWorkspace.settings,
+      ownerPayrollMonthly: resolved?.inherited.ownerPay && !workingWorkspace.settings.ownerPayrollOverride
+        ? storedWorkspace.settings.ownerPayrollMonthly : workingWorkspace.settings.ownerPayrollMonthly,
+    } };
+    const estimate = (selected: typeof financialRangeReports.selected) => {
+      const report = practiceFinancialRange(estimateWorkspace, modelContext ?? context, localRetentionState.snapshots, today,
+        selected.range, importedSessionOverlay?.attendanceCoverage, importEvidenceDeclarations);
+      const history = report.actual.range ? practiceFinancialEstimateRange(estimateWorkspace, context, localRetentionState.snapshots,
+        today, report.actual.range, importEvidenceDeclarations, localRetentionState.sameDayVisitOverrides) : null;
+      return { ...financialEstimateDisplay(report, history), report };
+    };
+    return { selected: estimate(financialRangeReports.selected), summary: estimate(financialRangeReports.summary), year: estimate(financialRangeReports.year) };
+  }, [financialRangeReports, context, storedWorkspace, workspace, workingWorkspace, resolved?.inherited.ownerPay,
+    modelContext, localRetentionState.snapshots, localRetentionState.sameDayVisitOverrides, today, importedSessionOverlay?.attendanceCoverage, importEvidenceDeclarations]);
   const billingIdentityNeedsReview = useMemo(() => !!context && !!workspace && localRetentionState.snapshots.some((source) => source.kind === "billing"
     && source.rows.some((row) => row.serviceDate <= today
       && resolveImportedProvider(row.clinician, context.clinicians, workspace.settings.teamId, importEvidenceDeclarations) === null
@@ -3157,7 +3178,7 @@ export default function PracticeWorkspace() {
   ];
   const fundGoalRows = ["Building Fund", "Emergency Reserve", "Growth Fund"];
   const goalExpected = (goal: LinkedPracticeGoal | undefined) =>
-    goal ? mode === "practice" && Object.hasOwn(summaryMoneyReport.values, goal.metric) ? summaryMoneyReport.values[goal.metric] : summaryMonth?.values[goal.metric] ?? null : null;
+    goal ? mode === "practice" && Object.hasOwn(summaryMoneyReport.values, goal.metric) ? financialEstimates?.summary.values[goal.metric] ?? null : summaryMonth?.values[goal.metric] ?? null : null;
   const goalTarget = (goal: LinkedPracticeGoal | undefined) =>
     goal ? goal.amount / (goal.metric !== "activeClinicalHeadcount" && goal.basis === "annual" ? 12 : 1) : 0;
   const goalUnit = (metric: Workspace["goals"][number]["metric"]) =>
@@ -3167,7 +3188,11 @@ export default function PracticeWorkspace() {
     expected: number | null | undefined,
     target: number,
   ) => {
-    return completedGoalResult(goal, expected).message;
+    const result = completedGoalResult(goal, expected);
+    if (mode === "practice" && goal && Object.hasOwn(summaryMoneyReport.values, goal.metric) && result.status !== "met")
+      return expected == null ? "Estimate unavailable: review source coverage and model assumptions in Money. Recorded achievement remains unverified."
+        : "Estimated progress only; not a recorded completed-period achievement.";
+    return result.message;
   };
   const completedGoalResult = (
     goal: LinkedPracticeGoal | undefined,
@@ -3196,7 +3221,7 @@ export default function PracticeWorkspace() {
   const overviewYear = (summaryMonth?.date ?? today).slice(0, 4);
   const reportedBilling = selectedMoneyRange.actual.report;
   const overviewYearRange = financialRangeReports!.year;
-  const overviewYearBridge = financialRangeBridge(overviewYearRange);
+  const overviewYearBridge = financialEstimates ? financialEstimateBridge(financialEstimates.year.report, financialEstimates.year) : financialRangeBridge(overviewYearRange);
   const overviewFinancial = { income: overviewYearBridge.revenue, clinicianPay: overviewYearBridge.clinicianPay, profit: overviewYearBridge.profit, otherCosts: overviewYearBridge.otherCosts, adjustments: overviewYearBridge.adjustments, costComponents: overviewYearBridge.components };
   const overviewFlow = overviewFlowMemo;
   const overviewSessionEvidence = selectedPeriodSessionSummary((modelContext ?? context).sessions, people.map((person) => person.id), {
@@ -5848,9 +5873,22 @@ export default function PracticeWorkspace() {
                     custom={customPeriod}
                     onPeriod={setSharedPeriod}
                     onCustom={setCustomPeriod}
-                    note="Selected dates govern charged fees, actual financial records, future estimates, and the money flow. Missing historical financial coverage stays unknown."
+                    note="Selected dates govern billed-charge estimates and recorded actuals separately. Missing source coverage or model inputs stay unknown; estimates do not require bank reconciliation."
                   />
                   {historicalBillingReport && <HistoricalBillingSummary report={historicalBillingReport} />}
+                  {financialEstimates && <section className="pw-money-bridge-panel" aria-label="Billed-charge financial estimate">
+                    <div className="pw-section-heading"><div><h3>Financial estimate</h3><p>{selectedMoneyRange.range.start} to {selectedMoneyRange.range.end} · billed charges and configured cost assumptions, not cash collected or paid payroll.</p></div></div>
+                    <div className="pw-money-bridge">
+                      {[["Revenue estimate", "revenue"], ["Clinician compensation estimate", "clinicianPay"], ["Operating profit estimate", "profit"]].map(([label, key]) => <div className={`pw-bridge-step pw-bridge-${key === "profit" ? "profit" : "in"}`} key={key}><strong>{money(financialEstimates.selected.values[key])}</strong><span>{label}</span></div>)}
+                    </div>
+                    <details><summary>Estimate sources and assumptions</summary>
+                      <p>{financialEstimates.selected.basis}</p>
+                      <p>Historical estimate: {financialEstimates.selected.historical?.range ? `${financialEstimates.selected.historical.range.start} to ${financialEstimates.selected.historical.range.end}` : "No complete historical boundary"}. Future estimate: {financialEstimates.selected.report.forward.range ? `${financialEstimates.selected.report.forward.range.start} to ${financialEstimates.selected.report.forward.range.end}` : "Not included"}.</p>
+                      {financialEstimates.selected.historical?.components.map(component => <div className="pw-overview-total" key={component.key}><span>{component.label} · {component.basis}</span><strong>{money(component.value)}</strong></div>)}
+                      {financialEstimates.selected.historical?.assumptions.map(reason => <p key={reason}>{reason}</p>)}
+                      {financialEstimates.selected.reasons.map(reason => <p key={reason}>{reason}</p>)}
+                    </details>
+                  </section>}
                   <section className="pw-money-bridge-panel" aria-label="Reported charged fees">
                     <div className="pw-section-heading"><div><h3>{historicalBillingReport || billingIdentityNeedsReview ? "Current-team complete-period charged fees" : "Reported charged fees"}</h3><p>{selectedMoneyRange.range.start} to {selectedMoneyRange.actual.range?.end ?? selectedMoneyRange.range.end} · imported service-date charges, not cash collected.</p></div></div>
                     <div className="pw-money-bridge">
@@ -5867,7 +5905,7 @@ export default function PracticeWorkspace() {
                   <section className="pw-money-bridge-panel">
                     <div className="pw-section-heading">
                       <div>
-                        <h3>{historicalBillingReport || billingIdentityNeedsReview ? "Current-team period money bridge" : "Selected period money bridge"}</h3>
+                        <h3>{historicalBillingReport || billingIdentityNeedsReview ? "Current-team recorded money bridge" : "Recorded actuals and forward forecast"}</h3>
                         <p>
                           {selectedMoneyRange.range.start} to {selectedMoneyRange.range.end} · complete actual periods{selectedMoneyRange.forward.range ? " plus forecast after report coverage" : " only"}.
                         </p>
@@ -7046,10 +7084,10 @@ export default function PracticeWorkspace() {
                   )}
                   <div className="pw-overview-primary-grid">
                     <section aria-label="Overview monthly surplus">
-                      <h3>Monthly surplus</h3><p>{monthLabel(summaryMonth?.date ?? today)} · complete actual periods plus forecast after {summaryMoneyReport.dataThrough ?? "unverified report coverage"}</p>
-                      <div className="pw-metric-hero"><strong>{money(summaryMoneyReport.values.profit)}</strong><span>After clinician pay and practice costs</span></div>
+                      <h3>Estimated monthly surplus</h3><p>{monthLabel(summaryMonth?.date ?? today)} · billed-charge history and future clinician-card estimate</p>
+                      <div className="pw-metric-hero"><strong>{money(financialEstimates?.summary.values.profit)}</strong><span>After estimated clinician pay and practice costs</span></div>
                       <button className="pw-button" onClick={() => setSection("money")}>Money<ChevronRight /></button>
-                      <details><summary>Details</summary><p>Historical revenue uses actual billed session fees from complete report periods. Percentage compensation uses accepted actual discounted charges. Future working revenue and percentage pay use the same clinician-card fee estimate. Incomplete pay periods are excluded from actual totals and three-month averages. Missing actual costs withhold profit. PHONE must be zero-fee; anomalies remain source-review items.</p>{summaryMoneyReport.warnings.map((warning) => <p key={warning}>{warning}</p>)}</details>
+                      <details><summary>Details</summary><p>Historical percentage compensation uses accepted discounted billed charges and dated compensation rules. Costs use configured assumptions, not paid receipts. Future revenue and percentage pay use clinician-card fee estimates. Incomplete source periods are excluded; missing model inputs stay unknown. Recorded actual profit remains separate in Money.</p>{financialEstimates?.summary.reasons.map((warning) => <p key={warning}>{warning}</p>)}</details>
                     </section>
                     <section aria-label="Overview session pace">
                       <h3>Sessions / week</h3><p>{sharedPeriodLabel(sharedPeriod)} · complete report periods only</p>
@@ -7067,17 +7105,18 @@ export default function PracticeWorkspace() {
                   </div>
                   <div className="pw-overview-composition">
                     <section aria-label="Overview financial summary">
-                      <h3>{importEvidenceDeclarations?.historicalBillingProviders?.length || billingIdentityNeedsReview ? "Current-team financial summary" : "Financial summary"}</h3>
+                      <h3>{importEvidenceDeclarations?.historicalBillingProviders?.length || billingIdentityNeedsReview ? "Current-team financial estimate" : "Financial estimate"}</h3>
                       <p>{today.slice(0, 4)} current-year progress · complete report periods through {overviewYearRange.dataThrough ?? "unverified"}; forecast estimate {overviewYearRange.forward.range?.start ?? "unavailable"} to {today.slice(0, 4)}-12-31. Not collected cash.</p>
                       <div aria-label="Current year actual and forward split">
                         <div className="pw-overview-total"><span>Actual reported charged fees · {overviewYearRange.actual.range?.start} to {overviewYearRange.actual.range?.end} · billing coverage {overviewYearRange.actual.billingComplete ? "complete" : "incomplete or unverified"}</span><strong>{money(overviewYearRange.actual.reportedCharges)}</strong></div>
                         <div className="pw-overview-total"><span>Actual billed session income · financial coverage {overviewYearRange.actual.complete ? "complete" : "incomplete"}</span><strong>{money(overviewYearRange.actual.values.revenue)}</strong></div>
-                        <div className="pw-overview-total"><span>Future estimated revenue · {overviewYearRange.forward.range?.start} to {overviewYearRange.forward.range?.end}</span><strong>{money(overviewYearRange.forward.values.revenue)}</strong></div>
+                        <div className="pw-overview-total"><span>Future estimated revenue · {financialEstimates?.year.report.forward.range?.start} to {financialEstimates?.year.report.forward.range?.end}</span><strong>{money(financialEstimates?.year.report.forward.values.revenue)}</strong></div>
                         <div className="pw-overview-total"><span>Actual operating profit</span><strong>{money(overviewYearRange.actual.values.profit)}</strong></div>
-                        <div className="pw-overview-total"><span>Future estimated operating profit</span><strong>{money(overviewYearRange.forward.values.profit)}</strong></div>
+                        <div className="pw-overview-total"><span>Historical operating profit estimate · configured costs, not paid actuals</span><strong>{money(financialEstimates?.year.historical?.values.profit)}</strong></div>
+                        <div className="pw-overview-total"><span>Future estimated operating profit</span><strong>{money(financialEstimates?.year.report.forward.values.profit)}</strong></div>
                       </div>
                       {overviewYearRange.warnings.length > 0 && <details><summary>Current-year source and coverage</summary>{overviewYearRange.warnings.map((warning) => <p key={warning}>{warning}</p>)}</details>}
-                      {overviewFinancial.income !== null && overviewFinancial.profit !== null ? <div className="pw-overview-bridge" role="img" aria-label="Current-year actual plus future income less compensation and costs leaves practice profit">
+                      {overviewFinancial.income !== null && overviewFinancial.profit !== null ? <div className="pw-overview-bridge" role="img" aria-label="Current-year billed-charge and future estimates less modeled compensation and costs">
                         {[
                           { label: "Income", value: overviewFinancial.income !== null && overviewFinancial.adjustments !== null ? overviewFinancial.income + overviewFinancial.adjustments : null, bottom: 0, kind: "income" },
                           { label: "Clinician pay", value: overviewFinancial.clinicianPay === null ? null : -overviewFinancial.clinicianPay, bottom: overviewFinancial.income === null || overviewFinancial.adjustments === null || overviewFinancial.clinicianPay === null ? 0 : overviewFinancial.income + overviewFinancial.adjustments - overviewFinancial.clinicianPay, kind: "deduction" },
@@ -7087,12 +7126,13 @@ export default function PracticeWorkspace() {
                           const scale = Math.max(1, Math.abs((overviewFinancial.income ?? 0) + (overviewFinancial.adjustments ?? 0)), Math.abs(overviewFinancial.profit ?? 0));
                           return <div key={step.label}><strong>{money(step.value)}</strong><div className="pw-overview-bridge-plot"><i className={`${step.kind}${step.value !== null && step.value < 0 && step.kind === "profit" ? " loss" : ""}`} style={{ height: `${Math.min(100, Math.abs(step.value ?? 0) / scale * 100)}%`, bottom: `${Math.max(0, Math.min(100, step.bottom / scale * 100))}%` }} /></div><span>{step.value !== null && step.value < 0 && step.kind === "profit" ? "Practice loss" : step.label}</span></div>;
                         })}
-                      </div> : <p>Combined current-year totals are unavailable until actual financial coverage and future inputs are complete. Reported charges above are facts, not a replacement for missing earned costs or cash records.</p>}
+                      </div> : <p>Combined current-year estimates need complete billed-charge coverage and supported compensation and cost assumptions. Missing model inputs remain unknown; bank reconciliation is not required for this estimate.</p>}
+                      <details><summary>Estimate assumptions and missing inputs</summary>{financialEstimates?.year.historical?.assumptions.map(reason => <p key={reason}>{reason}</p>)}{financialEstimates?.year.reasons.map(reason => <p key={reason}>{reason}</p>)}</details>
                       <details><summary>Financial details</summary><p>Clinical revenue {money(overviewFinancial.income)}; other income or reconciliation adjustments {money(overviewFinancial.adjustments)}.</p>{overviewFinancial.costComponents.map((component) => <div className="pw-overview-total" key={component.label}><span>{component.label}</span><strong>{money(component.value)}</strong></div>)}<p>Owner distributions are funding needs after profit; owner clinical revenue stays in the business. Taxes, reserves and distributions are not counted again as operating costs.</p></details>
                     </section>
                     <section aria-label="Overview combined funding progress">
                       <h3>Named goal status</h3>
-                      <p>{monthLabel(summaryMonth?.date ?? today)} complete actual periods plus forecast; achievement requires completed actual evidence.</p>
+                      <p>{monthLabel(summaryMonth?.date ?? today)} estimated progress; recorded achievement remains separate.</p>
                       {coreGoalRows.map((row) => { const goal = findGoal(row.name); const expected = goalExpected(goal); return <div className="pw-overview-goal-status" key={row.name}><div className="pw-overview-total"><span>{row.name}</span><strong>{fmt(expected, goalUnit(row.metric))} / {fmt(goalTarget(goal), goalUnit(row.metric))}</strong></div><small>{completedGoalStatus(goal, expected, goalTarget(goal))}</small></div>; })}
                       <button className="pw-button" onClick={() => setSection("current-goals")}>Goals<ChevronRight /></button>
                     </section>
@@ -7745,7 +7785,7 @@ export default function PracticeWorkspace() {
                   <div className="pw-goal-editor">
                     {coreGoalRows.map((row) => {
                       const goal = findGoal(row.name);
-                      const expected = goalExpected(goal) ?? summaryMonth?.values[row.metric];
+                      const expected = goal ? goalExpected(goal) : row.metric === "activeClinicalHeadcount" ? summaryMonth?.values[row.metric] : null;
                       const target = goalTarget(goal);
                       const unit = goalUnit(row.metric);
                       return (
@@ -7799,7 +7839,7 @@ export default function PracticeWorkspace() {
                           </div>
                           <div className="pw-progress-comparison">
                             <div>
-                              <span>{row.metric === "activeClinicalHeadcount" ? "Active clinical headcount" : `${monthLabel(summaryMonth?.date ?? today)} projected pre-tax measure`}</span>
+                              <span>{row.metric === "activeClinicalHeadcount" ? "Active clinical headcount" : `${monthLabel(summaryMonth?.date ?? today)} estimated pre-tax measure`}</span>
                               <strong>{fmt(expected, unit)}</strong>
                             </div>
                             <div>
@@ -7808,7 +7848,7 @@ export default function PracticeWorkspace() {
                             </div>
                             <MetricTargetBar
                               value={expected ?? null}
-                              valueLabel="Projected"
+                              valueLabel="Estimated"
                               goal={target || null}
                               benchmark={
                                 recordedFinancialPeriods[0]?.values[row.metric]

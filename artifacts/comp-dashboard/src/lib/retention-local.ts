@@ -465,7 +465,7 @@ function factGroupKey(
   ].join("\u0000");
 }
 
-function phoneOnlyConsultKeys(snapshots: LocalSnapshot[]) {
+function phoneOnlyConsultKeys(snapshots: readonly LocalSnapshot[]) {
   const groups = new Map<
     string,
     { phoneRows: number; treatmentRows: number }
@@ -491,7 +491,7 @@ function phoneOnlyConsultKeys(snapshots: LocalSnapshot[]) {
   );
 }
 
-export function consultAttendanceClassifier(snapshots: LocalSnapshot[]) {
+export function consultAttendanceClassifier(snapshots: readonly LocalSnapshot[]) {
   const consultKeys = phoneOnlyConsultKeys(snapshots);
   const isDocumentation = documentationAttendanceClassifier(snapshots);
   const billed = new Map<string, BillingRow[]>();
@@ -512,7 +512,7 @@ export function consultAttendanceClassifier(snapshots: LocalSnapshot[]) {
   };
 }
 
-export function documentationAttendanceClassifier(snapshots: LocalSnapshot[]) {
+export function documentationAttendanceClassifier(snapshots: readonly LocalSnapshot[]) {
   const kinds = new Map<string, { documentation: boolean; other: boolean }>();
   for (const snapshot of snapshots) if (snapshot.kind === "billing") for (const row of snapshot.rows) {
     const key = factGroupKey(row);
@@ -538,10 +538,13 @@ export function isPhoneOnlyConsultAttendanceRow(
   return consultAttendanceClassifier(snapshots)(row);
 }
 
-export function treatmentAttendanceRows(snapshots: LocalSnapshot[]) {
-  const isConsult = consultAttendanceClassifier(snapshots);
-  const isDocumentation = documentationAttendanceClassifier(snapshots);
-  const conflicted = new Set(attendanceStatusConflicts(snapshots).flatMap((group) => group.rows));
+export function treatmentAttendanceRows(
+  snapshots: LocalSnapshot[],
+  classificationSnapshots: readonly LocalSnapshot[] = snapshots,
+) {
+  const isConsult = consultAttendanceClassifier(classificationSnapshots);
+  const isDocumentation = documentationAttendanceClassifier(classificationSnapshots);
+  const conflicted = new Set(attendanceStatusConflicts(snapshots, classificationSnapshots).flatMap((group) => group.rows));
   const seenNonShows = new Set<string>();
   return snapshots.flatMap((snapshot) =>
     snapshot.kind === "attendance"
@@ -560,9 +563,12 @@ export function treatmentAttendanceRows(snapshots: LocalSnapshot[]) {
 }
 
 /** Name/date coordinates cannot establish which contradictory appointment status is authoritative. */
-export function attendanceStatusConflicts(snapshots: LocalSnapshot[]) {
-  const isConsult = consultAttendanceClassifier(snapshots);
-  const isDocumentation = documentationAttendanceClassifier(snapshots);
+export function attendanceStatusConflicts(
+  snapshots: LocalSnapshot[],
+  classificationSnapshots: readonly LocalSnapshot[] = snapshots,
+) {
+  const isConsult = consultAttendanceClassifier(classificationSnapshots);
+  const isDocumentation = documentationAttendanceClassifier(classificationSnapshots);
   const groups = new Map<string, { clientId: string; clinician: string; serviceDate: string; kind: "consultation" | "treatment"; rows: AttendanceRow[]; snapshotIds: string[]; statusesBySource: Map<string, Set<AttendanceStatus>> }>();
   for (const snapshot of snapshots) if (snapshot.kind === "attendance") for (const row of snapshot.rows) {
     if (isDocumentation(row)) continue;
@@ -598,10 +604,11 @@ export function treatmentBillingRows(snapshots: LocalSnapshot[]) {
 function showRowsBySameDayVisit(
   snapshots: LocalSnapshot[],
   asOfDate = "9999-12-31",
+  classificationSnapshots: readonly LocalSnapshot[] = snapshots,
 ) {
   const groups = new Map<string, AttendanceRow[]>();
   const seenRows = new Set<string>();
-  for (const row of treatmentAttendanceRows(snapshots)) {
+  for (const row of treatmentAttendanceRows(snapshots, classificationSnapshots)) {
     if (
       row.status !== "show" ||
       row.serviceDate > asOfDate ||
@@ -629,9 +636,10 @@ function resolvedVisitCount(
 export function derivedShowVisits(
   snapshots: LocalSnapshot[],
   overrides: SameDayVisitOverrides = {},
+  classificationSnapshots: readonly LocalSnapshot[] = snapshots,
 ) {
   const visits: AttendanceRow[] = [];
-  for (const rows of showRowsBySameDayVisit(snapshots).values()) {
+  for (const rows of showRowsBySameDayVisit(snapshots, "9999-12-31", classificationSnapshots).values()) {
     visits.push(...rows.slice(0, resolvedVisitCount(rows, overrides)));
   }
   return visits;
@@ -1323,6 +1331,7 @@ function verifiedAttendanceIntervals(
   snapshots: LocalSnapshot[],
   asOfDate: string,
   clinician?: string,
+  classificationSnapshots: readonly LocalSnapshot[] = snapshots,
 ): DateInterval[] {
   if (clinician === undefined) {
     const clinicians = new Set(snapshots.flatMap((snapshot) =>
@@ -1334,7 +1343,7 @@ function verifiedAttendanceIntervals(
     // Practice-wide absence needs reports for every observed clinician, including transfers.
     let common: DateInterval[] | null = null;
     for (const name of clinicians) {
-      const intervals = verifiedAttendanceIntervals(snapshots, asOfDate, name);
+      const intervals = verifiedAttendanceIntervals(snapshots, asOfDate, name, classificationSnapshots);
       common = common === null ? intervals : mergeIntervals(common.flatMap((a) =>
         intervals.flatMap((b) => {
           const start = a.start > b.start ? a.start : b.start;
@@ -1365,7 +1374,7 @@ function verifiedAttendanceIntervals(
     }
   }
   let verified = mergeIntervals(clipIntervals(intervals, asOfDate));
-  for (const conflict of attendanceStatusConflicts(snapshots).filter((row) => normalizeClinician(row.clinician) === normalizeClinician(clinician))) {
+  for (const conflict of attendanceStatusConflicts(snapshots, classificationSnapshots).filter((row) => normalizeClinician(row.clinician) === normalizeClinician(clinician))) {
     const stamp = Date.parse(conflict.serviceDate + "T12:00:00Z");
     if (!/^\d{4}-\d{2}-\d{2}$/.test(conflict.serviceDate) || !Number.isFinite(stamp) || new Date(stamp).toISOString().slice(0, 10) !== conflict.serviceDate) continue;
     verified = verified.flatMap((range) => conflict.serviceDate < range.start || conflict.serviceDate > range.end ? [range] : [
@@ -1782,6 +1791,8 @@ function estimateObservedClientEndings(
 }
 
 export type ClientActivityOptions = {
+  /** Service classification only; these sources cannot add visits, coverage or financial actuals. */
+  classificationSnapshots?: readonly LocalSnapshot[];
   /** Unresolved partial rows block absence claims but never add visits. Drop them after full source replacement. */
   excludedFollowUpEvidence?: readonly { clientId: string; serviceDate: string }[];
 };
@@ -1820,7 +1831,8 @@ export function estimateLocalClientActivity(
   eventEnd = "9999-12-31",
   options: ClientActivityOptions = {},
 ): LocalClientActivityEstimate | null {
-  const shows = derivedShowVisits(snapshots, sameDayVisitOverrides)
+  const classificationSnapshots = options.classificationSnapshots ?? snapshots;
+  const shows = derivedShowVisits(snapshots, sameDayVisitOverrides, classificationSnapshots)
     .filter((row) => row.serviceDate <= asOfDate)
     .sort(
       (a, b) =>
@@ -1843,7 +1855,7 @@ export function estimateLocalClientActivity(
     ),
   );
   const excludedFollowUp = unresolvedActivityFollowUp(shows, options, asOfDate);
-  const coverageIntervals = absenceCoverageWithoutPartialFollowUp(verifiedAttendanceIntervals(snapshots, asOfDate), excludedFollowUp);
+  const coverageIntervals = absenceCoverageWithoutPartialFollowUp(verifiedAttendanceIntervals(snapshots, asOfDate, undefined, classificationSnapshots), excludedFollowUp);
   const coverageDates = [...observedIntervals, ...coverageIntervals]
     .flatMap((interval) => [interval.start, interval.end])
     .sort();
@@ -2052,6 +2064,8 @@ export function consultConversionForContributor(summary: ConsultConversionSummar
 }
 
 export type ConsultConversionOptions = {
+  /** Service classification only; these sources cannot add visits or coverage. */
+  classificationSnapshots?: readonly LocalSnapshot[];
   /** Scope consultation cohorts only. All clinicians' treatment and coverage evidence remains available. */
   cohortClinicianNames?: readonly string[];
   /** Excluded partial evidence can block an absence claim, never establish a conversion. */
@@ -2069,9 +2083,10 @@ export function summarizeConsultConversions(
 ): ConsultConversionSummary {
   const cohortNames = options.cohortClinicianNames === undefined ? null
     : new Set(options.cohortClinicianNames.map(normalizeClinician).filter(Boolean));
-  const coverageIntervals = verifiedAttendanceIntervals(snapshots, asOfDate);
-  const isConsult = consultAttendanceClassifier(snapshots);
-  const conflictedRows = new Set(attendanceStatusConflicts(snapshots).flatMap((group) => group.rows));
+  const classificationSnapshots = options.classificationSnapshots ?? snapshots;
+  const coverageIntervals = verifiedAttendanceIntervals(snapshots, asOfDate, undefined, classificationSnapshots);
+  const isConsult = consultAttendanceClassifier(classificationSnapshots);
+  const conflictedRows = new Set(attendanceStatusConflicts(snapshots, classificationSnapshots).flatMap((group) => group.rows));
   const overridesByClient = new Map(
     attributionOverrides
       .filter((override) => !override.archived)
@@ -2095,7 +2110,7 @@ export function summarizeConsultConversions(
         a.serviceDate.localeCompare(b.serviceDate) ||
         a.clinician.localeCompare(b.clinician),
     );
-  const treatmentShows = derivedShowVisits(snapshots, sameDayVisitOverrides)
+  const treatmentShows = derivedShowVisits(snapshots, sameDayVisitOverrides, classificationSnapshots)
     .filter((row) => row.serviceDate <= asOfDate)
     .sort(
       (a, b) =>
@@ -2302,23 +2317,25 @@ export function buildLocalRetentionMetrics(
   eventEnd = "9999-12-31",
   options: ClientActivityOptions = {},
 ): LocalRetentionMetrics {
+  const classificationSnapshots = options.classificationSnapshots ?? snapshots;
   const attendance = snapshots.flatMap((snapshot) =>
     snapshot.kind === "attendance"
       ? snapshot.rows.filter((row) => row.serviceDate <= asOfDate)
       : [],
   );
-  const treatmentAttendance = treatmentAttendanceRows(snapshots).filter(
+  const treatmentAttendance = treatmentAttendanceRows(snapshots, classificationSnapshots).filter(
     (row) => row.serviceDate <= asOfDate,
   );
   const derivedShows = derivedShowVisits(
     snapshots,
     sameDayVisitOverrides,
+    classificationSnapshots,
   ).filter((row) => row.serviceDate <= asOfDate);
   const rawShowRows = attendance.filter((row) => row.status === "show").length;
   const treatmentShowRows = treatmentAttendance.filter(
     (row) => row.status === "show",
   ).length;
-  const isConsultation = consultAttendanceClassifier(snapshots);
+  const isConsultation = consultAttendanceClassifier(classificationSnapshots);
   const excludedConsultationShowRows = attendance.filter((row) => row.status === "show" && isConsultation(row)).length;
   const billing = snapshots.flatMap((snapshot) =>
     snapshot.kind === "billing"
@@ -2397,13 +2414,13 @@ export function buildLocalRetentionMetrics(
   }
   const unresolvedFollowUp = unresolvedActivityFollowUp(derivedShows, options, asOfDate);
   const scopedOptions: ClientActivityOptions = { excludedFollowUpEvidence: unresolvedFollowUp };
-  const coverageIntervals = absenceCoverageWithoutPartialFollowUp(verifiedAttendanceIntervals(snapshots, asOfDate), unresolvedFollowUp);
+  const coverageIntervals = absenceCoverageWithoutPartialFollowUp(verifiedAttendanceIntervals(snapshots, asOfDate, undefined, classificationSnapshots), unresolvedFollowUp);
   const coverageByClinician = new Map<string, DateInterval[]>();
   const coverageForClinician = (clinician: string) => {
     let intervals = coverageByClinician.get(clinician);
     if (!intervals) {
       const excluded = unresolvedActivityFollowUp(derivedShows.filter((row) => normalizeClinician(row.clinician) === clinician), scopedOptions, asOfDate);
-      intervals = absenceCoverageWithoutPartialFollowUp(verifiedAttendanceIntervals(snapshots, asOfDate, clinician), excluded);
+      intervals = absenceCoverageWithoutPartialFollowUp(verifiedAttendanceIntervals(snapshots, asOfDate, clinician, classificationSnapshots), excluded);
       coverageByClinician.set(clinician, intervals);
     }
     return intervals;

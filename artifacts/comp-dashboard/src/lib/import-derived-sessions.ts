@@ -92,6 +92,8 @@ export function buildImportedSessionOverlay(
   teamId: number | null,
   sameDayVisitOverrides: SameDayVisitOverrides = {},
   options: {
+    /** Service classification only; actual rows and coverage still come from snapshots. */
+    classificationSnapshots?: readonly LocalSnapshot[];
     declarations?: ImportEvidenceDeclarations | null;
     clinicianActiveRanges?: Array<{ clinicianId: number; start: string; end: string | null }>;
     /** Workspace compensation effective dates must never restrict attendance coverage. */
@@ -114,7 +116,8 @@ export function buildImportedSessionOverlay(
   }
 
   const missingClinicianLabels = new Set<string>();
-  const statusConflicts = attendanceStatusConflicts(snapshots);
+  const classificationSnapshots = options.classificationSnapshots ?? snapshots;
+  const statusConflicts = attendanceStatusConflicts(snapshots, classificationSnapshots);
   const conflictedRows = new Set(statusConflicts.flatMap((group) => group.rows));
   const ambiguousClinicianLabels = new Set<string>();
   const missingBillingClinicianLabels = new Set<string>();
@@ -130,8 +133,8 @@ export function buildImportedSessionOverlay(
   const sameDayShowGroups = new Map<string, AttendanceRow[]>();
   const billingActuals: ImportedBillingActual[] = [];
   let excludedNonShowRows = 0;
-  const isConsultation = consultAttendanceClassifier(snapshots);
-  const isDocumentation = documentationAttendanceClassifier(snapshots);
+  const isConsultation = consultAttendanceClassifier(classificationSnapshots);
+  const isDocumentation = documentationAttendanceClassifier(classificationSnapshots);
 
   for (const snapshot of snapshots) {
     if (snapshot.kind !== "attendance") continue;

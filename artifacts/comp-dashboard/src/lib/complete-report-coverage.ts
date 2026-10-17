@@ -174,7 +174,7 @@ export function completeReportCoverage(
   }
   const ids = [...new Set(clinicians.map((person) => person.id))];
   // Partial sources stay reconciliation-only and cannot poison an independently complete replacement.
-  const statusConflicts = attendanceStatusConflicts(eligibleSnapshots);
+  const statusConflicts = attendanceStatusConflicts(eligibleSnapshots, snapshots);
   const conflictedPeriods = new Set<string>();
   for (const conflict of statusConflicts) {
     const clinicianId = mappedId(conflict.clinician);

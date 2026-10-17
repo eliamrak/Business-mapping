@@ -9,7 +9,7 @@ export function overviewClientFlow(snapshots: LocalSnapshot[], overrides: SameDa
   const activity = estimateLocalClientActivity(snapshots, overrides, 56, 56, 28, asOf, 90, start, end, options);
   if (!activity) return { starts: null, departures: null, through: null, leftCensoredStarts: 0 };
   const firstDates = new Map<string, string>();
-  for (const row of derivedShowVisits(snapshots, overrides)) {
+  for (const row of derivedShowVisits(snapshots, overrides, options.classificationSnapshots)) {
     if (row.serviceDate > asOf) continue;
     const first = firstDates.get(row.clientId);
     if (!first || row.serviceDate < first) firstDates.set(row.clientId, row.serviceDate);
