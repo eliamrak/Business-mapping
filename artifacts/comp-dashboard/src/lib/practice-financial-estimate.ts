@@ -156,6 +156,7 @@ export function practiceFinancialEstimateRange(
       const profiles = workspace.clinicians.filter(row => row.clinicianId === person.id);
       const datedModel = clinicianModelAt(workspace, person.id, date);
       const term = clinicianTermsAt(workspace, person.id, date);
+      const currentTerms = clinicianTermsAt(workspace, person.id, asOf);
       const currentModel = clinicianModelAt(workspace, person.id, asOf);
       const beforeConfiguration = profiles.length > 0 && profiles.every(profile => profile.start > date);
       const datedPayKnown = beforeConfiguration && term.payMode !== null && (term.payMode === "existing_split"
@@ -164,7 +165,7 @@ export function practiceFinancialEstimateRange(
       const model = datedModel ?? (useCurrent ? { ...currentModel, payMode: term.payMode ?? currentModel.payMode, payAmount: term.payAmount ?? currentModel.payAmount, paidHoursPerWeek: term.paidHoursPerWeek ?? currentModel.paidHoursPerWeek } : null);
       if (selected && useCurrent && !assumedPeople.has(person.id)) {
         assumedPeople.add(person.id);
-        assumptions.push(`${person.label}: current pay assumptions configured from ${currentModel!.start} are applied before that date only in this selected scenario; existing dated terms take precedence. This is not verified historical compensation or a change to stored history.`);
+        assumptions.push(`${person.label}: current pay assumptions configured from ${currentModel!.start}, with terms effective as of ${asOf}, are applied before that profile date only in this selected scenario; existing dated terms take precedence. This is not verified historical compensation or a change to stored history.`);
       }
       const fee = feeAt(person.id, date);
       const gross = grossAt(person.id, date);
@@ -189,7 +190,7 @@ export function practiceFinancialEstimateRange(
           pay = nonnegative(amount) && nonnegative(hours) && nonnegative(person.weeksWorkedPerYear) ? amount * hours / 7 * person.weeksWorkedPerYear / 52.1786 : null;
         } else if (mode === "per_session") pay = nonnegative(amount) && count !== null ? amount * count : null;
         else {
-          const split = term.clinicianSplit ?? person.preCapClinicianSplit;
+          const split = term.clinicianSplit ?? (useCurrent ? currentTerms.clinicianSplit : null) ?? person.preCapClinicianSplit;
           const capKnown = typeof person.capEnabled === "boolean" && (!person.capEnabled || nonnegative(person.capAmount) && percent(person.postCapClinicianSplit) && percent(person.postCapPracticeSplit) && Math.abs(person.postCapClinicianSplit + person.postCapPracticeSplit - 100) < 1e-8);
           const capped = person.capEnabled && person.capAmount > 0;
           if (!percent(split) || !capKnown || fee === null || capped && (state.earned === null || fee < 0)) pay = null;

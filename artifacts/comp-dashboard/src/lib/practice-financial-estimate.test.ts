@@ -283,6 +283,16 @@ test("known dated salary remains usable before a later profile configuration, in
   }
 });
 
+test("current-pay scenario uses the current effective split before legacy cards, while preserving historical terms", () => {
+  const f = fixture("2026-09-24", "2026-10-07"); f.asOf = "2026-10-17";
+  f.workspace.clinicians.push(clinicianSettingSchema.parse({ id: crypto.randomUUID(), clinicianId: 1, start: "2026-10-08", desiredWeeklySessions: 7 }));
+  f.workspace.terms.push(termSchema.parse({ id: crypto.randomUUID(), clinicianId: 1, effectiveDate: "2026-10-08", clinicianSplit: 0 }));
+  const run = () => practiceFinancialEstimateRange(f.workspace, f.context, f.snapshots, f.asOf, f.range, f.declarations, {}, { payBasis: "current-assumptions" });
+  near(run().values.clinicianPay, 0);
+  f.workspace.terms.push(termSchema.parse({ id: crypto.randomUUID(), clinicianId: 1, effectiveDate: "2026-09-01", clinicianSplit: 40 }));
+  near(run().values.clinicianPay, 20);
+});
+
 test("owner clinical pay and family salary are subsets; separate owner payroll is deducted once", () => {
   const f = fixture(); f.context.clinicians[0].classification = "owner";
   f.workspace.settings.familyW2ClinicianId = 1;
