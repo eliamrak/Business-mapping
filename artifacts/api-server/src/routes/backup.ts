@@ -4,6 +4,7 @@ import { pool } from "@workspace/db";
 import { workspaceSchema } from "@workspace/practice/hub";
 import { z } from "@workspace/practice";
 import { logger } from "../lib/logger";
+import { validateDurableImportBackup } from "../lib/import-backup-validation";
 
 // Explicit allowlist excludes passwords, accounts and active login sessions.
 export const backupTables = [
@@ -27,7 +28,7 @@ export const backupTables = [
 ] as const;
 const envelope = z
   .object({
-    format: z.literal("emc-business-data-v1"),
+    format: z.literal("emc-business-data-v2"),
     exportedAt: z.string(),
     schema: z.string().regex(/^[a-f0-9]{64}$/),
     tables: z.record(
@@ -68,7 +69,7 @@ router.get("/hub/backup", async (_req, res) => {
       .set("Cache-Control", "no-store")
       .attachment("emc-business-data-backup.json");
     return res.json({
-      format: "emc-business-data-v1",
+      format: "emc-business-data-v2",
       exportedAt: new Date().toISOString(),
       schema,
       tables,
@@ -90,7 +91,7 @@ router.post("/hub/backup/preview", async (req, res) => {
       .status(400)
       .json({
         error:
-          "This is not a complete EMC business-data backup. All 17 business tables, including converted history and approval journals, are required. Older 13-table backups are incomplete and cannot be restored by this release.",
+          "This release requires an EMC business-data v2 backup containing all 17 business tables. Legacy v1/13-table backups require their matching earlier release; no partial restore is performed.",
       });
   const client = await pool.connect();
   try {
@@ -104,6 +105,7 @@ router.post("/hub/backup/preview", async (req, res) => {
         });
     for (const row of backup.tables.hub_workspaces)
       workspaceSchema.parse(row.data);
+    validateDurableImportBackup(backup.tables);
     const counts: Record<string, number> = {},
       existing: Record<string, number> = {};
     for (const name of backupTables) {
@@ -128,7 +130,7 @@ router.post("/hub/backup/preview", async (req, res) => {
     const canRestore = Object.values(existing).every((n) => n === 0);
     if (canRestore)
       previews.set(token, {
-        backup,
+        backup: structuredClone(backup),
         actor: res.locals.actor,
         expires: now + 600000,
         digest: hash,
@@ -182,6 +184,8 @@ router.post("/hub/backup/restore", async (req, res) => {
     );
     if (preview.backup.schema !== (await schemaSignature(client)))
       throw new Error("schema changed");
+    for (const row of preview.backup.tables.hub_workspaces) workspaceSchema.parse(row.data);
+    validateDurableImportBackup(preview.backup.tables);
     for (const name of backupTables)
       if (
         Number(

@@ -84,3 +84,94 @@ export function syntheticImportBackup(clinicianId = 1, teamId = 1, clinicianLabe
   return { practice_import_packages: packages, practice_import_snapshots: storedSnapshots,
     practice_import_declarations: declarations, practice_import_audit: audits };
 }
+
+export function syntheticStaleImportBackup(...args) {
+  const fixture = syntheticImportBackup(...args);
+  const original = fixture.practice_import_snapshots.find((row) => row.kind === "billing" && row.active === 1);
+  original.active = 0;
+  const replacementPackage = { ...structuredClone(fixture.practice_import_packages[0]),
+    id: uuid(3), package_id: "synthetic-replacement-package", content_hash: "d".repeat(64) };
+  fixture.practice_import_packages.push(replacementPackage);
+  fixture.practice_import_snapshots.push({ ...structuredClone(original), id: uuid(13),
+    package_import_id: replacementPackage.id, source_hash: "d".repeat(64), active: 1,
+    rows: original.rows.map((row) => ({ ...row, totalFeeCharged: row.totalFeeCharged + 10,
+      sourceRowHash: `replacement-${row.sourceRowHash}` })) });
+  return fixture;
+}
+
+export function syntheticHistoricalFactsBackup(...args) {
+  const fixture = syntheticImportBackup(...args);
+  const label = "(deleted) Synthetic Former Clinician";
+  const billing = fixture.practice_import_snapshots.find((row) => row.kind === "billing" && row.active === 1);
+  const attendance = fixture.practice_import_snapshots.find((row) => row.kind === "attendance");
+  const fifth = fixture.practice_import_audit[4].detail.resolution;
+  const originalLabel = fifth.clinicianLabel;
+  fifth.clinicianLabel = label;
+  fixture.practice_import_audit.at(-1).detail.providers[0].sourceLabel = label;
+  for (const snapshot of fixture.practice_import_snapshots)
+    for (const row of snapshot.rows) if (row.clinician === originalLabel) row.clinician = label;
+  const codes = ["", null, "0", "unclassified", "   "];
+  billing.rows.push(...codes.map((billingCode, index) => ({ clientId: `synthetic-adjustment-${index}`,
+    clinician: label, serviceDate: "2026-10-03", billingCode, totalFeeCharged: -(index + 1) * 5,
+    sourceRowHash: `synthetic-signed-adjustment-${index}` })));
+  billing.row_count = billing.rows.length;
+  attendance.rows.push({ clientId: "synthetic-historical-cancellation", clinician: label,
+    serviceDate: "2026-10-03", location: null, status: "cancelled", cancellationSubtype: "late_cancelled",
+    billingCode: "", sourceRowHash: "synthetic-historical-cancellation" });
+  attendance.row_count = attendance.rows.length;
+  return fixture;
+}
+
+// Each mutation starts from a valid backup; never loosen runtime schemas to admit it.
+export const invalidImportBackupCases = [
+  ["declarations mappings are a string", (tables) => { tables.practice_import_declarations[0].data.mappings = "broken"; }],
+  ["declarations include an unsupported approval field", (tables) => { tables.practice_import_declarations[0].data.billingResolutions = []; }],
+  ["declarations have a nonpositive revision", (tables) => { tables.practice_import_declarations[0].revision = 0; }],
+  ["declarations repeat their composite key", (tables) => { tables.practice_import_declarations.push(structuredClone(tables.practice_import_declarations[0])); }],
+  ["billing journal has a revision gap", (tables) => { tables.practice_import_audit.splice(1, 1); }],
+  ["billing journal repeats a revision", (tables) => { tables.practice_import_audit[1].detail.revision = 1; }],
+  ["billing journal repeats a resolution ID", (tables) => { tables.practice_import_audit[1].detail.resolution.id = tables.practice_import_audit[0].detail.resolution.id; }],
+  ["billing journal repeats an approval token", (tables) => { tables.practice_import_audit[1].detail.resolution.approvalToken = tables.practice_import_audit[0].detail.resolution.approvalToken; }],
+  ["billing journal has malformed detail", (tables) => { tables.practice_import_audit[0].detail = "broken"; }],
+  ["billing resolution has only one charge", (tables) => { tables.practice_import_audit[0].detail.resolution.charges.pop(); }],
+  ["historical journal has malformed providers", (tables) => { tables.practice_import_audit.at(-1).detail.providers = "broken"; }],
+  ["historical journal exceeds the declaration revision", (tables) => { tables.practice_import_audit.at(-1).detail.declarationRevision = 3; }],
+  ["historical journal repeats a registry revision", (tables) => {
+    const row = structuredClone(tables.practice_import_audit.at(-1)); row.id = uuid(31); tables.practice_import_audit.push(row);
+  }],
+  ["historical journal repurposes a provider UUID", (tables) => {
+    const row = structuredClone(tables.practice_import_audit.at(-1)); row.id = uuid(31);
+    row.detail.declarationRevision = 1; row.detail.providers[0].sourceLabel = "Different Synthetic Former";
+    tables.practice_import_audit.push(row);
+  }],
+  ["snapshot rows are a string", (tables) => { tables.practice_import_snapshots[0].rows = "broken"; }],
+  ["snapshot row count disagrees with rows", (tables) => { tables.practice_import_snapshots[0].row_count++; }],
+  ["attendance row has an invalid status", (tables) => { tables.practice_import_snapshots[0].rows[0].status = "unknown"; }],
+  ["attendance row has an impossible service date", (tables) => { tables.practice_import_snapshots[0].rows[0].serviceDate = "2026-02-30"; }],
+  ["billing row has a string fee", (tables) => { tables.practice_import_snapshots[1].rows[0].totalFeeCharged = "broken"; }],
+  ["billing row has an object fee", (tables) => { tables.practice_import_snapshots[1].rows[0].totalFeeCharged = { amount: 100 }; }],
+  ["billing row has an object code", (tables) => { tables.practice_import_snapshots[1].rows[0].billingCode = { code: "90837" }; }],
+  ["snapshot proof is incomplete", (tables) => { tables.practice_import_snapshots[0].report_coverage.complete = false; }],
+  ["archived snapshot rows are malformed", (tables) => { tables.practice_import_snapshots[2].rows = [null]; }],
+  ["same-day override key is not 16 hex digits", (tables) => { tables.practice_import_packages[0].same_day_visit_overrides = { "synthetic-override": 2 }; }],
+  ["same-day override is out of range", (tables) => { const settings = tables.practice_import_packages[0].same_day_visit_overrides; settings[Object.keys(settings)[0]] = 21; }],
+  ["billing minutes are not numeric", (tables) => { tables.practice_import_packages[0].billing_code_minutes = { "90837": "broken" }; }],
+  ["billing minutes exceed the supported range", (tables) => { tables.practice_import_packages[0].billing_code_minutes = { "90837": 1441 }; }],
+  ["snapshot references a missing package", (tables) => { tables.practice_import_snapshots[0].package_import_id = uuid(99); }],
+  ["snapshot and package practice scopes disagree", (tables) => { tables.practice_import_snapshots[0].practice_id = "different-synthetic-practice"; }],
+  ["snapshot and package account scopes disagree", (tables) => { tables.practice_import_snapshots[0].account_id = "different-synthetic-account"; }],
+  ["journal scope changes break revision continuity", (tables) => { tables.practice_import_audit[0].account_id = "different-synthetic-account"; }],
+  ["packages repeat their primary key", (tables) => { tables.practice_import_packages.push(structuredClone(tables.practice_import_packages[0])); }],
+  ["packages repeat their scoped package identity", (tables) => {
+    const row = structuredClone(tables.practice_import_packages[0]); row.id = uuid(99); tables.practice_import_packages.push(row);
+  }],
+  ["snapshots repeat their primary key", (tables) => { tables.practice_import_snapshots.push(structuredClone(tables.practice_import_snapshots[0])); }],
+  ["audit rows repeat their primary key", (tables) => { tables.practice_import_audit[1].id = tables.practice_import_audit[0].id; }],
+  ["snapshot service date exceeds its stored range", (tables) => { tables.practice_import_snapshots[0].rows[0].serviceDate = "2026-10-06"; }],
+  ["report proof excludes its snapshot range", (tables) => { tables.practice_import_snapshots[0].report_coverage.start = "2026-10-02"; }],
+  ["archived package settings are malformed", (tables) => { tables.practice_import_packages[1].billing_code_minutes = "broken"; }],
+  ["declarations outside the configured reader scope are malformed", (tables) => {
+    const row = structuredClone(tables.practice_import_declarations[0]); row.practice_id = "synthetic-historical-other";
+    row.account_id = "synthetic-historical-other"; row.data.mappings = "broken"; tables.practice_import_declarations.push(row);
+  }],
+];

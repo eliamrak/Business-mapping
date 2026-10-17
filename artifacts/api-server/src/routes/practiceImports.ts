@@ -9,8 +9,9 @@ import {
   cliniciansTable,
 } from "@workspace/db";
 import { z } from "@workspace/practice";
+import { parseBillingResolutionJournal, parseStoredImportDeclarations } from "../lib/import-backup-validation";
 import { importDeclarationsSchema, normalizeProviderLabel, prepareBillingChargeResolution, reconcileBillingEvidence,
-  resolveImportedProvider, bindBillingResolutions, billingChargeResolutionSchema, resolveHistoricalBillingProvider,
+  resolveImportedProvider, bindBillingResolutions, resolveHistoricalBillingProvider,
   validateHistoricalBillingProviders, restoreHistoricalBillingProviders, unverifiedDeletionMarker, deletionMarkerGuidance, legacyServiceCodes, type StoredImportDeclarations } from "@workspace/practice/hub";
 
 const router = Router();
@@ -388,22 +389,14 @@ async function readDeclarations(connection: Pick<typeof db, "execute">, practice
   const result = await connection.execute(sql`SELECT revision, data, confirmed_at FROM practice_import_declarations WHERE practice_id = ${practiceId} AND account_id = ${accountId}`);
   const row = result.rows[0];
   if (!row) return null;
-  const parsed = importDeclarationsSchema.safeParse(row.data);
-  if (!parsed.success) throw new Error("Invalid saved import declarations require review.");
   const journal = await connection.execute(sql`SELECT detail FROM practice_import_audit WHERE practice_id = ${practiceId} AND account_id = ${accountId} AND action = 'confirm-historical-billing-providers' LIMIT 1001`);
-  const historicalBillingProviders = restoreHistoricalBillingProviders(journal.rows.map((entry) => entry.detail), Number(row.revision));
-  return { revision: Number(row.revision), data: { ...parsed.data, ...(historicalBillingProviders ? { historicalBillingProviders } : {}) }, confirmedAt: new Date(String(row.confirmed_at)).toISOString() };
+  return parseStoredImportDeclarations(row.data, Number(row.revision), new Date(String(row.confirmed_at)).toISOString(), journal.rows.map((entry) => entry.detail));
 }
 
 async function readBillingResolutionJournal(connection: Pick<typeof db, "execute">, practiceId: string, accountId: string) {
   const result = await connection.execute(sql`SELECT detail FROM practice_import_audit
     WHERE practice_id = ${practiceId} AND account_id = ${accountId} AND action = 'accept-billing-charge-exception' LIMIT 1001`);
-  const events = result.rows.map((row) => z.object({ revision: z.number().int().positive(), resolution: billingChargeResolutionSchema }).passthrough().parse(row.detail))
-    .sort((a, b) => a.revision - b.revision);
-  if (events.length > 1000 || events.some((row, i) => row.revision !== i + 1)
-    || new Set(events.map((row) => row.resolution.id)).size !== events.length
-    || new Set(events.map((row) => row.resolution.approvalToken)).size !== events.length) throw new Error("Billing resolution journal requires review.");
-  return { billingResolutionRevision: events.length, billingResolutions: events.map((row) => row.resolution) };
+  return parseBillingResolutionJournal(result.rows.map(row => row.detail));
 }
 
 function billingApprovalCases(snapshots: Snapshot[], practiceId: string, accountId: string) {

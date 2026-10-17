@@ -2,7 +2,7 @@ import { before, after, test } from "node:test";
 import assert from "node:assert/strict";
 import { randomUUID, randomBytes } from "node:crypto";
 import { syntheticClerkFixture } from "./synthetic-clerk.mjs";
-import { importBackupTables, syntheticImportBackup } from "./backup-fixture.mjs";
+import { importBackupTables, syntheticHistoricalFactsBackup, invalidImportBackupCases } from "./backup-fixture.mjs";
 import { spawn, execFileSync } from "node:child_process";
 import { createRequire } from "node:module";
 import net from "node:net";
@@ -115,6 +115,7 @@ before(async () => {
       LOCAL_PREVIEW: "false",
       SEED_DEMO_DATA: "false",
       EMC_OWNER_EMAIL: ownerEmail,
+      EMC_PRACTICE_ID: "synthetic-backup",
       APP_ORIGIN: base,
     },
     stdio: ["ignore", "pipe", "pipe"],
@@ -739,7 +740,7 @@ test("full database backup restores hub, attachments, audit, sessions and legacy
 test("business-data backup excludes access credentials and refuses nonempty restoration", async () => {
   const backup = await call("/hub/backup");
   assert.equal(backup.status, 200);
-  assert.equal(backup.data.format, "emc-business-data-v1");
+  assert.equal(backup.data.format, "emc-business-data-v2");
   assert.ok(backup.data.tables.clinicians.length);
   assert.ok(backup.data.tables.session_record_history.length);
   assert.equal(backup.data.tables.hub_users, undefined);
@@ -850,26 +851,43 @@ test("reviewed business-data recovery restores every application table atomicall
     ...importBackupTables,
   ];
   try {
-    const fixture = syntheticImportBackup(clinician.id, clinician.goalId ?? null, clinician.label);
+    const fixture = syntheticHistoricalFactsBackup(clinician.id, clinician.goalId ?? null, clinician.label);
     for (const name of importBackupTables)
       await database.query(
         `INSERT INTO "${name}" SELECT * FROM json_populate_recordset(NULL::"${name}", $1::json)`,
         [JSON.stringify(fixture[name])],
       );
     const original = (await call("/hub/backup")).data;
+    assert.equal(original.format, "emc-business-data-v2");
     assert.equal(Object.keys(original.tables).length, 17);
     for (const name of importBackupTables)
       assert.equal(original.tables[name].length, fixture[name].length, name);
     assert.equal(original.tables.practice_import_audit.filter((row) => row.action === "accept-billing-charge-exception").length, 5);
     assert.equal(original.tables.practice_import_snapshots.filter((row) => row.active === 0).length, 1);
     const legacy = structuredClone(original);
+    legacy.format = "emc-business-data-v1";
     for (const name of importBackupTables) delete legacy.tables[name];
     const legacyPreview = await call("/hub/backup/preview", legacy);
     assert.equal(legacyPreview.status, 400);
-    assert.match(legacyPreview.data.error, /13-table backups are incomplete/);
+    assert.match(legacyPreview.data.error, /matching|earlier release/i);
+    assert.match(legacyPreview.data.error, /partial|incomplete|legacy|v1|13-table/i);
+    const candidateV1 = await call("/hub/backup/preview", { ...original, format: "emc-business-data-v1" });
+    assert.equal(candidateV1.status, 400);
     await database.query(
       `TRUNCATE ${tables.join(", ")} RESTART IDENTITY CASCADE`,
     );
+    for (const [name, mutate] of invalidImportBackupCases) {
+      const invalid = structuredClone(original);
+      mutate(invalid.tables);
+      const rejected = await call("/hub/backup/preview", invalid);
+      assert.equal(rejected.status, 400, `${name}: ${JSON.stringify(rejected.data)}`);
+      assert.ok(!rejected.data.token, name);
+    }
+    for (const name of tables)
+      assert.equal(Number((await database.query(`SELECT count(*) AS n FROM "${name}"`)).rows[0].n), 0, name);
+    const emptyHistory = await call("/practice-imports");
+    assert.equal(emptyHistory.status, 200);
+    assert.equal(emptyHistory.data.snapshots.length, 0);
     await database.query(
       'INSERT INTO practice_import_declarations SELECT * FROM json_populate_recordset(NULL::practice_import_declarations, $1::json)',
       [JSON.stringify(fixture.practice_import_declarations)],
@@ -922,6 +940,23 @@ test("reviewed business-data recovery restores every application table atomicall
       const rows = (await database.query(`SELECT row_to_json(t) AS record FROM "${name}" t ORDER BY ${order}`)).rows.map((row) => row.record);
       assert.deepEqual(rows, original.tables[name], name);
     }
+    const history = await call("/practice-imports");
+    assert.equal(history.status, 200, JSON.stringify(history.data));
+    assert.equal(history.data.snapshots.length, 2);
+    assert.equal(history.data.packages.length, 1);
+    assert.equal(history.data.billingResolutionRevision, 5);
+    assert.equal(history.data.billingResolutions.length, 5);
+    assert.equal(history.data.declarations.data.historicalBillingProviders.length, 1);
+    assert.deepEqual(history.data.declarations.data.mappings, fixture.practice_import_declarations[0].data.mappings);
+    assert.deepEqual(history.data.billingCodeMinutes, fixture.practice_import_packages[0].billing_code_minutes);
+    assert.deepEqual(history.data.sameDayVisitOverrides, fixture.practice_import_packages[0].same_day_visit_overrides);
+    for (const snapshot of history.data.snapshots)
+      assert.deepEqual(snapshot.rows, fixture.practice_import_snapshots.find((row) => row.kind === snapshot.kind && row.active === 1).rows);
+    const adjustments = history.data.snapshots.find((row) => row.kind === "billing").rows.filter((row) => row.totalFeeCharged < 0);
+    assert.deepEqual(adjustments.map((row) => row.totalFeeCharged), [-5, -10, -15, -20, -25]);
+    assert.deepEqual(adjustments.map((row) => row.billingCode), ["", null, "0", "unclassified", "   "]);
+    assert.ok(adjustments.every((row) => row.clinician === "(deleted) Synthetic Former Clinician"));
+    assert.equal(history.data.declarations.data.historicalBillingProviders[0].sourceLabel, "(deleted) Synthetic Former Clinician");
     assert.equal(
       (
         await call("/hub/backup/restore", {
