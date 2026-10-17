@@ -1,0 +1,62 @@
+import fs from "node:fs/promises";
+// Reuse the isolated, synthetic-only mounting harness, never the signed-in app.
+const harness = await fs.readFile(new URL("./financial-completeness-render.mjs", import.meta.url), "utf8");
+const begin = harness.indexOf("const checks=String.raw`");
+const end = harness.indexOf("`;\ntry{await import", begin);
+if (begin < 0 || end < 0) throw new Error("Synthetic harness markers changed");
+const checks = String.raw`
+const requests=[];
+await page.route('**/*',route=>{const req=route.request();if(new URL(req.url()).hostname!=='127.0.0.1')return route.abort();requests.push(req.method());if(req.method()!=='GET')return route.abort();return route.fallback();});
+workspace.periods=[];
+try {
+await page.goto('http://127.0.0.1:PORT/workspace');
+await clickSection('Money');
+await page.getByLabel('Shared reporting period',{exact:true}).selectOption('custom');
+await page.getByLabel('From',{exact:true}).fill('2026-01-01');
+await page.getByLabel('Through',{exact:true}).fill('2026-01-31');
+const estimate=page.getByLabel('Billed-charge financial estimate',{exact:true});
+await estimate.waitFor();
+assert.match(await estimate.innerText(),/Financial estimate/);
+assert.match(await estimate.innerText(),/not cash collected or paid payroll/);
+assert.doesNotMatch(await estimate.locator('.pw-bridge-step').nth(2).innerText(), /Unavailable|--|\u2014/);
+for(const width of [1280,390]){await capture('billed-estimate-no-finalized-periods',width,900);await estimate.screenshot({path:path.join(outDir,'estimate-detail-'+width+'.png')});}
+await estimate.getByText('Estimate sources and assumptions',{exact:true}).click();
+assert.match(await estimate.innerText(),/Actual billed gross/);
+assert.match(await estimate.innerText(),/not bank transfers/);
+await clickSection('Goals');
+assert.match(await page.locator('main').innerText(),/estimated pre-tax measure/);
+for(const width of [1280,390])await capture('estimated-goal-progress',width,900);
+await clickSection('Overview');
+assert.match(await page.getByLabel('Overview monthly surplus',{exact:true}).innerText(),/Estimated monthly surplus/);
+assert.match(await page.getByLabel('Overview financial summary',{exact:true}).innerText(),/financial coverage incomplete/);
+for(const width of [1280,390])await capture('overview-estimate-distinct-from-actual',width,900);
+await clickSection('Sessions');
+assert.deepEqual(await page.locator('nav[aria-label="Practice sections"] button span:last-child').allTextContents(),['Overview','Sessions','Team','Money','Growth','Goals']);
+assert.ok(await page.locator('.pw-percentage-kpi-ring').count()>0);
+for(const width of [1280,390])await capture('preserved-clinical-circles',width,900);
+workspace.settings.ownerPayrollOverride=false;
+workspace.settings.familyW2ClinicianId=null;
+await page.reload();await clickSection('Overview');
+const overview=page.getByLabel('Overview financial summary',{exact:true});
+const amount=text=>Number(text.replace(/[^0-9.-]/g,''));
+const historicalProfit=amount(await overview.locator('.pw-overview-total').filter({hasText:'Historical operating profit estimate'}).locator('strong').innerText());
+const futureProfit=amount(await overview.locator('.pw-overview-total').filter({hasText:'Future estimated operating profit'}).locator('strong').innerText());
+const combinedProfit=amount(await overview.locator('.pw-overview-bridge > div').last().locator('strong').innerText());
+assert.ok(Math.abs(historicalProfit+futureProfit-combinedProfit)<=1,'overview split and combined bridge share the corrected non-goal-injected expense basis');
+for(const width of [1280,390])await capture('inherited-owner-target-not-salary',width,900);
+snapshots[1].reportCoverage=undefined;
+await page.reload();await clickSection('Money');
+await page.getByLabel('Shared reporting period',{exact:true}).selectOption('custom');
+await page.getByLabel('From',{exact:true}).fill('2026-01-01');
+await page.getByLabel('Through',{exact:true}).fill('2026-01-31');
+const unknown=page.getByLabel('Billed-charge financial estimate',{exact:true});
+assert.match(await unknown.locator('.pw-bridge-step').nth(2).innerText(),/--|\u2014/);
+await unknown.getByText('Estimate sources and assumptions',{exact:true}).click();
+assert.match(await unknown.innerText(),/billed charges are unavailable/);
+for(const width of [1280,390])await capture('estimate-missing-billing-proof',width,900);
+assert.deepEqual(browserErrors,[]);assert.ok(requests.every(method=>method==='GET'));assert.ok(checks.every(c=>c.scrollWidth<=c.clientWidth+1&&c.topNavigation));
+await fs.writeFile(path.join(outDir,'results.json'),JSON.stringify({syntheticOnly:true,productionAccess:false,writes:0,requests,browserErrors,checks},null,2));console.log(JSON.stringify({outDir,states:checks.length,browserErrors,overflow:false,writes:0}));
+} finally { await browser.close(); }
+`;
+const source = harness.slice(0, begin) + "const checks=String.raw`" + checks + harness.slice(end);
+await import("data:text/javascript;base64," + Buffer.from(source.replace("new URL('../',import.meta.url)", JSON.stringify(new URL("../", import.meta.url).href))).toString("base64"));
