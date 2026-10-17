@@ -20,7 +20,12 @@ export function financialEstimateDisplay(report: PracticeFinancialRange, histori
   if (!report.actual.range && !report.forward.range) reasons.push("Complete source coverage has not established an estimate boundary.");
   const keys = new Set([...Object.keys(report.values), ...parts.flatMap(part => Object.keys(part))]);
   const values: Values = Object.fromEntries([...keys].map(key => [key, parts.length && parts.every(part => part[key] != null && Number.isFinite(part[key])) ? parts.reduce((sum, part) => sum + part[key]!, 0) : null]));
-  return { values, historical, reasons: [...new Set(reasons)], basis: "Billed-charge historical estimate + clinician-card future estimate; not recorded cash or paid payroll." };
+  const historyMatches = !report.actual.range || historical?.range?.start === report.actual.range.start && historical.range.end === report.actual.range.end;
+  const disjoint = !report.actual.range || !report.forward.range || report.forward.range.start > report.actual.range.end;
+  const subtotalParts = [...(report.actual.range ? [historyMatches ? historical?.values.surplusBeforeUnconfiguredMarketing ?? null : null] : []), ...(report.forward.range ? [report.forward.values.profit ?? null] : [])];
+  const surplusBeforeUnconfiguredMarketing = disjoint && subtotalParts.length > 0 && subtotalParts.every(value => value !== null && Number.isFinite(value))
+    ? subtotalParts.reduce<number>((sum, value) => sum + value!, 0) : null;
+  return { values, historical, surplusBeforeUnconfiguredMarketing, reasons: [...new Set(reasons)], basis: "Billed-charge historical estimate + clinician-card future estimate; not recorded cash or paid payroll." };
 }
 
 export function financialEstimateBridge(report: PracticeFinancialRange, display: ReturnType<typeof financialEstimateDisplay>) {

@@ -20,6 +20,10 @@ export const backupTables = [
   "session_goal_years",
   "session_record_history",
   "hub_history",
+  "practice_import_packages",
+  "practice_import_snapshots",
+  "practice_import_declarations",
+  "practice_import_audit",
 ] as const;
 const envelope = z
   .object({
@@ -55,7 +59,7 @@ router.get("/hub/backup", async (_req, res) => {
     for (const name of backupTables)
       tables[name] = (
         await client.query(
-          `SELECT row_to_json(t) AS record FROM "${name}" t ORDER BY id`,
+          `SELECT row_to_json(t) AS record FROM "${name}" t ORDER BY ${name === "practice_import_declarations" ? "practice_id, account_id" : "id"}`,
         )
       ).rows.map((r) => r.record);
     const schema = await schemaSignature(client);
@@ -84,7 +88,10 @@ router.post("/hub/backup/preview", async (req, res) => {
   if (!parsed.success)
     return res
       .status(400)
-      .json({ error: "This is not a complete EMC business-data backup." });
+      .json({
+        error:
+          "This is not a complete EMC business-data backup. All 17 business tables, including converted history and approval journals, are required. Older 13-table backups are incomplete and cannot be restored by this release.",
+      });
   const client = await pool.connect();
   try {
     const backup = parsed.data;
@@ -188,6 +195,8 @@ router.post("/hub/backup/restore", async (req, res) => {
         `INSERT INTO "${name}" SELECT * FROM json_populate_recordset(NULL::"${name}", $1::json)`,
         [JSON.stringify(preview.backup.tables[name])],
       );
+      // Declarations use (practice_id, account_id), with no id or sequence.
+      if (name === "practice_import_declarations") continue;
       const sequence = (
         await client.query("SELECT pg_get_serial_sequence($1, 'id') AS name", [
           name,

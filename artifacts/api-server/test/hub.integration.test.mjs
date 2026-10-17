@@ -2,6 +2,7 @@ import { before, after, test } from "node:test";
 import assert from "node:assert/strict";
 import { randomUUID, randomBytes } from "node:crypto";
 import { syntheticClerkFixture } from "./synthetic-clerk.mjs";
+import { importBackupTables, syntheticImportBackup } from "./backup-fixture.mjs";
 import { spawn, execFileSync } from "node:child_process";
 import { createRequire } from "node:module";
 import net from "node:net";
@@ -830,7 +831,6 @@ test("numbered migrations upgrade a legacy-only database and can be inspected sa
 });
 
 test("reviewed business-data recovery restores every application table atomically into a disposable empty app", async () => {
-  const original = (await call("/hub/backup")).data;
   const database = new Client({ connectionString: testDatabaseUrl });
   await database.connect();
   const tables = [
@@ -844,13 +844,42 @@ test("reviewed business-data recovery restores every application table atomicall
     "hub_workspaces",
     "hub_attachments",
     "session_records",
+    "session_goal_years",
     "session_record_history",
     "hub_history",
+    ...importBackupTables,
   ];
   try {
+    const fixture = syntheticImportBackup(clinician.id, clinician.goalId ?? null, clinician.label);
+    for (const name of importBackupTables)
+      await database.query(
+        `INSERT INTO "${name}" SELECT * FROM json_populate_recordset(NULL::"${name}", $1::json)`,
+        [JSON.stringify(fixture[name])],
+      );
+    const original = (await call("/hub/backup")).data;
+    assert.equal(Object.keys(original.tables).length, 17);
+    for (const name of importBackupTables)
+      assert.equal(original.tables[name].length, fixture[name].length, name);
+    assert.equal(original.tables.practice_import_audit.filter((row) => row.action === "accept-billing-charge-exception").length, 5);
+    assert.equal(original.tables.practice_import_snapshots.filter((row) => row.active === 0).length, 1);
+    const legacy = structuredClone(original);
+    for (const name of importBackupTables) delete legacy.tables[name];
+    const legacyPreview = await call("/hub/backup/preview", legacy);
+    assert.equal(legacyPreview.status, 400);
+    assert.match(legacyPreview.data.error, /13-table backups are incomplete/);
     await database.query(
       `TRUNCATE ${tables.join(", ")} RESTART IDENTITY CASCADE`,
     );
+    await database.query(
+      'INSERT INTO practice_import_declarations SELECT * FROM json_populate_recordset(NULL::practice_import_declarations, $1::json)',
+      [JSON.stringify(fixture.practice_import_declarations)],
+    );
+    const occupied = await call("/hub/backup/preview", original);
+    assert.equal(occupied.status, 200);
+    assert.equal(occupied.data.canRestore, false);
+    assert.equal(occupied.data.token, null);
+    assert.equal(occupied.data.existing.practice_import_declarations, 1);
+    await database.query("TRUNCATE practice_import_declarations");
     const broken = structuredClone(original);
     broken.tables.clinicians[0].goal_id = 2147483647;
     const badPreview = await call("/hub/backup/preview", broken);
@@ -888,6 +917,11 @@ test("reviewed business-data recovery restores every application table atomicall
     });
     assert.equal(restored.status, 200, JSON.stringify(restored.data));
     assert.deepEqual((await call("/hub/backup")).data.tables, original.tables);
+    for (const name of importBackupTables) {
+      const order = name === "practice_import_declarations" ? "practice_id, account_id" : "id";
+      const rows = (await database.query(`SELECT row_to_json(t) AS record FROM "${name}" t ORDER BY ${order}`)).rows.map((row) => row.record);
+      assert.deepEqual(rows, original.tables[name], name);
+    }
     assert.equal(
       (
         await call("/hub/backup/restore", {

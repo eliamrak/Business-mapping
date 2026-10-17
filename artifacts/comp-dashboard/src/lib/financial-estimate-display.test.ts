@@ -43,3 +43,17 @@ test("history-only and future-only estimates preserve their own bases", () => {
   source.forward = report().forward;
   assert.equal(financialEstimateDisplay(source, null).values.profit, 30);
 });
+
+test("partial marketing subtotal remains separate from profit, actuals and overlapping date segments", () => {
+  const source = report();
+  const partial = { ...history, values: { ...history.values, profit: null, marketing: null, surplusBeforeUnconfiguredMarketing: 20 } };
+  const result = financialEstimateDisplay(source, partial);
+  assert.equal(result.values.profit, null);
+  assert.equal(result.surplusBeforeUnconfiguredMarketing, 50);
+  assert.equal(source.actual.complete, false);
+  source.forward.range!.start = "2026-01-14";
+  assert.equal(financialEstimateDisplay(source, partial).surplusBeforeUnconfiguredMarketing, null);
+  source.forward.range = null;
+  const zero = { ...partial, values: { ...partial.values, surplusBeforeUnconfiguredMarketing: 0 } };
+  assert.equal(financialEstimateDisplay(source, zero).surplusBeforeUnconfiguredMarketing, 0);
+});

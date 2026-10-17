@@ -19,7 +19,7 @@ export type PracticeFinancialEstimate = {
   status: "available" | "partial" | "unavailable";
   billingCoverageComplete: boolean;
   modelComplete: boolean;
-  values: Values;
+  values: Values & { surplusBeforeUnconfiguredMarketing: number | null };
   components: Component[];
   assumptions: string[];
   unavailableReasons: string[];
@@ -34,6 +34,15 @@ const total = (numbers: (number | null)[]) => numbers.reduce<number | null>(plus
 const active = (row: { start: string | null; end: string | null; archived?: boolean }, date: string) => !row.archived && !!row.start && row.start <= date && (!row.end || row.end >= date);
 const keys = ["sessions", "reportedBilledGross", "revenue", "clinicianPay", "employerBurden", "ownerClinicalPay", "coOwnerSalaryPretax", "staffCost", "overhead", "marketing", "fees", "ownerPayroll", "ownerPayrollBurden", "otherIncome", "profit", "taxReserve", "reserves", "distributions", "retainedSurplus", "ownerDistributionsPretax"];
 const cashKeys = ["collections", "cash", "retainedCash", "familyTakeHome", "paidPayroll", "actualPaid", "bankTransfers"];
+const surplusCostKeys = ["clinicianPay", "employerBurden", "staffCost", "overhead", "fees", "ownerPayroll", "ownerPayrollBurden"] as const;
+
+/** Deduct configured costs only; never supplies a profit or allocation basis. */
+export function calculateSurplusBeforeUnconfiguredMarketing(values: Values, configuredMarketing: number | null): number | null {
+  const inputs = [values.revenue, values.otherIncome, configuredMarketing, ...surplusCostKeys.map(key => values[key])];
+  if (!inputs.every(value => typeof value === "number" && Number.isFinite(value))) return null;
+  const result = values.revenue! + values.otherIncome! - configuredMarketing! - surplusCostKeys.reduce((sum, key) => sum + values[key]!, 0);
+  return Number.isFinite(result) ? result : null;
+}
 
 /** Billed accrual estimate only. Never finalizes periods or establishes payments. */
 export function practiceFinancialEstimateRange(
@@ -53,17 +62,18 @@ export function practiceFinancialEstimateRange(
     "Allocations use each selected month's positive estimated billed surplus, weighted by effective dates; distributions are estimates, not bank transfers.",
     "Budget accruals and configured processing/separate owner payroll are distinct expense assumptions; overlapping payroll or processing budget lines require review.",
     "Overhead compares the selected calendar month's accrued detail with its allowance once; explicit raw floors apply in detailed mode, and dated event costs are additional.",
+    "Surplus before unconfigured marketing deducts known dated marketing budgets and campaign spend, independently of funnel inputs. Blank optional campaign other costs contribute no configured cost, matching the forecast. Unconfigured campaign/hiring effects remain unresolved; this subtotal never establishes profit, cash or allocations.",
   ];
-  const values: Values = Object.fromEntries([...keys.map(key => [key, 0]), ...cashKeys.map(key => [key, null])]);
+  const values: PracticeFinancialEstimate["values"] = Object.assign(Object.fromEntries([...keys.map(key => [key, 0]), ...cashKeys.map(key => [key, null])]), { surplusBeforeUnconfiguredMarketing: null });
   const finish = (range: Range | null, billingCoverageComplete: boolean): PracticeFinancialEstimate => {
     const modelComplete = range !== null && billingCoverageComplete && reasons.size === 0 && keys.every(key => values[key] !== null);
     return {
       source: "historical-estimate", range,
       status: modelComplete ? "available" : keys.some(key => values[key] !== null) && range ? "partial" : "unavailable",
       billingCoverageComplete, modelComplete, values,
-      components: keys.map(key => ({ key, label: ({ sessions: "Completed treatment sessions", reportedBilledGross: "Accepted billed gross", revenue: "Billed revenue estimate", clinicianPay: "Estimated earned clinician compensation", coOwnerSalaryPretax: "Co-owner salary (included in clinician compensation)", ownerClinicalPay: "Owner clinical pay (included in clinician compensation)", ownerDistributionsPretax: "Estimated household distribution (not a transfer)", profit: "Estimated operating profit", fees: "Estimated processing fees" } as Record<string, string>)[key] ?? key,
+      components: [...keys, "surplusBeforeUnconfiguredMarketing"].map(key => ({ key, label: ({ surplusBeforeUnconfiguredMarketing: "Estimated surplus before unconfigured marketing", sessions: "Completed treatment sessions", reportedBilledGross: "Accepted billed gross", revenue: "Billed revenue estimate", clinicianPay: "Estimated earned clinician compensation", coOwnerSalaryPretax: "Co-owner salary (included in clinician compensation)", ownerClinicalPay: "Owner clinical pay (included in clinician compensation)", ownerDistributionsPretax: "Estimated household distribution (not a transfer)", profit: "Estimated operating profit", fees: "Estimated processing fees" } as Record<string, string>)[key] ?? key,
         value: values[key] ?? null, unit: key === "sessions" ? "number" as const : "currency" as const,
-        basis: key === "sessions" ? "Complete source-period attended treatment visits" : key === "reportedBilledGross" || key === "revenue" ? "Accepted billed charges by service date" : options.payBasis === "current-assumptions" ? "Dated terms where available; disclosed current-pay assumptions for earlier configuration gaps; not paid/accounting actual" : "Dated model assumption; not paid/accounting actual" })),
+        basis: key === "surplusBeforeUnconfiguredMarketing" ? "Selected pay basis and configured dated costs, including known marketing; excludes unconfigured campaign/hiring effects; not profit, cash or an allocation basis" : key === "sessions" ? "Complete source-period attended treatment visits" : key === "reportedBilledGross" || key === "revenue" ? "Accepted billed charges by service date" : options.payBasis === "current-assumptions" ? "Dated terms where available; disclosed current-pay assumptions for earlier configuration gaps; not paid/accounting actual" : "Dated model assumption; not paid/accounting actual" })),
       assumptions, unavailableReasons: [...reasons],
     };
   };
@@ -141,6 +151,7 @@ export function practiceFinancialEstimateRange(
   const capStates = new Map<number, { year: string; earned: number | null }>();
   const monthValues = new Map<string, Values>();
   const monthDetailedOverhead = new Map<string, number | null>();
+  const monthConfiguredMarketing = new Map<string, number | null>();
   const replayStart = range.start.slice(0, 4) + "-01-01";
   const assumedPeople = new Set<number>();
   const historicalWorkers = new Set<number>();
@@ -243,6 +254,7 @@ export function practiceFinancialEstimateRange(
       daily.staffCost = plus(daily.staffCost!, cost);
     }
     let detailed: number | null = 0;
+    let unresolvedMarketing = false;
     let explicitTax: number | null = 0, explicitReserve: number | null = 0;
     const events = workspace.events.filter(event => event.enabled && event.date <= date && (!event.end || event.end >= date));
     for (const budget of workspace.budgets) {
@@ -278,7 +290,7 @@ export function practiceFinancialEstimateRange(
         daily.overhead = null;
         reasons.add(`${event.name}: budget event target is missing.`);
       }
-      if (event.field !== "custom" && event.field !== "budget.amount") {
+      if (event.field !== "custom" && event.field !== "budget.amount" && event.field !== "marketing.spend") {
         daily.overhead = null;
         reasons.add(`${event.name}: event ${event.field} is unsupported by this bounded historical estimate; use dated model terms.`);
       }
@@ -287,7 +299,35 @@ export function practiceFinancialEstimateRange(
         reasons.add(`${event.name}: dependent, delayed, ramped or invalid event costs require explicit dated assumptions.`);
       } else daily.overhead = plus(daily.overhead!, event.monthlyCost / calendarDays + (event.date === date ? event.oneTimeCost : 0));
     }
-    if (workspace.campaigns.some(row => !row.archived && (!row.start || active(row, date))) || workspace.hiring.some(row => !row.archived && row.start <= date)) {
+    for (const campaign of workspace.campaigns) {
+      if (campaign.archived) continue;
+      const changes = events.filter(event => event.field === "marketing.spend" && event.targetId === campaign.id).sort((a, b) => a.date.localeCompare(b.date));
+      if (campaign.planningOnly && !changes.length) continue;
+      if (!campaign.start) { unresolvedMarketing = true; continue; }
+      if (!active(campaign, date)) continue;
+      const ambiguous = changes.length > 1 && changes.at(-1)?.date === changes.at(-2)?.date;
+      const unsupported = changes.some(event => event.dependsOn.length || event.delayMonths || event.rampMonths !== 1);
+      if (ambiguous || unsupported) {
+        daily.marketing = null;
+        unresolvedMarketing = true;
+        reasons.add(`${campaign.name || "Campaign"}: ambiguous or unsupported spend events require explicit dated expense assumptions.`);
+        continue;
+      }
+      const spend = changes.at(-1)?.value ?? campaign.monthlySpend;
+      const other = campaign.otherMonthlyCost ?? 0;
+      if (!nonnegative(spend)) unresolvedMarketing = true;
+      if (!nonnegative(other)) daily.marketing = null;
+      else daily.marketing = plus(daily.marketing!, ((nonnegative(spend) ? spend : 0) + other) / calendarDays);
+    }
+    for (const event of events.filter(event => event.field === "marketing.spend")) {
+      if (!workspace.campaigns.some(campaign => campaign.id === event.targetId)) {
+        daily.marketing = null;
+        reasons.add(`${event.name}: campaign spend event target is missing.`);
+      }
+    }
+    const month = date.slice(0, 7);
+    monthConfiguredMarketing.set(month, plus(monthConfiguredMarketing.has(month) ? monthConfiguredMarketing.get(month)! : 0, daily.marketing!));
+    if (unresolvedMarketing) {
       daily.marketing = null;
       reasons.add("Campaign/hiring financial effects require explicit dated budgets in this bounded historical estimate.");
     }
@@ -301,12 +341,12 @@ export function practiceFinancialEstimateRange(
     if (fixedFee === null) reasons.add(daily.sessions === null ? "Fixed processing estimate needs completed-session coverage for its modeled payment count." : "Fixed processing fee, expected-collection percentage or payments-per-session setting is invalid or missing.");
     daily.taxReserve = explicitTax;
     daily.reserves = explicitReserve;
-    const month = date.slice(0, 7);
     monthDetailedOverhead.set(month, plus(monthDetailedOverhead.has(month) ? monthDetailedOverhead.get(month)! : 0, detailed));
     const bucket = monthValues.get(month) ?? Object.fromEntries(keys.map(key => [key, 0]));
     keys.forEach(key => bucket[key] = plus(bucket[key]!, daily[key]!));
     monthValues.set(month, bucket);
   }
+  let configuredSurplus: number | null = 0;
   for (const [month, row] of monthValues) {
     const start = range.start > month + "-01" ? range.start : month + "-01";
     const end = range.end < monthEnd(start) ? range.end : monthEnd(start);
@@ -317,6 +357,7 @@ export function practiceFinancialEstimateRange(
     const detailed = monthDetailedOverhead.get(month)!;
     row.overhead = allowance === null || detailed === null ? null : plus(row.overhead!, Math.max(allowance, detailed));
     if (row.overhead === null) reasons.add("Operating overhead assumptions, detailed expenses or revenue-based allowance are unknown.");
+    configuredSurplus = plus(configuredSurplus, calculateSurplusBeforeUnconfiguredMarketing(row, monthConfiguredMarketing.get(month)!));
     const costs = total([row.clinicianPay!, row.employerBurden!, row.staffCost!, row.overhead!, row.marketing!, row.fees!, row.ownerPayroll!, row.ownerPayrollBurden!]);
     row.profit = costs === null || row.revenue === null || row.otherIncome === null ? null : row.revenue - costs + row.otherIncome;
     const allocation = cashAllocationsForRange(workspace.allocations, Math.max(0, row.profit ?? 0), start, end);
@@ -335,5 +376,6 @@ export function practiceFinancialEstimateRange(
     row.retainedSurplus = allocated !== null && row.profit !== null ? row.profit - allocated : null;
     keys.forEach(key => values[key] = plus(values[key]!, row[key]!));
   }
+  values.surplusBeforeUnconfiguredMarketing = configuredSurplus !== null && Number.isFinite(configuredSurplus) ? configuredSurplus : null;
   return finish(range, billingCoverageComplete);
 }

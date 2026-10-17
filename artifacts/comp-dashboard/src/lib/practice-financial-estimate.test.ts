@@ -1,11 +1,11 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import {
-  allocationSchema, budgetSchema, categorySchema, clinicianSettingSchema,
-  emptyWorkspace, eventSchema, forecast, prepareBillingChargeResolution, termSchema,
+  allocationSchema, budgetAmount, budgetSchema, campaignSchema, categorySchema, clinicianSettingSchema,
+  emptyWorkspace, eventSchema, forecast, hiringSchema, prepareBillingChargeResolution, termSchema,
   type Context, type ImportEvidenceDeclarations,
 } from "@workspace/practice/hub";
-import { practiceFinancialEstimateRange } from "./practice-financial-estimate.ts";
+import { calculateSurplusBeforeUnconfiguredMarketing, practiceFinancialEstimateRange } from "./practice-financial-estimate.ts";
 import { practiceFinancialRange } from "./practice-financial-range.ts";
 import { summarizeReportedBilling } from "./reported-billing.ts";
 import type { BillingRow, LocalSnapshot } from "./retention-local.ts";
@@ -26,6 +26,197 @@ function fixture(start = "2026-01-01", end = "2026-01-14") {
   return { workspace, context, snapshots, billing, attendance, declarations, range: { start, end }, asOf: end };
 }
 const estimate = (f: ReturnType<typeof fixture>) => practiceFinancialEstimateRange(f.workspace, f.context, f.snapshots, f.asOf, f.range, f.declarations);
+
+const suppliedCosts = () => ({ revenue: 17425, clinicianPay: 10057, fees: 581, employerBurden: 315, staffCost: 361,
+  overhead: 3006, otherIncome: 0, ownerPayroll: 0, ownerPayrollBurden: 0, coOwnerSalaryPretax: 3444 });
+
+test("configured-cost surplus is 3105 without deducting family salary twice, and retains dated marketing", () => {
+  const input = suppliedCosts();
+  const before = structuredClone(input);
+  near(calculateSurplusBeforeUnconfiguredMarketing(input, 0), 3105);
+  near(calculateSurplusBeforeUnconfiguredMarketing({ ...input, coOwnerSalaryPretax: 9999 }, 0), 3105);
+  near(calculateSurplusBeforeUnconfiguredMarketing(input, 200), 2905);
+  assert.deepEqual(input, before);
+  near(calculateSurplusBeforeUnconfiguredMarketing(input, 200), 2905);
+});
+
+test("configured-cost surplus requires every included input to be finite and preserves zero and losses", () => {
+  const input: Record<string, number | null> = suppliedCosts();
+  for (const key of ["revenue", "clinicianPay", "fees", "employerBurden", "staffCost", "overhead", "otherIncome", "ownerPayroll", "ownerPayrollBurden"]) {
+    for (const unknown of [null, NaN, Infinity, -Infinity])
+      assert.equal(calculateSurplusBeforeUnconfiguredMarketing({ ...input, [key]: unknown }, 0), null, `${key}: ${unknown}`);
+    const missing = { ...input };
+    delete missing[key];
+    assert.equal(calculateSurplusBeforeUnconfiguredMarketing(missing, 0), null, key);
+  }
+  for (const unknown of [null, NaN, Infinity]) assert.equal(calculateSurplusBeforeUnconfiguredMarketing(input, unknown), null);
+  near(calculateSurplusBeforeUnconfiguredMarketing(input, 3105), 0);
+  near(calculateSurplusBeforeUnconfiguredMarketing(input, 3106), -1);
+  assert.equal(calculateSurplusBeforeUnconfiguredMarketing({ ...input, revenue: Number.MAX_VALUE, otherIncome: Number.MAX_VALUE }, 0), null);
+});
+
+test("unconfigured campaign effects preserve the known subtotal without supplying profit, allocations or cash", () => {
+  const f = fixture();
+  f.workspace.campaigns.push(campaignSchema.parse({ id: crypto.randomUUID(), name: "Undated spend", monthlySpend: 100 }));
+  const category = categorySchema.parse({ id: crypto.randomUUID(), name: "Marketing services", kind: "marketing" });
+  f.workspace.categories.push(category);
+  f.workspace.budgets.push(budgetSchema.parse({ id: crypto.randomUUID(), name: "Dated service", categoryId: category.id, start: f.range.start, amount: 31, cadence: "monthly" }));
+  const before = structuredClone(f);
+  const result = estimate(f);
+  near(result.values.surplusBeforeUnconfiguredMarketing, 6);
+  assert.equal(result.values.marketing, null); assert.equal(result.values.profit, null);
+  assert.equal(result.status, "partial"); assert.equal(result.modelComplete, false);
+  for (const key of ["taxReserve", "reserves", "distributions", "ownerDistributionsPretax", "retainedSurplus", "cash", "collections", "paidPayroll"])
+    assert.equal(result.values[key], null, key);
+  assert.match(result.unavailableReasons.join(" "), /Campaign\/hiring/);
+  assert.deepEqual(result.components.find(row => row.key === "surplusBeforeUnconfiguredMarketing"), {
+    key: "surplusBeforeUnconfiguredMarketing", label: "Estimated surplus before unconfigured marketing", value: 6, unit: "currency",
+    basis: "Selected pay basis and configured dated costs, including known marketing; excludes unconfigured campaign/hiring effects; not profit, cash or an allocation basis",
+  });
+  assert.deepEqual(f, before);
+  assert.deepEqual(estimate(f), result);
+  assert.equal(practiceFinancialRange(f.workspace, f.context, f.snapshots, f.asOf, f.range).actual.values.profit, null);
+  f.workspace.settings.processingPct = NaN;
+  assert.equal(estimate(f).values.surplusBeforeUnconfiguredMarketing, null);
+});
+
+test("ordinary known marketing preserves available status and a zero subtotal", () => {
+  const f = fixture();
+  f.workspace.campaigns.push(campaignSchema.parse({ id: crypto.randomUUID(), name: "Dated spend", start: f.range.start, monthlySpend: 20 * 31 / 14 }));
+  const result = estimate(f);
+  near(result.values.marketing, 20); near(result.values.profit, 0); near(result.values.surplusBeforeUnconfiguredMarketing, 0);
+  assert.equal(result.status, "available"); assert.equal(result.modelComplete, true);
+  assert.deepEqual(result.unavailableReasons, []);
+  f.range.start = "invalid";
+  assert.equal(estimate(f).values.surplusBeforeUnconfiguredMarketing, null);
+});
+
+test("Sep24-Oct7 campaigns and recurring marketing services accrue by dates without acquisition or bill timing inputs", () => {
+  const f = fixture("2026-09-24", "2026-10-07");
+  f.workspace.campaigns.push(
+    campaignSchema.parse({ id: crypto.randomUUID(), name: "Google Ads General", start: "2026-01-01", monthlySpend: 850 }),
+    campaignSchema.parse({ id: crypto.randomUUID(), name: "October increase", start: "2026-10-01", monthlySpend: 500 }),
+  );
+  const category = categorySchema.parse({ id: crypto.randomUUID(), name: "Marketing services", kind: "marketing" });
+  f.workspace.categories.push(category);
+  for (const [index, amount] of [150, 750, 30, 30, 12].entries()) f.workspace.budgets.push(budgetSchema.parse({
+    id: crypto.randomUUID(), name: `Service ${index}`, categoryId: category.id, start: "2026-01-01", amount, cadence: "monthly",
+    billingReferenceStart: null,
+  }));
+  const before = structuredClone(f);
+  const result = estimate(f);
+  const campaignCost = 850 * 7 / 30 + (850 + 500) * 7 / 31;
+  const serviceCost = (150 + 750 + 30 + 30 + 12) * (7 / 30 + 7 / 31);
+  assert.equal(f.workspace.budgets.reduce((sum, budget) => sum + budget.amount, 0), 972);
+  for (const campaign of f.workspace.campaigns) {
+    assert.equal(campaign.otherMonthlyCost, null); assert.equal(campaign.method, null);
+    assert.equal(campaign.consultationPct, null); assert.equal(campaign.attendancePct, null); assert.equal(campaign.closePct, null);
+    assert.equal(campaign.end, null); assert.equal(campaign.planningOnly, false);
+  }
+  near(result.values.marketing, 949.4559139784946);
+  near(result.values.marketing, campaignCost + serviceCost);
+  near(result.values.profit, 50 - 30 - campaignCost - serviceCost);
+  near(result.values.surplusBeforeUnconfiguredMarketing, result.values.profit!);
+  assert.equal(result.status, "available"); assert.equal(result.modelComplete, true);
+  assert.deepEqual(result.unavailableReasons, []);
+  assert.deepEqual(f, before); assert.deepEqual(estimate(f), result);
+  for (const budget of f.workspace.budgets) {
+    assert.equal(budget.end, null); assert.equal(budget.billingReferenceStart, null);
+    near(budgetAmount(budget, "2026-09-24", "2026-09-30") + budgetAmount(budget, "2026-10-01", "2026-10-07"), budget.amount * (7 / 30 + 7 / 31));
+    budget.billingDay = 31;
+    budget.billingReferenceStart = "2026-12-01";
+    near(budgetAmount(budget, "2026-09-24", "2026-09-30") + budgetAmount(budget, "2026-10-01", "2026-10-07"), budget.amount * (7 / 30 + 7 / 31));
+  }
+  assert.deepEqual(estimate(f), result, "optional first-bill references do not change expense accrual");
+});
+
+test("campaign spend events replace daily spend and optional configured other costs accrue once", () => {
+  const f = fixture("2026-01-01", "2026-01-28");
+  const campaign = campaignSchema.parse({ id: crypto.randomUUID(), name: "Dated campaign", start: f.range.start, monthlySpend: 310, otherMonthlyCost: 31 });
+  f.workspace.campaigns.push(campaign);
+  f.workspace.events.push(eventSchema.parse({ id: crypto.randomUUID(), name: "Temporary spend", field: "marketing.spend", targetId: campaign.id, date: "2026-01-11", end: "2026-01-20", value: 620 }));
+  const result = estimate(f);
+  near(result.values.marketing, 18 * 10 + 10 * 20 + 28);
+  near(result.values.profit, 20 - 408);
+  assert.equal(result.status, "available");
+  assert.deepEqual(result.unavailableReasons, []);
+  campaign.planningOnly = true;
+  near(estimate(f).values.marketing, 10 * 20 + 10);
+});
+
+test("campaign-associated agency services add to campaign spend, matching forecast expense semantics", () => {
+  const f = fixture();
+  const campaign = campaignSchema.parse({ id: crypto.randomUUID(), name: "Linked campaign", start: f.range.start, monthlySpend: 310 });
+  f.workspace.campaigns.push(campaign);
+  const category = categorySchema.parse({ id: crypto.randomUUID(), name: "Marketing", kind: "marketing" });
+  f.workspace.categories.push(category);
+  f.workspace.budgets.push(budgetSchema.parse({ id: crypto.randomUUID(), name: "Agency management service", categoryId: category.id, start: f.range.start, amount: 310, cadence: "monthly", campaignId: campaign.id }));
+  const linked = estimate(f);
+  near(linked.values.marketing, 280); near(linked.values.profit, 20 - 280); near(linked.values.surplusBeforeUnconfiguredMarketing, 20 - 280);
+  assert.equal(linked.status, "available"); assert.deepEqual(linked.unavailableReasons, []);
+  f.workspace.budgets[0].campaignId = null;
+  assert.deepEqual(estimate(f), linked, "association alone does not change cost attribution");
+});
+
+test("ambiguous same-day spend events withhold campaign expense and the bounded subtotal", () => {
+  const f = fixture();
+  const campaign = campaignSchema.parse({ id: crypto.randomUUID(), name: "Ambiguous campaign", start: f.range.start, monthlySpend: 310 });
+  f.workspace.campaigns.push(campaign);
+  for (const value of [310, 620]) f.workspace.events.push(eventSchema.parse({ id: crypto.randomUUID(), name: "Ambiguous spend", field: "marketing.spend", targetId: campaign.id, date: f.range.start, value }));
+  const result = estimate(f);
+  assert.equal(result.values.marketing, null); assert.equal(result.values.profit, null); assert.equal(result.values.surplusBeforeUnconfiguredMarketing, null);
+  assert.match(result.unavailableReasons.join(" "), /ambiguous or unsupported spend events/);
+});
+
+test("inactive planning campaigns and unused hiring templates do not invent costs or blockers", () => {
+  const f = fixture();
+  for (const fields of [{ planningOnly: true }, { archived: true }, { start: "2026-02-01" }, { start: "2025-01-01", end: "2025-12-31" }])
+    f.workspace.campaigns.push(campaignSchema.parse({ id: crypto.randomUUID(), name: "Inactive campaign", monthlySpend: 310, ...fields }));
+  const known = estimate(f);
+  near(known.values.profit, 20); near(known.values.surplusBeforeUnconfiguredMarketing, 20);
+  assert.equal(known.status, "available");
+  f.workspace.hiring.push(hiringSchema.parse({ id: crypto.randomUUID(), name: "Unused hiring template", templateClinicianId: 1, start: f.range.start,
+    monthlySupport: 100, recruiting: 500, credentialing: 200, training: 300, equipment: 400, preCaseloadPay: 600 }));
+  const before = structuredClone(f);
+  assert.deepEqual(estimate(f), known);
+  assert.deepEqual(f, before);
+});
+
+test("only enabled applicable hire events withhold historical costs through the unsupported event path", () => {
+  const f = fixture();
+  const known = estimate(f);
+  const event = eventSchema.parse({ id: crypto.randomUUID(), name: "Explicit hire", field: "clinician.hire", targetId: "1",
+    date: f.range.start, value: 25, monthlyCost: 100, oneTimeCost: 500, enabled: false });
+  f.workspace.events.push(event);
+  assert.deepEqual(estimate(f), known, "disabled hire events have no financial effects");
+  event.enabled = true;
+  event.date = "2026-02-01";
+  assert.deepEqual(estimate(f), known, "future hire events have no selected-period effects");
+  event.date = f.range.start;
+  const before = structuredClone(f);
+  const result = estimate(f);
+  near(result.values.marketing, 0);
+  assert.equal(result.values.overhead, null); assert.equal(result.values.profit, null);
+  assert.equal(result.values.surplusBeforeUnconfiguredMarketing, null);
+  assert.equal(result.status, "partial"); assert.equal(result.modelComplete, false);
+  assert.match(result.unavailableReasons.join(" "), /event clinician\.hire is unsupported/);
+  for (const key of ["distributions", "retainedSurplus", "cash", "collections", "paidPayroll"]) assert.equal(result.values[key], null, key);
+  assert.deepEqual(f, before);
+});
+
+test("known salary and configured campaign spend survive an unclassified charge warning", () => {
+  const f = fixture();
+  f.billing.rows[0].billingCode = "UNCLASSIFIED";
+  f.workspace.clinicians.push(clinicianSettingSchema.parse({ id: crypto.randomUUID(), clinicianId: 1, start: f.range.start, desiredWeeklySessions: 7, payMode: "salary", payAmount: 372 }));
+  f.workspace.settings.familyW2ClinicianId = 1;
+  f.workspace.campaigns.push(campaignSchema.parse({ id: crypto.randomUUID(), name: "Known campaign spend", start: f.range.start, monthlySpend: 31 }));
+  const result = estimate(f);
+  near(result.values.clinicianPay, 14); near(result.values.coOwnerSalaryPretax, 14);
+  near(result.values.marketing, 14); near(result.values.profit, 22); near(result.values.surplusBeforeUnconfiguredMarketing, 22);
+  assert.equal(result.status, "partial"); assert.equal(result.modelComplete, false);
+  assert.match(result.unavailableReasons.join(" "), /unclassified service code/);
+  assert.doesNotMatch(result.unavailableReasons.join(" "), /Campaign\/hiring/);
+});
 
 test("discounted billed gross drives split pay without finalized financial periods or card-rate fill", () => {
   const f = fixture();
