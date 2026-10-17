@@ -158,7 +158,7 @@ import {
 import MoneyFlowToday from "@/components/practice/money-flow-today";
 import MoneyRangeSummary from "@/components/practice/money-range-summary";
 import { practiceFinancialRange, financialRangeBridge } from "@/lib/practice-financial-range";
-import { practiceFinancialEstimateRange } from "@/lib/practice-financial-estimate";
+import { practiceFinancialEstimateRange, type HistoricalPayBasis } from "@/lib/practice-financial-estimate";
 import { financialEstimateDisplay, financialEstimateBridge } from "@/lib/financial-estimate-display";
 import WeeklyBlocks from "@/components/practice/weekly-blocks";
 import SandboxView from "@/components/sandbox-view";
@@ -720,6 +720,7 @@ export default function PracticeWorkspace() {
   const [sessionMetricView, setSessionMetricView] =
     useState<SessionMetricView>("sessions");
   const [sharedPeriod, setSharedPeriod] = useState<SharedPeriod>("30d");
+  const [historicalPayBasis, setHistoricalPayBasis] = useState<HistoricalPayBasis>("dated");
   const [customPeriod, setCustomPeriod] = useState({
     start: "2026-09-01",
     end: "2026-10-14",
@@ -1087,12 +1088,12 @@ export default function PracticeWorkspace() {
       const report = practiceFinancialRange(estimateWorkspace, modelContext ?? context, localRetentionState.snapshots, today,
         selected.range, importedSessionOverlay?.attendanceCoverage, importEvidenceDeclarations);
       const history = report.actual.range ? practiceFinancialEstimateRange(estimateWorkspace, context, localRetentionState.snapshots,
-        today, report.actual.range, importEvidenceDeclarations, localRetentionState.sameDayVisitOverrides) : null;
+        today, report.actual.range, importEvidenceDeclarations, localRetentionState.sameDayVisitOverrides, { payBasis: historicalPayBasis }) : null;
       return { ...financialEstimateDisplay(report, history), report };
     };
     return { selected: estimate(financialRangeReports.selected), summary: estimate(financialRangeReports.summary), year: estimate(financialRangeReports.year) };
   }, [financialRangeReports, context, storedWorkspace, workspace, workingWorkspace, resolved?.inherited.ownerPay,
-    modelContext, localRetentionState.snapshots, localRetentionState.sameDayVisitOverrides, today, importedSessionOverlay?.attendanceCoverage, importEvidenceDeclarations]);
+    modelContext, localRetentionState.snapshots, localRetentionState.sameDayVisitOverrides, today, importedSessionOverlay?.attendanceCoverage, importEvidenceDeclarations, historicalPayBasis]);
   const billingIdentityNeedsReview = useMemo(() => !!context && !!workspace && localRetentionState.snapshots.some((source) => source.kind === "billing"
     && source.rows.some((row) => row.serviceDate <= today
       && resolveImportedProvider(row.clinician, context.clinicians, workspace.settings.teamId, importEvidenceDeclarations) === null
@@ -5878,13 +5879,15 @@ export default function PracticeWorkspace() {
                   {historicalBillingReport && <HistoricalBillingSummary report={historicalBillingReport} />}
                   {financialEstimates && <section className="pw-money-bridge-panel" aria-label="Billed-charge financial estimate">
                     <div className="pw-section-heading"><div><h3>Financial estimate</h3><p>{selectedMoneyRange.range.start} to {selectedMoneyRange.range.end} · billed charges and configured cost assumptions, not cash collected or paid payroll.</p></div></div>
+                    <label className="pw-draft-field"><span>Historical compensation basis</span><select aria-label="Historical compensation basis" value={historicalPayBasis} onChange={event => setHistoricalPayBasis(event.target.value as HistoricalPayBasis)}><option value="dated">Respect configured pay dates</option><option value="current-assumptions">Current pay assumptions for earlier gaps</option></select></label>
+                    <p className="pw-note">{historicalPayBasis === "current-assumptions" ? "Scenario: current configured pay fills earlier profile-date gaps for clinicians with recorded work. Known dated terms take precedence. It does not verify historical pay, assume an unknown cap position, save settings or complete actual goals." : "Later-configured pay is not historical proof. A current-pay scenario is available without changing stored history."}</p>
                     <div className="pw-money-bridge">
                       {[["Revenue estimate", "revenue"], ["Clinician compensation estimate", "clinicianPay"], ["Operating profit estimate", "profit"]].map(([label, key]) => <div className={`pw-bridge-step pw-bridge-${key === "profit" ? "profit" : "in"}`} key={key}><strong>{money(financialEstimates.selected.values[key])}</strong><span>{label}</span></div>)}
                     </div>
                     <details><summary>Estimate sources and assumptions</summary>
                       <p>{financialEstimates.selected.basis}</p>
                       <p>Historical estimate: {financialEstimates.selected.historical?.range ? `${financialEstimates.selected.historical.range.start} to ${financialEstimates.selected.historical.range.end}` : "No complete historical boundary"}. Future estimate: {financialEstimates.selected.report.forward.range ? `${financialEstimates.selected.report.forward.range.start} to ${financialEstimates.selected.report.forward.range.end}` : "Not included"}.</p>
-                      {financialEstimates.selected.historical?.components.map(component => <div className="pw-overview-total" key={component.key}><span>{component.label} · {component.basis}</span><strong>{money(component.value)}</strong></div>)}
+                      {financialEstimates.selected.historical?.components.map(component => <div className="pw-overview-total" key={component.key}><span>{component.label} · {component.basis}</span><strong>{fmt(component.value, component.unit)}</strong></div>)}
                       {financialEstimates.selected.historical?.assumptions.map(reason => <p key={reason}>{reason}</p>)}
                       {financialEstimates.selected.reasons.map(reason => <p key={reason}>{reason}</p>)}
                     </details>
@@ -7084,7 +7087,7 @@ export default function PracticeWorkspace() {
                   )}
                   <div className="pw-overview-primary-grid">
                     <section aria-label="Overview monthly surplus">
-                      <h3>Estimated monthly surplus</h3><p>{monthLabel(summaryMonth?.date ?? today)} · billed-charge history and future clinician-card estimate</p>
+                      <h3>Estimated monthly surplus</h3><p>{monthLabel(summaryMonth?.date ?? today)} · billed-charge history and future clinician-card estimate · {historicalPayBasis === "current-assumptions" ? "current-pay scenario for historical gaps" : "configured pay dates respected"}</p>
                       <div className="pw-metric-hero"><strong>{money(financialEstimates?.summary.values.profit)}</strong><span>After estimated clinician pay and practice costs</span></div>
                       <button className="pw-button" onClick={() => setSection("money")}>Money<ChevronRight /></button>
                       <details><summary>Details</summary><p>Historical percentage compensation uses accepted discounted billed charges and dated compensation rules. Costs use configured assumptions, not paid receipts. Future revenue and percentage pay use clinician-card fee estimates. Incomplete source periods are excluded; missing model inputs stay unknown. Recorded actual profit remains separate in Money.</p>{financialEstimates?.summary.reasons.map((warning) => <p key={warning}>{warning}</p>)}</details>
@@ -7106,7 +7109,7 @@ export default function PracticeWorkspace() {
                   <div className="pw-overview-composition">
                     <section aria-label="Overview financial summary">
                       <h3>{importEvidenceDeclarations?.historicalBillingProviders?.length || billingIdentityNeedsReview ? "Current-team financial estimate" : "Financial estimate"}</h3>
-                      <p>{today.slice(0, 4)} current-year progress · complete report periods through {overviewYearRange.dataThrough ?? "unverified"}; forecast estimate {overviewYearRange.forward.range?.start ?? "unavailable"} to {today.slice(0, 4)}-12-31. Not collected cash.</p>
+                      <p>{today.slice(0, 4)} current-year progress · complete report periods through {overviewYearRange.dataThrough ?? "unverified"}; forecast estimate {overviewYearRange.forward.range?.start ?? "unavailable"} to {today.slice(0, 4)}-12-31. Not collected cash. {historicalPayBasis === "current-assumptions" ? "Current-pay scenario fills historical profile gaps; not historical pay facts." : "Configured pay dates respected; legacy card assumptions disclosed in Money."}</p>
                       <div aria-label="Current year actual and forward split">
                         <div className="pw-overview-total"><span>Actual reported charged fees · {overviewYearRange.actual.range?.start} to {overviewYearRange.actual.range?.end} · billing coverage {overviewYearRange.actual.billingComplete ? "complete" : "incomplete or unverified"}</span><strong>{money(overviewYearRange.actual.reportedCharges)}</strong></div>
                         <div className="pw-overview-total"><span>Actual billed session income · financial coverage {overviewYearRange.actual.complete ? "complete" : "incomplete"}</span><strong>{money(overviewYearRange.actual.values.revenue)}</strong></div>
@@ -7132,7 +7135,7 @@ export default function PracticeWorkspace() {
                     </section>
                     <section aria-label="Overview combined funding progress">
                       <h3>Named goal status</h3>
-                      <p>{monthLabel(summaryMonth?.date ?? today)} estimated progress; recorded achievement remains separate.</p>
+                      <p>{monthLabel(summaryMonth?.date ?? today)} estimated progress; recorded achievement remains separate. {historicalPayBasis === "current-assumptions" ? "Current-pay scenario for earlier gaps." : "Dated pay basis."}</p>
                       {coreGoalRows.map((row) => { const goal = findGoal(row.name); const expected = goalExpected(goal); return <div className="pw-overview-goal-status" key={row.name}><div className="pw-overview-total"><span>{row.name}</span><strong>{fmt(expected, goalUnit(row.metric))} / {fmt(goalTarget(goal), goalUnit(row.metric))}</strong></div><small>{completedGoalStatus(goal, expected, goalTarget(goal))}</small></div>; })}
                       <button className="pw-button" onClick={() => setSection("current-goals")}>Goals<ChevronRight /></button>
                     </section>
@@ -7839,7 +7842,7 @@ export default function PracticeWorkspace() {
                           </div>
                           <div className="pw-progress-comparison">
                             <div>
-                              <span>{row.metric === "activeClinicalHeadcount" ? "Active clinical headcount" : `${monthLabel(summaryMonth?.date ?? today)} estimated pre-tax measure`}</span>
+                              <span>{row.metric === "activeClinicalHeadcount" ? "Active clinical headcount" : `${monthLabel(summaryMonth?.date ?? today)} estimated pre-tax measure${historicalPayBasis === "current-assumptions" ? " (current-pay scenario for earlier gaps)" : " (dated pay)"}`}</span>
                               <strong>{fmt(expected, unit)}</strong>
                             </div>
                             <div>

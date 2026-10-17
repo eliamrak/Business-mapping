@@ -12,6 +12,22 @@ const snapshot = (rows: BillingRow[], id = "synthetic-snapshot"): BillingSnapsho
   id, kind: "billing", importedAt: "2026-10-14T12:00:00Z", sourceHash: id,
   coverageStart: "2026-01-01", coverageEnd: "2026-10-09", rows,
 });
+
+test("eligibility cannot hide retained conflicts; identical excluded copies do not hide admitted charges", () => {
+  const accepted = row();
+  const duplicate = { ...accepted, sourceRowHash: "a-sorts-first" };
+  const admitted = snapshot([accepted], "accepted");
+  const excluded = snapshot([duplicate], "excluded");
+  const before = structuredClone([admitted, excluded]);
+  const options = { eligibleRows: new Set([accepted]), start: "2026-09-01", end: "2026-09-30" };
+  assert.equal(summarizeReportedBilling([excluded, admitted], "2026-10-14", options).months[0].charges, 100);
+  assert.deepEqual([admitted, excluded], before);
+  excluded.rows[0].totalFeeCharged = 150;
+  const conflict = summarizeReportedBilling([excluded, admitted], "2026-10-14", options);
+  assert.equal(conflict.months[0].charges, null);
+  assert.equal(conflict.evidence.conflictingHashCount, 1);
+  assert.equal(conflict.evidence.rawRowCount, 1);
+});
 function monthSnapshot(month: string, total: number, count: number, through = 28) {
   return snapshot(Array.from({ length: count }, (_, index) => row({
     clientId: `synthetic-${month}-${index}`, sourceRowHash: `synthetic-hash-${month}-${index}`,

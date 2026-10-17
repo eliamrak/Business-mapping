@@ -7,6 +7,7 @@ import {
 } from "@workspace/practice/hub";
 import { practiceFinancialEstimateRange } from "./practice-financial-estimate.ts";
 import { practiceFinancialRange } from "./practice-financial-range.ts";
+import { summarizeReportedBilling } from "./reported-billing.ts";
 import type { BillingRow, LocalSnapshot } from "./retention-local.ts";
 import { sameDayVisitKey } from "./retention-local.ts";
 
@@ -189,17 +190,97 @@ test("cap progress resets on January 1, not every selected month", () => {
   near(estimate(f).values.clinicianPay, 30);
 });
 
-test("zero PHONE and documentation are excluded; charged non-treatment and unclassified codes stay unknown", () => {
-  for (const code of ["PHONE", "2"]) {
-    const f = fixture();
-    f.billing.rows.push({ ...f.billing.rows[0], clientId: code, billingCode: code, sourceRowHash: code, totalFeeCharged: 0 });
-    near(estimate(f).values.revenue, 50);
-    f.billing.rows[1].totalFeeCharged = 5;
-    assert.equal(estimate(f).values.revenue, null);
-  }
+test("accepted gross and treatment compensation stay distinct; only nonzero free PHONE violates policy", () => {
+  const f = fixture();
+  f.workspace.settings.processingPct = 3.15;
+  f.workspace.settings.processingFixedPerTransaction = 0.3;
+  f.workspace.settings.processingTransactionsPerSession = 1;
+  for (const [code, amount] of [["30003", 60], ["2", 25], ["PHONE", 0], ["0", 0]] as const)
+    f.billing.rows.push({ ...f.billing.rows[0], clientId: code, billingCode: code, sourceRowHash: code, totalFeeCharged: amount });
+  const known = estimate(f);
+  near(known.values.reportedBilledGross, 135); near(known.values.revenue, 135);
+  near(known.values.clinicianPay, 30); near(known.values.sessions, 1);
+  near(known.values.fees, 135 * 0.0315 + 0.3);
+  assert.equal(known.billingCoverageComplete, true);
+  f.billing.rows.find(row => row.billingCode === "PHONE")!.totalFeeCharged = 5;
+  const anomaly = estimate(f);
+  near(anomaly.values.reportedBilledGross, 140);
+  assert.equal(anomaly.values.revenue, null);
+  assert.equal(anomaly.values.profit, null);
+  assert.match(anomaly.unavailableReasons.join(" "), /nonzero PHONE/);
+});
+
+test("unclassified accepted charges preserve gross and percentage processing, not treatment pay certification", () => {
   const f = fixture(); f.billing.rows[0].billingCode = "UNCLASSIFIED";
-  assert.equal(estimate(f).values.revenue, null);
-  near(estimate(f).values.sessions, 1);
+  Object.assign(f.workspace.settings, { processingPct: 3.15, processingFixedPerTransaction: 0.3, processingTransactionsPerSession: 1 });
+  const result = estimate(f);
+  near(result.values.reportedBilledGross, 50); near(result.values.revenue, 50);
+  near(result.values.fees, 50 * 0.0315 + 0.3); near(result.values.sessions, 1);
+  assert.equal(result.values.clinicianPay, null); assert.equal(result.values.profit, null);
+  assert.match(result.unavailableReasons.join(" "), /unclassified service code/);
+  assert.doesNotMatch(result.unavailableReasons.join(" "), /source coverage|Processing|processing/);
+});
+
+test("later current-pay configuration is an explicit scenario, never silently backdated or persisted", () => {
+  const f = fixture("2026-09-24", "2026-10-07"); f.asOf = "2026-10-17";
+  f.workspace.clinicians.push(clinicianSettingSchema.parse({ id: crypto.randomUUID(), clinicianId: 1, start: "2026-10-08", desiredWeeklySessions: 7 }));
+  const before = structuredClone(f);
+  const dated = estimate(f);
+  near(dated.values.revenue, 50); assert.equal(dated.values.clinicianPay, null);
+  assert.match(dated.unavailableReasons.join(" "), /later-configured pay is not historical proof/);
+  const scenario = practiceFinancialEstimateRange(f.workspace, f.context, f.snapshots, f.asOf, f.range, f.declarations, {}, { payBasis: "current-assumptions" });
+  near(scenario.values.clinicianPay, 30); near(scenario.values.profit, 20);
+  assert.match(scenario.assumptions.join(" "), /configured from 2026-10-08.*not verified historical compensation/);
+  assert.deepEqual(f, before);
+  f.workspace.terms.push(termSchema.parse({ id: crypto.randomUUID(), clinicianId: 1, effectiveDate: "2026-09-01", clinicianSplit: 40 }));
+  const datedPriority = practiceFinancialEstimateRange(f.workspace, f.context, f.snapshots, f.asOf, f.range, f.declarations, {}, { payBasis: "current-assumptions" });
+  near(datedPriority.values.clinicianPay, 20);
+  Object.assign(f.context.clinicians[0], { capEnabled: true, capAmount: 100 });
+  const capUnknown = practiceFinancialEstimateRange(f.workspace, f.context, f.snapshots, f.asOf, f.range, f.declarations, {}, { payBasis: "current-assumptions" });
+  assert.equal(capUnknown.values.clinicianPay, null);
+  assert.match(capUnknown.unavailableReasons.join(" "), /prior annual cap progress/);
+});
+
+test("source-derived six-provider fixed-window fixture reconciles 17425 gross, 107 visits and configured processing independently of pay history", () => {
+  const f = fixture("2026-09-24", "2026-10-07"); f.asOf = "2026-10-17";
+  const original = f.context.clinicians[0];
+  f.context.clinicians = Array.from({ length: 6 }, (_, index) => ({ ...original, id: index + 1, label: `Synthetic ${index + 1}`, preCapClinicianSplit: index === 0 ? 0 : 60 }));
+  f.billing.rows = Array.from({ length: 107 }, (_, index) => ({ ...f.billing.rows[0], clientId: `Synthetic encounter ${index}`, clinician: f.context.clinicians[index % 6].label,
+    serviceDate: index % 2 ? "2026-10-01" : "2026-09-24", totalFeeCharged: index === 0 ? 2415 : 140, sourceRowHash: `treatment-${index}` }));
+  for (let index = 0; index < 8; index++) f.billing.rows.push({ ...f.billing.rows[0], clientId: `Non-treatment ${index}`, clinician: f.context.clinicians[index % 3].label,
+    billingCode: index % 2 ? "30003" : "2", totalFeeCharged: index === 0 ? 100 : index === 1 ? 70 : 0, sourceRowHash: `non-treatment-${index}` });
+  f.attendance.rows = f.billing.rows.slice(0, 107).map(row => ({ ...f.attendance.rows[0], ...row, status: "show" as const }));
+  f.snapshots.push({ ...structuredClone(f.billing), id: "duplicate-export", rows: structuredClone(f.billing.rows.slice(0, 111)).map(row => ({ ...row, sourceRowHash: "copy-" + row.sourceRowHash })) });
+  for (const id of [1, 2]) f.workspace.clinicians.push(clinicianSettingSchema.parse({ id: crypto.randomUUID(), clinicianId: id, start: "2026-10-08", desiredWeeklySessions: 7 }));
+  Object.assign(f.workspace.settings, { processingPct: 3.15, processingFixedPerTransaction: 0.3, processingTransactionsPerSession: 1, collectionPct: 100 });
+  const before = structuredClone(f);
+  const dated = estimate(f);
+  near(dated.values.revenue, 17425); near(dated.values.reportedBilledGross, 17425); near(dated.values.sessions, 107);
+  const reported = summarizeReportedBilling(f.snapshots, f.asOf, f.range);
+  assert.equal(reported.evidence.rawRowCount, 226); assert.equal(reported.evidence.uniqueRowCount, 115); assert.equal(reported.evidence.duplicateRowCount, 111);
+  near(reported.months.reduce((sum, row) => sum + row.charges!, 0), dated.values.revenue!);
+  near(dated.values.fees, 17425 * 0.0315 + 107 * 0.3);
+  assert.equal(dated.values.clinicianPay, null); assert.equal(dated.billingCoverageComplete, true);
+  assert.doesNotMatch(dated.unavailableReasons.join(" "), /billed source coverage|processing|classified/);
+  const scenario = practiceFinancialEstimateRange(f.workspace, f.context, f.snapshots, f.asOf, f.range, f.declarations, {}, { payBasis: "current-assumptions" });
+  assert.notEqual(scenario.values.clinicianPay, null); assert.notEqual(scenario.values.profit, null);
+  assert.equal(scenario.components.find(row => row.key === "sessions")!.unit, "number");
+  const actual = practiceFinancialRange(f.workspace, f.context, f.snapshots, f.asOf, f.range);
+  assert.equal(actual.actual.complete, false); assert.equal(actual.actual.values.profit, null);
+  assert.deepEqual(f, before);
+});
+
+test("known dated salary remains usable before a later profile configuration, in either estimate scenario", () => {
+  const f = fixture("2026-09-24", "2026-10-07"); f.asOf = "2026-10-17";
+  f.workspace.settings.familyW2ClinicianId = 1;
+  f.workspace.clinicians.push(clinicianSettingSchema.parse({ id: crypto.randomUUID(), clinicianId: 1, start: "2026-10-08", payMode: "salary", payAmount: 120000, desiredWeeklySessions: 7 }));
+  f.workspace.terms.push(termSchema.parse({ id: crypto.randomUUID(), clinicianId: 1, effectiveDate: "2026-01-01", payMode: "salary", payAmount: 90000 }));
+  for (const payBasis of ["dated", "current-assumptions"] as const) {
+    const result = practiceFinancialEstimateRange(f.workspace, f.context, f.snapshots, f.asOf, f.range, f.declarations, {}, { payBasis });
+    near(result.values.clinicianPay, 7500 * (7 / 30 + 7 / 31));
+    near(result.values.coOwnerSalaryPretax, result.values.clinicianPay!);
+    assert.doesNotMatch(result.assumptions.join(" "), /current pay assumptions configured from/);
+  }
 });
 
 test("owner clinical pay and family salary are subsets; separate owner payroll is deducted once", () => {

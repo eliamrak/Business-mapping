@@ -1,6 +1,6 @@
 import {
   bindBillingResolutions, budgetAmount, cashAllocationsForRange,
-  clinicianModelAt, clinicianTermsAt, isConsultationService,
+  clinicianModelAt, clinicianTermsAt, isConsultationService, isFreePhoneService,
   isDocumentationService, isRecognizedTreatmentCode, monthEnd,
   overheadGoalAllowance, reconcileBillingEvidence, resolveHistoricalBillingProvider, resolveImportedProvider,
   staffCostForRange, staffMemberAt,
@@ -11,7 +11,8 @@ import { completeReportCoverage } from "./complete-report-coverage.ts";
 import { derivedShowVisits, type LocalSnapshot, type SameDayVisitOverrides } from "./retention-local.ts";
 
 type Range = { start: string; end: string };
-type Component = { key: string; label: string; value: number | null; basis: string };
+type Component = { key: string; label: string; value: number | null; basis: string; unit: "number" | "currency" };
+export type HistoricalPayBasis = "dated" | "current-assumptions";
 export type PracticeFinancialEstimate = {
   source: "historical-estimate";
   range: Range | null;
@@ -31,7 +32,7 @@ const percent = (n: unknown): n is number => nonnegative(n) && n <= 100;
 const plus = (a: number | null, b: number | null) => a === null || b === null ? null : a + b;
 const total = (numbers: (number | null)[]) => numbers.reduce<number | null>(plus, 0);
 const active = (row: { start: string | null; end: string | null; archived?: boolean }, date: string) => !row.archived && !!row.start && row.start <= date && (!row.end || row.end >= date);
-const keys = ["sessions", "revenue", "clinicianPay", "employerBurden", "ownerClinicalPay", "coOwnerSalaryPretax", "staffCost", "overhead", "marketing", "fees", "ownerPayroll", "ownerPayrollBurden", "otherIncome", "profit", "taxReserve", "reserves", "distributions", "retainedSurplus", "ownerDistributionsPretax"];
+const keys = ["sessions", "reportedBilledGross", "revenue", "clinicianPay", "employerBurden", "ownerClinicalPay", "coOwnerSalaryPretax", "staffCost", "overhead", "marketing", "fees", "ownerPayroll", "ownerPayrollBurden", "otherIncome", "profit", "taxReserve", "reserves", "distributions", "retainedSurplus", "ownerDistributionsPretax"];
 const cashKeys = ["collections", "cash", "retainedCash", "familyTakeHome", "paidPayroll", "actualPaid", "bankTransfers"];
 
 /** Billed accrual estimate only. Never finalizes periods or establishes payments. */
@@ -39,12 +40,14 @@ export function practiceFinancialEstimateRange(
   workspace: Workspace, context: Context, snapshots: readonly LocalSnapshot[],
   asOf: string, requested: Range, declarations?: ImportEvidenceDeclarations | null,
   sameDayVisitOverrides: SameDayVisitOverrides = {},
+  options: { payBasis?: HistoricalPayBasis } = {},
 ): PracticeFinancialEstimate {
   const reasons = new Set<string>();
   const assumptions = [
     "Estimate scope is the selected team's clinician roster; explicitly declared historical billing-only providers are excluded from current-team revenue and compensation.",
     "Raw workspace settings are expense assumptions, not goal-injected defaults or accounting actuals; explicit zero is supported.",
-    "Revenue and percentage compensation use accepted discounted billed charges, never clinician-card fees or collected cash.",
+    "Where no operating profile was configured, existing split calculations use clinician-card compensation assumptions; those cards do not verify historical pay. Later profile dates are respected unless the current-pay scenario is explicitly selected.",
+    "Revenue includes accepted discounted billed service charges, including separately billed consultation and documentation; percentage treatment compensation excludes those non-treatment services, matching the existing compensation model. No clinician-card fee or cash substitution is used.",
     "Salary accrues on active calendar dates; owner clinical pay and co-owner salary are subsets of clinician compensation.",
     "Processing is modeled billed revenue times collectionPct times processingPct, plus attended visits times collectionPct times transaction factor times fixed fee; no payment timing or successful payment is established.",
     "Allocations use each selected month's positive estimated billed surplus, weighted by effective dates; distributions are estimates, not bank transfers.",
@@ -58,8 +61,9 @@ export function practiceFinancialEstimateRange(
       source: "historical-estimate", range,
       status: modelComplete ? "available" : keys.some(key => values[key] !== null) && range ? "partial" : "unavailable",
       billingCoverageComplete, modelComplete, values,
-      components: keys.map(key => ({ key, label: ({ revenue: "Actual billed gross", clinicianPay: "Estimated earned clinician compensation", coOwnerSalaryPretax: "Co-owner salary (included in clinician compensation)", ownerClinicalPay: "Owner clinical pay (included in clinician compensation)", ownerDistributionsPretax: "Estimated household distribution (not a transfer)", profit: "Estimated operating profit", fees: "Estimated processing fees" } as Record<string, string>)[key] ?? key,
-        value: values[key] ?? null, basis: key === "revenue" ? "Accepted billed charges by service date" : "Dated model assumption; not paid/accounting actual" })),
+      components: keys.map(key => ({ key, label: ({ sessions: "Completed treatment sessions", reportedBilledGross: "Accepted billed gross", revenue: "Billed revenue estimate", clinicianPay: "Estimated earned clinician compensation", coOwnerSalaryPretax: "Co-owner salary (included in clinician compensation)", ownerClinicalPay: "Owner clinical pay (included in clinician compensation)", ownerDistributionsPretax: "Estimated household distribution (not a transfer)", profit: "Estimated operating profit", fees: "Estimated processing fees" } as Record<string, string>)[key] ?? key,
+        value: values[key] ?? null, unit: key === "sessions" ? "number" as const : "currency" as const,
+        basis: key === "sessions" ? "Complete source-period attended treatment visits" : key === "reportedBilledGross" || key === "revenue" ? "Accepted billed charges by service date" : options.payBasis === "current-assumptions" ? "Dated terms where available; disclosed current-pay assumptions for earlier configuration gaps; not paid/accounting actual" : "Dated model assumption; not paid/accounting actual" })),
       assumptions, unavailableReasons: [...reasons],
     };
   };
@@ -76,6 +80,9 @@ export function practiceFinancialEstimateRange(
   const resolve = (label: string) => resolveImportedProvider(label, context.clinicians, workspace.settings.teamId, declarations);
   const covered = (kind: "billing" | "attendance", id: number, date: string) => (kind === "billing" ? proof.completeBillingCoverage : proof.completeAttendanceCoverage).some(row => row.clinicianId === id && row.start <= date && row.end >= date);
   const charges = new Map<string, number>();
+  const grossCharges = new Map<string, number>();
+  const reconciliationDays = new Set<string>();
+  const phoneAnomalyDays = new Set<string>();
   const badDays = new Set<string>();
   const keyFor = (id: number, date: string) => `${id}|${date}`;
   // Reconcile globally before source admission, date, or team filtering: an excluded
@@ -102,17 +109,19 @@ export function practiceFinancialEstimateRange(
     for (const row of admitted) {
       const id = resolve(row.clinician);
       if (id === null || !ids.has(id)) continue;
-      if (!group.known || group.acceptedRows?.some(accepted => !eligible.has(accepted))) badDays.add(keyFor(id, row.serviceDate));
+      if (!group.known || group.acceptedRows?.some(accepted => !eligible.has(accepted))) reconciliationDays.add(keyFor(id, row.serviceDate));
     }
     if (!admitted.length || !group.known || group.acceptedRows?.some(row => !eligible.has(row))) continue;
     for (const row of group.acceptedRows ?? [admitted[0]]) {
       const id = resolve(row.clinician);
       if (id === null || !ids.has(id)) continue;
       const key = keyFor(id, row.serviceDate);
+      grossCharges.set(key, (grossCharges.get(key) ?? 0) + row.totalFeeCharged);
+      if (isFreePhoneService(row) && row.totalFeeCharged !== 0) { phoneAnomalyDays.add(key); badDays.add(key); continue; }
       if (isDocumentationService(row) || isConsultationService(row)) {
-        if (row.totalFeeCharged !== 0) badDays.add(key);
         continue;
       }
+      if (row.totalFeeCharged === 0) continue;
       if (!isRecognizedTreatmentCode(row.billingCode)) { badDays.add(key); continue; }
       charges.set(key, (charges.get(key) ?? 0) + row.totalFeeCharged);
     }
@@ -122,7 +131,8 @@ export function practiceFinancialEstimateRange(
     const id = resolve(row.clinician);
     if (id !== null && ids.has(id)) visits.set(keyFor(id, row.serviceDate), (visits.get(keyFor(id, row.serviceDate)) ?? 0) + 1);
   }
-  const feeAt = (id: number, date: string) => covered("billing", id, date) && !badDays.has(keyFor(id, date)) ? charges.get(keyFor(id, date)) ?? 0 : null;
+  const grossAt = (id: number, date: string) => covered("billing", id, date) && !reconciliationDays.has(keyFor(id, date)) ? grossCharges.get(keyFor(id, date)) ?? 0 : null;
+  const feeAt = (id: number, date: string) => grossAt(id, date) !== null && !badDays.has(keyFor(id, date)) ? charges.get(keyFor(id, date)) ?? 0 : null;
   const countAt = (id: number, date: string) => covered("attendance", id, date) ? visits.get(keyFor(id, date)) ?? 0 : null;
   if (!people.length) { reasons.add("No mapped clinicians establish the historical practice scope."); keys.forEach(key => values[key] = null); return finish(range, false); }
   let billingCoverageComplete = !identityUnknown;
@@ -132,17 +142,34 @@ export function practiceFinancialEstimateRange(
   const monthValues = new Map<string, Values>();
   const monthDetailedOverhead = new Map<string, number | null>();
   const replayStart = range.start.slice(0, 4) + "-01-01";
+  const assumedPeople = new Set<number>();
+  const historicalWorkers = new Set<number>();
+  for (const source of [grossCharges, visits]) for (const [key, amount] of source) {
+    const [id, date] = key.split("|");
+    if (amount !== 0 && date >= range.start && date <= range.end) historicalWorkers.add(Number(id));
+  }
   for (let date = replayStart; date <= range.end; date = shift(date, 1)) {
     const selected = date >= range.start;
     const calendarDays = Number(monthEnd(date).slice(8));
     const daily: Values = Object.fromEntries(keys.map(key => [key, 0]));
     for (const person of people) {
       const profiles = workspace.clinicians.filter(row => row.clinicianId === person.id);
-      const model = clinicianModelAt(workspace, person.id, date);
+      const datedModel = clinicianModelAt(workspace, person.id, date);
       const term = clinicianTermsAt(workspace, person.id, date);
+      const currentModel = clinicianModelAt(workspace, person.id, asOf);
+      const beforeConfiguration = profiles.length > 0 && profiles.every(profile => profile.start > date);
+      const datedPayKnown = beforeConfiguration && term.payMode !== null && (term.payMode === "existing_split"
+        ? term.clinicianSplit !== null : term.payAmount !== null && (term.payMode !== "hourly" || term.paidHoursPerWeek !== null));
+      const useCurrent = options.payBasis === "current-assumptions" && beforeConfiguration && !datedPayKnown && historicalWorkers.has(person.id) && currentModel?.status === "active";
+      const model = datedModel ?? (useCurrent ? { ...currentModel, payMode: term.payMode ?? currentModel.payMode, payAmount: term.payAmount ?? currentModel.payAmount, paidHoursPerWeek: term.paidHoursPerWeek ?? currentModel.paidHoursPerWeek } : null);
+      if (selected && useCurrent && !assumedPeople.has(person.id)) {
+        assumedPeople.add(person.id);
+        assumptions.push(`${person.label}: current pay assumptions configured from ${currentModel!.start} are applied before that date only in this selected scenario; existing dated terms take precedence. This is not verified historical compensation or a change to stored history.`);
+      }
       const fee = feeAt(person.id, date);
+      const gross = grossAt(person.id, date);
       const count = countAt(person.id, date);
-      const inactive = profiles.length > 0 && (!model || model.status !== "active");
+      const inactive = profiles.length > 0 && (!model || model.status !== "active") && !datedPayKnown;
       const knownInactive = inactive && fee === 0;
       const mode = model?.payMode ?? term.payMode ?? "existing_split";
       let state = capStates.get(person.id);
@@ -192,15 +219,17 @@ export function practiceFinancialEstimateRange(
       if (unsupportedPayEvent) { pay = null; state.earned = null; }
       if (!selected) continue;
       if (unsupportedPayEvent) reasons.add(`${person.label}: clinician events cannot establish dated compensation or cap progress; use explicit dated terms.`);
-      if (fee === null || identityUnknown) { billingCoverageComplete = false; reasons.add(`${person.label}: complete, classified and reconciled billed charges are unavailable for selected dates.`); }
+      if (gross === null || identityUnknown) { billingCoverageComplete = false; reasons.add(`${person.label}: billed source coverage, reconciliation or provider identity is unresolved for selected dates.`); }
+      if (badDays.has(keyFor(person.id, date))) reasons.add(`${person.label}: accepted billed gross is available, but ${phoneAnomalyDays.has(keyFor(person.id, date)) ? "a nonzero PHONE charge violates the zero-fee policy" : "a nonzero charge has an unclassified service code"}; treatment compensation eligibility is unresolved.`);
       if (count === null) reasons.add(`${person.label}: exact attended visits require complete attendance coverage; no period-average or card-rate fill is used.`);
-      if (pay === null) reasons.add(`${person.label}: dated ${mode} compensation inputs or prior annual cap progress are unknown.`);
+      if (pay === null) reasons.add(`${person.label}: ${inactive ? "no active compensation profile covers the service dates; later-configured pay is not historical proof" : fee === null ? "treatment compensation charge basis is unresolved" : person.capEnabled && state.earned === null ? "prior annual cap progress is unknown" : `required ${mode} compensation inputs are missing or unsupported`}.`);
       const burdenInputs = [person.w2EmployerFicaPct, person.futaSutaPct, person.workersCompPct, person.otherEmployerBurdenPct];
       const classificationKnown = ["w2", "1099", "owner", "other"].includes(String(person.classification).toLowerCase());
       const burden = !classificationKnown ? null : String(person.classification).toLowerCase() === "w2" ? pay !== null && burdenInputs.every(percent) ? pay * burdenInputs.reduce((a, b) => a + b, 0) / 100 : null : 0;
       if (burden === null) reasons.add(`${person.label}: classification or employer burden is unknown.`);
       daily.sessions = plus(daily.sessions!, count);
-      daily.revenue = plus(daily.revenue!, identityUnknown ? null : fee);
+      daily.reportedBilledGross = plus(daily.reportedBilledGross!, identityUnknown ? null : gross);
+      daily.revenue = plus(daily.revenue!, identityUnknown || phoneAnomalyDays.has(keyFor(person.id, date)) ? null : gross);
       daily.clinicianPay = plus(daily.clinicianPay!, pay);
       daily.employerBurden = plus(daily.employerBurden!, burden);
       if (String(person.classification).toLowerCase() === "owner") daily.ownerClinicalPay = plus(daily.ownerClinicalPay!, pay);
@@ -267,7 +296,8 @@ export function practiceFinancialEstimateRange(
     const percentageFee = settings.processingPct === 0 ? 0 : percent(settings.processingPct) && percent(settings.collectionPct) && daily.revenue !== null ? daily.revenue * settings.collectionPct / 100 * settings.processingPct / 100 : null;
     const fixedFee = settings.processingFixedPerTransaction === 0 ? 0 : nonnegative(settings.processingFixedPerTransaction) && nonnegative(settings.processingTransactionsPerSession) && percent(settings.collectionPct) && daily.sessions !== null ? daily.sessions * settings.collectionPct / 100 * settings.processingTransactionsPerSession * settings.processingFixedPerTransaction : null;
     daily.fees = plus(percentageFee, fixedFee);
-    if (daily.fees === null) reasons.add("Processing assumptions or exact attended visits needed for estimated transaction counts are unknown.");
+    if (percentageFee === null) reasons.add(daily.revenue === null ? "Percentage processing estimate is withheld because its billed-revenue base is unresolved; this does not establish missing processing settings." : "Percentage processing or expected-collection settings are invalid or missing.");
+    if (fixedFee === null) reasons.add(daily.sessions === null ? "Fixed processing estimate needs completed-session coverage for its modeled payment count." : "Fixed processing fee, expected-collection percentage or payments-per-session setting is invalid or missing.");
     daily.taxReserve = explicitTax;
     daily.reserves = explicitReserve;
     const month = date.slice(0, 7);

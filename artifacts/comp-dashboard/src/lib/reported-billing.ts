@@ -62,7 +62,7 @@ export function summarizeReportedBilling(
   if (teamScope?.has("")) throw new Error("Selected clinician labels must not be blank.");
   const matches = (row: BillingRow) => (scope === null || normalizedLabel(row.clinician) === scope) && (teamScope === null || teamScope.has(normalizedLabel(row.clinician)));
   const billingSnapshots = snapshots.filter((snapshot) => snapshot.kind === "billing");
-  const groups = reconcileBillingEvidence(billingSnapshots.flatMap((snapshot) => snapshot.rows.filter((row) => options.eligibleRows === undefined || options.eligibleRows.has(row)).map((row) => ({ row, snapshotId: snapshot.sourceSnapshotId ?? snapshot.id }))), options.billingResolutions);
+  const groups = reconcileBillingEvidence(billingSnapshots.flatMap((snapshot) => snapshot.rows.map((row) => ({ row, snapshotId: snapshot.sourceSnapshotId ?? snapshot.id }))), options.billingResolutions);
   const evidence = {
     billingSnapshotCount: billingSnapshots.length,
     rawRowCount: 0,
@@ -89,8 +89,13 @@ export function summarizeReportedBilling(
     if (!scopedRows.length) continue;
     const conflicting = group.conflicting && !group.resolutionId;
     const ambiguous = group.ambiguous && !group.resolutionId;
-    const acceptedRows = (group.acceptedRows ?? [group.row]).filter((row) => scopedRows.includes(row));
-    const acceptedCount = group.known ? acceptedRows.length : 1;
+    const approvedCoverageKnown = !group.acceptedRows || group.acceptedRows.every(row => options.eligibleRows === undefined || options.eligibleRows.has(row));
+    if (!approvedCoverageKnown && !evidence.warnings.includes("A pinned approved charge is outside admitted source coverage; the affected total remains unknown.")) evidence.warnings.push("A pinned approved charge is outside admitted source coverage; the affected total remains unknown.");
+    const known = group.known && approvedCoverageKnown;
+    // Ordinary identical exports may sort an excluded copy first. Approved
+    // charges retain their exact source anchors and cannot switch representatives.
+    const acceptedRows = (group.acceptedRows ?? [scopedRows[0]]).filter((row) => scopedRows.includes(row));
+    const acceptedCount = known ? acceptedRows.length : 1;
     const missingHash = group.missingHash;
     evidence.rawRowCount += scopedRows.length;
     evidence.uniqueRowCount += acceptedCount;
@@ -124,7 +129,7 @@ export function summarizeReportedBilling(
         fullyElapsed: month < asOf.slice(0, 7), coverage: "reported-rows-only" as const,
       };
       const acceptedMonthRows = acceptedRows.filter((row) => row.serviceDate.slice(0, 7) === month);
-      const monthCount = group.known ? acceptedMonthRows.length : 1;
+      const monthCount = known ? acceptedMonthRows.length : 1;
       aggregate.rowCount += monthCount;
       aggregate.rawRowCount += monthRows.length;
       aggregate.duplicateRowCount += monthRows.length - monthCount;
@@ -136,7 +141,7 @@ export function summarizeReportedBilling(
       // Signed adjustments and PHONE fees are included. Bad fees and conflicting
       // hash payloads invalidate the affected total instead of becoming zero.
       const sum = aggregate.charges === null ? null : aggregate.charges + acceptedMonthRows.reduce((total, row) => total + row.totalFeeCharged, 0);
-      aggregate.charges = !group.known || monthRows.some((row) => !Number.isFinite(row.totalFeeCharged))
+      aggregate.charges = !known || monthRows.some((row) => !Number.isFinite(row.totalFeeCharged))
         || sum === null || !Number.isFinite(sum) ? null : sum;
       months.set(month, aggregate);
     }
