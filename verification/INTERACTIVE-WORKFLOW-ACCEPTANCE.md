@@ -2,7 +2,7 @@
 
 ## Candidate And Bounds
 
-Frozen runtime/test candidate `a5121c47a01a07ff0e6917f8dd75b3c21bc14003`, tree `71f0ec222b5fbfe189ad37bbf0a73ed1c37ad986`, branch `codex/workflow-acceptance`, based on released `7d8ac067`. No push or deployment in this task. All browser data and downloaded files are synthetic. No private client files, real business records, owner browser, credentials, server settings or converter code were accessed or changed.
+Frozen runtime/test candidate `a5121c47a01a07ff0e6917f8dd75b3c21bc14003`, tree `71f0ec222b5fbfe189ad37bbf0a73ed1c37ad986`, branch `codex/workflow-acceptance`, based on released `7d8ac067`. No push or deployment in this task. All browser data and downloaded files are synthetic. No private client files, real business records, owner browser, credentials or server settings were accessed or changed. No converter code changed; the existing full suite includes synthetic converter compatibility fixtures.
 
 The mounted browser harness uses actual `PracticeWorkspace`, lead-entry and import components, `customFetch`, production parsers and the actual `Reports` recovery component. Endpoint transport is a revision-aware in-memory fixture, not PostgreSQL. The browser-managed backup attachment is served by the loopback fixture server; ordinary endpoint traffic is intercepted locally. This verifies UI behavior, not backend transaction guarantees. Separately, nine tests mount the actual backup router with a database replacement; those are also not PostgreSQL.
 
