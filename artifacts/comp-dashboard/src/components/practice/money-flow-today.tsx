@@ -6,11 +6,11 @@ import {
   clinicianTermsAt,
   estimateW2NetPay,
   monthFlow,
-  staffMemberAt,
   type Context,
   type Workspace,
   type PaceCoverage,
 } from "@workspace/practice/hub";
+import { staffPayAtEditScope } from "@/lib/staff-pay-editor";
 
 const currency = (value: number | null) =>
   value === null
@@ -711,16 +711,14 @@ export default function MoneyFlowToday({
         {staff.length > 0 && (
           <Sources label="Support staff pay">
             {staff.map((member) => {
-              const effective = staffMemberAt(
-                workspace,
-                member,
-                flowHorizonDate,
-              );
               const id = member.id ?? 0;
               const mode = staffModes[id]?.mode ?? "year";
               const date =
                 staffModes[id]?.date || (month > today ? month : today);
               const year = Number(month.slice(0, 4));
+              const effective = staffPayAtEditScope(workspace, member, {
+                year, effectiveDate: mode === "date" ? date : null,
+              });
               return (
                 <SourceRow
                   key={member.id}
