@@ -1638,16 +1638,18 @@ export function forecast(
       .filter((bucket) => bucket.kind === "distribution")
       .reduce((sum, bucket) => sum + bucket.amount, 0);
     const ownerDistributionsPretax =
-      ownerDistributionBuckets.length > 0
-        ? distributions *
-          (ratio(
-            ownerDistributionBuckets.reduce(
-              (sum, bucket) => sum + bucket.amount,
-              0,
-            ),
-            distributionAmountTotal,
-          ) ?? 0)
-        : null;
+      distributions === 0
+        ? 0
+        : ownerDistributionBuckets.length > 0
+          ? distributions *
+            (ratio(
+              ownerDistributionBuckets.reduce(
+                (sum, bucket) => sum + bucket.amount,
+                0,
+              ),
+              distributionAmountTotal,
+            ) ?? 0)
+          : null;
     const familyDistribution =
       configured ? ownerDistributionsPretax ?? 0 : distributions;
     const familyTakeHome =
@@ -1772,7 +1774,7 @@ export function forecast(
       activeClinicalHeadcount:
         "Selected-team clinical roster count at period end, including owners. Dated active status is required when configured; planning records and simulated hire instances are excluded.",
       ownerDistributionsPretax:
-        "Cash distributions attributable to household-marked owner distribution allocations, before personal income tax. Excludes clinical compensation and salary; missing owner allocation attribution remains unknown.",
+        "Cash distributions attributable to household-marked owner distribution allocations, before personal income tax. Excludes clinical compensation and salary; known zero total distributions imply zero owner distributions, while positive amounts with missing owner attribution remain unknown.",
       coOwnerSalaryPretax:
         "Fixed gross salary for settings.familyW2ClinicianId only, using active dates and effective salary-mode terms. Excludes split/hourly/session compensation and personal tax estimates; absent salary attribution remains unknown.",
       sessions: options.workingForecast ? "Working average: each current clinician's available sessions in the rolling three-month window divided by calendar weeks, including quiet weeks. No vacation, full-caseload, room-capacity or acquisition adjustment." : `Demand ${demand.toFixed(1)} allocated across clinician capacity ${capacity.toFixed(1)}, capped by assigned rooms and locations (usable capacity ${Number.isFinite(roomLimit) ? roomLimit.toFixed(1) : "unverified / telehealth"}). Telehealth consumes a room only where configured. Historical baseline is retained separately from new-client cohorts.`,

@@ -229,6 +229,32 @@ test("non-salary pay and unattributed distribution assumptions never substitute 
   assert.equal(values.ownerDistributionsPretax, null);
 });
 
+test("known zero forecast distributions imply zero owner distributions without an attribution bucket", () => {
+  for (const kind of [null, "reserve", "distribution"] as const) {
+    const { workspace, context } = setup();
+    workspace.settings.distributionPct = 0;
+    if (kind) workspace.allocations.push(allocationSchema.parse({
+      id: randomUUID(), name: "Non-household allocation", kind,
+      percent: kind === "reserve" ? 100 : 0, household: false, start: "2026-01-01",
+    }));
+    const values = forecast(workspace, context)[0].values;
+    assert.ok(values.profit! > 0);
+    assert.equal(values.distributions, 0);
+    assert.equal(values.ownerDistributionsPretax, 0);
+  }
+});
+
+test("positive configured distributions without household attribution remain unknown", () => {
+  const { workspace, context } = setup();
+  workspace.allocations.push(allocationSchema.parse({
+    id: randomUUID(), name: "Other owner", kind: "distribution",
+    percent: 25, household: false, start: "2026-01-01",
+  }));
+  const values = forecast(workspace, context)[0].values;
+  assert.ok(values.distributions! > 0);
+  assert.equal(values.ownerDistributionsPretax, null);
+});
+
 test("legacy financial periods default new attributed actual measures to null", () => {
   const { workspace, context } = setup();
   const period = periodSchema.parse({

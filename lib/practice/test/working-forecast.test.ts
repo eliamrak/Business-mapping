@@ -80,7 +80,7 @@ test("unknown selected support pay does not become certified zero staff cost or 
   const { workspace, context, options } = setup();
   context.staff = [{ id: 1, goalId: null, label: "Unknown", classification: "w2", annualSalary: null, hourlyRate: null, hoursPerWeek: null, weeksPerYear: 48, w2EmployerFicaPct: 7.65, futaSutaPct: 1, workersCompPct: 0.5, otherEmployerBurdenPct: 0 }];
   const month = forecast(workspace, context, [], 1, false, options)[0];
-  near(month.values.revenue, 3100); assert.equal(month.values.staffCost, null); assert.equal(month.values.profit, null); assert.equal(month.values.distributions, null);
+  near(month.values.revenue, 3100); assert.equal(month.values.staffCost, null); assert.equal(month.values.profit, null); assert.equal(month.values.distributions, null); assert.equal(month.values.ownerDistributionsPretax, null);
 });
 test("unknown prior costs keep accumulated cash unknown after later staff terms become known", () => {
   const { workspace, context, options } = setup();
@@ -102,6 +102,8 @@ test("billing uncertainty follows collections without destroying later known ear
   assert.equal(months[0].clinicians["1"].profit, null);
   near(months[1].values.revenue, 3000);
   assert.equal(months[1].values.collections, null);
+  assert.equal(months[1].values.distributions, null);
+  assert.equal(months[1].values.ownerDistributionsPretax, null);
   near(months[2].values.revenue, 3100);
   near(months[2].values.collections, 3000);
   assert.equal(months[2].values.cash, null);
@@ -158,7 +160,10 @@ test("a partial working start cannot invent delayed receipts from absent or part
   const months = forecast(workspace, context, [], 1, false, { ...options, useImportedBillingActuals: false, workingRange: { start: "2026-10-15", end: "2026-12-31" } });
   near(months[0].values.revenue, 1700);
   assert.equal(months[0].values.collections, null);
+  assert.equal(months[0].values.distributions, null);
+  assert.equal(months[0].values.ownerDistributionsPretax, null);
   assert.equal(months[1].values.collections, null, "October's partial revenue is not a complete previous-month source");
+  assert.equal(months[1].values.ownerDistributionsPretax, null);
   near(months[2].values.collections, 3000);
   assert.equal(months[2].values.cash, null);
 });

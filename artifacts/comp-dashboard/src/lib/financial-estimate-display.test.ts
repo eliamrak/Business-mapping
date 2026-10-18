@@ -3,10 +3,19 @@ import assert from "node:assert/strict";
 import { financialEstimateBridge, financialEstimateDisplay } from "./financial-estimate-display.ts";
 import type { PracticeFinancialRange } from "./practice-financial-range.ts";
 import type { PracticeFinancialEstimate } from "./practice-financial-estimate.ts";
+import { emptyWorkspace, forecast, type Context } from "@workspace/practice/hub";
+import { practiceFinancialRange } from "./practice-financial-range.ts";
 
 const values = { revenue: 100, clinicianPay: 60, profit: 30, employerBurden: 0, staffCost: 0, overhead: 10, marketing: 0, fees: 0, ownerPayroll: 0, ownerPayrollBurden: 0, collections: null };
 const history = { range: { start: "2026-01-01", end: "2026-01-14" }, values, components: [], unavailableReasons: [] } as unknown as PracticeFinancialEstimate;
 const report = () => ({ actual: { range: history.range, values: { profit: null }, complete: false }, forward: { range: { start: "2026-01-15", end: "2026-01-31" }, values: { ...values, collections: 100 } }, values, ownerPayrollBurdenPct: 0, forecastWarnings: [] }) as unknown as PracticeFinancialRange;
+const ownerContext: Context = {
+  clinicians: [{ id: 1, label: "Synthetic", goalId: null, classification: "other", sessionRate: 100,
+    sessionsPerWeek: 20, weeksWorkedPerYear: 52.1786, capEnabled: false, capAmount: 0,
+    preCapClinicianSplit: 60, preCapPracticeSplit: 40, postCapClinicianSplit: 60, postCapPracticeSplit: 40,
+    w2EmployerFicaPct: 0, futaSutaPct: 0, workersCompPct: 0, otherEmployerBurdenPct: 0 }],
+  staff: [], sessions: [],
+};
 
 test("estimate composition sums disjoint segments without changing recorded actuals or certifying cash", () => {
   const source = report();
@@ -56,4 +65,39 @@ test("partial marketing subtotal remains separate from profit, actuals and overl
   source.forward.range = null;
   const zero = { ...partial, values: { ...partial.values, surplusBeforeUnconfiguredMarketing: 0 } };
   assert.equal(financialEstimateDisplay(source, zero).surplusBeforeUnconfiguredMarketing, 0);
+});
+
+test("mixed historical and forecast owner distributions preserve known zero and unknown segments", () => {
+  const workspace = emptyWorkspace("2026-10-01");
+  Object.assign(workspace.settings, { baselineMode: "manual", baselineWeeklySessions: 7, baselineRetentionPct: 100, defaultInPersonPct: 0, horizonMonths: 1, distributionPct: 0 });
+  const forwardRange = { start: "2026-10-08", end: "2026-10-31" };
+  const future = forecast(workspace, ownerContext, [], 1, false, { workingForecast: true, workingRange: forwardRange, useImportedBillingActuals: false, baselineWeeklyByClinician: { 1: 7 } })[0];
+  assert.ok(future.values.profit! > 0);
+  assert.equal(future.values.distributions, 0);
+  assert.equal(future.values.ownerDistributionsPretax, 0);
+  const source = report();
+  source.actual.range = { start: "2026-10-01", end: "2026-10-07" };
+  source.forward.range = forwardRange;
+  source.forward.values = future.values;
+  const known = { ...history, range: source.actual.range, values: { ...history.values, distributions: 0, ownerDistributionsPretax: 0 } };
+  assert.equal(financialEstimateDisplay(source, known).values.ownerDistributionsPretax, 0);
+  const positiveKnown = { ...known, values: { ...known.values, distributions: 50, ownerDistributionsPretax: 50 } };
+  assert.equal(financialEstimateDisplay(source, positiveKnown).values.ownerDistributionsPretax, 50);
+  const unknown = { ...known, values: { ...known.values, ownerDistributionsPretax: null } };
+  assert.equal(financialEstimateDisplay(source, unknown).values.ownerDistributionsPretax, null);
+  assert.equal(financialEstimateDisplay(source, null).values.ownerDistributionsPretax, null);
+  source.forward.values = { ...future.values, distributions: 100, ownerDistributionsPretax: null };
+  assert.equal(financialEstimateDisplay(source, known).values.ownerDistributionsPretax, null);
+  source.forward.values = { ...future.values, distributions: null, ownerDistributionsPretax: null };
+  assert.equal(financialEstimateDisplay(source, known).values.ownerDistributionsPretax, null);
+});
+
+test("absent report coverage cannot become a known zero owner estimate", () => {
+  const workspace = emptyWorkspace("2026-10-01");
+  workspace.settings.distributionPct = 0;
+  const source = practiceFinancialRange(workspace, ownerContext, [], "2026-10-18", { start: "2026-10-01", end: "2026-10-31" });
+  assert.equal(source.dataThrough, null);
+  assert.equal(source.values.distributions, null);
+  assert.equal(source.values.ownerDistributionsPretax, null);
+  assert.equal(financialEstimateDisplay(source, null).values.ownerDistributionsPretax, null);
 });

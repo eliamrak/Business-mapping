@@ -381,6 +381,10 @@ test("unset target is unavailable, explicit zero is meaningful, missing attribut
   input.workspace.goals[0].metric = "sessions";
   close(financialSessionGoal(input).practiceWeeklyGoal, 0);
   input.workspace.goals[0].metric = "ownerDistributionsPretax";
+  input.workspace.settings.distributionPct = 0;
+  assert.equal(financialSessionGoal(input).status, "available");
+  input.workspace.goals[0].amount = 1;
+  input.workspace.settings.distributionPct = 25;
   assert.equal(financialSessionGoal(input).status, "unavailable");
 });
 
