@@ -1,6 +1,21 @@
 import { useEffect } from "react";
+export function requiresUnsavedNavigationConfirm(event: MouseEvent, currentHref: string) {
+  if (event.defaultPrevented || event.button !== 0) return false;
+  const target = event.target as Element | null;
+  const anchor = target?.closest?.("a[href]") as HTMLAnchorElement | null;
+  const button = target?.closest?.("button") as HTMLButtonElement | null;
+  const changesView = button && !button.disabled
+    && button.getAttribute("aria-current") !== "page"
+    && button.getAttribute("aria-selected") !== "true"
+    && button.closest("[data-unsaved-navigation]");
+  const leavesPage = anchor && !event.ctrlKey && !event.metaKey && !event.shiftKey
+    && !anchor.download && anchor.target !== "_blank" && anchor.href !== currentHref;
+  return !!(leavesPage || changesView);
+}
+
 export function useUnsaved(dirty: boolean) {
   useEffect(() => {
+    if (!dirty) return;
     const unload = (event: BeforeUnloadEvent) => {
       if (dirty) {
         event.preventDefault();
@@ -9,22 +24,7 @@ export function useUnsaved(dirty: boolean) {
     };
     const navigate = (event: MouseEvent) => {
       if (
-        !dirty ||
-        event.defaultPrevented ||
-        event.ctrlKey ||
-        event.metaKey ||
-        event.shiftKey ||
-        event.button !== 0
-      )
-        return;
-      const anchor = (event.target as HTMLElement).closest(
-        "a[href]",
-      ) as HTMLAnchorElement | null;
-      if (
-        anchor &&
-        !anchor.download &&
-        anchor.target !== "_blank" &&
-        anchor.href !== location.href &&
+        requiresUnsavedNavigationConfirm(event, location.href) &&
         !window.confirm("Discard unsaved changes and leave this view?")
       ) {
         event.preventDefault();
@@ -33,6 +33,7 @@ export function useUnsaved(dirty: boolean) {
     };
     const discard = (event: Event) => {
       if (
+        !event.defaultPrevented &&
         dirty &&
         !window.confirm("Discard unsaved changes and reload saved values?")
       )

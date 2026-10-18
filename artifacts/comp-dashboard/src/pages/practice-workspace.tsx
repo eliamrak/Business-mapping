@@ -1,5 +1,6 @@
 import { useEffect, useId, useMemo, useRef, useState, type ReactNode } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useUnsaved } from "@/components/hub/use-unsaved";
 import {
   customFetch,
   useListBusinessGoals,
@@ -508,6 +509,7 @@ function DraftField({
   step?: number;
 }) {
   const [text, setText] = useState(value == null ? "" : String(value));
+  useUnsaved(text !== (value == null ? "" : String(value)));
   useEffect(() => setText(value == null ? "" : String(value)), [value]);
   return (
     <label className="pw-draft-field">
@@ -3277,7 +3279,7 @@ export default function PracticeWorkspace() {
 
   return (
     <div className="practice-theme pw-app" data-appearance="dark">
-      <header className="pw-rail pw-top-navigation" aria-label="Practice navigation">
+      <header className="pw-rail pw-top-navigation" aria-label="Practice navigation" data-unsaved-navigation>
         <div className="pw-brand">
           <span className="pw-brand-mark">EMC</span>
           <span>
@@ -3444,12 +3446,12 @@ export default function PracticeWorkspace() {
                     <Download /> Move data
                   </button>
                 )}
-                <button className="pw-button" onClick={startPlanning}>
+                <button className="pw-button" data-unsaved-navigation onClick={startPlanning}>
                   <Flag /> New scenario
                 </button>
               </>
             ) : (
-              <button className="pw-button" onClick={startPlanning}>
+              <button className="pw-button" data-unsaved-navigation onClick={startPlanning}>
                 <Plus />
                 New scenario
               </button>
@@ -4409,6 +4411,7 @@ export default function PracticeWorkspace() {
                     className="pw-segmented"
                     role="tablist"
                     aria-label="Marketing view"
+                    data-unsaved-navigation
                   >
                     {["results", "campaigns"].map((t) => (
                       <button

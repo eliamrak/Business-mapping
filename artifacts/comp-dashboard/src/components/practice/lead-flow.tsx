@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useUnsaved } from "@/components/hub/use-unsaved";
 import { MoreHorizontal, Plus, Save, Trash2 } from "lucide-react";
 import type { Context, Workspace } from "@workspace/practice/hub";
 import BulkLeadEntry from "./bulk-lead-entry";
@@ -31,14 +32,18 @@ function CountInput({ row, field, disabled, onPatch }: {
   onPatch: (id: string, patch: Partial<Funnel>) => void;
 }) {
   const current = row[field];
+  const [dirty, setDirty] = useState(false);
+  useUnsaved(dirty);
   const label = countFields.find((item) => item.key === field)?.label ?? field;
   return <input
     key={`${row.id}:${field}:${current}`}
     aria-label={`${label} for ${row.scope === "practice" ? "whole practice" : row.sourceName || "campaign"}`}
     type="number" min="0" max="10000000" step="1"
     defaultValue={current ?? ""} disabled={disabled}
+    onChange={(event) => setDirty(event.currentTarget.value !== (current == null ? "" : String(current)))}
     onKeyDown={(event) => { if (event.key === "Enter") event.currentTarget.blur(); }}
     onBlur={(event) => {
+      setDirty(false);
       const raw = event.currentTarget.value.trim();
       if (!validCount(raw)) {
         event.currentTarget.value = current === null ? "" : String(current);
@@ -92,6 +97,21 @@ export default function LeadFlow({
   const [draftCounts, setDraftCounts] = useState<Record<CountKey, string>>({ leads: "", scheduled: "", attended: "", clients: "" });
   const [entryError, setEntryError] = useState("");
   const [entrySaving, setEntrySaving] = useState(false);
+  const [sourceEditing, setSourceEditing] = useState(false);
+  const entryDirty = Object.values(draftCounts).some(value => value !== "") || !!draftSource || !!draftClinician;
+  useUnsaved(bulkDirty || entryDirty || sourceEditing);
+  function selectMonth(next: string) {
+    if (next === month) return true;
+    if (!window.dispatchEvent(new Event("emc-discard", { cancelable: true }))) return false;
+    setMonth(next);
+    setEntryMode("practice");
+    setReplacePractice(false);
+    setDraftCounts({ leads: "", scheduled: "", attended: "", clients: "" });
+    setDraftSource("");
+    setDraftClinician("");
+    setEntryError("");
+    return true;
+  }
   const start = `${month}-01`;
   const end = month
     ? new Date(Date.UTC(Number(month.slice(0, 4)), Number(month.slice(5)), 0)).toISOString().slice(0, 10)
@@ -208,19 +228,11 @@ export default function LeadFlow({
     </div>
     {view === "year" ? <BulkLeadEntry workspace={workspace} readOnly={readOnly} pending={pending}
       year={year} onYearChange={setYear} onDirtyChange={setBulkDirty} onSave={onSaveBulk}
-      onOpenMonth={(next) => { setMonth(next); setView("month"); }} /> : <>
+      onOpenMonth={(next) => { if (selectMonth(next)) setView("month"); }} /> : <>
     <div className="pw-lead-flow-top">
       <label className="pw-lead-flow-month">Month
         <input aria-label="Lead flow month" type="month" value={month}
-          onChange={(event) => {
-            setMonth(event.target.value);
-            setEntryMode("practice");
-            setReplacePractice(false);
-            setDraftCounts({ leads: "", scheduled: "", attended: "", clients: "" });
-            setDraftSource("");
-            setDraftClinician("");
-            setEntryError("");
-          }} />
+          onChange={(event) => selectMonth(event.target.value)} />
       </label>
       {pending && !readOnly && <button className="pw-button pw-primary" type="button" disabled={!canSave || entrySaving}
         onClick={onSave}><Save /> Save edits</button>}
@@ -288,8 +300,10 @@ export default function LeadFlow({
             return <tr key={row.id}>
               <td><input aria-label="Lead source" list="pw-lead-sources" maxLength={120}
                 key={`${row.id}:source:${sourceLabel(row)}`} defaultValue={sourceLabel(row)} disabled={locked}
+                onChange={(event) => setSourceEditing(event.currentTarget.value !== sourceLabel(row))}
                 onKeyDown={(event) => { if (event.key === "Enter") event.currentTarget.blur(); }}
                 onBlur={(event) => {
+                  setSourceEditing(false);
                   if (!event.currentTarget.value.trim()) {
                     event.currentTarget.value = sourceLabel(row);
                     return;
