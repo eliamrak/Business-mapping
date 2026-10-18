@@ -23,6 +23,10 @@ const out = process.env.PRACTICE_ACCEPTANCE_OUTPUT ?? await fs.mkdtemp("/tmp/pra
 if (!path.resolve(out).startsWith("/tmp/")) throw new Error("Acceptance output/database must stay in /tmp.");
 await fs.mkdir(out, { recursive: true });
 const dataDir = path.join(out, "synthetic-database");
+try {
+  await fs.access(dataDir);
+  throw new Error("Refusing an existing database directory; use a fresh acceptance output.");
+} catch (error) { if (error.code !== "ENOENT") throw error; }
 const clerk = syntheticClerkFixture();
 const token = clerk.token("owner@example.test");
 const checks = [];
@@ -30,7 +34,7 @@ let database, socket, child, base, uiBase, browser, page, appLog = "", ui;
 const requests = [], browserErrors = [], screenshots = [];
 const git = (...args) => execFileSync("git", args, { cwd: repo, encoding: "utf8" }).trim();
 const buildProvenance = { commit: git("rev-parse", "HEAD"), tree: git("rev-parse", "HEAD^{tree}") };
-const runtimeChanges = git("diff", "HEAD", "--name-only", "--", "lib", "artifacts/api-server/src", "artifacts/comp-dashboard/src");
+const runtimeChanges = git("diff", "HEAD", "--name-only", "--", "lib", "artifacts", "package.json", "pnpm-lock.yaml");
 assert.equal(runtimeChanges, "", "Commit runtime changes before acceptance so source provenance is exact.");
 async function freePort() {
   const server = net.createServer();
