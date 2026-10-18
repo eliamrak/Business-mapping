@@ -1,0 +1,93 @@
+{
+  "candidate": "520e82932a6eb2c950f131159142a282875bf109",
+  "syntheticOnly": true,
+  "productionAccess": false,
+  "writes": 0,
+  "assertions": [
+    "Future known zero displays $0",
+    "Positive unattributed future displays --",
+    "Missing coverage displays --",
+    "Owner target and dated pre-tax labels unchanged"
+  ],
+  "browserErrors": [],
+  "checks": [
+    {
+      "name": "owner-known-zero",
+      "width": 1280,
+      "height": 900,
+      "url": "/workspace",
+      "title": "Goals",
+      "scrollWidth": 1280,
+      "clientWidth": 1280,
+      "buttonCount": 18,
+      "text": "EMC\nEMCounseling\nPractice workspace\nToday\nLong Term Goals\n1\nSandbox\nTODAY\n01\nOverview\n02\nSessions\n03\nTeam\n04\nMoney\n05\nGrowth\n06\nGoals\nData & imports\nSettings\nReference layout\nCurrent business\nGoals\nReports\nNew scenario\n\nReporting period is retained across tabs. Financial comparisons use the labeled forecast month; targets retain their monthly or annual basis. Blank targets remain editable.\n\nPeriod\n30 days\n60 days\n90 days\n6 months\nYear\nOverall\nLast 4 completed pay periods\nLast 4 completed weeks\nCustom dates\nCurrent goals\n\nEditable monthly or annual targets for Today. Blank amounts are treated as zero until you enter them.\n\nOpen Money\nOwner pay\n\nPre-tax owner distribution target. Owner clinical revenue remains business revenue.\n\nSaved\nGoal amount\nBasis\nMonthly\nAnnual\nTarget date (optional)\nNov 2026 estimated pre-tax measure (dated pay)\n$0\nGoal line\n$15,000\n Estimated\n Goal\nEstimated progress only; not a recorded completed-period achievement.\nCo-owner pay\n\nPre-tax salary target for Erin; payroll taxes and take-home stay in Money.\n\nSaved\nGoal amount\nBasis\nMonthly\nAnnual\nTarget date (optional)\nNov 2026 estimated pre-tax measure (dated pay)\n$8,000\nGoal line\n$8,000\n Estimated\n Goal\nEstimated progress only; not a recorded completed-period achievement.\nBusiness Profit\n\nOperating profit goal after payroll and practice costs.\n\nSaved\nGoal amount\nBasis\nMonthly\nAnnual\nTarget date (optional)\nNov 2026 estimated pre-tax measure (dated pay)\n-$8,732\nGoal line\n$20,000\n Estimated\n Goal\nEstimated progress only; not a recorded completed-period achievement.\nDesired Clinicians\n\nActive clinical headcount, including clinical owners.\n\nSaved\nGoal amount\nTarget date (optional)\nActive clinical headcount\n2\nGoal line\n10\n Estimated\n Goal\nInsufficient headcount data: explicit clinician active dates and a completed biweekly period with full selected-team actual coverage are required.\nOverhead\nOverhead goal basis\nFixed dollars\nFixed percentage\nMonthly dollars\nCalculated equivalent · Oct 2026\n0.0% of re",
+      "localAuthErrors": [],
+      "topNavigation": true
+    },
+    {
+      "name": "owner-known-zero",
+      "width": 390,
+      "height": 900,
+      "url": "/workspace",
+      "title": "Goals",
+      "scrollWidth": 390,
+      "clientWidth": 390,
+      "buttonCount": 18,
+      "text": "EMC\nEMCounseling\nToday\nLong Term Goals\n1\nSandbox\nTODAY\nOverview\nSessions\nTeam\nMoney\nGrowth\nGoals\nData & imports\nSettings\nReference layout\nCurrent business\nGoals\nReports\nNew scenario\n\nReporting period is retained across tabs. Financial comparisons use the labeled forecast month; targets retain their monthly or annual basis. Blank targets remain editable.\n\nPeriod\n30 days\n60 days\n90 days\n6 months\nYear\nOverall\nLast 4 completed pay periods\nLast 4 completed weeks\nCustom dates\nCurrent goals\n\nEditable monthly or annual targets for Today. Blank amounts are treated as zero until you enter them.\n\nOpen Money\nOwner pay\n\nPre-tax owner distribution target. Owner clinical revenue remains business revenue.\n\nSaved\nGoal amount\nBasis\nMonthly\nAnnual\nTarget date (optional)\nNov 2026 estimated pre-tax measure (dated pay)\n$0\nGoal line\n$15,000\n Estimated\n Goal\nEstimated progress only; not a recorded completed-period achievement.\nCo-owner pay\n\nPre-tax salary target for Erin; payroll taxes and take-home stay in Money.\n\nSaved\nGoal amount\nBasis\nMonthly\nAnnual\nTarget date (optional)\nNov 2026 estimated pre-tax measure (dated pay)\n$8,000\nGoal line\n$8,000\n Estimated\n Goal\nEstimated progress only; not a recorded completed-period achievement.\nBusiness Profit\n\nOperating profit goal after payroll and practice costs.\n\nSaved\nGoal amount\nBasis\nMonthly\nAnnual\nTarget date (optional)\nNov 2026 estimated pre-tax measure (dated pay)\n-$8,732\nGoal line\n$20,000\n Estimated\n Goal\nEstimated progress only; not a recorded completed-period achievement.\nDesired Clinicians\n\nActive clinical headcount, including clinical owners.\n\nSaved\nGoal amount\nTarget date (optional)\nActive clinical headcount\n2\nGoal line\n10\n Estimated\n Goal\nInsufficient headcount data: explicit clinician active dates and a completed biweekly period with full selected-team actual coverage are required.\nOverhead\nOverhead goal basis\nFixed dollars\nFixed percentage\nMonthly dollars\nCalculated equivalent · Oct 2026\n0.0% of revenue\nSaved target\nLegacy expense set",
+      "localAuthErrors": [],
+      "topNavigation": true
+    },
+    {
+      "name": "owner-positive-unattributed",
+      "width": 1280,
+      "height": 900,
+      "url": "/workspace",
+      "title": "Goals",
+      "scrollWidth": 1280,
+      "clientWidth": 1280,
+      "buttonCount": 18,
+      "text": "EMC\nEMCounseling\nPractice workspace\nToday\nLong Term Goals\n1\nSandbox\nTODAY\n01\nOverview\n02\nSessions\n03\nTeam\n04\nMoney\n05\nGrowth\n06\nGoals\nData & imports\nSettings\nReference layout\nCurrent business\nGoals\nReports\nNew scenario\n\nReporting period is retained across tabs. Financial comparisons use the labeled forecast month; targets retain their monthly or annual basis. Blank targets remain editable.\n\nPeriod\n30 days\n60 days\n90 days\n6 months\nYear\nOverall\nLast 4 completed pay periods\nLast 4 completed weeks\nCustom dates\nCurrent goals\n\nEditable monthly or annual targets for Today. Blank amounts are treated as zero until you enter them.\n\nOpen Money\nOwner pay\n\nPre-tax owner distribution target. Owner clinical revenue remains business revenue.\n\nSaved\nGoal amount\nBasis\nMonthly\nAnnual\nTarget date (optional)\nNov 2026 estimated pre-tax measure (dated pay)\n--\nGoal line\n$15,000\n Estimated\n Goal\nEstimate unavailable: review source coverage and model assumptions in Money. Recorded achievement remains unverified.\nCo-owner pay\n\nPre-tax salary target for Erin; payroll taxes and take-home stay in Money.\n\nSaved\nGoal amount\nBasis\nMonthly\nAnnual\nTarget date (optional)\nNov 2026 estimated pre-tax measure (dated pay)\n$8,000\nGoal line\n$8,000\n Estimated\n Goal\nEstimated progress only; not a recorded completed-period achievement.\nBusiness Profit\n\nOperating profit goal after payroll and practice costs.\n\nSaved\nGoal amount\nBasis\nMonthly\nAnnual\nTarget date (optional)\nNov 2026 estimated pre-tax measure (dated pay)\n$60,444\nGoal line\n$20,000\n Estimated\n Goal\nEstimated progress only; not a recorded completed-period achievement.\nDesired Clinicians\n\nActive clinical headcount, including clinical owners.\n\nSaved\nGoal amount\nTarget date (optional)\nActive clinical headcount\n2\nGoal line\n10\n Estimated\n Goal\nInsufficient headcount data: explicit clinician active dates and a completed biweekly period with full selected-team actual coverage are required.\nOverhead\nOverhead goal basis\nFixed dollars\nFixed percentage\nMonthly dol",
+      "localAuthErrors": [],
+      "topNavigation": true
+    },
+    {
+      "name": "owner-positive-unattributed",
+      "width": 390,
+      "height": 900,
+      "url": "/workspace",
+      "title": "Goals",
+      "scrollWidth": 390,
+      "clientWidth": 390,
+      "buttonCount": 18,
+      "text": "EMC\nEMCounseling\nToday\nLong Term Goals\n1\nSandbox\nTODAY\nOverview\nSessions\nTeam\nMoney\nGrowth\nGoals\nData & imports\nSettings\nReference layout\nCurrent business\nGoals\nReports\nNew scenario\n\nReporting period is retained across tabs. Financial comparisons use the labeled forecast month; targets retain their monthly or annual basis. Blank targets remain editable.\n\nPeriod\n30 days\n60 days\n90 days\n6 months\nYear\nOverall\nLast 4 completed pay periods\nLast 4 completed weeks\nCustom dates\nCurrent goals\n\nEditable monthly or annual targets for Today. Blank amounts are treated as zero until you enter them.\n\nOpen Money\nOwner pay\n\nPre-tax owner distribution target. Owner clinical revenue remains business revenue.\n\nSaved\nGoal amount\nBasis\nMonthly\nAnnual\nTarget date (optional)\nNov 2026 estimated pre-tax measure (dated pay)\n--\nGoal line\n$15,000\n Estimated\n Goal\nEstimate unavailable: review source coverage and model assumptions in Money. Recorded achievement remains unverified.\nCo-owner pay\n\nPre-tax salary target for Erin; payroll taxes and take-home stay in Money.\n\nSaved\nGoal amount\nBasis\nMonthly\nAnnual\nTarget date (optional)\nNov 2026 estimated pre-tax measure (dated pay)\n$8,000\nGoal line\n$8,000\n Estimated\n Goal\nEstimated progress only; not a recorded completed-period achievement.\nBusiness Profit\n\nOperating profit goal after payroll and practice costs.\n\nSaved\nGoal amount\nBasis\nMonthly\nAnnual\nTarget date (optional)\nNov 2026 estimated pre-tax measure (dated pay)\n$60,444\nGoal line\n$20,000\n Estimated\n Goal\nEstimated progress only; not a recorded completed-period achievement.\nDesired Clinicians\n\nActive clinical headcount, including clinical owners.\n\nSaved\nGoal amount\nTarget date (optional)\nActive clinical headcount\n2\nGoal line\n10\n Estimated\n Goal\nInsufficient headcount data: explicit clinician active dates and a completed biweekly period with full selected-team actual coverage are required.\nOverhead\nOverhead goal basis\nFixed dollars\nFixed percentage\nMonthly dollars\nCalculated equivalent · Oct 2026",
+      "localAuthErrors": [],
+      "topNavigation": true
+    },
+    {
+      "name": "owner-missing-coverage",
+      "width": 1280,
+      "height": 900,
+      "url": "/workspace",
+      "title": "Goals",
+      "scrollWidth": 1280,
+      "clientWidth": 1280,
+      "buttonCount": 18,
+      "text": "EMC\nEMCounseling\nPractice workspace\nToday\nLong Term Goals\n1\nSandbox\nTODAY\n01\nOverview\n02\nSessions\n03\nTeam\n04\nMoney\n05\nGrowth\n06\nGoals\nData & imports\nSettings\nReference layout\nCurrent business\nGoals\nReports\nNew scenario\n\nReporting period is retained across tabs. Financial comparisons use the labeled forecast month; targets retain their monthly or annual basis. Blank targets remain editable.\n\nPeriod\n30 days\n60 days\n90 days\n6 months\nYear\nOverall\nLast 4 completed pay periods\nLast 4 completed weeks\nCustom dates\nCurrent goals\n\nEditable monthly or annual targets for Today. Blank amounts are treated as zero until you enter them.\n\nOpen Money\nOwner pay\n\nPre-tax owner distribution target. Owner clinical revenue remains business revenue.\n\nSaved\nGoal amount\nBasis\nMonthly\nAnnual\nTarget date (optional)\nOct 2026 estimated pre-tax measure (dated pay)\n--\nGoal line\n$15,000\n Estimated\n Goal\nEstimate unavailable: review source coverage and model assumptions in Money. Recorded achievement remains unverified.\nCo-owner pay\n\nPre-tax salary target for Erin; payroll taxes and take-home stay in Money.\n\nSaved\nGoal amount\nBasis\nMonthly\nAnnual\nTarget date (optional)\nOct 2026 estimated pre-tax measure (dated pay)\n--\nGoal line\n$8,000\n Estimated\n Goal\nEstimate unavailable: review source coverage and model assumptions in Money. Recorded achievement remains unverified.\nBusiness Profit\n\nOperating profit goal after payroll and practice costs.\n\nSaved\nGoal amount\nBasis\nMonthly\nAnnual\nTarget date (optional)\nOct 2026 estimated pre-tax measure (dated pay)\n--\nGoal line\n$20,000\n Estimated\n Goal\nEstimate unavailable: review source coverage and model assumptions in Money. Recorded achievement remains unverified.\nDesired Clinicians\n\nActive clinical headcount, including clinical owners.\n\nSaved\nGoal amount\nTarget date (optional)\nActive clinical headcount\n--\nGoal line\n10\n Estimated\n Goal\nInsufficient headcount data: explicit clinician active dates and a completed biweekly period with full selected-team actual covera",
+      "localAuthErrors": [],
+      "topNavigation": true
+    },
+    {
+      "name": "owner-missing-coverage",
+      "width": 390,
+      "height": 900,
+      "url": "/workspace",
+      "title": "Goals",
+      "scrollWidth": 390,
+      "clientWidth": 390,
+      "buttonCount": 18,
+      "text": "EMC\nEMCounseling\nToday\nLong Term Goals\n1\nSandbox\nTODAY\nOverview\nSessions\nTeam\nMoney\nGrowth\nGoals\nData & imports\nSettings\nReference layout\nCurrent business\nGoals\nReports\nNew scenario\n\nReporting period is retained across tabs. Financial comparisons use the labeled forecast month; targets retain their monthly or annual basis. Blank targets remain editable.\n\nPeriod\n30 days\n60 days\n90 days\n6 months\nYear\nOverall\nLast 4 completed pay periods\nLast 4 completed weeks\nCustom dates\nCurrent goals\n\nEditable monthly or annual targets for Today. Blank amounts are treated as zero until you enter them.\n\nOpen Money\nOwner pay\n\nPre-tax owner distribution target. Owner clinical revenue remains business revenue.\n\nSaved\nGoal amount\nBasis\nMonthly\nAnnual\nTarget date (optional)\nOct 2026 estimated pre-tax measure (dated pay)\n--\nGoal line\n$15,000\n Estimated\n Goal\nEstimate unavailable: review source coverage and model assumptions in Money. Recorded achievement remains unverified.\nCo-owner pay\n\nPre-tax salary target for Erin; payroll taxes and take-home stay in Money.\n\nSaved\nGoal amount\nBasis\nMonthly\nAnnual\nTarget date (optional)\nOct 2026 estimated pre-tax measure (dated pay)\n--\nGoal line\n$8,000\n Estimated\n Goal\nEstimate unavailable: review source coverage and model assumptions in Money. Recorded achievement remains unverified.\nBusiness Profit\n\nOperating profit goal after payroll and practice costs.\n\nSaved\nGoal amount\nBasis\nMonthly\nAnnual\nTarget date (optional)\nOct 2026 estimated pre-tax measure (dated pay)\n--\nGoal line\n$20,000\n Estimated\n Goal\nEstimate unavailable: review source coverage and model assumptions in Money. Recorded achievement remains unverified.\nDesired Clinicians\n\nActive clinical headcount, including clinical owners.\n\nSaved\nGoal amount\nTarget date (optional)\nActive clinical headcount\n--\nGoal line\n10\n Estimated\n Goal\nInsufficient headcount data: explicit clinician active dates and a completed biweekly period with full selected-team actual coverage are required.\nOverhead\nOverhead go",
+      "localAuthErrors": [],
+      "topNavigation": true
+    }
+  ]
+}

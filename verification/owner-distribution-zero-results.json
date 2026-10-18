@@ -1,0 +1,76 @@
+{
+  "candidate": "520e82932a6eb2c950f131159142a282875bf109",
+  "candidateTree": "1419d3684dd506a3e01722e65610f069d26b19f4",
+  "base": "02591d43e90ab3514ea093514389a91aaf058094",
+  "syntheticOnly": true,
+  "productionAccess": false,
+  "writes": 0,
+  "comparison": "base engine versus candidate engine; other runtime sources identical",
+  "rows": [
+    {
+      "mode": "zero-fallback",
+      "aggregate": 0,
+      "ownerBefore": null,
+      "ownerAfter": 0,
+      "allOtherValuesUnchanged": true
+    },
+    {
+      "mode": "reserve-only",
+      "aggregate": 0,
+      "ownerBefore": null,
+      "ownerAfter": 0,
+      "allOtherValuesUnchanged": true
+    },
+    {
+      "mode": "household-zero",
+      "aggregate": 0,
+      "ownerBefore": 0,
+      "ownerAfter": 0,
+      "allOtherValuesUnchanged": true
+    },
+    {
+      "mode": "other-owner-zero",
+      "aggregate": 0,
+      "ownerBefore": null,
+      "ownerAfter": 0,
+      "allOtherValuesUnchanged": true
+    },
+    {
+      "mode": "positive-fallback",
+      "aggregate": 99.99999999999986,
+      "ownerBefore": null,
+      "ownerAfter": null,
+      "allOtherValuesUnchanged": true
+    },
+    {
+      "mode": "positive-other-owner",
+      "aggregate": 99.99999999999986,
+      "ownerBefore": null,
+      "ownerAfter": null,
+      "allOtherValuesUnchanged": true
+    },
+    {
+      "mode": "positive-household",
+      "aggregate": 99.99999999999986,
+      "ownerBefore": 99.99999999999986,
+      "ownerAfter": 99.99999999999986,
+      "allOtherValuesUnchanged": true
+    },
+    {
+      "mode": "unknown-staff",
+      "aggregate": null,
+      "ownerBefore": null,
+      "ownerAfter": null,
+      "allOtherValuesUnchanged": true
+    },
+    {
+      "mode": "unknown-prior-receipts",
+      "aggregate": null,
+      "ownerBefore": null,
+      "ownerAfter": null,
+      "allOtherValuesUnchanged": true
+    }
+  ],
+  "missingCoverageRemainsUnknown": true,
+  "mixedHistoryZeroPositiveUnknown": true
+}
