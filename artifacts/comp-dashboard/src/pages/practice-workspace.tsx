@@ -7985,6 +7985,9 @@ export default function PracticeWorkspace() {
               )}
               {section === "settings" && (
                 <>
+                  {mode === "practice" && <button className="pw-button" onClick={() => setSection("documents")}>
+                    <FolderOpen /> Reporting documents &amp; recovery <ChevronRight />
+                  </button>}
                   <Settings {...props} />
                   <a
                     className="pw-text-button"
@@ -8005,7 +8008,7 @@ export default function PracticeWorkspace() {
                   >
                     Back to Overview
                   </button>
-                  <Updates {...props} theme="light" />
+                  <Updates {...props} theme="light" initialTab="reports" />
                 </>
               )}
             </div>

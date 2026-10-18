@@ -74,10 +74,10 @@ const sessionFields: Field[] = [
     optional: true,
   },
 ];
-export default function Updates(props: ViewProps & { theme: string }) {
+export default function Updates(props: ViewProps & { theme: string; initialTab?: "periods" | "documents" | "history" | "reports" }) {
   const { workspace, context, save, table, theme } = props;
   const cache = useQueryClient();
-  const [tab, setTab] = useState("periods"),
+  const [tab, setTab] = useState<string>(props.initialTab ?? "periods"),
     [periodId, setPeriodId] = useState(""),
     [error, setError] = useState(""),
     [status, setStatus] = useState(""),
