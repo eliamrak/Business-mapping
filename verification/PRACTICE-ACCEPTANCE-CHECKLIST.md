@@ -1,5 +1,14 @@
 # Practice Acceptance Checklist
 
+## October 18 Bounded Keyboard/Reflow Candidate
+
+Runtime/test `338e6001bced3923974f78f3b77e64c92b59b8c3` repairs controlled-dialog focus and local raw-draft navigation protection. See `KEYBOARD-ZOOM-NAVIGATION-ACCEPTANCE.md` for the matrix, exact tree, independent review and withdrawn preliminary viewport evidence.
+
+- [x] **NEW FIXTURE KEYBOARD/INTERRUPTION:** Navigation Enter/Space, modal Tab/reverse-Tab/Escape/focus return, dirty editor Keep/Discard, focused raw text reload cancellation, staged Goal/date retention, Growth section/month/grid cancel/accept safety. No application writes.
+- [x] **NEW VERIFIED REFLOW:** 44 unique checks/58 executions; 30 captures across1280/390/320CSS and two200%-equivalent DPR2 configurations. Every viewport/DPR/PNG dimension checked; pending review controls remain keyboard reachable. Independent reviewer reran32+26PASS,756unit tests and types, no blockers.
+- [ ] **LIMITS RETAINED:** Not full accessibility, native browser zoom, screen-reader, native-wrapper or live/provider/database verification. Earlier broad untested boundaries remain unless specifically covered by this matrix.
+- [ ] **RELEASE:** No release or live-record edits in this QA pass. Commit/push and deployment status must be reported separately.
+
 ## October 18 Annual Goal and Staff Save Candidate
 
 Runtime/test `c42ea46ab50fd98604afed4ad12cad1f600c3ee6` adds bounded authenticated durable-SQL acceptance and a narrow staff editor scope repair. See `AUTHENTICATED-GOAL-STAFF-ACCEPTANCE.md`; earlier live/authentication limitations below are not silently upgraded to whole-app acceptance.

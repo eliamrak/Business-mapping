@@ -1,0 +1,38 @@
+{
+  "candidate": "f08ae601e8ddb811a5afce3dd647909482ccd3a4",
+  "syntheticOnly": true,
+  "productionAccess": false,
+  "failures": [
+    {
+      "name": "Reports modal Tab trap, reverse Tab, Escape and opener focus",
+      "status": "FAIL",
+      "error": "Escape returns focus to opener"
+    },
+    {
+      "name": "Move data modal keyboard/Escape/opener focus",
+      "status": "FAIL",
+      "error": "Escape returns focus to opener"
+    },
+    {
+      "name": "Record editor dirty Escape keeps or explicitly discards draft",
+      "status": "FAIL",
+      "error": "explicit discard restores opener focus"
+    },
+    {
+      "name": "Reload while Goal text remains focused warns and can be cancelled",
+      "status": "FAIL",
+      "error": "focused unblurred draft triggers real beforeunload dialog"
+    },
+    {
+      "name": "Bulk lead draft blocks destructive section change and year filter",
+      "status": "FAIL",
+      "error": "changing section asks before discarding local lead draft"
+    },
+    {
+      "name": "Unsaved month-entry values survive cancelled month-filter change",
+      "status": "FAIL",
+      "error": "month change asks before resetting unsaved entry"
+    }
+  ],
+  "note": "Interaction failures only. Preliminary reflow labels are withdrawn because device metrics reset between captures; final normal/zoom results verify every viewport and PNG dimension."
+}
