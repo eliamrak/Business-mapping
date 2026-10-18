@@ -1,5 +1,15 @@
 # Practice Acceptance Checklist
 
+## October 18 Annual Goal and Staff Save Candidate
+
+Runtime/test `c42ea46ab50fd98604afed4ad12cad1f600c3ee6` adds bounded authenticated durable-SQL acceptance and a narrow staff editor scope repair. See `AUTHENTICATED-GOAL-STAFF-ACCEPTANCE.md`; earlier live/authentication limitations below are not silently upgraded to whole-app acceptance.
+
+- [x] **NEW AUTHENTICATED EMBEDDED-SQL UI:** Annual Goal review/save/reload preserves144000 annual and12000 monthly goal line without changing the legacy target. Actual Clerk server JWT verification and API/pg/Drizzle handlers are used with synthetic identity, not fixture endpoints.
+- [x] **NEW AUTHENTICATED EMBEDDED-SQL UI:** Staff annual rate/hours and dated override save/reload, scope switching, unchanged-value regression, seven audit revisions, stale-write refusal, SQL read-back and full API/database reopen pass. Eight desktop/mobile captures, zero browser errors.
+- [x] **REPRODUCED AND REPAIRED:** Annual staff editor showed the later dated override and could suppress a valid annual change as unchanged. Editor fields now read the selected save scope; calculation/persistence rules and source rows are unchanged. 753 domain/dashboard tests pass.
+- [ ] **EXPLICIT LIMIT:** Native PostgreSQL is locally blocked by host shared-memory exhaustion. PGlite is durable embedded PostgreSQL, not a native server concurrency/recovery certification. Frontend Clerk identity hooks remain a fixture; external-provider sign-in/real production session acceptance is not claimed. No owner QA or financial-record request is made.
+- [ ] **RELEASE:** Local reviewed-candidate process only; no push, deployment or live business-record edits for this task.
+
 ## October 17 Interactive Workflow Candidate
 
 Runtime `a5121c47a01a07ff0e6917f8dd75b3c21bc14003` extends reviewed/released `7d8ac067` with configured-marketing accrual and full durable-import backup coverage. `INTERACTIVE-WORKFLOW-ACCEPTANCE.md` records the exact evidence and remaining release boundary.

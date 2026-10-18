@@ -1,0 +1,337 @@
+{
+  "candidate": "dea1d592f467940871f5172ccd6127d32ba6ba2b",
+  "sourceTree": "f3d51b8a0a9f50b7f5f6a34eae7782e1dad44add",
+  "buildProvenance": {
+    "commit": "dea1d592f467940871f5172ccd6127d32ba6ba2b",
+    "tree": "f3d51b8a0a9f50b7f5f6a34eae7782e1dad44add",
+    "apiBundleSha256": "b008591b4c05d677c9d2ccbfb49c03adae64c0b0715370a85c25d78192adbc7b"
+  },
+  "environment": {
+    "engine": "PostgreSQL 18.6 (PGlite 0.5.10) on wasm32-unknown-emscripten, compiled by emcc (Emscripten gcc/clang-like replacement + linker emulating GNU ld) 6.0.5 (1db513782be24469589d7cb8a1f1834e9a33f271), 32-bit",
+    "storage": "filesystem-backed embedded PostgreSQL over loopback wire protocol, unchangedpg/DrizzleAPI",
+    "authentication": "actual Clerk middleware and requireAccess; fresh local RS256 key; frontend identity hook fixture,notGoogleOAuth",
+    "nativePostgres": "unavailable:hostSysVshared-memoryexhausted",
+    "realBusinessData": false,
+    "productionAccess": false,
+    "externalRequestsAllowed": false
+  },
+  "checks": [
+    "Actual Clerk middleware: missing/invalid JWT 401, uninvited identity 403, isolated configured owner 200",
+    "Unchanged pg/Drizzle API inserts synthetic team/staff/workspace; wrong-origin write refused",
+    "Missing/invalid JWT and uninvited identity cannot save; no revision or audit change",
+    "Real annual Goal UI review/save and reload: 144000 annual persisted; monthly goal line12000; legacy target unchanged",
+    "Real staff year-default inline commits and reload:22/hour,12hours/week,one2026 term; source staff row unchanged",
+    "Real dated-rate inline commit and reload:24/hour fromOct16;Oct15 stays22;12hours inherited; exactlytwo terms,originalstaff unchanged",
+    "Scope regression:annual editor shows its own default;24 equal to dated override stillsaves annual;26 annual survives reload whiledated24 staysindependent",
+    "SQL read-back equals API snapshot; stale revision409 preserves all saved changes; audit actor is verified synthetic owner",
+    "API and embedded database fully stopped/reopened fromdisk; annualgoal,staffterms,source staff,audit and revision survive; UI reload confirms"
+  ],
+  "browserErrors": [],
+  "screenshots": [
+    {
+      "name": "annual-goal-reloaded",
+      "width": 1280,
+      "file": "annual-goal-reloaded-1280.png",
+      "scroll": 1280,
+      "client": 1280
+    },
+    {
+      "name": "annual-goal-reloaded",
+      "width": 390,
+      "file": "annual-goal-reloaded-390.png",
+      "scroll": 390,
+      "client": 390
+    },
+    {
+      "name": "staff-year-rate-reloaded",
+      "width": 1280,
+      "file": "staff-year-rate-reloaded-1280.png",
+      "scroll": 1280,
+      "client": 1280
+    },
+    {
+      "name": "staff-year-rate-reloaded",
+      "width": 390,
+      "file": "staff-year-rate-reloaded-390.png",
+      "scroll": 390,
+      "client": 390
+    },
+    {
+      "name": "staff-dated-rate-reloaded",
+      "width": 1280,
+      "file": "staff-dated-rate-reloaded-1280.png",
+      "scroll": 1280,
+      "client": 1280
+    },
+    {
+      "name": "staff-dated-rate-reloaded",
+      "width": 390,
+      "file": "staff-dated-rate-reloaded-390.png",
+      "scroll": 390,
+      "client": 390
+    },
+    {
+      "name": "staff-year-scope-after-restart",
+      "width": 1280,
+      "file": "staff-year-scope-after-restart-1280.png",
+      "scroll": 1280,
+      "client": 1280
+    },
+    {
+      "name": "staff-year-scope-after-restart",
+      "width": 390,
+      "file": "staff-year-scope-after-restart-390.png",
+      "scroll": 390,
+      "client": 390
+    }
+  ],
+  "requests": [
+    {
+      "method": "GET",
+      "path": "/api/auth/me",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/hub",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/business-goals",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/scenarios",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/hub/context",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/practice-imports",
+      "status": 200
+    },
+    {
+      "method": "POST",
+      "path": "/api/hub",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/auth/me",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/hub",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/business-goals",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/scenarios",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/hub/context",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/practice-imports",
+      "status": 200
+    },
+    {
+      "method": "POST",
+      "path": "/api/hub",
+      "status": 200
+    },
+    {
+      "method": "POST",
+      "path": "/api/hub",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/auth/me",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/hub",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/business-goals",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/scenarios",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/hub/context",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/practice-imports",
+      "status": 200
+    },
+    {
+      "method": "POST",
+      "path": "/api/hub",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/auth/me",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/hub",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/business-goals",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/scenarios",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/hub/context",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/practice-imports",
+      "status": 200
+    },
+    {
+      "method": "POST",
+      "path": "/api/hub",
+      "status": 200
+    },
+    {
+      "method": "POST",
+      "path": "/api/hub",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/auth/me",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/hub",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/business-goals",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/scenarios",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/hub/context",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/practice-imports",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/auth/me",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/hub",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/business-goals",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/scenarios",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/hub/context",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/practice-imports",
+      "status": 200
+    }
+  ],
+  "finalRevision": 7,
+  "auditRows": 7,
+  "staffTerms": [
+    {
+      "id": "e44d48d0-6772-4555-85f8-600ba986a44b",
+      "staffMemberId": 1,
+      "effectiveDate": "2026-10-16",
+      "end": null,
+      "annualSalary": null,
+      "hourlyRate": 24,
+      "hoursPerWeek": null,
+      "weeksPerYear": null,
+      "notes": "Date-specific staff pay change"
+    },
+    {
+      "id": "b1b57f73-1ed0-4c11-a0c4-1c8658d93727",
+      "staffMemberId": 1,
+      "effectiveDate": "2026-01-01",
+      "end": "2026-12-31",
+      "annualSalary": null,
+      "hourlyRate": 26,
+      "hoursPerWeek": 12,
+      "weeksPerYear": null,
+      "notes": "Default staff pay for 2026"
+    }
+  ],
+  "annualGoal": {
+    "id": "85856f3e-fc3b-4bc3-aea5-45474aeaff62",
+    "name": "Owner pay",
+    "archived": false,
+    "notes": "",
+    "sourceAttachmentId": null,
+    "metric": "ownerDistributionsPretax",
+    "amount": 144000,
+    "date": null,
+    "basis": "annual"
+  }
+}
