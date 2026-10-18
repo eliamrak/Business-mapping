@@ -1,0 +1,202 @@
+{
+  "syntheticOnly": true,
+  "productionAccess": false,
+  "writes": 0,
+  "assertions": [
+    "Owner Settings opens Reports & recovery directly",
+    "Existing compensation Reports dialog unchanged",
+    "All four Updates tabs remain reachable",
+    "Back to Overview works",
+    "Sandbox hides recovery entry",
+    "data_entry sees Entry only",
+    "Denied account cannot see workspace",
+    "Signed-out account sees sign-in only",
+    "Desktop/mobile no overflow and entry label fits",
+    "No backup or restore request"
+  ],
+  "requests": [
+    {
+      "path": "/workspace",
+      "method": "GET"
+    },
+    {
+      "path": "/styles.css",
+      "method": "GET"
+    },
+    {
+      "path": "/bundle.js",
+      "method": "GET"
+    },
+    {
+      "path": "/api/auth/me",
+      "method": "GET"
+    },
+    {
+      "path": "/api/hub",
+      "method": "GET"
+    },
+    {
+      "path": "/api/hub/context",
+      "method": "GET"
+    },
+    {
+      "path": "/api/business-goals",
+      "method": "GET"
+    },
+    {
+      "path": "/api/scenarios",
+      "method": "GET"
+    },
+    {
+      "path": "/api/practice-imports",
+      "method": "GET"
+    },
+    {
+      "path": "/api/clinicians",
+      "method": "GET"
+    },
+    {
+      "path": "/api/scenarios",
+      "method": "GET"
+    },
+    {
+      "path": "/api/business-goals",
+      "method": "GET"
+    },
+    {
+      "path": "/api/current-reality",
+      "method": "GET"
+    },
+    {
+      "path": "/api/staff",
+      "method": "GET"
+    },
+    {
+      "path": "/api/hub/attachments",
+      "method": "GET"
+    },
+    {
+      "path": "/api/hub/history",
+      "method": "GET"
+    },
+    {
+      "path": "/workspace",
+      "method": "GET"
+    },
+    {
+      "path": "/styles.css",
+      "method": "GET"
+    },
+    {
+      "path": "/bundle.js",
+      "method": "GET"
+    },
+    {
+      "path": "/api/auth/me",
+      "method": "GET"
+    },
+    {
+      "path": "/api/hub/entry",
+      "method": "GET"
+    },
+    {
+      "path": "/api/session-records",
+      "method": "GET"
+    },
+    {
+      "path": "/workspace",
+      "method": "GET"
+    },
+    {
+      "path": "/styles.css",
+      "method": "GET"
+    },
+    {
+      "path": "/bundle.js",
+      "method": "GET"
+    },
+    {
+      "path": "/api/auth/me",
+      "method": "GET"
+    },
+    {
+      "path": "/signedout",
+      "method": "GET"
+    },
+    {
+      "path": "/styles.css",
+      "method": "GET"
+    },
+    {
+      "path": "/bundle.js",
+      "method": "GET"
+    }
+  ],
+  "browserErrors": [],
+  "checks": [
+    {
+      "name": "today-settings-recovery-entry",
+      "width": 1280,
+      "height": 900,
+      "url": "/workspace",
+      "title": "Settings",
+      "scrollWidth": 1280,
+      "clientWidth": 1280,
+      "buttonCount": 21,
+      "text": "EMC\nEMCounseling\nPractice workspace\nToday\nLong Term Goals\n1\nSandbox\nTODAY\n01\nOverview\n02\nSessions\n03\nTeam\n04\nMoney\n05\nGrowth\n06\nGoals\nData & imports\nSettings\nReference layout\nCurrent business\nSettings\nReports\nNew scenario\nReporting documents & recovery\nIf This, Then That\nCustom KPIs\nShared assumptions\nAccess\nDecision rules\n0\nColumns\nAdd\nInclude archived\nNo records yet\nAdd decision rules\nLatest recorded signals\nForecast rule results\nOriginal layout for reference\nToday\nForecast checks\n0",
+      "localAuthErrors": [],
+      "topNavigation": true
+    },
+    {
+      "name": "today-settings-recovery-entry",
+      "width": 390,
+      "height": 900,
+      "url": "/workspace",
+      "title": "Settings",
+      "scrollWidth": 390,
+      "clientWidth": 390,
+      "buttonCount": 21,
+      "text": "EMC\nEMCounseling\nToday\nLong Term Goals\n1\nSandbox\nTODAY\nOverview\nSessions\nTeam\nMoney\nGrowth\nGoals\nData & imports\nSettings\nReference layout\nCurrent business\nSettings\nReports\nNew scenario\nReporting documents & recovery\nIf This, Then That\nCustom KPIs\nShared assumptions\nAccess\nDecision rules\n0\nColumns\nAdd\nInclude archived\nNo records yet\nAdd decision rules\nLatest recorded signals\nForecast rule results\nOriginal layout for reference\nToday\nForecast checks\n0",
+      "localAuthErrors": [],
+      "topNavigation": true
+    },
+    {
+      "name": "today-reports-and-recovery",
+      "width": 1280,
+      "height": 900,
+      "url": "/workspace",
+      "title": "Reporting documents",
+      "scrollWidth": 1280,
+      "clientWidth": 1280,
+      "buttonCount": 20,
+      "text": "EMC\nEMCounseling\nPractice workspace\nToday\nLong Term Goals\n1\nSandbox\nTODAY\n01\nOverview\n02\nSessions\n03\nTeam\n04\nMoney\n05\nGrowth\n06\nGoals\nData & imports\nSettings\nReference layout\nCurrent business\nReporting documents\nReports\nNew scenario\nBack to Overview\nReporting periods\nDocuments & imports\nAudit history\nReports & recovery\nManagement report\nRecorded position\nCategory breakdown\nActive forecast\nDecision signals\n\nActuals: 2026-01-01 to 2026-10-14. Forecast: 12 months.\n\nDownload PDF\nBackup and recovery\n\nIncludes compensation, scenarios, sessions, hub records, documents and audit history. Passwords, accounts and login sessions are excluded. Keep the file private. Restore is allowed only into an empty app with a matching database schema.\n\nBusiness-data backup\nReview backup\nToday\nForecast checks\n0",
+      "localAuthErrors": [],
+      "topNavigation": true
+    },
+    {
+      "name": "today-reports-and-recovery",
+      "width": 390,
+      "height": 900,
+      "url": "/workspace",
+      "title": "Reporting documents",
+      "scrollWidth": 390,
+      "clientWidth": 390,
+      "buttonCount": 20,
+      "text": "EMC\nEMCounseling\nToday\nLong Term Goals\n1\nSandbox\nTODAY\nOverview\nSessions\nTeam\nMoney\nGrowth\nGoals\nData & imports\nSettings\nReference layout\nCurrent business\nReporting documents\nReports\nNew scenario\nBack to Overview\nReporting periods\nDocuments & imports\nAudit history\nReports & recovery\nManagement report\nRecorded position\nCategory breakdown\nActive forecast\nDecision signals\n\nActuals: 2026-01-01 to 2026-10-14. Forecast: 12 months.\n\nDownload PDF\nBackup and recovery\n\nIncludes compensation, scenarios, sessions, hub records, documents and audit history. Passwords, accounts and login sessions are excluded. Keep the file private. Restore is allowed only into an empty app with a matching database schema.\n\nBusiness-data backup\nReview backup\nToday\nForecast checks\n0",
+      "localAuthErrors": [],
+      "topNavigation": true
+    },
+    {
+      "name": "data-entry",
+      "protectedContent": false
+    },
+    {
+      "name": "denied",
+      "protectedContent": false
+    },
+    {
+      "name": "signedout",
+      "protectedContent": false
+    }
+  ]
+}
