@@ -22,6 +22,10 @@ export default function ProfitFirstPlanning(props: ProfitFirstPlanningProps) {
   const inputId = useId();
   useEffect(() => { setPlanning(props.workspace.moneyPlanning ?? {}); }, [props.workspace.moneyPlanning]);
   const report = profitFirstPlanning({ ...props, workspace: { ...props.workspace, moneyPlanning: planning } });
+  const [costDetailsOpen, setCostDetailsOpen] = useState(report.status === "incomplete");
+  useEffect(() => {
+    if (report.status === "incomplete") setCostDetailsOpen(true);
+  }, [report.status]);
   const setFieldError = (key: string, message?: string) => setErrors(current => {
     const next = { ...current };
     if (message) next[key] = message; else delete next[key];
@@ -114,7 +118,7 @@ export default function ProfitFirstPlanning(props: ProfitFirstPlanningProps) {
         onBlur={event => stageGoal(goal.id, goal, goal.name, goal.bucket, goal.mode, event.target)}
         onKeyDown={event => { if (event.key === "Enter") event.currentTarget.blur(); }} />{fieldError(goal.id)}</label>)}
     </fieldset>
-    <details open={report.status === "incomplete"}><summary>Cost estimates and source periods</summary>
+    <details open={costDetailsOpen} onToggle={event => setCostDetailsOpen(event.currentTarget.open)}><summary>Cost estimates and source periods</summary>
       <div className="pf-estimates">
         <label>Monthly billed revenue estimate{estimateInput("revenue", report.revenue, "Monthly billed revenue estimate")}</label>
         {report.costs.map(cost => <label key={cost.key}>{cost.label}

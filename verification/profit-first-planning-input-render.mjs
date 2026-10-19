@@ -263,6 +263,22 @@ async function runRender() {
         assert.equal((await last()).estimatedMonthlyValues.otherIncome, 12);
         await assertClear(labels.revenue);
       });
+      await check("cost-disclosure-keeps-active-input-visible", width, height, async () => {
+        await change(labels.revenue, "");
+        await assertCount(1);
+        const control = input(labels.revenue);
+        await control.fill("0");
+        assert.ok(await control.isVisible(), "Resolving an Unknown must not collapse the active editor");
+        assert.ok(await control.evaluate(node => node === document.activeElement));
+        await assertCount(1);
+        await blur();
+        await assertCount(2);
+        const summary = page.getByText("Cost estimates and source periods", { exact: true });
+        await summary.click();
+        assert.ok(await control.isHidden(), "Explicit close remains available");
+        await summary.click();
+        assert.ok(await control.isVisible(), "Explicit reopen remains available");
+      });
       await check("intentional-blank-zero-and-infeasible-floor", width, height, async () => {
         await change(labels.revenue, ""); await assertCount(1);
         assert.equal((await last()).estimatedMonthlyValues.revenue, null);
@@ -302,8 +318,8 @@ async function runRender() {
         });
       }
     }
-    assert.equal(cases.length, 26, "Every desktop/mobile case must execute");
-    assert.equal(captures.length, 26, "Every passing case must retain a capture");
+    assert.equal(cases.length, 28, "Every desktop/mobile case must execute");
+    assert.equal(captures.length, 28, "Every passing case must retain a capture");
     assert.deepEqual(browserErrors, []);
     assert.ok(requests.every(request => request.allowed), "Only GET requests to the owned loopback fixture are permitted");
   } catch (error) {
