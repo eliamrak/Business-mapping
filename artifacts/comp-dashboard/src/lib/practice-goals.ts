@@ -232,8 +232,14 @@ export function practiceChanges(
     }
   };
   compare("Practice", base.workspace.settings, draft.workspace.settings);
+  const planningBefore = base.workspace.moneyPlanning ?? {};
+  const planningAfter = draft.workspace.moneyPlanning ?? {};
+  compare("Money planning", planningBefore, {
+    ...Object.fromEntries(Object.keys(planningBefore).map((key) => [key, undefined])),
+    ...planningAfter,
+  });
   for (const key of Object.keys(draft.workspace) as (keyof Workspace)[]) {
-    if (key === "settings" || key === "proposals") continue;
+    if (key === "settings" || key === "proposals" || key === "moneyPlanning") continue;
     for (const record of draft.workspace[key]) {
       const old = base.workspace[key].find((r) => r.id === record.id);
       const name = "name" in record ? String(record.name) : key;

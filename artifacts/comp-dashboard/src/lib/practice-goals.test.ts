@@ -100,6 +100,28 @@ test("sandbox layers multiple changes without mutating practice", () => {
     forecast(draft.workspace, draft.context),
   );
 });
+
+test("money planning changes are reviewed and survive draft snapshots without changing actual goals", () => {
+  const practice = fixture();
+  const before = structuredClone(practice);
+  const draft = copyPractice(practice.workspace, practice.context);
+  draft.workspace.moneyPlanning = {
+    estimatedMonthlyValues: { revenue: 10000, overhead: 2000 },
+    scenarioPercents: { "owner-payroll": 120 },
+    goals: [{ id: crypto.randomUUID(), name: "Building monthly funding", bucket: "business-profit", mode: "additional", monthlyAmount: 2000 }],
+  };
+  assert.equal(practiceChanges(practice, draft).length, 3);
+  assert.equal(practiceChanges(draft, practice).length, 3);
+  const proposal = makePracticeGoal("Infeasible funding scenario", draft, 12);
+  const restored = readPracticeGoal(proposal)!;
+  assert.deepEqual(restored.workspace.moneyPlanning, draft.workspace.moneyPlanning);
+  const moved = importSection(practice, exportSection(draft, "money", "sandbox"), "sandbox");
+  assert.deepEqual(moved.workspace.moneyPlanning, draft.workspace.moneyPlanning);
+  const legacyBundle = exportSection(practice, "money", "sandbox");
+  assert.deepEqual(importSection(draft, legacyBundle, "sandbox").workspace.moneyPlanning, draft.workspace.moneyPlanning);
+  assert.deepEqual(restored.workspace.goals, before.workspace.goals);
+  assert.deepEqual(practice, before);
+});
 test("saved goals are isolated, nonrecursive and exclude access tokens", () => {
   const practice = fixture();
   Object.assign(practice.context.clinicians[0], {

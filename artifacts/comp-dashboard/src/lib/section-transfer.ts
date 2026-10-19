@@ -93,6 +93,7 @@ export function exportSection(
       overheadFloorOverride: w.settings.overheadFloorOverride,
     };
   } else {
+    if (w.moneyPlanning) workspace.moneyPlanning = w.moneyPlanning;
     workspace.allocations = w.allocations;
     workspace.transactions = w.transactions;
     workspace.periods = w.periods;
@@ -291,6 +292,7 @@ export function importSection(
     if (moneySettings.some((key) => !["familyW2ClinicianId", "ownerPayrollOverride"].includes(key) && part.settings![key] === undefined))
       throw new Error("Money flow export is incomplete.");
     w.allocations = part.allocations;
+    if (part.moneyPlanning !== undefined) w.moneyPlanning = part.moneyPlanning;
     if (destination !== "today") {
       w.transactions = part.transactions;
       w.periods = part.periods;

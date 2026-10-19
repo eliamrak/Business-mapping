@@ -1,0 +1,26 @@
+.pf-planning { color: var(--pw-ink, hsl(var(--foreground, 222 47% 11%))); font-size: 14px; line-height: 1.5; min-width: 0; }
+.pf-planning h2 { font-size: 20px; margin: 0; letter-spacing: 0; }
+.pf-planning header p, .pf-planning small, .pf-planning caption { color: var(--pw-muted, hsl(var(--muted-foreground, 215 16% 47%))); }
+.pf-planning p { margin: 12px 0; }
+.pf-summary { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; padding: 16px 0; border-block: 1px solid var(--pw-edge, hsl(var(--border, 214 32% 91%))); }
+.pf-summary span, .pf-summary strong { display: block; overflow-wrap: anywhere; }
+.pf-summary strong { font-size: 20px; font-variant-numeric: tabular-nums; }
+.pf-table-scroll { max-width: 100%; overflow-x: auto; }
+.pf-planning table { border-collapse: collapse; width: 100%; font-variant-numeric: tabular-nums; }
+.pf-planning caption { text-align: left; padding: 8px 0; }
+.pf-planning th, .pf-planning td { padding: 10px 8px; text-align: right; border-bottom: 1px solid var(--pw-edge, hsl(var(--border, 214 32% 91%))); vertical-align: middle; }
+.pf-planning th:first-child { text-align: left; min-width: 125px; }
+.pf-planning thead th { font-size: 12px; font-weight: 600; background: var(--pw-panel, hsl(var(--card, 0 0% 100%))); }
+.pf-planning input { box-sizing: border-box; width: 100%; min-width: 0; border: 1px solid var(--pw-edge, hsl(var(--input, 214 32% 91%))); border-radius: 4px; background: var(--pw-panel, hsl(var(--card, 0 0% 100%))); color: var(--pw-ink, hsl(var(--foreground, 222 47% 11%))); font: inherit; padding: 6px 8px; }
+.pf-planning input:focus { outline: 2px solid var(--pw-accent, hsl(var(--ring, 175 75% 35%))); outline-offset: 2px; }
+.pf-planning td input { width: 86px; text-align: right; }
+.pf-planning .pf-deficit, .pw-app .pf-planning p.pf-deficit { color: var(--pw-limit, #b42318); }
+.pf-goals { border: 0; border-block: 1px solid var(--pw-edge, hsl(var(--border, 214 32% 91%))); margin: 16px 0; padding: 12px 0 16px; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px 20px; }
+.pf-planning legend { font-weight: 600; padding: 0; }
+.pf-planning label { display: grid; align-content: start; gap: 5px; overflow-wrap: anywhere; }
+.pf-planning small { font-size: 12px; }
+.pf-planning details { padding: 12px 0; border-bottom: 1px solid var(--pw-edge, hsl(var(--border, 214 32% 91%))); }
+.pf-planning summary { cursor: pointer; font-weight: 600; }
+.pf-estimates { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px 20px; padding-top: 16px; }
+.pf-limitations { color: var(--pw-muted, hsl(var(--muted-foreground, 215 16% 47%))); padding-left: 20px; }
+@media (max-width: 600px) { .pf-summary, .pf-goals, .pf-estimates { grid-template-columns: minmax(0, 1fr); } .pf-summary { gap: 10px; } }

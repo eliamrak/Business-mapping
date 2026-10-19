@@ -39,6 +39,7 @@ import {
 } from "recharts";
 import {
   forecast,
+  monthEnd,
   completeServicePeriodState,
   canonicalServicePeriod,
   referencedClinicianIds,
@@ -158,6 +159,7 @@ import {
 } from "@/lib/bulk-lead-flow";
 import MoneyFlowToday from "@/components/practice/money-flow-today";
 import MoneyRangeSummary from "@/components/practice/money-range-summary";
+import ProfitFirstPlanning from "@/components/practice/profit-first-planning";
 import { practiceFinancialRange, financialRangeBridge } from "@/lib/practice-financial-range";
 import { practiceFinancialEstimateRange, type HistoricalPayBasis } from "@/lib/practice-financial-estimate";
 import { financialEstimateDisplay, financialEstimateBridge } from "@/lib/financial-estimate-display";
@@ -166,6 +168,7 @@ import SandboxView from "@/components/sandbox-view";
 import BusinessGoalsTab from "@/components/tabs/business-goals-tab";
 import CurrentRealityTab from "@/components/tabs/current-reality-tab";
 import TeamBuilderTab from "@/components/tabs/team-builder-tab";
+import { historicalPerformance, type HistoricalPerformancePeriod } from "@/lib/historical-performance";
 import ClinicianImpactViewTab from "@/components/tabs/clinician-impact-tab";
 import ScenarioBuilderTab from "@/components/tabs/scenario-builder-tab";
 import ScenarioComparisonTab from "@/components/tabs/scenario-comparison-tab";
@@ -762,7 +765,8 @@ export default function PracticeWorkspace() {
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
-  const [marketingTab, setMarketingTab] = useState("results");
+  const [marketingTab, setMarketingTab] = useState("campaigns");
+  const [historicalPeriod, setHistoricalPeriod] = useState<HistoricalPerformancePeriod>("3mo");
   const [moneyMonthIndex, setMoneyMonthIndex] = useState(0);
   const [summaryMonthDate, setSummaryMonthDate] = useState("");
   const [fillHorizonMonths, setFillHorizonMonths] = useState(6);
@@ -943,6 +947,22 @@ export default function PracticeWorkspace() {
       today,
     ],
   );
+  const historicalMetrics = useMemo(() => historicalPerformance({
+    snapshots: historicalClinicalSnapshots,
+    consultSnapshots: completeClinicalReports?.eligibleSnapshots ?? [],
+    calendarSnapshots: localRetentionState.snapshots,
+    calendarScope: { clinicians: context?.clinicians ?? [], teamId: workspace?.settings.teamId ?? null, declarations: importEvidenceDeclarations },
+    classificationSnapshots: localRetentionState.snapshots,
+    overrides: localRetentionState.sameDayVisitOverrides,
+    attributions: (stagedWorkspace ?? workspace)?.consultAttributionOverrides ?? [],
+    cohortClinicianNames: currentConsultCohort,
+    excludedFollowUpEvidence,
+    today,
+    period: historicalPeriod,
+  }), [historicalClinicalSnapshots, completeClinicalReports, localRetentionState.snapshots, localRetentionState.sameDayVisitOverrides, stagedWorkspace, workspace, context, importEvidenceDeclarations, currentConsultCohort, excludedFollowUpEvidence, today, historicalPeriod]);
+  const historicalActivity = historicalMetrics.activity;
+  const historicalClinicianActivityByName = new Map(historicalMetrics.clinicians.map((row) => [normalizeClinicianName(row.clinician), row]));
+  const historicalConsults = historicalMetrics.consults;
   const clinicianActivityByName = useMemo(
     () =>
       new Map(
@@ -1079,6 +1099,8 @@ export default function PracticeWorkspace() {
     };
   }, [workspace, workingWorkspace, moneyFlowWorkspace, modelContext, localRetentionState.snapshots, importEvidenceDeclarations,
     today, periodRange.start, periodRange.end, summaryMonth?.date, importedSessionOverlay?.attendanceCoverage]);
+  const planningForecastMonths = useMemo(() => moneyFlowWorkspace && modelContext
+    ? forecast(moneyFlowWorkspace, modelContext) : [], [moneyFlowWorkspace, modelContext]);
   const financialEstimates = useMemo(() => {
     if (!financialRangeReports || !context || !storedWorkspace || !workspace) return null;
     // A compensation target inherited for planning is not an extra salary expense.
@@ -1529,6 +1551,19 @@ export default function PracticeWorkspace() {
       return { ...current, settings: { ...current.settings, ...patch } };
     });
     setStagedLabels((prior) => ({ ...prior, settings: label }));
+    setReviewStaged(false);
+  }
+  function stageMoneyPlanning(moneyPlanning: NonNullable<Workspace["moneyPlanning"]>) {
+    if (!workspace) return;
+    setStagedWorkspace((prior) => {
+      const current = prior ?? workspace;
+      return { ...current, moneyPlanning, settings: {
+        ...current.settings,
+        ...(resolved?.inherited.ownerPay && !current.settings.ownerPayrollOverride && storedWorkspace
+          ? { ownerPayrollMonthly: storedWorkspace.settings.ownerPayrollMonthly } : {}),
+      } };
+    });
+    setStagedLabels((prior) => ({ ...prior, moneyPlanning: "Money planning estimates and funding goals" }));
     setReviewStaged(false);
   }
   function stageGoalPatch(
@@ -2841,7 +2876,7 @@ export default function PracticeWorkspace() {
   const contributorActivity =
     selectedContributorName === "Whole Practice" || !hasUniqueClinicianIdentity(context.clinicians, selectedContributorName, workspace.settings.teamId)
       ? null
-      : clinicianActivityByName.get(
+      : historicalClinicianActivityByName.get(
           normalizeClinicianName(selectedContributorName),
         ) ?? null;
   const contributorConsult =
@@ -2854,7 +2889,7 @@ export default function PracticeWorkspace() {
         ) ?? null;
   const clinicalComparisonRowsFor = (kind: "retention" | "attrition") => people.map((person) => {
     const unique = hasUniqueClinicianIdentity(context.clinicians, person.label, workspace.settings.teamId);
-    const row = unique ? clinicianActivityByName.get(normalizeClinicianName(person.label)) : undefined;
+    const row = unique ? historicalClinicianActivityByName.get(normalizeClinicianName(person.label)) : undefined;
     return { id: String(person.id), label: person.label,
       value: kind === "retention" ? row?.initialRetentionPct : row?.averageClientEndingsPerFullMonth,
       detail: !unique ? "Unknown: clinician name maps to multiple IDs; resolve the import mapping."
@@ -2863,20 +2898,29 @@ export default function PracticeWorkspace() {
         : `${fmt(row?.endingFullMonthClientEnds)} relationship endings / ${fmt(row?.endingFullMonthDenominator)} mature months`,
     };
   }).concat([{ id: "practice", label: "Whole Practice",
-    value: kind === "retention" ? clientActivityEstimate?.initialRetentionRate == null ? null : clientActivityEstimate.initialRetentionRate * 100 : clientActivityEstimate?.averageClientEndingsPerFullMonth,
+    value: kind === "retention" ? historicalActivity?.initialRetentionRate == null ? null : historicalActivity.initialRetentionRate * 100 : historicalActivity?.averageClientEndingsPerFullMonth,
     detail: kind === "retention"
-      ? `${fmt(clientActivityEstimate?.retainedClientPairs)} retained / ${fmt(clientActivityEstimate?.initialRetentionDenominator)} evaluated starts; ${fmt(clientActivityEstimate?.immatureClientPairsExcluded)} pending${clientActivityEstimate?.initialRetentionCoverageVerified ? "" : "; coverage unverified"}`
-      : `${fmt(clientActivityEstimate?.endingFullMonthClientEnds)} unique client endings / ${fmt(clientActivityEstimate?.endingFullMonthDenominator)} mature months`,
+      ? `${fmt(historicalActivity?.retainedClientPairs)} retained / ${fmt(historicalActivity?.initialRetentionDenominator)} evaluated starts; ${fmt(historicalActivity?.immatureClientPairsExcluded)} pending${historicalActivity?.initialRetentionCoverageVerified ? "" : "; coverage unverified"}`
+      : `${fmt(historicalActivity?.endingFullMonthClientEnds)} unique client endings / ${fmt(historicalActivity?.endingFullMonthDenominator)} mature months`,
   }]).map((row) => ({ ...row, practice: row.id === "practice" }));
   const consultComparisonRows = [...currentConsultPeople.map((person) => {
     const unique = hasUniqueClinicianIdentity(context.clinicians, person.label, workspace.settings.teamId);
     const row = unique ? consultConversionSummary.byClinician.find((metric) => normalizeClinicianName(metric.clinician ?? "") === normalizeClinicianName(person.label)) : undefined;
     return { id: String(person.id), label: person.label, value: row?.conversionRate,
-      detail: unique ? `${fmt(row?.converted)} confirmed closes / ${fmt(row?.evaluated)} evaluated; ${fmt(row?.pending)} pending` : "Unknown: clinician name maps to multiple IDs; resolve the import mapping.",
+      detail: unique ? `${fmt(row?.converted)} confirmed closes / ${fmt(row?.evaluated)} evaluated; ${fmt(row?.consultations)} consultations; ${fmt(row?.pending)} pending` : "Unknown: clinician name maps to multiple IDs; resolve the import mapping.",
     };
   }), { id: "practice", label: "Whole Practice", value: consultConversionSummary.practice.conversionRate,
-    detail: `${fmt(consultConversionSummary.practice.converted)} treatment starts / ${fmt(consultConversionSummary.practice.evaluated)} evaluated; ${fmt(consultConversionSummary.practice.pending)} pending`,
+    detail: `${fmt(consultConversionSummary.practice.converted)} treatment starts / ${fmt(consultConversionSummary.practice.evaluated)} evaluated; ${fmt(consultConversionSummary.practice.consultations)} consultations; ${fmt(consultConversionSummary.journeys.filter((journey) => journey.attributionSource === "manual_confirmed_closer").length)} confirmed closes; ${fmt(consultConversionSummary.practice.pending)} pending`,
   }].map((row) => ({ ...row, practice: row.id === "practice" }));
+  const historicalControls = (
+    <div className="pw-period-controls" aria-label="Historical performance range">
+      <div className="pw-segmented" role="group" aria-label="Historical performance period">
+        {(["3mo", "year"] as const).map((period) => <button key={period} aria-pressed={historicalPeriod === period} onClick={() => setHistoricalPeriod(period)}>{period === "3mo" ? "Trailing 3 months" : "Trailing year"}</button>)}
+      </div>
+      <p>Historical performance · complete calendar months: {historicalMetrics.window.cohort.start} to {historicalMetrics.window.cohort.end} · observations through {historicalMetrics.window.asOf}</p>
+      <p>Average monthly attrition: {historicalMetrics.window.attrition.start} to {historicalMetrics.window.attrition.end} · 90-day follow-up; latest eligible ending {historicalMetrics.window.endingObservationCutoff}. Only covered mature months contribute; zero eligible months means the monthly average is unknown.</p>
+    </div>
+  );
   const recordedClinicianCount =
     viewProjection?.clinicianPace.filter(
       (person) => person.recordedWeekly !== null,
@@ -2892,6 +2936,19 @@ export default function PracticeWorkspace() {
   const selectedMoneyRange = financialRangeReports!.selected;
   const moneyMonth = mode === "practice" ? selectedMoneyRange.forward.months[0] : months[Math.min(moneyMonthIndex, months.length - 1)];
   const moneyValues = mode === "practice" ? selectedMoneyRange.values : moneyMonth?.values ?? {};
+  const planningMonthDate = (mode === "practice" ? summaryMonth : moneyMonth)?.date;
+  const planningMonth = planningForecastMonths.find((month) => month.date === planningMonthDate) ?? planningForecastMonths[0];
+  // Operating overhead uses its own annual accrual basis, not a selected pay window.
+  const { overhead: _planningMonthOverhead, ...planningMonthlyValues } = planningMonth?.values ?? {};
+  const inheritedOwnerTarget = resolved?.inherited.ownerPay && !workingWorkspace.settings.ownerPayrollOverride;
+  const planningWorkspace = inheritedOwnerTarget && storedWorkspace ? {
+    ...workingWorkspace,
+    settings: { ...workingWorkspace.settings, ownerPayrollMonthly: storedWorkspace.settings.ownerPayrollMonthly },
+  } : workingWorkspace;
+  if (inheritedOwnerTarget) {
+    planningMonthlyValues.ownerPayroll = planningWorkspace.settings.ownerPayrollMonthly;
+    planningMonthlyValues.ownerPayrollBurden = planningWorkspace.settings.ownerPayrollMonthly * planningWorkspace.settings.ownerPayrollBurdenPct / 100;
+  }
   const summaryMoneyReport = financialRangeReports!.summary;
   const moneyBridge = mode === "practice" ? financialRangeBridge(selectedMoneyRange) : moneyBridgeSummary(moneyValues, workingWorkspace.settings.ownerPayrollBurdenPct);
   const ownerBurden =
@@ -3229,6 +3286,10 @@ export default function PracticeWorkspace() {
   const overviewFlow = overviewFlowMemo;
   const overviewSessionEvidence = selectedPeriodSessionSummary((modelContext ?? context).sessions, people.map((person) => person.id), {
     start: periodRange.start.startsWith("0000-") ? completeSessionHistoryStart((modelContext ?? context).sessions, people.map((person) => person.id), importedSessionOverlay?.attendanceCoverage ?? [], today) ?? today : periodRange.start,
+    end: periodRange.end.startsWith("9999-") ? today : periodRange.end,
+  }, importedSessionOverlay?.attendanceCoverage ?? [], today);
+  const selectedSessionEvidence = selectedPeriodSessionSummary((modelContext ?? context).sessions, selectedContributor ? [selectedContributor.id] : people.map((person) => person.id), {
+    start: periodRange.start.startsWith("0000-") ? completeSessionHistoryStart((modelContext ?? context).sessions, selectedContributor ? [selectedContributor.id] : people.map((person) => person.id), importedSessionOverlay?.attendanceCoverage ?? [], today) ?? today : periodRange.start,
     end: periodRange.end.startsWith("9999-") ? today : periodRange.end,
   }, importedSessionOverlay?.attendanceCoverage ?? [], today);
   const fundProjection = (goal: LinkedFundGoal | undefined) => {
@@ -3642,8 +3703,9 @@ export default function PracticeWorkspace() {
                     custom={customPeriod}
                     onPeriod={setSharedPeriod}
                     onCustom={setCustomPeriod}
-                    note="Team KPIs use recorded/imported performance when available; pay structure remains editable below."
+                    note="Session activity uses the selected dates."
                   />
+                  {historicalControls}
                   {heading(
                     "Clinical staff",
                     people.length + " clinicians",
@@ -3706,11 +3768,11 @@ export default function PracticeWorkspace() {
                       };
                       const sessionEvidence = selectedPeriodSessionSummary(personRecords, [person.id], sessionEvidenceBounds, importedSessionOverlay?.attendanceCoverage ?? [], today);
                       const uniqueIdentity = hasUniqueClinicianIdentity(context.clinicians, person.label, workspace.settings.teamId);
-                      const importedActivity = uniqueIdentity ? clinicianActivityByName.get(
+                      const importedActivity = uniqueIdentity ? historicalClinicianActivityByName.get(
                         normalizeClinicianName(person.label),
                       ) : undefined;
                       const consultMetric =
-                        uniqueIdentity ? consultConversionSummary.byClinician.find(
+                        uniqueIdentity ? historicalConsults.byClinician.find(
                           (row) =>
                             normalizeClinicianName(row.clinician ?? "") ===
                             normalizeClinicianName(person.label),
@@ -3818,13 +3880,14 @@ export default function PracticeWorkspace() {
                             {!uniqueIdentity && <p className="pw-note">Imported clinician metrics are unknown: this name maps to multiple clinician IDs.</p>}
                             <div>
                               <span>Sessions</span>
+                              <strong>{fmt(sessionEvidence.observedCompleted)} total sessions</strong>
                               <strong>{fmt(sessionEvidence.completedWeekly ?? sessionEvidence.calendarWindowWeeklyEstimate)} / wk</strong>
                               <small>
                                 {fmt(sessionEvidence.observedCompleted)} eligible visits / {sessionEvidence.observedCoverageDays} complete-period days · incomplete periods excluded
                               </small>
                             </div>
                             <div>
-                              <PercentageKpi label="Retention" value={importedActivity?.initialRetentionPct} benchmark={clientActivityEstimate?.initialRetentionRate == null ? null : clientActivityEstimate.initialRetentionRate * 100} />
+                              <PercentageKpi label="Retention" value={importedActivity?.initialRetentionPct} benchmark={historicalActivity?.initialRetentionRate == null ? null : historicalActivity.initialRetentionRate * 100} />
                               <small>
                                 {importedActivity
                                   ? `${fmt(importedActivity.initialRetentionDenominator)} evaluated starts; ${fmt(importedActivity.pendingInitialClients)} pending${importedActivity.initialRetentionCoverageVerified ? "" : "; observed, coverage unverified"}`
@@ -3832,7 +3895,7 @@ export default function PracticeWorkspace() {
                               </small>
                             </div>
                             <div>
-                              <span>Attrition</span>
+                              <span>Average monthly attrition</span>
                               <strong>
                                 {fmt(
                                   importedActivity?.averageClientEndingsPerFullMonth,
@@ -3845,10 +3908,10 @@ export default function PracticeWorkspace() {
                               </small>
                             </div>
                             <div>
-                              <PercentageKpi label="Confirmed close" value={consultMetric?.conversionRate} benchmark={consultConversionSummary.practice.conversionRate} />
+                              <PercentageKpi label="Confirmed close" value={consultMetric?.conversionRate} benchmark={historicalConsults.practice.conversionRate} />
                               <small>
                                 {consultMetric
-                                  ? `${fmt(consultMetric.converted)} confirmed; ${fmt(consultMetric.pending)} pending${consultConversionSummary.coverageVerified ? "" : "; observed, coverage unverified"}`
+                                  ? `${fmt(consultMetric.converted)} confirmed / ${fmt(consultMetric.evaluated)} evaluated; ${fmt(consultMetric.consultations)} consultations; ${fmt(consultMetric.pending)} pending${historicalConsults.coverageVerified ? "" : "; observed, coverage unverified"}`
                                   : "no imported PHONE journeys"}
                               </small>
                             </div>
@@ -4281,8 +4344,11 @@ export default function PracticeWorkspace() {
                         .
                       </p>
                     )}
+                  {historicalControls}
                   <div className="pw-clinical-metric-grid" aria-label="Sessions, retention and attrition">
                     <section className="pw-clinical-card" aria-label="Session trends card">
+                      <h3>Total sessions</h3><div className="pw-metric-hero"><strong>{fmt(selectedSessionEvidence.observedCompleted)}</strong><span>{selectedContributorName} · selected-window total</span></div>
+                      <p>{selectedSessionEvidence.coverageComplete ? "Complete selected-window coverage" : "Eligible observed total; selected-window coverage incomplete"} · {selectedSessionEvidence.observedCoverageDays} included days</p>
                       <WorkspaceSessions
                         compact
                         key={mode + "-" + workspace.settings.teamId}
@@ -4301,29 +4367,250 @@ export default function PracticeWorkspace() {
                     </section>
                     <section className="pw-clinical-card" aria-label="Retention card">
                       <h3>Retention</h3>
-                      <p>{selectedContributorName} · {sharedPeriodLabel(sharedPeriod)}</p>
+                      <p>{selectedContributorName} · {historicalMetrics.window.cohort.start} to {historicalMetrics.window.cohort.end}</p>
                       {compareWholePractice
                         ? <MetricComparison rows={clinicalComparisonRowsFor("retention")} unit="%" percentage label="Retention comparison" />
                         : <>
-                          <div className="pw-clinical-count"><strong>{fmt(selectedContributorName === "Whole Practice" ? clientActivityEstimate?.retainedClientPairs : contributorActivity?.retainedClients)}</strong><span>retained / {fmt(selectedContributorName === "Whole Practice" ? clientActivityEstimate?.initialRetentionDenominator : contributorActivity?.initialRetentionDenominator)} evaluated starts</span></div>
-                          <p>{fmt(selectedContributorName === "Whole Practice" ? clientActivityEstimate?.immatureClientPairsExcluded : contributorActivity?.pendingInitialClients)} pending starts</p>
-                          <PercentageKpi label="Observed retention" value={selectedContributorName === "Whole Practice" ? clientActivityEstimate?.initialRetentionRate == null ? null : clientActivityEstimate.initialRetentionRate * 100 : contributorActivity?.initialRetentionPct} benchmark={selectedContributorName === "Whole Practice" ? null : clientActivityEstimate?.initialRetentionRate == null ? null : clientActivityEstimate.initialRetentionRate * 100} />
+                          <div className="pw-clinical-count"><strong>{fmt(selectedContributorName === "Whole Practice" ? historicalActivity?.retainedClientPairs : contributorActivity?.retainedClients)}</strong><span>retained / {fmt(selectedContributorName === "Whole Practice" ? historicalActivity?.initialRetentionDenominator : contributorActivity?.initialRetentionDenominator)} evaluated starts</span></div>
+                          <p>{fmt(selectedContributorName === "Whole Practice" ? historicalActivity?.immatureClientPairsExcluded : contributorActivity?.pendingInitialClients)} pending starts</p>
+                          <PercentageKpi label="Observed retention" value={selectedContributorName === "Whole Practice" ? historicalActivity?.initialRetentionRate == null ? null : historicalActivity.initialRetentionRate * 100 : contributorActivity?.initialRetentionPct} benchmark={selectedContributorName === "Whole Practice" ? null : historicalActivity?.initialRetentionRate == null ? null : historicalActivity.initialRetentionRate * 100} />
                         </>}
-                      <details><summary>Source and calculation</summary><p>Imported treatment starts in {periodRange.start} to {periodRange.end}. Three attended treatment sessions with no initial gap over 28 days; PHONE excluded. Pending starts are not failures. {(selectedContributorName === "Whole Practice" ? clientActivityEstimate?.initialRetentionCoverageVerified : contributorActivity?.initialRetentionCoverageVerified) ? "Selected starts and retention observation windows have verified report coverage." : "Observed history; selected retention coverage unverified."}</p></details>
+                      <details><summary>Source and calculation</summary><p>Imported treatment starts in {historicalMetrics.window.cohort.start} to {historicalMetrics.window.cohort.end}. Three attended treatment sessions with no initial gap over 28 days; PHONE excluded. Pending starts are not failures. {(selectedContributorName === "Whole Practice" ? historicalActivity?.initialRetentionCoverageVerified : contributorActivity?.initialRetentionCoverageVerified) ? "Selected starts and retention observation windows have verified report coverage." : "Observed history; selected retention coverage unverified."}</p></details>
                     </section>
                     <section className="pw-clinical-card" aria-label="Attrition card">
-                      <h3>Attrition</h3>
-                      <p>{selectedContributorName} · {sharedPeriodLabel(sharedPeriod)}</p>
+                      <h3>Average monthly attrition</h3>
+                      <p>{selectedContributorName} · {historicalMetrics.window.attrition.start} to {historicalMetrics.window.attrition.end}</p>
                       {compareWholePractice
                         ? <MetricComparison rows={clinicalComparisonRowsFor("attrition")} unit="endings / month" label="Attrition comparison" />
                         : <>
-                          <div className="pw-clinical-count"><strong>{fmt(selectedContributorName === "Whole Practice" ? clientActivityEstimate?.averageClientEndingsPerFullMonth : contributorActivity?.averageClientEndingsPerFullMonth)}</strong><span>client endings / mature month</span></div>
-                          <p>{fmt(selectedContributorName === "Whole Practice" ? clientActivityEstimate?.endingFullMonthDenominator : contributorActivity?.endingFullMonthDenominator)} fully observed mature months</p>
-                          <p>Latest eligible ending date: {clientActivityEstimate?.endingObservationCutoff ?? "--"}</p>
+                          <div className="pw-clinical-count"><strong>{fmt(selectedContributorName === "Whole Practice" ? historicalActivity?.averageClientEndingsPerFullMonth : contributorActivity?.averageClientEndingsPerFullMonth)}</strong><span>client endings / mature month</span></div>
+                          <p>{fmt(selectedContributorName === "Whole Practice" ? historicalActivity?.endingFullMonthDenominator : contributorActivity?.endingFullMonthDenominator)} fully observed mature months</p>
+                          <p>Latest eligible ending date: {historicalActivity?.endingObservationCutoff ?? "--"}</p>
                         </>}
                       <details><summary>Source and calculation</summary><p>Established treatment relationships need 90 covered days of follow-up. A later return removes the prior ending. Unknown mature coverage stays unknown, not zero. No attrition target or replacement requirement is invented.</p></details>
                     </section>
                   </div>
+                      <section className="pw-metric-panel">
+                        <div className="pw-section-heading">
+                          <div>
+                            <h3>Consult → treatment conversion</h3>
+                            <p>
+                              Selected activity dates: {periodRange.start} to {periodRange.end}. Current-team consultation cohorts, with all treatment follow-up retained · one
+                              calendar-month follow-up window
+                            </p>
+                          </div>
+                        </div>
+                        <div
+                          className="pw-contributor-tabs"
+                          role="group"
+                          aria-label="Consult contributor"
+                        >
+                          {consultContributorNames.map((name, index) => (
+                            <button
+                              key={index === 0 ? "practice" : currentConsultPeople[index - 1].id}
+                              aria-pressed={selectedContributorName === name}
+                              onClick={() => {
+                                setSharedContributor(name);
+                                setCompareWholePractice(false);
+                              }}
+                            >
+                              {name}
+                            </button>
+                          ))}
+                          {(
+                            <button
+                              aria-pressed={compareWholePractice}
+                              onClick={() =>
+                                setCompareWholePractice((value) => !value)
+                              }
+                            >
+                              Compare with Whole Practice
+                            </button>
+                          )}
+                        </div>
+                        {compareWholePractice ? <MetricComparison rows={consultComparisonRows} percentage unit="%" label="Consult metric comparison" /> : selectedContributorName !== "Whole Practice" ? <PercentageKpi label="Consult close rate" value={contributorConsult?.conversionRate} benchmark={consultConversionSummary.practice.conversionRate} observed={`${fmt(contributorConsult?.converted)} confirmed closes / ${fmt(contributorConsult?.evaluated)} evaluated`} pending={`${fmt(contributorConsult?.pending)} pending`} /> : <>
+                        <div className="pw-metric-hero">
+                          <strong>
+                            {fmt(contributorConsult?.conversionRate, "percent")}
+                          </strong>
+                          <span>
+                            {contributorConsult
+                              ? `${fmt(contributorConsult.converted)} ${selectedContributorName === "Whole Practice" ? "treatment starts" : "confirmed closes"} of ${fmt(contributorConsult.evaluated)} evaluated; ${fmt(contributorConsult.candidateConversions)} treatment-start candidates; ${fmt(contributorConsult.pending)} pending`
+                              : "No imported PHONE journeys for this contributor"}
+                          </span>
+                        </div>
+                        <MetricTargetBar
+                          value={contributorConsult?.conversionRate}
+                          benchmark={
+                            selectedContributorName === "Whole Practice"
+                              ? null
+                              : consultConversionSummary.practice.conversionRate
+                          }
+                          goal={null}
+                          valueLabel="Observed"
+                          max={100}
+                        />
+                        </>}
+                        {contributorConsult && !consultConversionSummary.coverageVerified && <p className="pw-note">Observed conversions; report coverage is unverified. {fmt(contributorConsult.pending)} journeys remain pending.</p>}
+                        {!compareWholePractice && selectedContributorName !== "Whole Practice" && !hasUniqueClinicianIdentity(context.clinicians, selectedContributorName, workspace.settings.teamId) && <p className="pw-note">Imported clinician metrics are unknown: this name maps to multiple clinician IDs.</p>}
+                        <div className="pw-number-grid pw-consult-audit">
+                          <div><span>Consultations</span><strong>{fmt(contributorConsult?.consultations)}</strong></div>
+                          <div><span>{selectedContributorName === "Whole Practice" ? "Observed treatment starts" : "Confirmed closes"}</span><strong>{fmt(contributorConsult?.converted)}</strong></div>
+                          {selectedContributorName === "Whole Practice" && <div><span>Confirmed closes</span><strong>{fmt(consultConversionSummary.journeys.filter((journey) => journey.attributionSource === "manual_confirmed_closer").length)}</strong></div>}
+                          <div><span>Evaluated</span><strong>{fmt(contributorConsult?.evaluated)}</strong></div>
+                          <div><span>Pending</span><strong>{fmt(contributorConsult?.pending)}</strong></div>
+                          <div>
+                            <span>Needs attribution</span>
+                            <strong>
+                              {fmt(contributorConsult?.needsAttribution)}
+                            </strong>
+                            <small>
+                              Missing manual closer confirmation or missed-owner
+                              review.
+                            </small>
+                          </div>
+                          <div>
+                            <span>Internal referrals protected</span>
+                            <strong>
+                              {fmt(
+                                contributorConsult?.internalReferralsProtected,
+                              )}
+                            </strong>
+                            <small>
+                              Referrers are not counted as misses when another
+                              clinician closes.
+                            </small>
+                          </div>
+                        </div>
+                        <p className="pw-note">
+                          Practice conversion is de-duplicated once per client.
+                          A qualifying treatment start counts for practice
+                          conversion, but clinician close rates use only manual
+                          closer confirmations. The treatment-start clinician is
+                          shown as a candidate until confirmed.
+                          Non-converted clients stay pending until one calendar
+                          month after consultation.
+                        </p>
+                        <details className="pw-consult-resolution">
+                          <summary>
+                            Review client attribution candidates
+                            <ChevronDown />
+                          </summary>
+                          <div className="pw-consult-resolution-list">
+                            {consultConversionSummary.journeys
+                              .filter(
+                                (journey) =>
+                                  journey.status === "needs_attribution" ||
+                                  journey.attributionSource !== "none",
+                              )
+                              .slice(0, 25)
+                              .map((journey) => {
+                                const candidate =
+                                  journey.treatmentStartClinician ??
+                                  (journey.consultClinicians.length === 1
+                                    ? journey.consultClinicians[0]
+                                    : null);
+                                const reviewClinician = consultReviewClinicians[journey.clientId] ?? journey.creditedClinician ?? "";
+                                return (
+                                  <div
+                                    className="pw-consult-resolution-row"
+                                    key={`${journey.clientId}:${journey.consultDate}`}
+                                  >
+                                    <div>
+                                      <strong>{journey.clientId}</strong>
+                                      <span>
+                                        Consult {journey.consultDate}
+                                        {journey.treatmentDate
+                                          ? ` · treatment start ${journey.treatmentDate}`
+                                          : ""}
+                                      </span>
+                                      <small>
+                                        {journey.attributionIssue ??
+                                          (journey.attributionSource ===
+                                          "manual_confirmed_closer"
+                                            ? "Manually confirmed closer."
+                                            : journey.attributionSource ===
+                                                "manual_missed_owner"
+                                              ? "Manually confirmed missed-consult owner."
+                                              : "No review needed.")}
+                                      </small>
+                                    </div>
+                                    <div>
+                                      <span>
+                                        Candidate: {candidate ?? "needs review"}
+                                      </span>
+                                      <span>
+                                        Consult clinician
+                                        {journey.consultClinicians.length === 1
+                                          ? `: ${journey.consultClinicians[0]}`
+                                          : `s: ${journey.consultClinicians.join(", ") || "--"}`}
+                                      </span>
+                                    </div>
+                                    <div className="pw-consult-resolution-actions">
+                                      <label className="pw-draft-field">
+                                        <span>Confirmed owner</span>
+                                        <select
+                                          aria-label={`Confirmed owner for ${journey.clientId}`}
+                                          value={reviewClinician}
+                                          onChange={(event) => setConsultReviewClinicians((prior) => ({ ...prior, [journey.clientId]: event.target.value }))}
+                                        >
+                                          <option value="">Select clinician</option>
+                                          {[...new Set([...(modelContext ?? context).clinicians.map((person) => person.label), ...journey.consultClinicians, ...(candidate ? [candidate] : []), ...(journey.creditedClinician ? [journey.creditedClinician] : [])])].sort().map((name) => <option key={name} value={name}>{name}</option>)}
+                                        </select>
+                                      </label>
+                                      <button
+                                        className="pw-text-button"
+                                        disabled={!journey.treatmentDate || !reviewClinician}
+                                        onClick={() =>
+                                          stageConsultAttributionOverride(
+                                            journey.clientId,
+                                            "confirmed_closer",
+                                            reviewClinician,
+                                          )
+                                        }
+                                      >
+                                        Confirm closer
+                                      </button>
+                                      <button
+                                        className="pw-text-button"
+                                        disabled={
+                                          !!journey.treatmentDate || journey.status === "pending" || !reviewClinician
+                                        }
+                                        onClick={() =>
+                                          stageConsultAttributionOverride(
+                                            journey.clientId,
+                                            "missed_owner",
+                                            reviewClinician,
+                                          )
+                                        }
+                                      >
+                                        Assign missed
+                                      </button>
+                                      <button
+                                        className="pw-text-button"
+                                        onClick={() =>
+                                          stageConsultAttributionOverride(
+                                            journey.clientId,
+                                            "needs_review",
+                                            null,
+                                          )
+                                        }
+                                      >
+                                        Mark review
+                                      </button>
+                                    </div>
+                                  </div>
+                                );
+                              })}
+                            {!consultConversionSummary.journeys.length && (
+                              <p className="pw-note">
+                                Import PHONE consultation rows to review
+                                attribution candidates.
+                              </p>
+                            )}
+                          </div>
+                        </details>
+                      </section>
                   <details className="pw-panel"><summary>Financial session goal details</summary>
                     {sessionGoal.unavailableReasons.map((reason) => <p key={reason}>{reason}</p>)}
                     {sessionGoal.knownSourceAssumptions.map((assumption) => <p key={assumption}>{assumption}</p>)}
@@ -4375,7 +4662,7 @@ export default function PracticeWorkspace() {
                     custom={customPeriod}
                     onPeriod={setSharedPeriod}
                     onCustom={setCustomPeriod}
-                    note="Reporting period carries to Growth and Rooms; contributor resets when leaving the tab."
+                    note="Selected activity dates apply to leads, sessions and consultations."
                   />
                   {marketingTab === "campaigns" && (
                     <div
@@ -4413,7 +4700,7 @@ export default function PracticeWorkspace() {
                     aria-label="Marketing view"
                     data-unsaved-navigation
                   >
-                    {["results", "campaigns"].map((t) => (
+                    {["campaigns"].map((t) => (
                       <button
                         key={t}
                         role="tab"
@@ -4433,7 +4720,7 @@ export default function PracticeWorkspace() {
                       Rooms
                     </button>
                   </div>
-                  {marketingTab === "campaigns" ? (
+                  {(
                     <div className="pw-edit-list">
                       {active(workingWorkspace.campaigns).map((c) => (
                         <section className="pw-edit-item" key={c.id}>
@@ -4768,224 +5055,9 @@ export default function PracticeWorkspace() {
                           ))}
                       </div>
                     </div>
-                  ) : (
+                  )}
+                  {(
                     <>
-                      <section className="pw-metric-panel">
-                        <div className="pw-section-heading">
-                          <div>
-                            <h3>Consult → treatment conversion</h3>
-                            <p>
-                              Current-team consultation cohorts, with all treatment follow-up retained · one
-                              calendar-month follow-up window
-                            </p>
-                          </div>
-                        </div>
-                        <div
-                          className="pw-contributor-tabs"
-                          role="group"
-                          aria-label="Consult contributor"
-                        >
-                          {consultContributorNames.map((name, index) => (
-                            <button
-                              key={index === 0 ? "practice" : currentConsultPeople[index - 1].id}
-                              aria-pressed={selectedContributorName === name}
-                              onClick={() => {
-                                setSharedContributor(name);
-                                setCompareWholePractice(false);
-                              }}
-                            >
-                              {name}
-                            </button>
-                          ))}
-                          {(
-                            <button
-                              aria-pressed={compareWholePractice}
-                              onClick={() =>
-                                setCompareWholePractice((value) => !value)
-                              }
-                            >
-                              Compare with Whole Practice
-                            </button>
-                          )}
-                        </div>
-                        {compareWholePractice ? <MetricComparison rows={consultComparisonRows} percentage unit="%" label="Consult metric comparison" /> : selectedContributorName !== "Whole Practice" ? <PercentageKpi label="Consult close rate" value={contributorConsult?.conversionRate} benchmark={consultConversionSummary.practice.conversionRate} observed={`${fmt(contributorConsult?.converted)} confirmed closes / ${fmt(contributorConsult?.evaluated)} evaluated`} pending={`${fmt(contributorConsult?.pending)} pending`} /> : <>
-                        <div className="pw-metric-hero">
-                          <strong>
-                            {fmt(contributorConsult?.conversionRate, "percent")}
-                          </strong>
-                          <span>
-                            {contributorConsult
-                              ? `${fmt(contributorConsult.converted)} ${selectedContributorName === "Whole Practice" ? "treatment starts" : "confirmed closes"} of ${fmt(contributorConsult.evaluated)} evaluated; ${fmt(contributorConsult.candidateConversions)} treatment-start candidates; ${fmt(contributorConsult.pending)} pending`
-                              : "No imported PHONE journeys for this contributor"}
-                          </span>
-                        </div>
-                        <MetricTargetBar
-                          value={contributorConsult?.conversionRate}
-                          benchmark={
-                            selectedContributorName === "Whole Practice"
-                              ? null
-                              : consultConversionSummary.practice.conversionRate
-                          }
-                          goal={null}
-                          valueLabel="Observed"
-                          max={100}
-                        />
-                        </>}
-                        {contributorConsult && !consultConversionSummary.coverageVerified && <p className="pw-note">Observed conversions; report coverage is unverified. {fmt(contributorConsult.pending)} journeys remain pending.</p>}
-                        {!compareWholePractice && selectedContributorName !== "Whole Practice" && !hasUniqueClinicianIdentity(context.clinicians, selectedContributorName, workspace.settings.teamId) && <p className="pw-note">Imported clinician metrics are unknown: this name maps to multiple clinician IDs.</p>}
-                        <div className="pw-number-grid pw-consult-audit">
-                          <div>
-                            <span>Needs attribution</span>
-                            <strong>
-                              {fmt(contributorConsult?.needsAttribution)}
-                            </strong>
-                            <small>
-                              Missing manual closer confirmation or missed-owner
-                              review.
-                            </small>
-                          </div>
-                          <div>
-                            <span>Internal referrals protected</span>
-                            <strong>
-                              {fmt(
-                                contributorConsult?.internalReferralsProtected,
-                              )}
-                            </strong>
-                            <small>
-                              Referrers are not counted as misses when another
-                              clinician closes.
-                            </small>
-                          </div>
-                        </div>
-                        <p className="pw-note">
-                          Practice conversion is de-duplicated once per client.
-                          A qualifying treatment start counts for practice
-                          conversion, but clinician close rates use only manual
-                          closer confirmations. The treatment-start clinician is
-                          shown as a candidate until confirmed.
-                          Non-converted clients stay pending until one calendar
-                          month after consultation.
-                        </p>
-                        <details className="pw-consult-resolution">
-                          <summary>
-                            Review client attribution candidates
-                            <ChevronDown />
-                          </summary>
-                          <div className="pw-consult-resolution-list">
-                            {consultConversionSummary.journeys
-                              .filter(
-                                (journey) =>
-                                  journey.status === "needs_attribution" ||
-                                  journey.attributionSource !== "none",
-                              )
-                              .slice(0, 25)
-                              .map((journey) => {
-                                const candidate =
-                                  journey.treatmentStartClinician ??
-                                  (journey.consultClinicians.length === 1
-                                    ? journey.consultClinicians[0]
-                                    : null);
-                                const reviewClinician = consultReviewClinicians[journey.clientId] ?? journey.creditedClinician ?? "";
-                                return (
-                                  <div
-                                    className="pw-consult-resolution-row"
-                                    key={`${journey.clientId}:${journey.consultDate}`}
-                                  >
-                                    <div>
-                                      <strong>{journey.clientId}</strong>
-                                      <span>
-                                        Consult {journey.consultDate}
-                                        {journey.treatmentDate
-                                          ? ` · treatment start ${journey.treatmentDate}`
-                                          : ""}
-                                      </span>
-                                      <small>
-                                        {journey.attributionIssue ??
-                                          (journey.attributionSource ===
-                                          "manual_confirmed_closer"
-                                            ? "Manually confirmed closer."
-                                            : journey.attributionSource ===
-                                                "manual_missed_owner"
-                                              ? "Manually confirmed missed-consult owner."
-                                              : "No review needed.")}
-                                      </small>
-                                    </div>
-                                    <div>
-                                      <span>
-                                        Candidate: {candidate ?? "needs review"}
-                                      </span>
-                                      <span>
-                                        Consult clinician
-                                        {journey.consultClinicians.length === 1
-                                          ? `: ${journey.consultClinicians[0]}`
-                                          : `s: ${journey.consultClinicians.join(", ") || "--"}`}
-                                      </span>
-                                    </div>
-                                    <div className="pw-consult-resolution-actions">
-                                      <label className="pw-draft-field">
-                                        <span>Confirmed owner</span>
-                                        <select
-                                          aria-label={`Confirmed owner for ${journey.clientId}`}
-                                          value={reviewClinician}
-                                          onChange={(event) => setConsultReviewClinicians((prior) => ({ ...prior, [journey.clientId]: event.target.value }))}
-                                        >
-                                          <option value="">Select clinician</option>
-                                          {[...new Set([...(modelContext ?? context).clinicians.map((person) => person.label), ...journey.consultClinicians, ...(candidate ? [candidate] : []), ...(journey.creditedClinician ? [journey.creditedClinician] : [])])].sort().map((name) => <option key={name} value={name}>{name}</option>)}
-                                        </select>
-                                      </label>
-                                      <button
-                                        className="pw-text-button"
-                                        disabled={!journey.treatmentDate || !reviewClinician}
-                                        onClick={() =>
-                                          stageConsultAttributionOverride(
-                                            journey.clientId,
-                                            "confirmed_closer",
-                                            reviewClinician,
-                                          )
-                                        }
-                                      >
-                                        Confirm closer
-                                      </button>
-                                      <button
-                                        className="pw-text-button"
-                                        disabled={
-                                          !!journey.treatmentDate || journey.status === "pending" || !reviewClinician
-                                        }
-                                        onClick={() =>
-                                          stageConsultAttributionOverride(
-                                            journey.clientId,
-                                            "missed_owner",
-                                            reviewClinician,
-                                          )
-                                        }
-                                      >
-                                        Assign missed
-                                      </button>
-                                      <button
-                                        className="pw-text-button"
-                                        onClick={() =>
-                                          stageConsultAttributionOverride(
-                                            journey.clientId,
-                                            "needs_review",
-                                            null,
-                                          )
-                                        }
-                                      >
-                                        Mark review
-                                      </button>
-                                    </div>
-                                  </div>
-                                );
-                              })}
-                            {!consultConversionSummary.journeys.length && (
-                              <p className="pw-note">
-                                Import PHONE consultation rows to review
-                                attribution candidates.
-                              </p>
-                            )}
-                          </div>
-                        </details>
-                      </section>
                       <LeadFlow
                         workspace={workingWorkspace}
                         context={context}
@@ -5879,6 +5951,16 @@ export default function PracticeWorkspace() {
                     onCustom={setCustomPeriod}
                     note="Selected dates govern billed-charge estimates and recorded actuals separately. Missing source coverage or model inputs stay unknown; estimates do not require bank reconciliation."
                   />
+                  <ProfitFirstPlanning
+                    workspace={planningWorkspace}
+                    context={modelContext ?? context}
+                    asOf={planningMonth?.date ?? today}
+                    estimatedMonthlyValues={planningMonthlyValues}
+                    estimateSourcePeriod={`${planningMonth?.date ?? today} to ${monthEnd(planningMonth?.date ?? today)} · configured monthly forecast estimate; not recorded expenses or bank cash`}
+                    legacyGoal={resolved?.goal}
+                    onPlanningChange={stageMoneyPlanning}
+                  />
+                  <details className="pw-money-source-reference"><summary>Reported activity, recorded actuals and dated source settings</summary>
                   {historicalBillingReport && <HistoricalBillingSummary report={historicalBillingReport} />}
                   {financialEstimates && <section className="pw-money-bridge-panel" aria-label="Billed-charge financial estimate">
                     <div className="pw-section-heading"><div><h3>Financial estimate</h3><p>{selectedMoneyRange.range.start} to {selectedMoneyRange.range.end} · billed charges and configured cost assumptions, not cash collected or paid payroll.</p></div></div>
@@ -6158,10 +6240,20 @@ export default function PracticeWorkspace() {
                     onNavigate={(target) => setSection(target)}
                   />
                   </details>
+                  </details>
                 </>
               )}
               {section === "money" && mode !== "practice" && (
                 <>
+                  <ProfitFirstPlanning
+                    workspace={planningWorkspace}
+                    context={modelContext ?? context}
+                    asOf={planningMonth?.date ?? today}
+                    estimatedMonthlyValues={planningMonthlyValues}
+                    estimateSourcePeriod={`${planningMonth?.date ?? today} to ${monthEnd(planningMonth?.date ?? today)} · ${planningEdit ? "Long Term Goals" : "Sandbox"} monthly forecast estimate; Today is unchanged`}
+                    legacyGoal={resolved?.goal}
+                    onPlanningChange={stageMoneyPlanning}
+                  />
                   {heading(
                     "Money flow",
                     "Modeled monthly income, costs, and family pay",
@@ -7098,7 +7190,8 @@ export default function PracticeWorkspace() {
                       <details><summary>Details</summary><p>Historical percentage compensation uses accepted discounted billed charges and dated compensation rules. Costs use configured assumptions, not paid receipts. Future revenue and percentage pay use clinician-card fee estimates. Incomplete source periods are excluded; missing model inputs stay unknown. Recorded actual profit remains separate in Money.</p>{financialEstimates?.summary.reasons.map((warning) => <p key={warning}>{warning}</p>)}</details>
                     </section>
                     <section aria-label="Overview session pace">
-                      <h3>Sessions / week</h3><p>{sharedPeriodLabel(sharedPeriod)} · complete report periods only</p>
+                      <h3>Total sessions</h3><p>{sharedPeriodLabel(sharedPeriod)} · complete report periods only</p>
+                      <div className="pw-metric-hero"><strong>{fmt(overviewSessionEvidence.observedCompleted)}</strong><span>Selected-window total sessions</span></div>
                       <div className="pw-metric-hero"><strong>{fmt(overviewSessionEvidence.completedWeekly)}</strong><span>Complete-period calendar-week average</span></div>
                       <p>{fmt(overviewSessionEvidence.observedCompleted)} eligible sessions / {overviewSessionEvidence.observedCoverageDays} included days · incomplete periods excluded</p>
                       <button className="pw-button" onClick={() => { setSessionMetricView("sessions"); setSection("sessions"); }}>Sessions<ChevronRight /></button>
@@ -7146,8 +7239,10 @@ export default function PracticeWorkspace() {
                     </section>
                   </div>
                   <div className="pw-overview-clinical-grid">
-                    <section aria-label="Overview initial retention"><h3>Initial retention</h3><p>Recorded treatment history · {sharedPeriodLabel(sharedPeriod)}</p><div className="pw-metric-hero"><strong>{percent(clientActivityEstimate?.initialRetentionRate)}</strong></div><p>{fmt(clientActivityEstimate?.retainedClientPairs)} retained / {fmt(clientActivityEstimate?.initialRetentionDenominator)} evaluated starts · {fmt(clientActivityEstimate?.immatureClientPairsExcluded)} pending{clientActivityEstimate?.initialRetentionCoverageVerified ? "" : " · observed, selected retention coverage unverified"}</p><button className="pw-button" onClick={() => { setSessionMetricView("retention"); setSection("sessions"); }}>Retention<ChevronRight /></button><details><summary>Details</summary><p>Three treatment sessions with initial gaps of no more than 28 days. PHONE consultations are excluded.</p></details></section>
-                    <section aria-label="Overview consult conversion"><h3>Consult close rate</h3><p>{sharedPeriodLabel(sharedPeriod)} · one calendar month</p><div className="pw-metric-hero"><strong>{fmt(consultConversionSummary.practice.conversionRate, "percent")}</strong></div><p>{fmt(consultConversionSummary.practice.converted)} treatment starts / {fmt(consultConversionSummary.practice.evaluated)} evaluated journeys · {fmt(consultConversionSummary.practice.pending)} pending{consultConversionSummary.coverageVerified ? "" : " · observed, coverage unverified"}</p><button className="pw-button" onClick={() => { setMarketingTab("results"); setSection("marketing"); }}>Growth<ChevronRight /></button><details><summary>Details</summary><p>The actual closer receives credit; internal referrals do not penalize the referring clinician. Each practice conversion is counted once.</p></details></section>
+                    <div style={{ gridColumn: "1 / -1", minWidth: 0 }}>{historicalControls}</div>
+                    <section aria-label="Overview initial retention"><h3>Initial retention</h3><p>Recorded treatment history · {historicalMetrics.window.cohort.start} to {historicalMetrics.window.cohort.end}</p><div className="pw-metric-hero"><strong>{percent(historicalActivity?.initialRetentionRate)}</strong></div><p>{fmt(historicalActivity?.retainedClientPairs)} retained / {fmt(historicalActivity?.initialRetentionDenominator)} evaluated starts · {fmt(historicalActivity?.immatureClientPairsExcluded)} pending{historicalActivity?.initialRetentionCoverageVerified ? "" : " · observed, selected retention coverage unverified"}</p><button className="pw-button" onClick={() => { setSessionMetricView("retention"); setSection("sessions"); }}>Retention<ChevronRight /></button><details><summary>Details</summary><p>Three treatment sessions with initial gaps of no more than 28 days. PHONE consultations are excluded.</p></details></section>
+                    <section aria-label="Overview consult conversion"><h3>Consult close rate</h3><p>{historicalMetrics.window.cohort.start} to {historicalMetrics.window.cohort.end} · one calendar-month follow-up</p><div className="pw-metric-hero"><strong>{fmt(historicalConsults.practice.conversionRate, "percent")}</strong></div><p>{fmt(historicalConsults.practice.converted)} treatment starts / {fmt(historicalConsults.practice.evaluated)} evaluated journeys · {fmt(historicalConsults.practice.consultations)} consultations · {fmt(historicalConsults.journeys.filter((journey) => journey.attributionSource === "manual_confirmed_closer").length)} confirmed closes · {fmt(historicalConsults.practice.pending)} pending{historicalConsults.coverageVerified ? "" : " · observed, coverage unverified"}</p><button className="pw-button" onClick={() => { setSection("sessions"); }}>Consultations<ChevronRight /></button><details><summary>Details</summary><p>The actual closer receives credit; internal referrals do not penalize the referring clinician. Each practice conversion is counted once.</p></details></section>
+                    <section aria-label="Overview average monthly attrition"><h3>Average monthly attrition</h3><p>{historicalMetrics.window.attrition.start} to {historicalMetrics.window.attrition.end}</p><div className="pw-metric-hero"><strong>{fmt(historicalActivity?.averageClientEndingsPerFullMonth)}</strong><span>Client endings / mature month</span></div><p>{fmt(historicalActivity?.endingFullMonthClientEnds)} endings / {fmt(historicalActivity?.endingFullMonthDenominator)} covered mature months · 90-day follow-up through {historicalMetrics.window.asOf}</p><button className="pw-button" onClick={() => setSection("sessions")}>Sessions<ChevronRight /></button></section>
                   </div>
                   <details className="pw-overview-existing-details"><summary>Forecast and historical details</summary>
                   <div className="pw-summary">

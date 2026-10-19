@@ -687,9 +687,31 @@ export const settingsSchema = z.object({
     });
 });
 
+export const moneyPlanningBucketSchema = z.enum([
+  "business-profit", "taxes", "operating-expenses", "owner-payroll",
+  "therapist-payroll", "admin-payroll", "distributions",
+]);
+export const moneyPlanningSchema = z.object({
+  estimatedMonthlyValues: z.record(z.string(), money.nullable()).optional(),
+  // Deliberately no 100% ceiling: infeasible plans must remain editable and saveable.
+  scenarioPercents: z.partialRecord(moneyPlanningBucketSchema, z.number().finite().min(0).nullable()).optional(),
+  goals: z.array(z.object({
+    id,
+    name: label,
+    monthlyAmount: money.nullable(),
+    bucket: moneyPlanningBucketSchema,
+    mode: z.enum(["additional", "bucket-total", "marketing-total"]),
+    archived: z.boolean().optional(),
+  }).superRefine((goal, ctx) => {
+    if (goal.mode === "marketing-total" && goal.bucket !== "operating-expenses") ctx.addIssue({ code: "custom", path: ["bucket"], message: "Marketing funding belongs in Operating expenses." });
+  })).max(2000).optional(),
+});
+export type MoneyPlanningSettings = z.infer<typeof moneyPlanningSchema>;
+
 export const workspaceSchema = z
   .object({
     settings: settingsSchema,
+    moneyPlanning: moneyPlanningSchema.optional(),
     categories: z.array(categorySchema).max(5000),
     budgets: z.array(budgetSchema).max(20000),
     locations: z.array(locationSchema).max(1000),
@@ -1101,7 +1123,7 @@ export type FocusedPlanAdoption = z.infer<typeof focusedPlanAdoptionSchema>;
 export type Rule = z.infer<typeof ruleSchema>;
 export type Period = z.infer<typeof periodSchema>;
 export type StaffTerm = z.infer<typeof staffTermSchema>;
-export type Collection = Exclude<keyof Workspace, "settings" | "familyPaychecks">;
+export type Collection = Exclude<keyof Workspace, "settings" | "familyPaychecks" | "moneyPlanning">;
 export const collections: Collection[] = [
   "categories",
   "budgets",
