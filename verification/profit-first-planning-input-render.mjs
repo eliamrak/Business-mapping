@@ -40,7 +40,7 @@ const bundled = await build({
       ]
     };
     const original = structuredClone(seed);
-    const fixture = window.fixture = {callbacks: [], events: [], current: structuredClone(seed), reset: null, sourceUnchanged: () => JSON.stringify(seed) === JSON.stringify(original)};
+    const fixture = window.fixture = {callbacks: [], events: [], current: structuredClone(seed), epoch: 0, reset: null, sourceUnchanged: () => JSON.stringify(seed) === JSON.stringify(original)};
     for (const type of ['input', 'change', 'blur']) document.addEventListener(type, event => {
       const input = event.target;
       if (input instanceof HTMLInputElement) fixture.events.push({type, label: input.getAttribute('aria-label'), value: input.value, badInput: input.validity.badInput, rangeOverflow: input.validity.rangeOverflow});
@@ -50,9 +50,11 @@ const bundled = await build({
       const [epoch, setEpoch] = useState(0);
       fixture.reset = () => {
         fixture.callbacks = []; fixture.events = []; fixture.current = structuredClone(seed);
-        setWorkspace(structuredClone(seed)); setEpoch(current => current + 1);
+        fixture.epoch++;
+        setWorkspace(structuredClone(seed)); setEpoch(fixture.epoch);
+        return fixture.epoch;
       };
-      return <main style={{padding: 16, maxWidth: 1280, margin: '0 auto'}}>
+      return <main data-fixture-epoch={epoch} style={{padding: 16, maxWidth: 1280, margin: '0 auto'}}>
         <button id="fixture-blur" type="button">Fixture blur target</button>
         <ProfitFirstPlanning key={epoch} workspace={workspace} context={{clinicians: [], staff: [], sessions: []}}
           asOf="2026-01-15" estimateSourcePeriod="Synthetic January 2026 monthly planning fixture"
@@ -135,7 +137,8 @@ async function runRender() {
     assert.equal(await input(name).getAttribute("aria-describedby"), null);
   }
   async function reset() {
-    await page.evaluate(() => window.fixture.reset());
+    const epoch = await page.evaluate(() => window.fixture.reset());
+    await page.waitForFunction(value => document.querySelector('main')?.dataset.fixtureEpoch === String(value), epoch);
     await page.waitForFunction(() => Number(document.querySelector('input[aria-label="Monthly billed revenue estimate"]')?.value) === 10000
       && !document.querySelector('[aria-invalid="true"]'));
     const summary = page.getByText("Cost estimates and source periods", { exact: true });
