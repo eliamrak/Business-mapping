@@ -1,0 +1,326 @@
+{
+  "provenance": {
+    "commit": "fdb013c336a1209cd0170c918e002a31377519fe",
+    "tree": "8513df816868b2496271508c81013629da969e74"
+  },
+  "syntheticOnly": true,
+  "productionAccess": false,
+  "requests": [
+    {
+      "method": "GET",
+      "path": "/workspace"
+    },
+    {
+      "method": "GET",
+      "path": "/styles.css"
+    },
+    {
+      "method": "GET",
+      "path": "/bundle.js"
+    },
+    {
+      "method": "GET",
+      "path": "/api/hub"
+    },
+    {
+      "method": "GET",
+      "path": "/api/hub/context"
+    },
+    {
+      "method": "GET",
+      "path": "/api/business-goals"
+    },
+    {
+      "method": "GET",
+      "path": "/api/scenarios"
+    },
+    {
+      "method": "GET",
+      "path": "/api/practice-imports"
+    },
+    {
+      "method": "POST",
+      "path": "/api/hub"
+    },
+    {
+      "method": "POST",
+      "path": "/api/hub"
+    },
+    {
+      "method": "GET",
+      "path": "/workspace"
+    },
+    {
+      "method": "GET",
+      "path": "/styles.css"
+    },
+    {
+      "method": "GET",
+      "path": "/bundle.js"
+    },
+    {
+      "method": "GET",
+      "path": "/api/hub"
+    },
+    {
+      "method": "GET",
+      "path": "/api/hub/context"
+    },
+    {
+      "method": "GET",
+      "path": "/api/business-goals"
+    },
+    {
+      "method": "GET",
+      "path": "/api/scenarios"
+    },
+    {
+      "method": "GET",
+      "path": "/api/practice-imports"
+    },
+    {
+      "method": "GET",
+      "path": "/api/session-goals"
+    },
+    {
+      "method": "GET",
+      "path": "/workspace"
+    },
+    {
+      "method": "GET",
+      "path": "/styles.css"
+    },
+    {
+      "method": "GET",
+      "path": "/bundle.js"
+    },
+    {
+      "method": "GET",
+      "path": "/api/hub"
+    },
+    {
+      "method": "GET",
+      "path": "/api/hub/context"
+    },
+    {
+      "method": "GET",
+      "path": "/api/business-goals"
+    },
+    {
+      "method": "GET",
+      "path": "/api/scenarios"
+    },
+    {
+      "method": "GET",
+      "path": "/api/practice-imports"
+    },
+    {
+      "method": "POST",
+      "path": "/api/hub"
+    },
+    {
+      "method": "POST",
+      "path": "/api/hub"
+    }
+  ],
+  "browserErrors": [],
+  "checks": [
+    {
+      "name": "money-without-finalized-periods",
+      "width": 1280,
+      "height": 900,
+      "url": "/workspace",
+      "title": "Money",
+      "scrollWidth": 1280,
+      "clientWidth": 1280,
+      "buttonCount": 25,
+      "text": "EMC\nEMCounseling\nPractice workspace\nToday\nLong Term Goals\n1\nSandbox\nTODAY\n01\nOverview\n02\nSessions\n03\nTeam\n04\nMoney\n05\nGrowth\n06\nGoals\nData & imports\nSettings\nReference layout\nCurrent business\nMoney\nReports\nMove data\nNew scenario\nProjection basis\n\nSelected dates govern billed-charge estimates and recorded actuals separately. Missing source coverage or model inputs stay unknown; estimates do not require bank reconciliation.\n\nPeriod\n30 days\n60 days\n90 days\n6 months\nYear\nOverall\nLast 4 completed pay periods\nLast 4 completed weeks\nCustom dates\nMoney planning estimates\n\n2026-10-01 to 2026-10-31 · configured monthly forecast estimate; not recorded expenses or bank cash\n\nEstimated monthly billed income\n$30,188\nMonthly costs and goals estimate\n$43,640\nRequired share of estimated income\n144.6%\n\nPlanned costs and goals exceed estimated income\nEstimated monthly shortfall: $13,452.\n\nEstimated monthly revenue needed: $44,056. Additional estimated revenue needed: $13,868.\n\nMonthly funding estimates; confirmed current allocation totals 100%\nBucket\tCurrent %\tCurrent estimate\tRequired %\tRequired estimate\tScenario floor %\nBusiness profit\t2%\t$604\t66.3%\t$20,000\t\nTaxes\t3%\t$906\t3%\t$906\t\nOperating expenses\t28%\t$8,453\t43.1%\t$13,002\t\nOwner payroll\t27%\t$8,151\t26.5%\t$8,000\t\nTherapist payroll\t36%\t$10,868\t2.4%\t$732\t\nAdmin payroll\t4%\t$1,208\t3.3%\t$1,000\t\nDistributions\t0%\t$0\t0%\t$0\t\n\nProtected configured Erin / co-owner salary estimate: $8,000 per month, included once in Owner payroll before optional goals.\n\nMonthly funding goals\nBuilding fund monthly contribution\nMarketing monthly funding\nCost estimates and source periods\nPlanning estimate assumptions\nReported activity, recorded actuals and dated source settings\nToday\nForecast checks\n$1",
+      "localAuthErrors": [],
+      "topNavigation": true
+    },
+    {
+      "name": "money-without-finalized-periods",
+      "width": 390,
+      "height": 900,
+      "url": "/workspace",
+      "title": "Money",
+      "scrollWidth": 390,
+      "clientWidth": 390,
+      "buttonCount": 25,
+      "text": "EMC\nEMCounseling\nToday\nLong Term Goals\n1\nSandbox\nTODAY\nOverview\nSessions\nTeam\nMoney\nGrowth\nGoals\nData & imports\nSettings\nReference layout\nCurrent business\nMoney\nReports\nMove data\nNew scenario\nProjection basis\n\nSelected dates govern billed-charge estimates and recorded actuals separately. Missing source coverage or model inputs stay unknown; estimates do not require bank reconciliation.\n\nPeriod\n30 days\n60 days\n90 days\n6 months\nYear\nOverall\nLast 4 completed pay periods\nLast 4 completed weeks\nCustom dates\nMoney planning estimates\n\n2026-10-01 to 2026-10-31 · configured monthly forecast estimate; not recorded expenses or bank cash\n\nEstimated monthly billed income\n$30,188\nMonthly costs and goals estimate\n$43,640\nRequired share of estimated income\n144.6%\n\nPlanned costs and goals exceed estimated income\nEstimated monthly shortfall: $13,452.\n\nEstimated monthly revenue needed: $44,056. Additional estimated revenue needed: $13,868.\n\nMonthly funding estimates; confirmed current allocation totals 100%\nBucket\tCurrent %\tCurrent estimate\tRequired %\tRequired estimate\tScenario floor %\nBusiness profit\t2%\t$604\t66.3%\t$20,000\t\nTaxes\t3%\t$906\t3%\t$906\t\nOperating expenses\t28%\t$8,453\t43.1%\t$13,002\t\nOwner payroll\t27%\t$8,151\t26.5%\t$8,000\t\nTherapist payroll\t36%\t$10,868\t2.4%\t$732\t\nAdmin payroll\t4%\t$1,208\t3.3%\t$1,000\t\nDistributions\t0%\t$0\t0%\t$0\t\n\nProtected configured Erin / co-owner salary estimate: $8,000 per month, included once in Owner payroll before optional goals.\n\nMonthly funding goals\nBuilding fund monthly contribution\nMarketing monthly funding\nCost estimates and source periods\nPlanning estimate assumptions\nReported activity, recorded actuals and dated source settings\nToday\nForecast checks\n$1",
+      "localAuthErrors": [],
+      "topNavigation": true
+    },
+    {
+      "name": "infeasible-editable-plan",
+      "width": 1280,
+      "height": 900,
+      "url": "/workspace",
+      "title": "Money",
+      "scrollWidth": 1280,
+      "clientWidth": 1280,
+      "buttonCount": 27,
+      "text": "EMC\nEMCounseling\nPractice workspace\nToday\nLong Term Goals\n1\nSandbox\nTODAY\n01\nOverview\n02\nSessions\n03\nTeam\n04\nMoney\n05\nGrowth\n06\nGoals\nData & imports\nSettings\nReference layout\nCurrent business\nMoney\nReports\nMove data\nNew scenario\nProjection basis\n\nSelected dates govern billed-charge estimates and recorded actuals separately. Missing source coverage or model inputs stay unknown; estimates do not require bank reconciliation.\n\nPeriod\n30 days\n60 days\n90 days\n6 months\nYear\nOverall\nLast 4 completed pay periods\nLast 4 completed weeks\nCustom dates\nMoney planning estimates\n\n2026-10-01 to 2026-10-31 · configured monthly forecast estimate; not recorded expenses or bank cash\n\nEstimated monthly billed income\n$30,188\nMonthly costs and goals estimate\n$82,921\nRequired share of estimated income\n274.7%\n\nPlanned costs and goals exceed estimated income\nEstimated monthly shortfall: $52,734.\n\nEstimated monthly revenue needed: Unknown. Additional estimated revenue needed: Unknown.\n\nThe percentage floors leave no room for fixed costs or additional goals. Higher revenue alone cannot fund this scenario.\n\nMonthly funding estimates; confirmed current allocation totals 100%\nBucket\tCurrent %\tCurrent estimate\tRequired %\tRequired estimate\tScenario floor %\nBusiness profit\t2%\t$604\t72.9%\t$22,000\t\nTaxes\t3%\t$906\t3%\t$906\t\nOperating expenses\t28%\t$8,453\t43.1%\t$13,002\t\nOwner payroll\t27%\t$8,151\t150%\t$45,282\t\nTherapist payroll\t36%\t$10,868\t2.4%\t$732\t\nAdmin payroll\t4%\t$1,208\t3.3%\t$1,000\t\nDistributions\t0%\t$0\t0%\t$0\t\n\nProtected configured Erin / co-owner salary estimate: $8,000 per month, included once in Owner payroll before optional goals.\n\nMonthly funding goals\nBuilding fund monthly contribution\nMarketing monthly funding\nCost estimates and source periods\nPlanning estimate assumptions\nReported activity, recorded actuals and dated source settings\n1 pending change\nThese edits are not saved yet.\nReview changes\nDiscard\nSaved to Today\nForecast checks\n$1",
+      "localAuthErrors": [],
+      "topNavigation": true
+    },
+    {
+      "name": "infeasible-editable-plan",
+      "width": 390,
+      "height": 900,
+      "url": "/workspace",
+      "title": "Money",
+      "scrollWidth": 390,
+      "clientWidth": 390,
+      "buttonCount": 27,
+      "text": "EMC\nEMCounseling\nToday\nLong Term Goals\n1\nSandbox\nTODAY\nOverview\nSessions\nTeam\nMoney\nGrowth\nGoals\nData & imports\nSettings\nReference layout\nCurrent business\nMoney\nReports\nMove data\nNew scenario\nProjection basis\n\nSelected dates govern billed-charge estimates and recorded actuals separately. Missing source coverage or model inputs stay unknown; estimates do not require bank reconciliation.\n\nPeriod\n30 days\n60 days\n90 days\n6 months\nYear\nOverall\nLast 4 completed pay periods\nLast 4 completed weeks\nCustom dates\nMoney planning estimates\n\n2026-10-01 to 2026-10-31 · configured monthly forecast estimate; not recorded expenses or bank cash\n\nEstimated monthly billed income\n$30,188\nMonthly costs and goals estimate\n$82,921\nRequired share of estimated income\n274.7%\n\nPlanned costs and goals exceed estimated income\nEstimated monthly shortfall: $52,734.\n\nEstimated monthly revenue needed: Unknown. Additional estimated revenue needed: Unknown.\n\nThe percentage floors leave no room for fixed costs or additional goals. Higher revenue alone cannot fund this scenario.\n\nMonthly funding estimates; confirmed current allocation totals 100%\nBucket\tCurrent %\tCurrent estimate\tRequired %\tRequired estimate\tScenario floor %\nBusiness profit\t2%\t$604\t72.9%\t$22,000\t\nTaxes\t3%\t$906\t3%\t$906\t\nOperating expenses\t28%\t$8,453\t43.1%\t$13,002\t\nOwner payroll\t27%\t$8,151\t150%\t$45,282\t\nTherapist payroll\t36%\t$10,868\t2.4%\t$732\t\nAdmin payroll\t4%\t$1,208\t3.3%\t$1,000\t\nDistributions\t0%\t$0\t0%\t$0\t\n\nProtected configured Erin / co-owner salary estimate: $8,000 per month, included once in Owner payroll before optional goals.\n\nMonthly funding goals\nBuilding fund monthly contribution\nMarketing monthly funding\nCost estimates and source periods\nPlanning estimate assumptions\nReported activity, recorded actuals and dated source settings\n1 pending change\nThese edits are not saved yet.\nReview changes\nDiscard\nSaved to Today\nForecast checks\n$1",
+      "localAuthErrors": [],
+      "topNavigation": true
+    },
+    {
+      "name": "sessions-consultations-history",
+      "width": 1280,
+      "height": 900,
+      "url": "/workspace",
+      "title": "Sessions",
+      "scrollWidth": 1280,
+      "clientWidth": 1280,
+      "buttonCount": 25,
+      "text": "EMC\nEMCounseling\nPractice workspace\nToday\nLong Term Goals\n1\nSandbox\nTODAY\n01\nOverview\n02\nSessions\n03\nTeam\n04\nMoney\n05\nGrowth\n06\nGoals\nData & imports\nSettings\nReference layout\nCurrent business\nSessions\nReports\nMove data\nNew scenario\n\nPeriod\n30 days\n60 days\n90 days\n6 months\nYear\nOverall\nLast 4 completed pay periods\nLast 4 completed weeks\nCustom dates\nWhole Practice\nElia\nErin\nCompare\nImport details\nTrailing 3 months\nTrailing year\n\nHistorical performance · complete calendar months: 2026-07-01 to 2026-09-30 · observations through 2026-10-14\n\nAverage monthly attrition: 2026-07-01 to 2026-09-30 · 90-day follow-up; latest eligible ending 2026-07-09. Only covered mature months contribute; zero eligible months means the monthly average is unknown.\n\nTotal sessions\n0\nWhole Practice · selected-window total\n\nEligible observed total; selected-window coverage incomplete · 23 included days\n\nSessions\n\nWhole Practice · Sep 15, 26 - Oct 14, 26\n\n0\nComplete-period sessions / week\n\n0 eligible sessions · 23 complete-period calendar days · incomplete periods excluded\n\nSep 15\nSep 28\nOct 5\nOct 14\n0\n15\n30\n60\nSessionsCapacity\nSession entry, history and hiring\nRetention\n\nWhole Practice · 2026-07-01 to 2026-09-30\n\n0\nretained / 0 evaluated starts\n\n0 pending starts\n\nObserved retention\n-\nUnknown\nSource and calculation\nAverage monthly attrition\n\nWhole Practice · 2026-07-01 to 2026-09-30\n\n--\nclient endings / mature month\n\n0 fully observed mature months\n\nLatest eligible ending date: 2026-07-09\n\nSource and calculation\nConsult → treatment conversion\n\nSelected activity dates: 2026-09-15 to 2026-10-14. Current-team consultation cohorts, with all treatment follow-up retained · one calendar-month follow-up window\n\nWhole Practice\nElia\nErin\nCompare with Whole Practice\n--\n0 treatment starts of 0 evaluated; 0 treatment-start candidates; 0 pending\n Observed\n\nObserved conversions; report coverage is unverified. 0 journeys remain pending.\n\nConsultations\n0\nObserved treatment starts\n0\nConfirmed closes\n0\nEvaluated\n0\nP",
+      "localAuthErrors": [],
+      "topNavigation": true
+    },
+    {
+      "name": "sessions-consultations-history",
+      "width": 390,
+      "height": 900,
+      "url": "/workspace",
+      "title": "Sessions",
+      "scrollWidth": 390,
+      "clientWidth": 390,
+      "buttonCount": 25,
+      "text": "EMC\nEMCounseling\nToday\nLong Term Goals\n1\nSandbox\nTODAY\nOverview\nSessions\nTeam\nMoney\nGrowth\nGoals\nData & imports\nSettings\nReference layout\nCurrent business\nSessions\nReports\nMove data\nNew scenario\n\nPeriod\n30 days\n60 days\n90 days\n6 months\nYear\nOverall\nLast 4 completed pay periods\nLast 4 completed weeks\nCustom dates\nWhole Practice\nElia\nErin\nCompare\nImport details\nTrailing 3 months\nTrailing year\n\nHistorical performance · complete calendar months: 2026-07-01 to 2026-09-30 · observations through 2026-10-14\n\nAverage monthly attrition: 2026-07-01 to 2026-09-30 · 90-day follow-up; latest eligible ending 2026-07-09. Only covered mature months contribute; zero eligible months means the monthly average is unknown.\n\nTotal sessions\n0\nWhole Practice · selected-window total\n\nEligible observed total; selected-window coverage incomplete · 23 included days\n\nSessions\n\nWhole Practice · Sep 15, 26 - Oct 14, 26\n\n0\nComplete-period sessions / week\n\n0 eligible sessions · 23 complete-period calendar days · incomplete periods excluded\n\nSep 15\nSep 28\nOct 14\n0\n15\n30\n60\nSessionsCapacity\nSession entry, history and hiring\nRetention\n\nWhole Practice · 2026-07-01 to 2026-09-30\n\n0\nretained / 0 evaluated starts\n\n0 pending starts\n\nObserved retention\n-\nUnknown\nSource and calculation\nAverage monthly attrition\n\nWhole Practice · 2026-07-01 to 2026-09-30\n\n--\nclient endings / mature month\n\n0 fully observed mature months\n\nLatest eligible ending date: 2026-07-09\n\nSource and calculation\nConsult → treatment conversion\n\nSelected activity dates: 2026-09-15 to 2026-10-14. Current-team consultation cohorts, with all treatment follow-up retained · one calendar-month follow-up window\n\nWhole Practice\nElia\nErin\nCompare with Whole Practice\n--\n0 treatment starts of 0 evaluated; 0 treatment-start candidates; 0 pending\n Observed\n\nObserved conversions; report coverage is unverified. 0 journeys remain pending.\n\nConsultations\n0\nObserved treatment starts\n0\nConfirmed closes\n0\nEvaluated\n0\nPending\n0\nNeeds attribution\n0\nMissing manual",
+      "localAuthErrors": [],
+      "topNavigation": true
+    },
+    {
+      "name": "team-year-history",
+      "width": 1280,
+      "height": 900,
+      "url": "/workspace",
+      "title": "Team",
+      "scrollWidth": 1280,
+      "clientWidth": 1280,
+      "buttonCount": 27,
+      "text": "EMC\nEMCounseling\nPractice workspace\nToday\nLong Term Goals\n1\nSandbox\nTODAY\n01\nOverview\n02\nSessions\n03\nTeam\n04\nMoney\n05\nGrowth\n06\nGoals\nData & imports\nSettings\nReference layout\nCurrent business\nTeam\nReports\nMove data\nNew scenario\nClinician KPIs\nPay structure\nPay comparison\n\nSession activity uses the selected dates.\n\nPeriod\n30 days\n60 days\n90 days\n6 months\nYear\nOverall\nLast 4 completed pay periods\nLast 4 completed weeks\nCustom dates\nTrailing 3 months\nTrailing year\n\nHistorical performance · complete calendar months: 2025-10-01 to 2026-09-30 · observations through 2026-10-14\n\nAverage monthly attrition: 2025-10-01 to 2026-09-30 · 90-day follow-up; latest eligible ending 2026-07-09. Only covered mature months contribute; zero eligible months means the monthly average is unknown.\n\nClinical staff\n\n2 clinicians\n\nUnassigned staff\nYear 1 Baseline\nManage team\nE\nElia\nOn team\n1099\nW2\nOwner\nSessions\n0 total sessions\n0 / wk\n0 eligible visits / 23 complete-period days · incomplete periods excluded\nRetention\n-\nUnknown; Practice average 50%\nPractice average\n50%\nno imported clinician data\nAverage monthly attrition\n--\nno mature observed months\nConfirmed close\n-\nUnknown; Practice average 50%\nPractice average\n50%\n0 confirmed / 0 evaluated; 1 consultations; 1 pending\nClinician details\nE\nErin\nOn team\n1099\nW2\nOwner\nSessions\n0 total sessions\n0 / wk\n0 eligible visits / 23 complete-period days · incomplete periods excluded\nRetention\n50%\n50%; Practice average 50%\nPractice average\n50%\n2 evaluated starts; 0 pending; observed, coverage unverified\nAverage monthly attrition\n0.2\n6 fully observed mature months\nConfirmed close\n-\nUnknown; Practice average 50%\nPractice average\n50%\n0 confirmed / 0 evaluated; 1 consultations; 1 pending\nClinician details\nNonclinical staff\nManage staff\nSynthetic coordinator\nSalary\n$1,000 monthly practice cost\nFuture pay changes\nHiring costs\nCompare clinician pay\nToday\nForecast checks\n20",
+      "localAuthErrors": [],
+      "topNavigation": true
+    },
+    {
+      "name": "team-year-history",
+      "width": 390,
+      "height": 900,
+      "url": "/workspace",
+      "title": "Team",
+      "scrollWidth": 390,
+      "clientWidth": 390,
+      "buttonCount": 27,
+      "text": "EMC\nEMCounseling\nToday\nLong Term Goals\n1\nSandbox\nTODAY\nOverview\nSessions\nTeam\nMoney\nGrowth\nGoals\nData & imports\nSettings\nReference layout\nCurrent business\nTeam\nReports\nMove data\nNew scenario\nClinician KPIs\nPay structure\nPay comparison\n\nSession activity uses the selected dates.\n\nPeriod\n30 days\n60 days\n90 days\n6 months\nYear\nOverall\nLast 4 completed pay periods\nLast 4 completed weeks\nCustom dates\nTrailing 3 months\nTrailing year\n\nHistorical performance · complete calendar months: 2025-10-01 to 2026-09-30 · observations through 2026-10-14\n\nAverage monthly attrition: 2025-10-01 to 2026-09-30 · 90-day follow-up; latest eligible ending 2026-07-09. Only covered mature months contribute; zero eligible months means the monthly average is unknown.\n\nClinical staff\n\n2 clinicians\n\nUnassigned staff\nYear 1 Baseline\nManage team\nE\nElia\nOn team\n1099\nW2\nOwner\nSessions\n0 total sessions\n0 / wk\n0 eligible visits / 23 complete-period days · incomplete periods excluded\nRetention\n-\nUnknown; Practice average 50%\nPractice average\n50%\nno imported clinician data\nAverage monthly attrition\n--\nno mature observed months\nConfirmed close\n-\nUnknown; Practice average 50%\nPractice average\n50%\n0 confirmed / 0 evaluated; 1 consultations; 1 pending\nClinician details\nE\nErin\nOn team\n1099\nW2\nOwner\nSessions\n0 total sessions\n0 / wk\n0 eligible visits / 23 complete-period days · incomplete periods excluded\nRetention\n50%\n50%; Practice average 50%\nPractice average\n50%\n2 evaluated starts; 0 pending; observed, coverage unverified\nAverage monthly attrition\n0.2\n6 fully observed mature months\nConfirmed close\n-\nUnknown; Practice average 50%\nPractice average\n50%\n0 confirmed / 0 evaluated; 1 consultations; 1 pending\nClinician details\nNonclinical staff\nManage staff\nSynthetic coordinator\nSalary\n$1,000 monthly practice cost\nFuture pay changes\nHiring costs\nCompare clinician pay\nToday\nForecast checks\n20",
+      "localAuthErrors": [],
+      "topNavigation": true
+    },
+    {
+      "name": "overview-year-history",
+      "width": 1280,
+      "height": 900,
+      "url": "/workspace",
+      "title": "Overview",
+      "scrollWidth": 1280,
+      "clientWidth": 1280,
+      "buttonCount": 31,
+      "text": "EMC\nEMCounseling\nPractice workspace\nToday\nLong Term Goals\n1\nSandbox\nTODAY\n01\nOverview\n02\nSessions\n03\nTeam\n04\nMoney\n05\nGrowth\n06\nGoals\nData & imports\nSettings\nReference layout\nCurrent business\nOverview\nReports\nNew scenario\nProjection basis\nOverview\nCompensation baseline\n\nReporting period carries across tabs. Monthly money forecasts and targets retain their labeled month or annual basis.\n\nPeriod\n30 days\n60 days\n90 days\n6 months\nYear\nOverall\nLast 4 completed pay periods\nLast 4 completed weeks\nCustom dates\nPractice summary\n\nForecast / Oct 2026\n\nMonth\nOct 2026\nNov 2026\nDec 2026\nJan 2027\nFeb 2027\nMar 2027\nApr 2027\nMay 2027\nJun 2027\nJul 2027\nAug 2027\nSep 2027\nCompare with\nNo goal comparison\nSynthetic focused plan\nImports\n2 converted snapshots loaded\nImport review stays separate from manual session entry and forecast assumptions.\nOpen Imports\nEstimated monthly surplus\n\nOct 2026 · billed-charge history and future clinician-card estimate · configured pay dates respected\n\n-$21,732\nAfter estimated clinician pay and practice costs\nMoney\nDetails\nTotal sessions\n\n30 days · complete report periods only\n\n0\nSelected-window total sessions\n0\nComplete-period calendar-week average\n\n0 eligible sessions / 23 included days · incomplete periods excluded\n\nSessions\nDetails\nClient growth\n\n30 days · recorded treatment history\n\nNew treatment starts\n0\nRetained-client departures\n--\nRetention & attrition\nDetails\nFinancial estimate\n\n2026 current-year progress · complete report periods through 2026-10-07; forecast estimate 2026-10-08 to 2026-12-31. Not collected cash. Configured pay dates respected; legacy card assumptions disclosed in Money.\n\nActual reported charged fees · 2026-01-01 to 2026-10-07 · billing coverage complete\n$294,699\nActual billed session income · financial coverage incomplete\n$294,699\nFuture estimated revenue · 2026-10-08 to 2026-12-31\n$0\nActual operating profit\n--\nHistorical operating profit estimate · configured costs, not paid actuals\n$84,920\nFuture estimated operating profit\n-$60",
+      "localAuthErrors": [],
+      "topNavigation": true
+    },
+    {
+      "name": "overview-year-history",
+      "width": 390,
+      "height": 900,
+      "url": "/workspace",
+      "title": "Overview",
+      "scrollWidth": 390,
+      "clientWidth": 390,
+      "buttonCount": 31,
+      "text": "EMC\nEMCounseling\nToday\nLong Term Goals\n1\nSandbox\nTODAY\nOverview\nSessions\nTeam\nMoney\nGrowth\nGoals\nData & imports\nSettings\nReference layout\nCurrent business\nOverview\nReports\nNew scenario\nProjection basis\nOverview\nCompensation baseline\n\nReporting period carries across tabs. Monthly money forecasts and targets retain their labeled month or annual basis.\n\nPeriod\n30 days\n60 days\n90 days\n6 months\nYear\nOverall\nLast 4 completed pay periods\nLast 4 completed weeks\nCustom dates\nPractice summary\n\nForecast / Oct 2026\n\nMonth\nOct 2026\nNov 2026\nDec 2026\nJan 2027\nFeb 2027\nMar 2027\nApr 2027\nMay 2027\nJun 2027\nJul 2027\nAug 2027\nSep 2027\nCompare with\nNo goal comparison\nSynthetic focused plan\nImports\n2 converted snapshots loaded\nImport review stays separate from manual session entry and forecast assumptions.\nOpen Imports\nEstimated monthly surplus\n\nOct 2026 · billed-charge history and future clinician-card estimate · configured pay dates respected\n\n-$21,732\nAfter estimated clinician pay and practice costs\nMoney\nDetails\nTotal sessions\n\n30 days · complete report periods only\n\n0\nSelected-window total sessions\n0\nComplete-period calendar-week average\n\n0 eligible sessions / 23 included days · incomplete periods excluded\n\nSessions\nDetails\nClient growth\n\n30 days · recorded treatment history\n\nNew treatment starts\n0\nRetained-client departures\n--\nRetention & attrition\nDetails\nFinancial estimate\n\n2026 current-year progress · complete report periods through 2026-10-07; forecast estimate 2026-10-08 to 2026-12-31. Not collected cash. Configured pay dates respected; legacy card assumptions disclosed in Money.\n\nActual reported charged fees · 2026-01-01 to 2026-10-07 · billing coverage complete\n$294,699\nActual billed session income · financial coverage incomplete\n$294,699\nFuture estimated revenue · 2026-10-08 to 2026-12-31\n$0\nActual operating profit\n--\nHistorical operating profit estimate · configured costs, not paid actuals\n$84,920\nFuture estimated operating profit\n-$60,289\nCurrent-year source and coverage",
+      "localAuthErrors": [],
+      "topNavigation": true
+    },
+    {
+      "name": "growth-rooms-no-consults",
+      "width": 1280,
+      "height": 900,
+      "url": "/workspace",
+      "title": "Growth",
+      "scrollWidth": 1280,
+      "clientWidth": 1280,
+      "buttonCount": 34,
+      "text": "EMC\nEMCounseling\nPractice workspace\nToday\nLong Term Goals\n1\nSandbox\nTODAY\n01\nOverview\n02\nSessions\n03\nTeam\n04\nMoney\n05\nGrowth\n06\nGoals\nData & imports\nSettings\nReference layout\nCurrent business\nGrowth\nReports\nMove data\nNew scenario\nMarketing\n\nAd spend drives lead estimates. Service costs complete the marketing total.\n\nAdd campaign\n\nSelected activity dates apply to leads, sessions and consultations.\n\nPeriod\n30 days\n60 days\n90 days\n6 months\nYear\nOverall\nLast 4 completed pay periods\nLast 4 completed weeks\nCustom dates\nAd spend / month\n$0\nServices & campaign costs\n$0\nTotal marketing cost\n$0\n\nCount agency fees and retainers either inside a campaign or as a marketing service cost, not both.\n\nLeads & campaigns\nRooms\nMarketing services and retainers\nAdd cost\n\nUse this for agency fees or ongoing marketing services not already included in a campaign above. General practice technology belongs in Operating expenses.\n\nYear totals\nMonth details\nYear\n0 months ready to save\nMonth\tLeads\tConsults scheduled\tConsults attended\tClients booked\tSchedule rate\tShow rate\tConsult close rate\tOverall close rate\nJanuary\t\t\t\t\t-\t-\t-\t-\nFebruary\t\t\t\t\t-\t-\t-\t-\nMarch\t\t\t\t\t-\t-\t-\t-\nApril\t\t\t\t\t-\t-\t-\t-\nMay\t\t\t\t\t-\t-\t-\t-\nJune\t\t\t\t\t-\t-\t-\t-\nJuly\t\t\t\t\t-\t-\t-\t-\nAugust\t\t\t\t\t-\t-\t-\t-\nSeptember\t\t\t\t\t-\t-\t-\t-\nOctober\t\t\t\t\t-\t-\t-\t-\nNovember\t\t\t\t\t-\t-\t-\t-\nDecember\t\t\t\t\t-\t-\t-\t-\nReady for monthly totals\n2026\nSave months\nNo lead sources set up yet\n\nAdd Google Ads, Meta, referrals, or another source to estimate leads and record results in one place.\n\nToday\nForecast checks\n20",
+      "localAuthErrors": [],
+      "topNavigation": true
+    },
+    {
+      "name": "growth-rooms-no-consults",
+      "width": 390,
+      "height": 900,
+      "url": "/workspace",
+      "title": "Growth",
+      "scrollWidth": 390,
+      "clientWidth": 390,
+      "buttonCount": 34,
+      "text": "EMC\nEMCounseling\nToday\nLong Term Goals\n1\nSandbox\nTODAY\nOverview\nSessions\nTeam\nMoney\nGrowth\nGoals\nData & imports\nSettings\nReference layout\nCurrent business\nGrowth\nReports\nMove data\nNew scenario\nMarketing\n\nAd spend drives lead estimates. Service costs complete the marketing total.\n\nAdd campaign\n\nSelected activity dates apply to leads, sessions and consultations.\n\nPeriod\n30 days\n60 days\n90 days\n6 months\nYear\nOverall\nLast 4 completed pay periods\nLast 4 completed weeks\nCustom dates\nAd spend / month\n$0\nServices & campaign costs\n$0\nTotal marketing cost\n$0\n\nCount agency fees and retainers either inside a campaign or as a marketing service cost, not both.\n\nLeads & campaigns\nRooms\nMarketing services and retainers\nAdd cost\n\nUse this for agency fees or ongoing marketing services not already included in a campaign above. General practice technology belongs in Operating expenses.\n\nYear totals\nMonth details\nYear\n0 months ready to save\nMonth\tLeads\tConsults scheduled\tConsults attended\tClients booked\tSchedule rate\tShow rate\tConsult close rate\tOverall close rate\nJanuary\t\t\t\t\t-\t-\t-\t-\nFebruary\t\t\t\t\t-\t-\t-\t-\nMarch\t\t\t\t\t-\t-\t-\t-\nApril\t\t\t\t\t-\t-\t-\t-\nMay\t\t\t\t\t-\t-\t-\t-\nJune\t\t\t\t\t-\t-\t-\t-\nJuly\t\t\t\t\t-\t-\t-\t-\nAugust\t\t\t\t\t-\t-\t-\t-\nSeptember\t\t\t\t\t-\t-\t-\t-\nOctober\t\t\t\t\t-\t-\t-\t-\nNovember\t\t\t\t\t-\t-\t-\t-\nDecember\t\t\t\t\t-\t-\t-\t-\nReady for monthly totals\n2026\nSave months\nNo lead sources set up yet\n\nAdd Google Ads, Meta, referrals, or another source to estimate leads and record results in one place.\n\nToday\nForecast checks\n20",
+      "localAuthErrors": [],
+      "topNavigation": true
+    },
+    {
+      "name": "sandbox-infeasible-editable",
+      "width": 1280,
+      "height": 900,
+      "url": "/workspace",
+      "title": "Sandbox",
+      "scrollWidth": 1280,
+      "clientWidth": 1280,
+      "buttonCount": 38,
+      "text": "EMC\nNew business\nPractice workspace\nToday\nLong Term Goals\n1\nSandbox\nTODAY\n01\nOverview\n02\nSessions\n03\nTeam\n04\nMoney\n05\nGrowth\n06\nGoals\nData & imports\nSettings\nIndependent model\nSandbox\nMove data\nSaved models\nCopy to Long Term Goals\nSave model\nOverview\nSessions\nTeam\nMoney\nGrowth\nGoals\nWorking copy\nSandbox only\nStarting month\nLooking ahead\n3 months\n6 months\n12 months\n24 months\n36 months\n60 months\nTimed changes\nMoney planning estimates\n\n2026-11-01 to 2026-11-30 · Sandbox monthly forecast estimate; Today is unchanged\n\nEstimated monthly billed income\n$0\nMonthly costs and goals estimate\nUnknown\nRequired share of estimated income\nUnknown\n\nPlanned costs and goals exceed estimated income\nEstimated monthly shortfall: $2,000 or more; some assumptions are missing.\n\nEstimated monthly revenue needed: Unknown. Additional estimated revenue needed: Unknown.\n\nMonthly funding estimates; confirmed current allocation totals 100%\nBucket\tCurrent %\tCurrent estimate\tRequired %\tRequired estimate\tScenario floor %\nBusiness profit\t2%\t$0\tUnknown\t$2,000\t\nTaxes\t3%\t$0\tUnknown\t$0\t\nOperating expenses\t28%\t$0\tUnknown\tUnknown\t\nOwner payroll\t27%\t$0\tUnknown\t$0\t\nTherapist payroll\t36%\t$0\tUnknown\t$0\t\nAdmin payroll\t4%\t$0\tUnknown\t$0\t\nDistributions\t0%\t$0\tUnknown\t$0\t\n\nProtected configured Erin / co-owner salary estimate: $0 per month, included once in Owner payroll before optional goals.\n\nMonthly funding goals\nBuilding fund monthly contribution\nMarketing monthly funding\nCost estimates and source periods\nMonthly billed revenue estimate\nOverhead set-aside estimate\n2025-11-01 to 2026-10-31; configured operating budget accrual / 12\nExisting marketing estimate\n2026-11-01 to 2026-11-30 · Sandbox monthly forecast estimate; Today is unchanged\nProcessing cost estimate\n2026-11-01 to 2026-11-30 · Sandbox monthly forecast estimate; Today is unchanged\nOwner clinical payroll estimate\n2026-11-01 to 2026-11-30 · Sandbox monthly forecast estimate; Today is unchanged\nProtected Erin / configured co-owner salary estimate\n2026-11-01 ",
+      "localAuthErrors": [],
+      "topNavigation": true
+    },
+    {
+      "name": "sandbox-infeasible-editable",
+      "width": 390,
+      "height": 900,
+      "url": "/workspace",
+      "title": "Sandbox",
+      "scrollWidth": 390,
+      "clientWidth": 390,
+      "buttonCount": 38,
+      "text": "EMC\nNew business\nToday\nLong Term Goals\n1\nSandbox\nTODAY\nOverview\nSessions\nTeam\nMoney\nGrowth\nGoals\nData & imports\nSettings\nIndependent model\nSandbox\nMove data\nSaved models\nCopy to Long Term Goals\nSave model\nOverview\nSessions\nTeam\nMoney\nGrowth\nGoals\nWorking copy\nSandbox only\nStarting month\nLooking ahead\n3 months\n6 months\n12 months\n24 months\n36 months\n60 months\nTimed changes\nMoney planning estimates\n\n2026-11-01 to 2026-11-30 · Sandbox monthly forecast estimate; Today is unchanged\n\nEstimated monthly billed income\n$0\nMonthly costs and goals estimate\nUnknown\nRequired share of estimated income\nUnknown\n\nPlanned costs and goals exceed estimated income\nEstimated monthly shortfall: $2,000 or more; some assumptions are missing.\n\nEstimated monthly revenue needed: Unknown. Additional estimated revenue needed: Unknown.\n\nMonthly funding estimates; confirmed current allocation totals 100%\nBucket\tCurrent %\tCurrent estimate\tRequired %\tRequired estimate\tScenario floor %\nBusiness profit\t2%\t$0\tUnknown\t$2,000\t\nTaxes\t3%\t$0\tUnknown\t$0\t\nOperating expenses\t28%\t$0\tUnknown\tUnknown\t\nOwner payroll\t27%\t$0\tUnknown\t$0\t\nTherapist payroll\t36%\t$0\tUnknown\t$0\t\nAdmin payroll\t4%\t$0\tUnknown\t$0\t\nDistributions\t0%\t$0\tUnknown\t$0\t\n\nProtected configured Erin / co-owner salary estimate: $0 per month, included once in Owner payroll before optional goals.\n\nMonthly funding goals\nBuilding fund monthly contribution\nMarketing monthly funding\nCost estimates and source periods\nMonthly billed revenue estimate\nOverhead set-aside estimate\n2025-11-01 to 2026-10-31; configured operating budget accrual / 12\nExisting marketing estimate\n2026-11-01 to 2026-11-30 · Sandbox monthly forecast estimate; Today is unchanged\nProcessing cost estimate\n2026-11-01 to 2026-11-30 · Sandbox monthly forecast estimate; Today is unchanged\nOwner clinical payroll estimate\n2026-11-01 to 2026-11-30 · Sandbox monthly forecast estimate; Today is unchanged\nProtected Erin / configured co-owner salary estimate\n2026-11-01 to 2026-11-30 · Sandbox monthly forec",
+      "localAuthErrors": [],
+      "topNavigation": true
+    }
+  ],
+  "planning": {
+    "scenarioPercents": {
+      "owner-payroll": 150
+    },
+    "goals": [
+      {
+        "id": "1abbe70d-9c88-4626-be0f-7c4c2e09a4e8",
+        "name": "Building fund monthly contribution",
+        "monthlyAmount": 2100,
+        "bucket": "business-profit",
+        "mode": "additional"
+      }
+    ]
+  },
+  "sourceFactsUnchanged": true
+}

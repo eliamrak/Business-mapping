@@ -1,0 +1,241 @@
+{
+  "candidate": "fdb013c336a1209cd0170c918e002a31377519fe",
+  "tree": "8513df816868b2496271508c81013629da969e74",
+  "syntheticOnly": true,
+  "productionAccess": false,
+  "identity": "frontend hook fixture; no new signin or real account",
+  "transport": "loopback intercepted fixture GETs; actual components; no database",
+  "zoom": "200% reflow emulation:1280x900physical=>640x450CSS atDPR2;640x800physical=>320x400CSS atDPR2;notnative browser chrome zoom",
+  "writes": 0,
+  "browserErrors": [],
+  "matrix": [
+    {
+      "name": "Keyboard Today navigation and visible focus",
+      "status": "PASS"
+    },
+    {
+      "name": "Reports modal Tab trap, reverse Tab, Escape and opener focus",
+      "status": "PASS"
+    },
+    {
+      "name": "Move data modal keyboard/Escape/opener focus",
+      "status": "PASS"
+    },
+    {
+      "name": "Record editor dirty Escape keeps or explicitly discards draft",
+      "status": "PASS"
+    },
+    {
+      "name": "Focused Goal Escape restores value without saving",
+      "status": "PASS"
+    },
+    {
+      "name": "Reload while Goal text remains focused warns and can be cancelled",
+      "status": "PASS"
+    },
+    {
+      "name": "Staged Goal survives section/date changes and blocks workspace switch",
+      "status": "PASS"
+    },
+    {
+      "name": "Bulk lead draft blocks destructive section change and year filter",
+      "status": "PASS"
+    },
+    {
+      "name": "Unsaved month-entry values survive cancelled month-filter change",
+      "status": "PASS"
+    },
+    {
+      "name": "Unblurred saved lead count and source text warn before reload",
+      "status": "PASS"
+    },
+    {
+      "name": "Dialog focus contract autofocus",
+      "status": "PASS"
+    },
+    {
+      "name": "Dialog focus contract veto",
+      "status": "PASS"
+    },
+    {
+      "name": "Dialog focus contract explicit",
+      "status": "PASS"
+    },
+    {
+      "name": "Dialog focus contract uncontrolled",
+      "status": "PASS"
+    },
+    {
+      "name": "zoom200-desktop Overview reflow",
+      "status": "PASS"
+    },
+    {
+      "name": "zoom200-desktop Goals reflow",
+      "status": "PASS"
+    },
+    {
+      "name": "zoom200-desktop Money reflow",
+      "status": "PASS"
+    },
+    {
+      "name": "zoom200-desktop Growth reflow",
+      "status": "PASS"
+    },
+    {
+      "name": "zoom200-desktop Reports modal reflow",
+      "status": "PASS"
+    },
+    {
+      "name": "zoom200-desktop pending review keyboard reachability",
+      "status": "PASS"
+    },
+    {
+      "name": "zoom200-narrow Overview reflow",
+      "status": "PASS"
+    },
+    {
+      "name": "zoom200-narrow Goals reflow",
+      "status": "PASS"
+    },
+    {
+      "name": "zoom200-narrow Money reflow",
+      "status": "PASS"
+    },
+    {
+      "name": "zoom200-narrow Growth reflow",
+      "status": "PASS"
+    },
+    {
+      "name": "zoom200-narrow Reports modal reflow",
+      "status": "PASS"
+    },
+    {
+      "name": "zoom200-narrow pending review keyboard reachability",
+      "status": "PASS"
+    }
+  ],
+  "geometry": [
+    {
+      "name": "zoom200-desktop-overview",
+      "width": 640,
+      "height": 450,
+      "dpr": 2,
+      "scroll": 640,
+      "client": 640,
+      "dialog": null
+    },
+    {
+      "name": "zoom200-desktop-goals",
+      "width": 640,
+      "height": 450,
+      "dpr": 2,
+      "scroll": 640,
+      "client": 640,
+      "dialog": null
+    },
+    {
+      "name": "zoom200-desktop-money",
+      "width": 640,
+      "height": 450,
+      "dpr": 2,
+      "scroll": 640,
+      "client": 640,
+      "dialog": null
+    },
+    {
+      "name": "zoom200-desktop-growth",
+      "width": 640,
+      "height": 450,
+      "dpr": 2,
+      "scroll": 640,
+      "client": 640,
+      "dialog": null
+    },
+    {
+      "name": "zoom200-desktop-reports",
+      "width": 640,
+      "height": 450,
+      "dpr": 2,
+      "scroll": 640,
+      "client": 640,
+      "dialog": {
+        "left": 16,
+        "right": 624,
+        "top": 22.5,
+        "bottom": 427.5,
+        "scrollHeight": 924,
+        "clientHeight": 403
+      }
+    },
+    {
+      "name": "zoom200-desktop-pending-review",
+      "width": 640,
+      "height": 450,
+      "dpr": 2,
+      "scroll": 640,
+      "client": 640,
+      "dialog": null
+    },
+    {
+      "name": "zoom200-narrow-overview",
+      "width": 320,
+      "height": 400,
+      "dpr": 2,
+      "scroll": 320,
+      "client": 320,
+      "dialog": null
+    },
+    {
+      "name": "zoom200-narrow-goals",
+      "width": 320,
+      "height": 400,
+      "dpr": 2,
+      "scroll": 320,
+      "client": 320,
+      "dialog": null
+    },
+    {
+      "name": "zoom200-narrow-money",
+      "width": 320,
+      "height": 400,
+      "dpr": 2,
+      "scroll": 320,
+      "client": 320,
+      "dialog": null
+    },
+    {
+      "name": "zoom200-narrow-growth",
+      "width": 320,
+      "height": 400,
+      "dpr": 2,
+      "scroll": 320,
+      "client": 320,
+      "dialog": null
+    },
+    {
+      "name": "zoom200-narrow-reports",
+      "width": 320,
+      "height": 400,
+      "dpr": 2,
+      "scroll": 320,
+      "client": 320,
+      "dialog": {
+        "left": 8,
+        "right": 312,
+        "top": 20,
+        "bottom": 380,
+        "scrollHeight": 1183,
+        "clientHeight": 358
+      }
+    },
+    {
+      "name": "zoom200-narrow-pending-review",
+      "width": 320,
+      "height": 400,
+      "dpr": 2,
+      "scroll": 320,
+      "client": 320,
+      "dialog": null
+    }
+  ]
+}
