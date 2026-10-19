@@ -2946,8 +2946,8 @@ export default function PracticeWorkspace() {
     settings: { ...workingWorkspace.settings, ownerPayrollMonthly: storedWorkspace.settings.ownerPayrollMonthly },
   } : workingWorkspace;
   if (inheritedOwnerTarget) {
-    planningMonthlyValues.ownerPayroll = planningWorkspace.settings.ownerPayrollMonthly;
-    planningMonthlyValues.ownerPayrollBurden = planningWorkspace.settings.ownerPayrollMonthly * planningWorkspace.settings.ownerPayrollBurdenPct / 100;
+    delete planningMonthlyValues.ownerPayroll;
+    delete planningMonthlyValues.ownerPayrollBurden;
   }
   const summaryMoneyReport = financialRangeReports!.summary;
   const moneyBridge = mode === "practice" ? financialRangeBridge(selectedMoneyRange) : moneyBridgeSummary(moneyValues, workingWorkspace.settings.ownerPayrollBurdenPct);
