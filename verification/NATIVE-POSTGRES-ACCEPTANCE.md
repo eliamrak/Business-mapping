@@ -1,5 +1,9 @@
 # Native PostgreSQL Acceptance
 
+## Final Outcome
+
+Native acceptance passed in the existing disposable Replit environment: all 40 gated tests and all nine annual-goal/staff save-and-restart groups passed. Evidence, hashes, the initial failure and its repair are retained below and in `native-postgres-results.json`. The Mac resource failure remains, but it no longer blocks this bounded acceptance. No production database operation or publication occurred.
+
 ## Scope
 
 Close the native-server verification gap for runtime release `f9a9bb997d5ef7c77178c6b97a14c4e7d274745e`. Changes in this work are verification tooling only. No production source behavior, business records, imports, credentials, grants, services or publication are changed.
@@ -38,7 +42,7 @@ Read-only inspection of the existing Comp Calculator app confirmed native Postgr
 
 This confirms an available isolated execution path, **not a successful native startup or suite run**. Use a disposable temporary checkout of the reviewed test-tooling commit and existing dependencies; leave the development/production checkout and database untouched. Do not publish. If existing fetch/dependency access is denied or unavailable, report the exact action and stop that path rather than obtaining new credentials or routing around the denial.
 
-Native execution results and remaining acceptance limits must be appended after the actual run. External-provider OAuth, production owner writes and exhaustive production concurrency/crash recovery are not established by synthetic acceptance.
+Final native results appear below. External-provider OAuth, production owner writes and exhaustive production concurrency/crash recovery are not established by synthetic acceptance.
 
 ## Reviewed Tooling Checkpoint
 
@@ -67,4 +71,31 @@ The narrow test repair pins `@workspace/db` and its schema to the disposable che
 
 The native save/restart harness was not run in the first operation because Playwright was absent. That dependency blocker was not an access denial. A free, isolated public-registry install now pins Playwright1.64.1 under `/tmp/practice-playwright-runtime-20261019`, with scripts/audit/funding checks disabled, no browser download, and no production settings or credentials. Its lock records integrity `sha512-HCrVhHr5QQuwYoswEUGTb7gGp522yflbv/ST8nF4sFWGuLjQCt17Q/EubpGGSNKYn1tsTCPZxqHhHCfVURu7UA==`. A headless about:blank smoke test with the existing Chromium passed with zero external requests. The app's package files and dependencies remained unchanged.
 
-A new pinned native run is still required to certify the repaired teardown and the full save/restart harness.
+## Successful Native Rerun
+
+The native acceptance gap is closed for the covered release paths. On October 19 the existing isolated Replit environment ran reviewed commit `1d25b281e239e1c9ec01e86433f702a6af574618`, tree `7eff53f672f6167626c7f0518219ad4269818b73`, with production runtime/build inputs unchanged from `f9a9bb9`. The source was clean. All six local tooling/test SHA256 values matched the retrieved report exactly.
+
+| Suite | Native Result |
+| --- | --- |
+| hub.integration |17/17 passed; exit 0|
+| practice-imports.integration |10/10 passed; exit 0; no late teardown error|
+| session-goals.persistence |1/1 passed; exit 0|
+| sessions.integration |12/12 passed; exit 0|
+
+Total: 40 native tests, zero failures or skips. The native runner and API build exited 0. The hub suite includes expanded 17-table reviewed recovery, owner/restricted-entry boundaries, signed identity checks, idempotency/revisions, attachments and audit/history preservation. This is fresh native execution, not a carry-forward from earlier pure or embedded tests.
+
+The established annual-goal/staff harness also ran against a separate fresh native PostgreSQL 16.10 cluster and exited 0 with status `pass`: nine check groups, revision 7, seven audit rows, eight desktop/mobile captures, zero browser errors or horizontal overflow. Missing/invalid JWTs returned 401, uninvited identities and wrong origins were refused, and stale saves returned 409 without changing revision/history. The 144000 annual goal, annual 26/hour and 12 hours/week default, independent dated 24/hour term, unchanged source staff row, SQL/API equality and all audit actors/history survived a full API and native PostgreSQL stop/start.
+
+Both clusters bound only to 127.0.0.1 and their private temporary Unix sockets. Start/stop event times and directory/port identities are retained in `native-postgres-results.json`. Cleanup completed; no PostgreSQL, Chromium or test API process remains. The synthetic data directories are retained for evidence. The real app checkout remained clean at `d35f1dd3dbeadd45e6948287f00e1ac97b434e77`; no production database operation, reimport, credential/grant change, service creation or publication occurred.
+
+Original retained reports:
+
+- `/tmp/practice-native-gated-qhbj1g/report.json`: SHA256 `aa90e84dd4e411d0e3f9d85c7dab76a8c1bfc7f66a574099e2c51ec83c98d5da`.
+- `/tmp/practice-native-accept-1d25b281/goal-staff/results.json`: SHA256 `228287daffec180b64a510b852cc4b859342b83ad8e4039b52aed7bca43fea59`.
+- `/tmp/practice-native-accept-1d25b281/goal-staff/cleanup.json`: SHA256 `b5aa805da95bbdb4a811de8584963a4b91550e0ecdc075f875ffc9f3c92bf7d3`.
+
+The compact repository JSON is a labeled read-only extraction, not a byte-for-byte copy of those complete reports. Earlier connector requests timed out and status requests were bounced while the agent was busy; no duplicate run was queued. Reports were retrieved after completion.
+
+## Remaining Limits
+
+The Mac shared-memory resource failure remains, but it no longer blocks this native acceptance because the existing Replit disposable path succeeded. This is bounded synthetic authorization and native persistence/recovery evidence. It does not certify external-provider OAuth, production owner writes, every business metric/input, screen readers, production load, or abrupt crash recovery. No owner technical QA, financial records or repeat import is required to close the gap verified here. No SEO/Ads work was started.

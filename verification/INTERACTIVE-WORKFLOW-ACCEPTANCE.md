@@ -1,5 +1,7 @@
 # Interactive Workflow Acceptance
 
+October 19 native follow-up: the four disposable PostgreSQL suites passed 40 tests on release `f9a9bb9` with reviewed tooling `1d25b28`, including the expanded 17-table backup/recovery assertions in `hub.integration`. The native database execution gap described below is closed for those assertions; this does not convert the mocked lead/import browser transport into native UI evidence. See `NATIVE-POSTGRES-ACCEPTANCE.md` for exact source, reports, cleanup and remaining limits. No production records or publication changed.
+
 ## Candidate And Bounds
 
 Frozen runtime/test candidate `a5121c47a01a07ff0e6917f8dd75b3c21bc14003`, tree `71f0ec222b5fbfe189ad37bbf0a73ed1c37ad986`, branch `codex/workflow-acceptance`, based on released `7d8ac067`. No push or deployment in this task. All browser data and downloaded files are synthetic. No private client files, real business records, owner browser, credentials or server settings were accessed or changed. No converter code changed; the existing full suite includes synthetic converter compatibility fixtures.

@@ -1,5 +1,14 @@
 # Practice Acceptance Checklist
 
+## October 19 Native PostgreSQL Closure
+
+The historical unchecked native-database items below are superseded for these covered paths by fresh native execution on release `f9a9bb9`, using reviewed test tooling `1d25b28`. Other untested live, provider and accessibility boundaries remain unchanged. See `NATIVE-POSTGRES-ACCEPTANCE.md` and `native-postgres-results.json`.
+
+- [x] **NATIVE GATED SUITES:** Hub 17/17, practice imports 10/10, session-goal persistence 1/1 and sessions 12/12 passed on disposable PostgreSQL 16.10; all four processes exited 0. This includes the expanded 17-table recovery assertions.
+- [x] **NATIVE AUTHENTICATED SAVES AND RESTART:** All nine annual-goal/staff groups passed with actual server JWT authorization, wrong-origin/unauthorized refusals, stale-revision protection, annual goals and independent dated staff terms. SQL/API equality, revision 7 and seven audit/history rows survived a full API and native PostgreSQL stop/start.
+- [x] **ISOLATION AND CLEANUP:** Synthetic data only; owned loopback clusters, all test processes stopped, real app checkout unchanged and clean. No production database operation, reimport, new service, credential/grant change or publication.
+- [ ] **LIMITS RETAINED:** External-provider OAuth, production owner writes, exhaustive business-metric certification, screen-reader coverage, production load and abrupt crash recovery are not established by these bounded tests. The Mac host still cannot initialize native PostgreSQL; the existing disposable Replit path resolved that execution blocker.
+
 ## October 18 Bounded Keyboard/Reflow Candidate
 
 Runtime/test `338e6001bced3923974f78f3b77e64c92b59b8c3` repairs controlled-dialog focus and local raw-draft navigation protection. See `KEYBOARD-ZOOM-NAVIGATION-ACCEPTANCE.md` for the matrix, exact tree, independent review and withdrawn preliminary viewport evidence.

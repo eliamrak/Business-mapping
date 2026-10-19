@@ -1,0 +1,110 @@
+{
+  "evidenceType": "Compact extraction of retained native PostgreSQL reports via read-only Replit retrieval",
+  "syntheticOnly": true,
+  "productionAccess": false,
+  "publicationPerformed": false,
+  "source": {
+    "commit": "1d25b281e239e1c9ec01e86433f702a6af574618",
+    "tree": "7eff53f672f6167626c7f0518219ad4269818b73",
+    "trackedStatus": "",
+    "runtimeRelease": "f9a9bb997d5ef7c77178c6b97a14c4e7d274745e",
+    "apiBundleSha256": "d5bd9ae91fe7bae6f14bce73c173c6deb56453541d41608abbfdf10dbae825a6",
+    "sourceFileSha256": {
+      "artifacts/api-server/test/practice-imports.integration.test.mjs": "c0e4ca249d74cb16db6165584abc6ac149e541d72d2a400c7416b2df2c4edbe3",
+      "verification/authenticated-goal-staff-acceptance.mjs": "6677d473a42c249bb3c8896ef1ff177c4fbbe609cd9f86dd55d1c5f2a50adb26",
+      "verification/isolated-database-bundle.mjs": "59d3dd77ebe67e5fad1a517936ae20321334bd0e1872cf8011b0d72cab6fbd13",
+      "verification/isolated-database-bundle.test.mjs": "00afecb7e86ad68db5ba8e42b25b626b7e66786d7fb730dfbff3a24fdd630e1f",
+      "verification/native-postgres-fixture.mjs": "7da52b8d81f0704c18cbc5b914f8380be02363d229d75c6d5344af766ca6d7a0",
+      "verification/native-postgres-gated-suites.mjs": "3a8ea75768785882cd2e62b865c417c7b8343e0cccfce161a658204577403f5f"
+    }
+  },
+  "gatedSuites": {
+    "status": "pass",
+    "exit": 0,
+    "apiBuildExit": 0,
+    "reportPath": "/tmp/practice-native-gated-qhbj1g/report.json",
+    "originalReportSha256": "aa90e84dd4e411d0e3f9d85c7dab76a8c1bfc7f66a574099e2c51ec83c98d5da",
+    "restart": "pass",
+    "suites": [
+      { "name": "hub.integration.test.mjs", "tests": 17, "pass": 17, "fail": 0, "skipped": 0, "exit": 0 },
+      { "name": "practice-imports.integration.test.mjs", "tests": 10, "pass": 10, "fail": 0, "skipped": 0, "exit": 0 },
+      { "name": "session-goals.persistence.test.mjs", "tests": 1, "pass": 1, "fail": 0, "skipped": 0, "exit": 0 },
+      { "name": "sessions.integration.test.mjs", "tests": 12, "pass": 12, "fail": 0, "skipped": 0, "exit": 0 }
+    ],
+    "postgres": {
+      "version": "PostgreSQL 16.10",
+      "dataDirectory": "/tmp/practice-native-gated-qhbj1g/cluster/data",
+      "socketDirectory": "/tmp/practice-native-gated-qhbj1g/cluster/socket",
+      "port": 32951,
+      "listenAddress": "127.0.0.1",
+      "events": [
+        { "action": "start", "initialize": true, "at": "2026-10-19T10:47:37.061Z" },
+        { "action": "stop", "at": "2026-10-19T10:47:37.185Z" },
+        { "action": "start", "initialize": false, "at": "2026-10-19T10:47:37.629Z" },
+        { "action": "stop", "at": "2026-10-19T10:48:24.894Z" }
+      ]
+    },
+    "apiCleanup": "stopped-or-never-started",
+    "clusterCleanup": "stopped-or-never-started"
+  },
+  "goalStaffAcceptance": {
+    "status": "pass",
+    "exit": 0,
+    "reportPath": "/tmp/practice-native-accept-1d25b281/goal-staff/results.json",
+    "originalReportSha256": "228287daffec180b64a510b852cc4b859342b83ad8e4039b52aed7bca43fea59",
+    "environment": {
+      "engine": "PostgreSQL 16.10 on x86_64-pc-linux-gnu",
+      "storage": "disposable native PostgreSQL over loopback, unchanged pg/Drizzle API",
+      "authentication": "actual Clerk middleware and requireAccess; fresh local RS256 key; frontend identity hook fixture, not Google OAuth",
+      "realBusinessData": false,
+      "productionAccess": false,
+      "externalRequestsAllowed": false
+    },
+    "checks": [
+      "Actual Clerk middleware: missing/invalid JWT 401, uninvited identity 403, isolated configured owner 200",
+      "Unchanged pg/Drizzle API inserts synthetic team/staff/workspace; wrong-origin write refused",
+      "Missing/invalid JWT and uninvited identity cannot save; no revision or audit change",
+      "Real annual Goal UI review/save and reload: 144000 annual persisted; monthly goal line 12000; legacy target unchanged",
+      "Real staff year-default inline commits and reload: 22/hour, 12 hours/week, one 2026 term; source staff row unchanged",
+      "Real dated-rate inline commit and reload: 24/hour from Oct 16; Oct 15 stays 22; 12 hours inherited; exactly two terms, original staff unchanged",
+      "Scope regression: annual editor shows its own default; 24 equal to dated override still saves annual; 26 annual survives reload while dated 24 stays independent",
+      "SQL read-back equals API snapshot; stale revision 409 preserves all saved changes; audit actor is verified synthetic owner",
+      "API and native PostgreSQL server fully stopped/reopened from disk; annual goal, staff terms, source staff, audit and revision survive; UI reload confirms"
+    ],
+    "finalRevision": 7,
+    "auditRows": 7,
+    "annualGoal": { "name": "Owner pay", "amount": 144000, "basis": "annual", "metric": "ownerDistributionsPretax", "archived": false },
+    "staffTerms": [
+      { "effectiveDate": "2026-10-16", "hourlyRate": 24, "notes": "Date-specific staff pay change" },
+      { "effectiveDate": "2026-01-01", "end": "2026-12-31", "hourlyRate": 26, "hoursPerWeek": 12, "notes": "Default staff pay for 2026" }
+    ],
+    "browserErrors": [],
+    "screenshotCount": 8,
+    "screenshotWidths": [1280, 390],
+    "horizontalOverflow": false,
+    "cleanup": {
+      "status": "complete",
+      "errors": [],
+      "reportPath": "/tmp/practice-native-accept-1d25b281/goal-staff/cleanup.json",
+      "originalReportSha256": "b5aa805da95bbdb4a811de8584963a4b91550e0ecdc075f875ffc9f3c92bf7d3",
+      "postgres": {
+        "version": "PostgreSQL 16.10",
+        "dataDirectory": "/tmp/practice-native-accept-1d25b281/goal-staff/native-postgres/data",
+        "socketDirectory": "/tmp/practice-native-accept-1d25b281/goal-staff/native-postgres/socket",
+        "port": 34347,
+        "events": [
+          { "action": "start", "initialize": true, "at": "2026-10-19T10:49:26.179Z" },
+          { "action": "stop", "at": "2026-10-19T10:49:50.927Z" },
+          { "action": "start", "initialize": false, "at": "2026-10-19T10:49:51.383Z" },
+          { "action": "stop", "at": "2026-10-19T10:49:55.185Z" }
+        ]
+      }
+    }
+  },
+  "appCheckout": {
+    "head": "d35f1dd3dbeadd45e6948287f00e1ac97b434e77",
+    "tree": "8e7626ca8ec3f3939d0ba59814bd6ac64f34d0c2",
+    "clean": true
+  },
+  "remainingOwnedProcesses": []
+}

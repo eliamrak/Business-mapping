@@ -1,5 +1,9 @@
 # Annual Goal and Staff Save Acceptance
 
+## October 19 Native Verification
+
+The native PostgreSQL gap in this historical record is now closed for the covered save paths on release `f9a9bb9`. Reviewed tooling `1d25b28` ran the established assertions against disposable native PostgreSQL 16.10 in Replit: nine groups passed, revision 7 and all seven audit/history rows survived the API and database restart, and eight screenshots had no browser errors or overflow. The four gated native suites also passed 40 tests. See `NATIVE-POSTGRES-ACCEPTANCE.md` and `native-postgres-results.json` for exact hashes, the repaired test-pool identity defect, cleanup and limits. No production record or publication changed. The earlier PGlite evidence below retains its original method and bounds; it is not relabeled as native evidence.
+
 ## Candidate and Bounds
 
 - Branch: `codex/authenticated-goal-staff-acceptance`.
