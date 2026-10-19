@@ -1,0 +1,3011 @@
+{
+  "runtimeCandidate": "7ef3bd15881fd8a5c5898375ce39d51ba307685f",
+  "runtimeTree": "ef54e81c3b54ad83022c60febf91683b73dfc3b4",
+  "verificationCandidate": {
+    "commit": "c6c71ccf36890eb9e5345987c868a28908aefe8f",
+    "tree": "408cdf922e6c3894a6ce03387c3ead6505f3620e",
+    "runtimeChanges": ""
+  },
+  "verificationSources": [
+    {
+      "path": "verification/semantics-native-zoom.mjs",
+      "sha256": "0b1202840a3c09416ac4741626519ef139ae6d1318aff47d4228ade58b70a940"
+    },
+    {
+      "path": "verification/workspace-sessions-semantics.mjs",
+      "sha256": "309b369e0e8ee72dea79ee8ae21b068e5d3619b247fd2dd3b846b0410d4ed669"
+    },
+    {
+      "path": "verification/record-editor-focus.test.mjs",
+      "sha256": "a577bc0d628bdb99aa4b39be7eaab93592d0da909548fc0f53d82ced8ebf7e94"
+    },
+    {
+      "path": "verification/keyboard-zoom-navigation.mjs",
+      "sha256": "d59a9036d2fff44edf4c2f02085b7e413845082bd11863c25399d339f851b48f"
+    }
+  ],
+  "runtimeUnchangedSinceCandidate": true,
+  "unitTests": {
+    "tests": 792,
+    "pass": 792,
+    "fail": 0,
+    "skipped": 0
+  },
+  "dashboardTypecheck": "pass",
+  "recoveryGuardTests": {
+    "tests": 27,
+    "pass": 27,
+    "fail": 0,
+    "skipped": 0,
+    "nativeDatabase": false
+  },
+  "nativeZoom": {
+    "rawReport": {
+      "path": "/tmp/practice-semantics-zoom-FvcUlZ/results.json",
+      "sha256": "4c16e9bd13a11b8974aaae65b93b7f1c74b4bb56d4f79e43c232574f5cf5763f"
+    },
+    "provenance": {
+      "commit": "c6c71ccf36890eb9e5345987c868a28908aefe8f",
+      "tree": "408cdf922e6c3894a6ce03387c3ead6505f3620e",
+      "runtimeChanges": ""
+    },
+    "syntheticOnly": true,
+    "productionAccess": false,
+    "writes": 0,
+    "browserErrors": [],
+    "matrix": [
+      {
+        "name": "Overview native accessibility landmarks and control names",
+        "status": "PASS"
+      },
+      {
+        "name": "Sessions native accessibility landmarks and control names",
+        "status": "PASS"
+      },
+      {
+        "name": "Team native accessibility landmarks and control names",
+        "status": "PASS"
+      },
+      {
+        "name": "Money native accessibility landmarks and control names",
+        "status": "PASS"
+      },
+      {
+        "name": "Growth native accessibility landmarks and control names",
+        "status": "PASS"
+      },
+      {
+        "name": "Goals native accessibility landmarks and control names",
+        "status": "PASS"
+      },
+      {
+        "name": "Growth uses navigation rather than an incomplete tab widget",
+        "status": "PASS"
+      },
+      {
+        "name": "Session tabs expose paired panels and native arrow-key navigation",
+        "status": "PASS"
+      },
+      {
+        "name": "Session detail disclosure exposes clinician, state and controlled region",
+        "status": "PASS"
+      },
+      {
+        "name": "Recorded period activation moves focus to the editor and close returns it",
+        "status": "PASS"
+      },
+      {
+        "name": "Dirty record confirmation has a named focus transition and restores the field",
+        "status": "PASS"
+      },
+      {
+        "name": "Comparison graphics expose metric values, goal and benchmark as text",
+        "status": "PASS"
+      },
+      {
+        "name": "Representative graphics retain exact fixture values and explicit unknowns",
+        "status": "PASS"
+      },
+      {
+        "name": "Consultation graphic exposes percentage units for a known fixture rate",
+        "status": "PASS"
+      },
+      {
+        "name": "Invalid numeric inputs expose the validation error without a save",
+        "status": "PASS"
+      },
+      {
+        "name": "Overview at native 100% zoom",
+        "status": "PASS"
+      },
+      {
+        "name": "Sessions at native 100% zoom",
+        "status": "PASS"
+      },
+      {
+        "name": "Team at native 100% zoom",
+        "status": "PASS"
+      },
+      {
+        "name": "Money at native 100% zoom",
+        "status": "PASS"
+      },
+      {
+        "name": "Growth at native 100% zoom",
+        "status": "PASS"
+      },
+      {
+        "name": "Goals at native 100% zoom",
+        "status": "PASS"
+      },
+      {
+        "name": "Reports modal keyboard trap and reflow at native 100%",
+        "status": "PASS"
+      },
+      {
+        "name": "Pending review commands remain keyboard reachable at native 100%",
+        "status": "PASS"
+      },
+      {
+        "name": "Overview at native 200% zoom",
+        "status": "PASS"
+      },
+      {
+        "name": "Sessions at native 200% zoom",
+        "status": "PASS"
+      },
+      {
+        "name": "Team at native 200% zoom",
+        "status": "PASS"
+      },
+      {
+        "name": "Money at native 200% zoom",
+        "status": "PASS"
+      },
+      {
+        "name": "Growth at native 200% zoom",
+        "status": "PASS"
+      },
+      {
+        "name": "Goals at native 200% zoom",
+        "status": "PASS"
+      },
+      {
+        "name": "Reports modal keyboard trap and reflow at native 200%",
+        "status": "PASS"
+      },
+      {
+        "name": "Pending review commands remain keyboard reachable at native 200%",
+        "status": "PASS"
+      },
+      {
+        "name": "Overview at native 400% zoom",
+        "status": "PASS"
+      },
+      {
+        "name": "Sessions at native 400% zoom",
+        "status": "PASS"
+      },
+      {
+        "name": "Team at native 400% zoom",
+        "status": "PASS"
+      },
+      {
+        "name": "Money at native 400% zoom",
+        "status": "PASS"
+      },
+      {
+        "name": "Growth at native 400% zoom",
+        "status": "PASS"
+      },
+      {
+        "name": "Goals at native 400% zoom",
+        "status": "PASS"
+      },
+      {
+        "name": "Reports modal keyboard trap and reflow at native 400%",
+        "status": "PASS"
+      },
+      {
+        "name": "Pending review commands remain keyboard reachable at native 400%",
+        "status": "PASS"
+      }
+    ],
+    "requestMethods": [
+      "GET"
+    ],
+    "actualScreenReader": false,
+    "mechanism": "Chrome for Testing page zoom controlled through chrome://settings/appearance in an owned temporary profile; no viewport/DPR emulation or CSS zoom",
+    "geometry": [
+      {
+        "name": "native-1-overview",
+        "nativeZoom": 1,
+        "nativeSetting": "1",
+        "viewport": {
+          "width": 1280,
+          "height": 900
+        },
+        "width": 1280,
+        "height": 900,
+        "outerWidth": 1280,
+        "outerHeight": 900,
+        "dpr": 1,
+        "visualScale": 1,
+        "cssZoom": "1",
+        "scroll": 1280,
+        "client": 1280,
+        "pngWidth": 1280,
+        "pngHeight": 900,
+        "sampledColors": 62,
+        "capture": "CDP compositor viewport, no document clip or beyond-viewport capture",
+        "path": "/tmp/practice-semantics-zoom-FvcUlZ/native-1-overview.png",
+        "sha256": "44f89eac5daf86dbb1417eafe300b3cf9a1d051be8e7f5aa2e174548ec8947c0"
+      },
+      {
+        "name": "native-1-overview-content",
+        "nativeZoom": 1,
+        "nativeSetting": "1",
+        "viewport": {
+          "width": 1280,
+          "height": 900
+        },
+        "width": 1280,
+        "height": 900,
+        "outerWidth": 1280,
+        "outerHeight": 900,
+        "dpr": 1,
+        "visualScale": 1,
+        "cssZoom": "1",
+        "scroll": 1280,
+        "client": 1280,
+        "pngWidth": 1280,
+        "pngHeight": 900,
+        "sampledColors": 56,
+        "capture": "CDP compositor viewport, no document clip or beyond-viewport capture",
+        "path": "/tmp/practice-semantics-zoom-FvcUlZ/native-1-overview-content.png",
+        "sha256": "d505cea58026c736a36cf89aa97f189a8981f0656e66da76a49ffbb16372eb87"
+      },
+      {
+        "name": "native-1-sessions",
+        "nativeZoom": 1,
+        "nativeSetting": "1",
+        "viewport": {
+          "width": 1280,
+          "height": 900
+        },
+        "width": 1280,
+        "height": 900,
+        "outerWidth": 1280,
+        "outerHeight": 900,
+        "dpr": 1,
+        "visualScale": 1,
+        "cssZoom": "1",
+        "scroll": 1280,
+        "client": 1280,
+        "pngWidth": 1280,
+        "pngHeight": 900,
+        "sampledColors": 65,
+        "capture": "CDP compositor viewport, no document clip or beyond-viewport capture",
+        "path": "/tmp/practice-semantics-zoom-FvcUlZ/native-1-sessions.png",
+        "sha256": "3aa2ecd83f8e6520f24e01c8529b3748311ffe1d84a179262196f7ff0bcef46c"
+      },
+      {
+        "name": "native-1-sessions-content",
+        "nativeZoom": 1,
+        "nativeSetting": "1",
+        "viewport": {
+          "width": 1280,
+          "height": 900
+        },
+        "width": 1280,
+        "height": 900,
+        "outerWidth": 1280,
+        "outerHeight": 900,
+        "dpr": 1,
+        "visualScale": 1,
+        "cssZoom": "1",
+        "scroll": 1280,
+        "client": 1280,
+        "pngWidth": 1280,
+        "pngHeight": 900,
+        "sampledColors": 63,
+        "capture": "CDP compositor viewport, no document clip or beyond-viewport capture",
+        "path": "/tmp/practice-semantics-zoom-FvcUlZ/native-1-sessions-content.png",
+        "sha256": "817eadc4229fac66d5e3930ba97b15c1b7d78d9b71dc9e2b62fc682b6b62e06c"
+      },
+      {
+        "name": "native-1-team",
+        "nativeZoom": 1,
+        "nativeSetting": "1",
+        "viewport": {
+          "width": 1280,
+          "height": 900
+        },
+        "width": 1280,
+        "height": 900,
+        "outerWidth": 1280,
+        "outerHeight": 900,
+        "dpr": 1,
+        "visualScale": 1,
+        "cssZoom": "1",
+        "scroll": 1280,
+        "client": 1280,
+        "pngWidth": 1280,
+        "pngHeight": 900,
+        "sampledColors": 60,
+        "capture": "CDP compositor viewport, no document clip or beyond-viewport capture",
+        "path": "/tmp/practice-semantics-zoom-FvcUlZ/native-1-team.png",
+        "sha256": "c08b871c7864e0cee205a7488c2cd4aeb40860a927181b0d5a85d9ace77efd12"
+      },
+      {
+        "name": "native-1-team-content",
+        "nativeZoom": 1,
+        "nativeSetting": "1",
+        "viewport": {
+          "width": 1280,
+          "height": 900
+        },
+        "width": 1280,
+        "height": 900,
+        "outerWidth": 1280,
+        "outerHeight": 900,
+        "dpr": 1,
+        "visualScale": 1,
+        "cssZoom": "1",
+        "scroll": 1280,
+        "client": 1280,
+        "pngWidth": 1280,
+        "pngHeight": 900,
+        "sampledColors": 54,
+        "capture": "CDP compositor viewport, no document clip or beyond-viewport capture",
+        "path": "/tmp/practice-semantics-zoom-FvcUlZ/native-1-team-content.png",
+        "sha256": "f5bf746b000f3f24fc670a320d32fb189bcae88589c5703556b9af559f7d84fe"
+      },
+      {
+        "name": "native-1-money",
+        "nativeZoom": 1,
+        "nativeSetting": "1",
+        "viewport": {
+          "width": 1280,
+          "height": 900
+        },
+        "width": 1280,
+        "height": 900,
+        "outerWidth": 1280,
+        "outerHeight": 900,
+        "dpr": 1,
+        "visualScale": 1,
+        "cssZoom": "1",
+        "scroll": 1280,
+        "client": 1280,
+        "pngWidth": 1280,
+        "pngHeight": 900,
+        "sampledColors": 82,
+        "capture": "CDP compositor viewport, no document clip or beyond-viewport capture",
+        "path": "/tmp/practice-semantics-zoom-FvcUlZ/native-1-money.png",
+        "sha256": "ca22dba637cab9eedcd8ac9dde2ec908f7d2da8baf32657d4fc37ff8f45e8975"
+      },
+      {
+        "name": "native-1-money-content",
+        "nativeZoom": 1,
+        "nativeSetting": "1",
+        "viewport": {
+          "width": 1280,
+          "height": 900
+        },
+        "width": 1280,
+        "height": 900,
+        "outerWidth": 1280,
+        "outerHeight": 900,
+        "dpr": 1,
+        "visualScale": 1,
+        "cssZoom": "1",
+        "scroll": 1280,
+        "client": 1280,
+        "pngWidth": 1280,
+        "pngHeight": 900,
+        "sampledColors": 74,
+        "capture": "CDP compositor viewport, no document clip or beyond-viewport capture",
+        "path": "/tmp/practice-semantics-zoom-FvcUlZ/native-1-money-content.png",
+        "sha256": "7aebcfd48741de610805e9e1b0f522293ef492a2aeaa74ed0701a6fb1aa59aaf"
+      },
+      {
+        "name": "native-1-growth",
+        "nativeZoom": 1,
+        "nativeSetting": "1",
+        "viewport": {
+          "width": 1280,
+          "height": 900
+        },
+        "width": 1280,
+        "height": 900,
+        "outerWidth": 1280,
+        "outerHeight": 900,
+        "dpr": 1,
+        "visualScale": 1,
+        "cssZoom": "1",
+        "scroll": 1280,
+        "client": 1280,
+        "pngWidth": 1280,
+        "pngHeight": 900,
+        "sampledColors": 59,
+        "capture": "CDP compositor viewport, no document clip or beyond-viewport capture",
+        "path": "/tmp/practice-semantics-zoom-FvcUlZ/native-1-growth.png",
+        "sha256": "8b94466ad84c1e6288f8730f614a6c113c1eb6af86b4df56a283687388dd3219"
+      },
+      {
+        "name": "native-1-growth-content",
+        "nativeZoom": 1,
+        "nativeSetting": "1",
+        "viewport": {
+          "width": 1280,
+          "height": 900
+        },
+        "width": 1280,
+        "height": 900,
+        "outerWidth": 1280,
+        "outerHeight": 900,
+        "dpr": 1,
+        "visualScale": 1,
+        "cssZoom": "1",
+        "scroll": 1280,
+        "client": 1280,
+        "pngWidth": 1280,
+        "pngHeight": 900,
+        "sampledColors": 51,
+        "capture": "CDP compositor viewport, no document clip or beyond-viewport capture",
+        "path": "/tmp/practice-semantics-zoom-FvcUlZ/native-1-growth-content.png",
+        "sha256": "fb9fec72eea7efece383718c750970b4c2817cbb75ec46ff7d9b15f1dcc64b1b"
+      },
+      {
+        "name": "native-1-goals",
+        "nativeZoom": 1,
+        "nativeSetting": "1",
+        "viewport": {
+          "width": 1280,
+          "height": 900
+        },
+        "width": 1280,
+        "height": 900,
+        "outerWidth": 1280,
+        "outerHeight": 900,
+        "dpr": 1,
+        "visualScale": 1,
+        "cssZoom": "1",
+        "scroll": 1280,
+        "client": 1280,
+        "pngWidth": 1280,
+        "pngHeight": 900,
+        "sampledColors": 62,
+        "capture": "CDP compositor viewport, no document clip or beyond-viewport capture",
+        "path": "/tmp/practice-semantics-zoom-FvcUlZ/native-1-goals.png",
+        "sha256": "c332885c79ce23837d24d87e4da8681971bfc09749e07205a9eaaad8f42fc801"
+      },
+      {
+        "name": "native-1-goals-content",
+        "nativeZoom": 1,
+        "nativeSetting": "1",
+        "viewport": {
+          "width": 1280,
+          "height": 900
+        },
+        "width": 1280,
+        "height": 900,
+        "outerWidth": 1280,
+        "outerHeight": 900,
+        "dpr": 1,
+        "visualScale": 1,
+        "cssZoom": "1",
+        "scroll": 1280,
+        "client": 1280,
+        "pngWidth": 1280,
+        "pngHeight": 900,
+        "sampledColors": 59,
+        "capture": "CDP compositor viewport, no document clip or beyond-viewport capture",
+        "path": "/tmp/practice-semantics-zoom-FvcUlZ/native-1-goals-content.png",
+        "sha256": "512651cb90c03bb9614b1a82115f3c1e699ae59371e3709f1567d9c8597ca2a6"
+      },
+      {
+        "name": "native-1-reports",
+        "nativeZoom": 1,
+        "nativeSetting": "1",
+        "viewport": {
+          "width": 1280,
+          "height": 900
+        },
+        "width": 1280,
+        "height": 900,
+        "outerWidth": 1280,
+        "outerHeight": 900,
+        "dpr": 1,
+        "visualScale": 1,
+        "cssZoom": "1",
+        "scroll": 1280,
+        "client": 1280,
+        "pngWidth": 1280,
+        "pngHeight": 900,
+        "sampledColors": 70,
+        "capture": "CDP compositor viewport, no document clip or beyond-viewport capture",
+        "path": "/tmp/practice-semantics-zoom-FvcUlZ/native-1-reports.png",
+        "sha256": "823286ebd90b1c1e3bb614e89bbb30e1f231f82b21591b7b5e7efee841d6c77b"
+      },
+      {
+        "name": "native-1-pending",
+        "nativeZoom": 1,
+        "nativeSetting": "1",
+        "viewport": {
+          "width": 1280,
+          "height": 900
+        },
+        "width": 1280,
+        "height": 900,
+        "outerWidth": 1280,
+        "outerHeight": 900,
+        "dpr": 1,
+        "visualScale": 1,
+        "cssZoom": "1",
+        "scroll": 1280,
+        "client": 1280,
+        "pngWidth": 1280,
+        "pngHeight": 900,
+        "sampledColors": 58,
+        "capture": "CDP compositor viewport, no document clip or beyond-viewport capture",
+        "path": "/tmp/practice-semantics-zoom-FvcUlZ/native-1-pending.png",
+        "sha256": "55213b43b84b653ee1fef5f34897536d1e1586996d71f521c10ea7d736656987"
+      },
+      {
+        "name": "native-2-overview",
+        "nativeZoom": 2,
+        "nativeSetting": "2",
+        "viewport": {
+          "width": 1280,
+          "height": 900
+        },
+        "width": 640,
+        "height": 450,
+        "outerWidth": 1280,
+        "outerHeight": 900,
+        "dpr": 2,
+        "visualScale": 1,
+        "cssZoom": "1",
+        "scroll": 640,
+        "client": 640,
+        "pngWidth": 1280,
+        "pngHeight": 900,
+        "sampledColors": 62,
+        "capture": "CDP compositor viewport, no document clip or beyond-viewport capture",
+        "path": "/tmp/practice-semantics-zoom-FvcUlZ/native-2-overview.png",
+        "sha256": "a611b3283b283a3364eab425fa6171bf91bff18e51950113b7de3c49b1adaa4b"
+      },
+      {
+        "name": "native-2-overview-content",
+        "nativeZoom": 2,
+        "nativeSetting": "2",
+        "viewport": {
+          "width": 1280,
+          "height": 900
+        },
+        "width": 640,
+        "height": 450,
+        "outerWidth": 1280,
+        "outerHeight": 900,
+        "dpr": 2,
+        "visualScale": 1,
+        "cssZoom": "1",
+        "scroll": 640,
+        "client": 640,
+        "pngWidth": 1280,
+        "pngHeight": 900,
+        "sampledColors": 51,
+        "capture": "CDP compositor viewport, no document clip or beyond-viewport capture",
+        "path": "/tmp/practice-semantics-zoom-FvcUlZ/native-2-overview-content.png",
+        "sha256": "140a995e788f8212cace2d4d2d9f03f4e21eb108905bca1569bb05d788641feb"
+      },
+      {
+        "name": "native-2-sessions",
+        "nativeZoom": 2,
+        "nativeSetting": "2",
+        "viewport": {
+          "width": 1280,
+          "height": 900
+        },
+        "width": 640,
+        "height": 450,
+        "outerWidth": 1280,
+        "outerHeight": 900,
+        "dpr": 2,
+        "visualScale": 1,
+        "cssZoom": "1",
+        "scroll": 640,
+        "client": 640,
+        "pngWidth": 1280,
+        "pngHeight": 900,
+        "sampledColors": 62,
+        "capture": "CDP compositor viewport, no document clip or beyond-viewport capture",
+        "path": "/tmp/practice-semantics-zoom-FvcUlZ/native-2-sessions.png",
+        "sha256": "25bf50ac2851a174d930f9444e2bfc616f8b6f4dcf7e056fee31727cb32f5b81"
+      },
+      {
+        "name": "native-2-sessions-content",
+        "nativeZoom": 2,
+        "nativeSetting": "2",
+        "viewport": {
+          "width": 1280,
+          "height": 900
+        },
+        "width": 640,
+        "height": 450,
+        "outerWidth": 1280,
+        "outerHeight": 900,
+        "dpr": 2,
+        "visualScale": 1,
+        "cssZoom": "1",
+        "scroll": 640,
+        "client": 640,
+        "pngWidth": 1280,
+        "pngHeight": 900,
+        "sampledColors": 45,
+        "capture": "CDP compositor viewport, no document clip or beyond-viewport capture",
+        "path": "/tmp/practice-semantics-zoom-FvcUlZ/native-2-sessions-content.png",
+        "sha256": "b2f0e7584a8ac76fa81bca21b190b535484c3cdfce4f402f3fcb65e56be1e558"
+      },
+      {
+        "name": "native-2-team",
+        "nativeZoom": 2,
+        "nativeSetting": "2",
+        "viewport": {
+          "width": 1280,
+          "height": 900
+        },
+        "width": 640,
+        "height": 450,
+        "outerWidth": 1280,
+        "outerHeight": 900,
+        "dpr": 2,
+        "visualScale": 1,
+        "cssZoom": "1",
+        "scroll": 640,
+        "client": 640,
+        "pngWidth": 1280,
+        "pngHeight": 900,
+        "sampledColors": 58,
+        "capture": "CDP compositor viewport, no document clip or beyond-viewport capture",
+        "path": "/tmp/practice-semantics-zoom-FvcUlZ/native-2-team.png",
+        "sha256": "ee453318ee4abfd1a1a75fbd0dd3a3c668e53253c6d392d7f38fee584d72cca6"
+      },
+      {
+        "name": "native-2-team-content",
+        "nativeZoom": 2,
+        "nativeSetting": "2",
+        "viewport": {
+          "width": 1280,
+          "height": 900
+        },
+        "width": 640,
+        "height": 450,
+        "outerWidth": 1280,
+        "outerHeight": 900,
+        "dpr": 2,
+        "visualScale": 1,
+        "cssZoom": "1",
+        "scroll": 640,
+        "client": 640,
+        "pngWidth": 1280,
+        "pngHeight": 900,
+        "sampledColors": 52,
+        "capture": "CDP compositor viewport, no document clip or beyond-viewport capture",
+        "path": "/tmp/practice-semantics-zoom-FvcUlZ/native-2-team-content.png",
+        "sha256": "415a7aa190164706a339dc464b87a9b6c56b229681dbd349578f33970d97736f"
+      },
+      {
+        "name": "native-2-money",
+        "nativeZoom": 2,
+        "nativeSetting": "2",
+        "viewport": {
+          "width": 1280,
+          "height": 900
+        },
+        "width": 640,
+        "height": 450,
+        "outerWidth": 1280,
+        "outerHeight": 900,
+        "dpr": 2,
+        "visualScale": 1,
+        "cssZoom": "1",
+        "scroll": 640,
+        "client": 640,
+        "pngWidth": 1280,
+        "pngHeight": 900,
+        "sampledColors": 60,
+        "capture": "CDP compositor viewport, no document clip or beyond-viewport capture",
+        "path": "/tmp/practice-semantics-zoom-FvcUlZ/native-2-money.png",
+        "sha256": "92e6b076a6d5ddc2143d4a95c6ebbba9b9e51df4223497a8be06f9661dcd0d43"
+      },
+      {
+        "name": "native-2-money-content",
+        "nativeZoom": 2,
+        "nativeSetting": "2",
+        "viewport": {
+          "width": 1280,
+          "height": 900
+        },
+        "width": 640,
+        "height": 450,
+        "outerWidth": 1280,
+        "outerHeight": 900,
+        "dpr": 2,
+        "visualScale": 1,
+        "cssZoom": "1",
+        "scroll": 640,
+        "client": 640,
+        "pngWidth": 1280,
+        "pngHeight": 900,
+        "sampledColors": 77,
+        "capture": "CDP compositor viewport, no document clip or beyond-viewport capture",
+        "path": "/tmp/practice-semantics-zoom-FvcUlZ/native-2-money-content.png",
+        "sha256": "114ce7d30d63df5c5368d1739ae9682168f3fc629dfbeed8f6239acbe5f5822e"
+      },
+      {
+        "name": "native-2-growth",
+        "nativeZoom": 2,
+        "nativeSetting": "2",
+        "viewport": {
+          "width": 1280,
+          "height": 900
+        },
+        "width": 640,
+        "height": 450,
+        "outerWidth": 1280,
+        "outerHeight": 900,
+        "dpr": 2,
+        "visualScale": 1,
+        "cssZoom": "1",
+        "scroll": 640,
+        "client": 640,
+        "pngWidth": 1280,
+        "pngHeight": 900,
+        "sampledColors": 63,
+        "capture": "CDP compositor viewport, no document clip or beyond-viewport capture",
+        "path": "/tmp/practice-semantics-zoom-FvcUlZ/native-2-growth.png",
+        "sha256": "86a132d02e04b393af0c94261893870655fdb8038049fd90c8fc2bb53765be3a"
+      },
+      {
+        "name": "native-2-growth-content",
+        "nativeZoom": 2,
+        "nativeSetting": "2",
+        "viewport": {
+          "width": 1280,
+          "height": 900
+        },
+        "width": 640,
+        "height": 450,
+        "outerWidth": 1280,
+        "outerHeight": 900,
+        "dpr": 2,
+        "visualScale": 1,
+        "cssZoom": "1",
+        "scroll": 640,
+        "client": 640,
+        "pngWidth": 1280,
+        "pngHeight": 900,
+        "sampledColors": 47,
+        "capture": "CDP compositor viewport, no document clip or beyond-viewport capture",
+        "path": "/tmp/practice-semantics-zoom-FvcUlZ/native-2-growth-content.png",
+        "sha256": "39dde163e71d89d9eaf477f00cc72059c850e145e147cb15c4c13d2e6904e3eb"
+      },
+      {
+        "name": "native-2-goals",
+        "nativeZoom": 2,
+        "nativeSetting": "2",
+        "viewport": {
+          "width": 1280,
+          "height": 900
+        },
+        "width": 640,
+        "height": 450,
+        "outerWidth": 1280,
+        "outerHeight": 900,
+        "dpr": 2,
+        "visualScale": 1,
+        "cssZoom": "1",
+        "scroll": 640,
+        "client": 640,
+        "pngWidth": 1280,
+        "pngHeight": 900,
+        "sampledColors": 61,
+        "capture": "CDP compositor viewport, no document clip or beyond-viewport capture",
+        "path": "/tmp/practice-semantics-zoom-FvcUlZ/native-2-goals.png",
+        "sha256": "daf31c701b571132ffe87275a23e7a6477b31e264b7d0ce48c57ca03a78925a0"
+      },
+      {
+        "name": "native-2-goals-content",
+        "nativeZoom": 2,
+        "nativeSetting": "2",
+        "viewport": {
+          "width": 1280,
+          "height": 900
+        },
+        "width": 640,
+        "height": 450,
+        "outerWidth": 1280,
+        "outerHeight": 900,
+        "dpr": 2,
+        "visualScale": 1,
+        "cssZoom": "1",
+        "scroll": 640,
+        "client": 640,
+        "pngWidth": 1280,
+        "pngHeight": 900,
+        "sampledColors": 46,
+        "capture": "CDP compositor viewport, no document clip or beyond-viewport capture",
+        "path": "/tmp/practice-semantics-zoom-FvcUlZ/native-2-goals-content.png",
+        "sha256": "02dae7d8c0d08555fffe7faa894aff52510141705f7fc7dea6a8d46c44fd6b08"
+      },
+      {
+        "name": "native-2-reports",
+        "nativeZoom": 2,
+        "nativeSetting": "2",
+        "viewport": {
+          "width": 1280,
+          "height": 900
+        },
+        "width": 640,
+        "height": 450,
+        "outerWidth": 1280,
+        "outerHeight": 900,
+        "dpr": 2,
+        "visualScale": 1,
+        "cssZoom": "1",
+        "scroll": 640,
+        "client": 640,
+        "pngWidth": 1280,
+        "pngHeight": 900,
+        "sampledColors": 67,
+        "capture": "CDP compositor viewport, no document clip or beyond-viewport capture",
+        "path": "/tmp/practice-semantics-zoom-FvcUlZ/native-2-reports.png",
+        "sha256": "c12e240f3ed27cf686949ced6a5277954fa825c5b8cafe4795580a2c30b71c87"
+      },
+      {
+        "name": "native-2-pending",
+        "nativeZoom": 2,
+        "nativeSetting": "2",
+        "viewport": {
+          "width": 1280,
+          "height": 900
+        },
+        "width": 640,
+        "height": 450,
+        "outerWidth": 1280,
+        "outerHeight": 900,
+        "dpr": 2,
+        "visualScale": 1,
+        "cssZoom": "1",
+        "scroll": 640,
+        "client": 640,
+        "pngWidth": 1280,
+        "pngHeight": 900,
+        "sampledColors": 56,
+        "capture": "CDP compositor viewport, no document clip or beyond-viewport capture",
+        "path": "/tmp/practice-semantics-zoom-FvcUlZ/native-2-pending.png",
+        "sha256": "386f8af37510d3bee1e9e44b287fe7d704dcf3d313f6ab37c2f2558a5bd27ec6"
+      },
+      {
+        "name": "native-4-overview",
+        "nativeZoom": 4,
+        "nativeSetting": "4",
+        "viewport": {
+          "width": 1280,
+          "height": 900
+        },
+        "width": 320,
+        "height": 225,
+        "outerWidth": 1280,
+        "outerHeight": 900,
+        "dpr": 4,
+        "visualScale": 1,
+        "cssZoom": "1",
+        "scroll": 320,
+        "client": 320,
+        "pngWidth": 1280,
+        "pngHeight": 900,
+        "sampledColors": 58,
+        "capture": "CDP compositor viewport, no document clip or beyond-viewport capture",
+        "path": "/tmp/practice-semantics-zoom-FvcUlZ/native-4-overview.png",
+        "sha256": "2b23fc15c6a075ac6836717efea9ec91243818bb1a892cc00d833ce7b4f4fdfc"
+      },
+      {
+        "name": "native-4-overview-content",
+        "nativeZoom": 4,
+        "nativeSetting": "4",
+        "viewport": {
+          "width": 1280,
+          "height": 900
+        },
+        "width": 320,
+        "height": 225,
+        "outerWidth": 1280,
+        "outerHeight": 900,
+        "dpr": 4,
+        "visualScale": 1,
+        "cssZoom": "1",
+        "scroll": 320,
+        "client": 320,
+        "pngWidth": 1280,
+        "pngHeight": 900,
+        "sampledColors": 45,
+        "capture": "CDP compositor viewport, no document clip or beyond-viewport capture",
+        "path": "/tmp/practice-semantics-zoom-FvcUlZ/native-4-overview-content.png",
+        "sha256": "19d7300659219cdd306079dde35fe226daf775ecb85cf190c0c07a53824bd6b7"
+      },
+      {
+        "name": "native-4-sessions",
+        "nativeZoom": 4,
+        "nativeSetting": "4",
+        "viewport": {
+          "width": 1280,
+          "height": 900
+        },
+        "width": 320,
+        "height": 225,
+        "outerWidth": 1280,
+        "outerHeight": 900,
+        "dpr": 4,
+        "visualScale": 1,
+        "cssZoom": "1",
+        "scroll": 320,
+        "client": 320,
+        "pngWidth": 1280,
+        "pngHeight": 900,
+        "sampledColors": 41,
+        "capture": "CDP compositor viewport, no document clip or beyond-viewport capture",
+        "path": "/tmp/practice-semantics-zoom-FvcUlZ/native-4-sessions.png",
+        "sha256": "86185d76c3041245e5de2ee7f0ea7a9c9709271c1ac51bfed34991a34a6ff717"
+      },
+      {
+        "name": "native-4-sessions-content",
+        "nativeZoom": 4,
+        "nativeSetting": "4",
+        "viewport": {
+          "width": 1280,
+          "height": 900
+        },
+        "width": 320,
+        "height": 225,
+        "outerWidth": 1280,
+        "outerHeight": 900,
+        "dpr": 4,
+        "visualScale": 1,
+        "cssZoom": "1",
+        "scroll": 320,
+        "client": 320,
+        "pngWidth": 1280,
+        "pngHeight": 900,
+        "sampledColors": 46,
+        "capture": "CDP compositor viewport, no document clip or beyond-viewport capture",
+        "path": "/tmp/practice-semantics-zoom-FvcUlZ/native-4-sessions-content.png",
+        "sha256": "d7c8ab1b4a53714b81f8f64f98eaa169046fc8f39da457a5fb7386a06d6bc0d8"
+      },
+      {
+        "name": "native-4-team",
+        "nativeZoom": 4,
+        "nativeSetting": "4",
+        "viewport": {
+          "width": 1280,
+          "height": 900
+        },
+        "width": 320,
+        "height": 225,
+        "outerWidth": 1280,
+        "outerHeight": 900,
+        "dpr": 4,
+        "visualScale": 1,
+        "cssZoom": "1",
+        "scroll": 320,
+        "client": 320,
+        "pngWidth": 1280,
+        "pngHeight": 900,
+        "sampledColors": 42,
+        "capture": "CDP compositor viewport, no document clip or beyond-viewport capture",
+        "path": "/tmp/practice-semantics-zoom-FvcUlZ/native-4-team.png",
+        "sha256": "bc64bed0fb4431e3ed4ef2f6d1c2de5eef5e5f63b6d7b80b1264a3809f0715d4"
+      },
+      {
+        "name": "native-4-team-content",
+        "nativeZoom": 4,
+        "nativeSetting": "4",
+        "viewport": {
+          "width": 1280,
+          "height": 900
+        },
+        "width": 320,
+        "height": 225,
+        "outerWidth": 1280,
+        "outerHeight": 900,
+        "dpr": 4,
+        "visualScale": 1,
+        "cssZoom": "1",
+        "scroll": 320,
+        "client": 320,
+        "pngWidth": 1280,
+        "pngHeight": 900,
+        "sampledColors": 40,
+        "capture": "CDP compositor viewport, no document clip or beyond-viewport capture",
+        "path": "/tmp/practice-semantics-zoom-FvcUlZ/native-4-team-content.png",
+        "sha256": "574e256db925236abb8a6d304abd108bd07ae1fc7379221a4af3cc714568861c"
+      },
+      {
+        "name": "native-4-money",
+        "nativeZoom": 4,
+        "nativeSetting": "4",
+        "viewport": {
+          "width": 1280,
+          "height": 900
+        },
+        "width": 320,
+        "height": 225,
+        "outerWidth": 1280,
+        "outerHeight": 900,
+        "dpr": 4,
+        "visualScale": 1,
+        "cssZoom": "1",
+        "scroll": 320,
+        "client": 320,
+        "pngWidth": 1280,
+        "pngHeight": 900,
+        "sampledColors": 44,
+        "capture": "CDP compositor viewport, no document clip or beyond-viewport capture",
+        "path": "/tmp/practice-semantics-zoom-FvcUlZ/native-4-money.png",
+        "sha256": "f352864ea8c89a9c132110829f168cd6383d1cce9f101e5b68c043adff84f0ee"
+      },
+      {
+        "name": "native-4-money-content",
+        "nativeZoom": 4,
+        "nativeSetting": "4",
+        "viewport": {
+          "width": 1280,
+          "height": 900
+        },
+        "width": 320,
+        "height": 225,
+        "outerWidth": 1280,
+        "outerHeight": 900,
+        "dpr": 4,
+        "visualScale": 1,
+        "cssZoom": "1",
+        "scroll": 320,
+        "client": 320,
+        "pngWidth": 1280,
+        "pngHeight": 900,
+        "sampledColors": 46,
+        "capture": "CDP compositor viewport, no document clip or beyond-viewport capture",
+        "path": "/tmp/practice-semantics-zoom-FvcUlZ/native-4-money-content.png",
+        "sha256": "9c56fd446614e81be45b697030fa210f35d10169ce67fa08304c5c23a448487b"
+      },
+      {
+        "name": "native-4-growth",
+        "nativeZoom": 4,
+        "nativeSetting": "4",
+        "viewport": {
+          "width": 1280,
+          "height": 900
+        },
+        "width": 320,
+        "height": 225,
+        "outerWidth": 1280,
+        "outerHeight": 900,
+        "dpr": 4,
+        "visualScale": 1,
+        "cssZoom": "1",
+        "scroll": 320,
+        "client": 320,
+        "pngWidth": 1280,
+        "pngHeight": 900,
+        "sampledColors": 44,
+        "capture": "CDP compositor viewport, no document clip or beyond-viewport capture",
+        "path": "/tmp/practice-semantics-zoom-FvcUlZ/native-4-growth.png",
+        "sha256": "f1207d288227daf27d51266345163b22d62dd358d8ffeb21454bcb03739c5f3e"
+      },
+      {
+        "name": "native-4-growth-content",
+        "nativeZoom": 4,
+        "nativeSetting": "4",
+        "viewport": {
+          "width": 1280,
+          "height": 900
+        },
+        "width": 320,
+        "height": 225,
+        "outerWidth": 1280,
+        "outerHeight": 900,
+        "dpr": 4,
+        "visualScale": 1,
+        "cssZoom": "1",
+        "scroll": 320,
+        "client": 320,
+        "pngWidth": 1280,
+        "pngHeight": 900,
+        "sampledColors": 44,
+        "capture": "CDP compositor viewport, no document clip or beyond-viewport capture",
+        "path": "/tmp/practice-semantics-zoom-FvcUlZ/native-4-growth-content.png",
+        "sha256": "4cf37b0aec45ea5eb17218e3bbf6cb5ed0fbcc07b0b478463105d3823c08093c"
+      },
+      {
+        "name": "native-4-goals",
+        "nativeZoom": 4,
+        "nativeSetting": "4",
+        "viewport": {
+          "width": 1280,
+          "height": 900
+        },
+        "width": 320,
+        "height": 225,
+        "outerWidth": 1280,
+        "outerHeight": 900,
+        "dpr": 4,
+        "visualScale": 1,
+        "cssZoom": "1",
+        "scroll": 320,
+        "client": 320,
+        "pngWidth": 1280,
+        "pngHeight": 900,
+        "sampledColors": 42,
+        "capture": "CDP compositor viewport, no document clip or beyond-viewport capture",
+        "path": "/tmp/practice-semantics-zoom-FvcUlZ/native-4-goals.png",
+        "sha256": "51f0811c79ebce01c3311728f13b3ba50afef7cc27e7585867e5a85731840f78"
+      },
+      {
+        "name": "native-4-goals-content",
+        "nativeZoom": 4,
+        "nativeSetting": "4",
+        "viewport": {
+          "width": 1280,
+          "height": 900
+        },
+        "width": 320,
+        "height": 225,
+        "outerWidth": 1280,
+        "outerHeight": 900,
+        "dpr": 4,
+        "visualScale": 1,
+        "cssZoom": "1",
+        "scroll": 320,
+        "client": 320,
+        "pngWidth": 1280,
+        "pngHeight": 900,
+        "sampledColors": 53,
+        "capture": "CDP compositor viewport, no document clip or beyond-viewport capture",
+        "path": "/tmp/practice-semantics-zoom-FvcUlZ/native-4-goals-content.png",
+        "sha256": "ef07750d2aeb88beb0fd84a9f58c791fcc7bb41bbeb2c635c1e3c5621338975b"
+      },
+      {
+        "name": "native-4-reports",
+        "nativeZoom": 4,
+        "nativeSetting": "4",
+        "viewport": {
+          "width": 1280,
+          "height": 900
+        },
+        "width": 320,
+        "height": 225,
+        "outerWidth": 1280,
+        "outerHeight": 900,
+        "dpr": 4,
+        "visualScale": 1,
+        "cssZoom": "1",
+        "scroll": 320,
+        "client": 320,
+        "pngWidth": 1280,
+        "pngHeight": 900,
+        "sampledColors": 55,
+        "capture": "CDP compositor viewport, no document clip or beyond-viewport capture",
+        "path": "/tmp/practice-semantics-zoom-FvcUlZ/native-4-reports.png",
+        "sha256": "926ad3b4261faae2b0cb8af3c18f9fec7d3e0d066452d86af70f5fee43b764c6"
+      },
+      {
+        "name": "native-4-pending",
+        "nativeZoom": 4,
+        "nativeSetting": "4",
+        "viewport": {
+          "width": 1280,
+          "height": 900
+        },
+        "width": 320,
+        "height": 225,
+        "outerWidth": 1280,
+        "outerHeight": 900,
+        "dpr": 4,
+        "visualScale": 1,
+        "cssZoom": "1",
+        "scroll": 320,
+        "client": 320,
+        "pngWidth": 1280,
+        "pngHeight": 900,
+        "sampledColors": 57,
+        "capture": "CDP compositor viewport, no document clip or beyond-viewport capture",
+        "path": "/tmp/practice-semantics-zoom-FvcUlZ/native-4-pending.png",
+        "sha256": "f26ea3175b091ebb197acb54d6bec6cf79620666dd1825694b4f24e5a81bc28b"
+      }
+    ],
+    "accessibilitySnapshots": [
+      {
+        "name": "Overview-100",
+        "roles": {
+          "RootWebArea": 1,
+          "generic": 17,
+          "banner": 1,
+          "main": 1,
+          "StaticText": 200,
+          "navigation": 3,
+          "button": 25,
+          "link": 1,
+          "sectionheader": 1,
+          "group": 12,
+          "paragraph": 16,
+          "LabelText": 3,
+          "heading": 10,
+          "region": 8,
+          "sectionfooter": 1,
+          "InlineTextBox": 210,
+          "DisclosureTriangle": 11,
+          "combobox": 3,
+          "strong": 23,
+          "image": 1,
+          "MenuListPopup": 3,
+          "option": 23
+        },
+        "comparisonImages": []
+      },
+      {
+        "name": "Sessions-100",
+        "roles": {
+          "RootWebArea": 1,
+          "generic": 23,
+          "banner": 1,
+          "main": 1,
+          "StaticText": 145,
+          "navigation": 2,
+          "button": 24,
+          "link": 1,
+          "sectionheader": 1,
+          "LabelText": 1,
+          "group": 10,
+          "sectionfooter": 1,
+          "InlineTextBox": 149,
+          "heading": 6,
+          "combobox": 1,
+          "DisclosureTriangle": 7,
+          "paragraph": 13,
+          "region": 4,
+          "strong": 12,
+          "image": 4,
+          "MenuListPopup": 1,
+          "figure": 1,
+          "option": 9,
+          "Figcaption": 1,
+          "application": 1,
+          "list": 1,
+          "listitem": 2
+        },
+        "comparisonImages": [
+          {
+            "role": "image",
+            "name": "Consultation close rate: Observed not available; Goal not available; Practice benchmark not available; Real capacity limit not available.",
+            "properties": []
+          }
+        ]
+      },
+      {
+        "name": "Team-100",
+        "roles": {
+          "RootWebArea": 1,
+          "generic": 18,
+          "banner": 1,
+          "main": 1,
+          "StaticText": 104,
+          "navigation": 3,
+          "button": 26,
+          "link": 1,
+          "sectionheader": 3,
+          "paragraph": 4,
+          "LabelText": 1,
+          "heading": 5,
+          "combobox": 4,
+          "article": 2,
+          "region": 1,
+          "sectionfooter": 1,
+          "InlineTextBox": 107,
+          "group": 4,
+          "MenuListPopup": 4,
+          "strong": 7,
+          "figure": 4,
+          "option": 17,
+          "checkbox": 2,
+          "Figcaption": 4,
+          "image": 4,
+          "DisclosureTriangle": 3
+        },
+        "comparisonImages": []
+      },
+      {
+        "name": "Money-100",
+        "roles": {
+          "RootWebArea": 1,
+          "generic": 14,
+          "banner": 1,
+          "main": 1,
+          "StaticText": 109,
+          "navigation": 2,
+          "button": 14,
+          "link": 1,
+          "sectionheader": 2,
+          "group": 7,
+          "paragraph": 4,
+          "LabelText": 3,
+          "region": 1,
+          "sectionfooter": 1,
+          "InlineTextBox": 111,
+          "heading": 2,
+          "DisclosureTriangle": 6,
+          "combobox": 1,
+          "strong": 7,
+          "status": 1,
+          "table": 1,
+          "MenuListPopup": 1,
+          "LineBreak": 1,
+          "caption": 1,
+          "rowgroup": 1,
+          "row": 8,
+          "Legend": 1,
+          "option": 9,
+          "rowheader": 7,
+          "cell": 35,
+          "spinbutton": 9,
+          "columnheader": 6
+        },
+        "comparisonImages": []
+      },
+      {
+        "name": "Growth-100",
+        "roles": {
+          "RootWebArea": 1,
+          "generic": 55,
+          "banner": 1,
+          "main": 1,
+          "StaticText": 126,
+          "navigation": 3,
+          "button": 33,
+          "link": 1,
+          "sectionheader": 1,
+          "heading": 4,
+          "paragraph": 5,
+          "LabelText": 2,
+          "region": 1,
+          "sectionfooter": 1,
+          "InlineTextBox": 127,
+          "combobox": 1,
+          "strong": 4,
+          "group": 2,
+          "table": 1,
+          "MenuListPopup": 1,
+          "spinbutton": 1,
+          "rowgroup": 1,
+          "row": 13,
+          "DisclosureTriangle": 1,
+          "option": 9,
+          "rowheader": 12,
+          "cell": 96,
+          "columnheader": 9,
+          "textbox": 48
+        },
+        "comparisonImages": []
+      },
+      {
+        "name": "Goals-100",
+        "roles": {
+          "RootWebArea": 1,
+          "generic": 56,
+          "banner": 1,
+          "main": 1,
+          "StaticText": 204,
+          "navigation": 2,
+          "button": 27,
+          "link": 1,
+          "sectionheader": 1,
+          "paragraph": 7,
+          "LabelText": 27,
+          "heading": 8,
+          "sectionfooter": 1,
+          "InlineTextBox": 218,
+          "combobox": 4,
+          "strong": 16,
+          "image": 7,
+          "group": 2,
+          "MenuListPopup": 4,
+          "spinbutton": 41,
+          "Date": 10,
+          "Legend": 1,
+          "DisclosureTriangle": 1,
+          "option": 15,
+          "radio": 2
+        },
+        "comparisonImages": [
+          {
+            "role": "image",
+            "name": "Owner pay: Estimated $0; Goal $15,000; Practice benchmark not available; Real capacity limit not available.",
+            "properties": []
+          },
+          {
+            "role": "image",
+            "name": "Co-owner pay: Estimated $8,000; Goal $8,000; Practice benchmark not available; Real capacity limit not available.",
+            "properties": []
+          },
+          {
+            "role": "image",
+            "name": "Business Profit: Estimated -$21,732; Goal $20,000; Practice benchmark not available; Real capacity limit not available.",
+            "properties": []
+          },
+          {
+            "role": "image",
+            "name": "Desired Clinicians: Estimated 2; Goal 10; Practice benchmark not available; Real capacity limit not available.",
+            "properties": []
+          },
+          {
+            "role": "image",
+            "name": "Building Fund balance: Recorded $100; Goal $50,000; Practice benchmark not available; Real capacity limit not available.",
+            "properties": []
+          },
+          {
+            "role": "image",
+            "name": "Emergency Reserve balance: Assumed $0; Goal $20,000; Practice benchmark not available; Real capacity limit not available.",
+            "properties": []
+          },
+          {
+            "role": "image",
+            "name": "Growth Fund balance: Assumed $0; Goal $30,000; Practice benchmark not available; Real capacity limit not available.",
+            "properties": []
+          }
+        ]
+      },
+      {
+        "name": "discard-confirmation",
+        "roles": {
+          "RootWebArea": 1,
+          "generic": 2,
+          "dialog": 1,
+          "main": 1,
+          "heading": 1,
+          "paragraph": 1,
+          "button": 3,
+          "sectionfooter": 1,
+          "StaticText": 7,
+          "group": 1,
+          "InlineTextBox": 7,
+          "DisclosureTriangle": 1
+        },
+        "comparisonImages": []
+      },
+      {
+        "name": "goal-comparison-values",
+        "roles": {
+          "RootWebArea": 1,
+          "generic": 56,
+          "banner": 1,
+          "main": 1,
+          "StaticText": 204,
+          "navigation": 2,
+          "button": 27,
+          "link": 1,
+          "sectionheader": 1,
+          "paragraph": 7,
+          "LabelText": 27,
+          "heading": 8,
+          "sectionfooter": 1,
+          "InlineTextBox": 218,
+          "combobox": 4,
+          "strong": 16,
+          "image": 7,
+          "group": 2,
+          "MenuListPopup": 4,
+          "spinbutton": 41,
+          "Date": 10,
+          "Legend": 1,
+          "DisclosureTriangle": 1,
+          "option": 15,
+          "radio": 2
+        },
+        "comparisonImages": [
+          {
+            "role": "image",
+            "name": "Owner pay: Estimated $0; Goal $15,000; Practice benchmark not available; Real capacity limit not available.",
+            "properties": []
+          },
+          {
+            "role": "image",
+            "name": "Co-owner pay: Estimated $8,000; Goal $8,000; Practice benchmark not available; Real capacity limit not available.",
+            "properties": []
+          },
+          {
+            "role": "image",
+            "name": "Business Profit: Estimated -$21,732; Goal $20,000; Practice benchmark not available; Real capacity limit not available.",
+            "properties": []
+          },
+          {
+            "role": "image",
+            "name": "Desired Clinicians: Estimated 2; Goal 10; Practice benchmark not available; Real capacity limit not available.",
+            "properties": []
+          },
+          {
+            "role": "image",
+            "name": "Building Fund balance: Recorded $100; Goal $50,000; Practice benchmark not available; Real capacity limit not available.",
+            "properties": []
+          },
+          {
+            "role": "image",
+            "name": "Emergency Reserve balance: Assumed $0; Goal $20,000; Practice benchmark not available; Real capacity limit not available.",
+            "properties": []
+          },
+          {
+            "role": "image",
+            "name": "Growth Fund balance: Assumed $0; Goal $30,000; Practice benchmark not available; Real capacity limit not available.",
+            "properties": []
+          }
+        ]
+      },
+      {
+        "name": "known-consultation-comparison",
+        "roles": {
+          "RootWebArea": 1,
+          "generic": 23,
+          "banner": 1,
+          "main": 1,
+          "StaticText": 142,
+          "navigation": 2,
+          "button": 24,
+          "link": 1,
+          "sectionheader": 1,
+          "LabelText": 1,
+          "group": 10,
+          "sectionfooter": 1,
+          "InlineTextBox": 146,
+          "heading": 6,
+          "combobox": 1,
+          "DisclosureTriangle": 7,
+          "paragraph": 12,
+          "region": 4,
+          "strong": 12,
+          "image": 4,
+          "MenuListPopup": 1,
+          "figure": 1,
+          "option": 9,
+          "Figcaption": 1,
+          "application": 1,
+          "list": 1,
+          "listitem": 2
+        },
+        "comparisonImages": [
+          {
+            "role": "image",
+            "name": "Consultation close rate: Observed 50%; Goal not available; Practice benchmark not available; Real capacity limit not available.",
+            "properties": []
+          }
+        ]
+      },
+      {
+        "name": "numeric-validation",
+        "roles": {
+          "RootWebArea": 1,
+          "generic": 23,
+          "banner": 1,
+          "main": 1,
+          "StaticText": 126,
+          "navigation": 3,
+          "button": 27,
+          "link": 1,
+          "sectionheader": 3,
+          "paragraph": 4,
+          "LabelText": 4,
+          "heading": 5,
+          "combobox": 4,
+          "article": 2,
+          "region": 1,
+          "sectionfooter": 2,
+          "InlineTextBox": 129,
+          "group": 5,
+          "MenuListPopup": 4,
+          "strong": 8,
+          "figure": 4,
+          "option": 17,
+          "checkbox": 2,
+          "Figcaption": 4,
+          "image": 4,
+          "DisclosureTriangle": 4,
+          "spinbutton": 3,
+          "alert": 1,
+          "DescriptionList": 1,
+          "term": 2,
+          "definition": 2
+        },
+        "comparisonImages": []
+      },
+      {
+        "name": "Overview-native-1",
+        "roles": {
+          "RootWebArea": 1,
+          "generic": 17,
+          "banner": 1,
+          "main": 1,
+          "StaticText": 200,
+          "navigation": 3,
+          "button": 25,
+          "link": 1,
+          "sectionheader": 1,
+          "group": 12,
+          "paragraph": 16,
+          "LabelText": 3,
+          "heading": 10,
+          "region": 8,
+          "sectionfooter": 1,
+          "InlineTextBox": 210,
+          "DisclosureTriangle": 11,
+          "combobox": 3,
+          "strong": 23,
+          "image": 1,
+          "MenuListPopup": 3,
+          "option": 23
+        },
+        "comparisonImages": []
+      },
+      {
+        "name": "Sessions-native-1",
+        "roles": {
+          "RootWebArea": 1,
+          "generic": 23,
+          "banner": 1,
+          "main": 1,
+          "StaticText": 145,
+          "navigation": 2,
+          "button": 24,
+          "link": 1,
+          "sectionheader": 1,
+          "LabelText": 1,
+          "group": 10,
+          "sectionfooter": 1,
+          "InlineTextBox": 149,
+          "heading": 6,
+          "combobox": 1,
+          "DisclosureTriangle": 7,
+          "paragraph": 13,
+          "region": 4,
+          "strong": 12,
+          "image": 4,
+          "MenuListPopup": 1,
+          "figure": 1,
+          "option": 9,
+          "Figcaption": 1,
+          "application": 1,
+          "list": 1,
+          "listitem": 2
+        },
+        "comparisonImages": [
+          {
+            "role": "image",
+            "name": "Consultation close rate: Observed not available; Goal not available; Practice benchmark not available; Real capacity limit not available.",
+            "properties": []
+          }
+        ]
+      },
+      {
+        "name": "Team-native-1",
+        "roles": {
+          "RootWebArea": 1,
+          "generic": 18,
+          "banner": 1,
+          "main": 1,
+          "StaticText": 104,
+          "navigation": 3,
+          "button": 26,
+          "link": 1,
+          "sectionheader": 3,
+          "paragraph": 4,
+          "LabelText": 1,
+          "heading": 5,
+          "combobox": 4,
+          "article": 2,
+          "region": 1,
+          "sectionfooter": 1,
+          "InlineTextBox": 107,
+          "group": 4,
+          "MenuListPopup": 4,
+          "strong": 7,
+          "figure": 4,
+          "option": 17,
+          "checkbox": 2,
+          "Figcaption": 4,
+          "image": 4,
+          "DisclosureTriangle": 3
+        },
+        "comparisonImages": []
+      },
+      {
+        "name": "Money-native-1",
+        "roles": {
+          "RootWebArea": 1,
+          "generic": 14,
+          "banner": 1,
+          "main": 1,
+          "StaticText": 109,
+          "navigation": 2,
+          "button": 14,
+          "link": 1,
+          "sectionheader": 2,
+          "group": 7,
+          "paragraph": 4,
+          "LabelText": 3,
+          "region": 1,
+          "sectionfooter": 1,
+          "InlineTextBox": 111,
+          "heading": 2,
+          "DisclosureTriangle": 6,
+          "combobox": 1,
+          "strong": 7,
+          "status": 1,
+          "table": 1,
+          "MenuListPopup": 1,
+          "LineBreak": 1,
+          "caption": 1,
+          "rowgroup": 1,
+          "row": 8,
+          "Legend": 1,
+          "option": 9,
+          "rowheader": 7,
+          "cell": 35,
+          "spinbutton": 9,
+          "columnheader": 6
+        },
+        "comparisonImages": []
+      },
+      {
+        "name": "Growth-native-1",
+        "roles": {
+          "RootWebArea": 1,
+          "generic": 55,
+          "banner": 1,
+          "main": 1,
+          "StaticText": 126,
+          "navigation": 3,
+          "button": 33,
+          "link": 1,
+          "sectionheader": 1,
+          "heading": 4,
+          "paragraph": 5,
+          "LabelText": 2,
+          "region": 1,
+          "sectionfooter": 1,
+          "InlineTextBox": 127,
+          "combobox": 1,
+          "strong": 4,
+          "group": 2,
+          "table": 1,
+          "MenuListPopup": 1,
+          "spinbutton": 1,
+          "rowgroup": 1,
+          "row": 13,
+          "DisclosureTriangle": 1,
+          "option": 9,
+          "rowheader": 12,
+          "cell": 96,
+          "columnheader": 9,
+          "textbox": 48
+        },
+        "comparisonImages": []
+      },
+      {
+        "name": "Goals-native-1",
+        "roles": {
+          "RootWebArea": 1,
+          "generic": 56,
+          "banner": 1,
+          "main": 1,
+          "StaticText": 204,
+          "navigation": 2,
+          "button": 27,
+          "link": 1,
+          "sectionheader": 1,
+          "paragraph": 7,
+          "LabelText": 27,
+          "heading": 8,
+          "sectionfooter": 1,
+          "InlineTextBox": 218,
+          "combobox": 4,
+          "strong": 16,
+          "image": 7,
+          "group": 2,
+          "MenuListPopup": 4,
+          "spinbutton": 41,
+          "Date": 10,
+          "Legend": 1,
+          "DisclosureTriangle": 1,
+          "option": 15,
+          "radio": 2
+        },
+        "comparisonImages": [
+          {
+            "role": "image",
+            "name": "Owner pay: Estimated $0; Goal $15,000; Practice benchmark not available; Real capacity limit not available.",
+            "properties": []
+          },
+          {
+            "role": "image",
+            "name": "Co-owner pay: Estimated $8,000; Goal $8,000; Practice benchmark not available; Real capacity limit not available.",
+            "properties": []
+          },
+          {
+            "role": "image",
+            "name": "Business Profit: Estimated -$21,732; Goal $20,000; Practice benchmark not available; Real capacity limit not available.",
+            "properties": []
+          },
+          {
+            "role": "image",
+            "name": "Desired Clinicians: Estimated 2; Goal 10; Practice benchmark not available; Real capacity limit not available.",
+            "properties": []
+          },
+          {
+            "role": "image",
+            "name": "Building Fund balance: Recorded $100; Goal $50,000; Practice benchmark not available; Real capacity limit not available.",
+            "properties": []
+          },
+          {
+            "role": "image",
+            "name": "Emergency Reserve balance: Assumed $0; Goal $20,000; Practice benchmark not available; Real capacity limit not available.",
+            "properties": []
+          },
+          {
+            "role": "image",
+            "name": "Growth Fund balance: Assumed $0; Goal $30,000; Practice benchmark not available; Real capacity limit not available.",
+            "properties": []
+          }
+        ]
+      },
+      {
+        "name": "Overview-native-2",
+        "roles": {
+          "RootWebArea": 1,
+          "generic": 16,
+          "banner": 1,
+          "main": 1,
+          "StaticText": 193,
+          "button": 26,
+          "navigation": 3,
+          "link": 1,
+          "sectionheader": 1,
+          "group": 12,
+          "paragraph": 16,
+          "LabelText": 3,
+          "heading": 10,
+          "region": 8,
+          "sectionfooter": 1,
+          "InlineTextBox": 198,
+          "DisclosureTriangle": 11,
+          "combobox": 3,
+          "strong": 23,
+          "image": 1,
+          "MenuListPopup": 3,
+          "option": 23
+        },
+        "comparisonImages": []
+      },
+      {
+        "name": "Sessions-native-2",
+        "roles": {
+          "RootWebArea": 1,
+          "generic": 23,
+          "banner": 1,
+          "main": 1,
+          "StaticText": 139,
+          "button": 25,
+          "navigation": 2,
+          "link": 1,
+          "sectionheader": 1,
+          "LabelText": 1,
+          "group": 10,
+          "sectionfooter": 1,
+          "InlineTextBox": 148,
+          "heading": 6,
+          "combobox": 1,
+          "DisclosureTriangle": 7,
+          "paragraph": 13,
+          "region": 4,
+          "strong": 12,
+          "image": 4,
+          "MenuListPopup": 1,
+          "figure": 1,
+          "option": 9,
+          "Figcaption": 1,
+          "application": 1,
+          "list": 1,
+          "listitem": 2
+        },
+        "comparisonImages": [
+          {
+            "role": "image",
+            "name": "Consultation close rate: Observed not available; Goal not available; Practice benchmark not available; Real capacity limit not available.",
+            "properties": []
+          }
+        ]
+      },
+      {
+        "name": "Team-native-2",
+        "roles": {
+          "RootWebArea": 1,
+          "generic": 17,
+          "banner": 1,
+          "main": 1,
+          "StaticText": 97,
+          "button": 27,
+          "navigation": 3,
+          "link": 1,
+          "sectionheader": 3,
+          "paragraph": 4,
+          "LabelText": 1,
+          "heading": 5,
+          "combobox": 4,
+          "article": 2,
+          "region": 1,
+          "sectionfooter": 1,
+          "InlineTextBox": 102,
+          "group": 4,
+          "MenuListPopup": 4,
+          "strong": 7,
+          "figure": 4,
+          "option": 17,
+          "checkbox": 2,
+          "Figcaption": 4,
+          "image": 4,
+          "DisclosureTriangle": 3
+        },
+        "comparisonImages": []
+      },
+      {
+        "name": "Money-native-2",
+        "roles": {
+          "RootWebArea": 1,
+          "generic": 13,
+          "banner": 1,
+          "main": 1,
+          "StaticText": 102,
+          "button": 15,
+          "navigation": 2,
+          "link": 1,
+          "sectionheader": 2,
+          "group": 7,
+          "paragraph": 4,
+          "LabelText": 3,
+          "region": 1,
+          "sectionfooter": 1,
+          "InlineTextBox": 110,
+          "heading": 2,
+          "DisclosureTriangle": 6,
+          "combobox": 1,
+          "strong": 7,
+          "status": 1,
+          "table": 1,
+          "MenuListPopup": 1,
+          "LineBreak": 1,
+          "caption": 1,
+          "rowgroup": 1,
+          "row": 8,
+          "Legend": 1,
+          "option": 9,
+          "rowheader": 7,
+          "cell": 35,
+          "spinbutton": 9,
+          "columnheader": 6
+        },
+        "comparisonImages": []
+      },
+      {
+        "name": "Growth-native-2",
+        "roles": {
+          "RootWebArea": 1,
+          "generic": 55,
+          "banner": 1,
+          "main": 1,
+          "StaticText": 119,
+          "button": 34,
+          "navigation": 3,
+          "link": 1,
+          "sectionheader": 1,
+          "heading": 4,
+          "paragraph": 5,
+          "LabelText": 2,
+          "region": 1,
+          "sectionfooter": 1,
+          "InlineTextBox": 121,
+          "combobox": 1,
+          "strong": 4,
+          "group": 2,
+          "MenuListPopup": 1,
+          "spinbutton": 1,
+          "table": 1,
+          "DisclosureTriangle": 1,
+          "option": 9,
+          "rowgroup": 1,
+          "row": 13,
+          "rowheader": 12,
+          "cell": 96,
+          "columnheader": 9,
+          "textbox": 48
+        },
+        "comparisonImages": []
+      },
+      {
+        "name": "Goals-native-2",
+        "roles": {
+          "RootWebArea": 1,
+          "generic": 55,
+          "banner": 1,
+          "main": 1,
+          "StaticText": 197,
+          "button": 28,
+          "navigation": 2,
+          "link": 1,
+          "sectionheader": 1,
+          "paragraph": 7,
+          "LabelText": 27,
+          "heading": 8,
+          "sectionfooter": 1,
+          "InlineTextBox": 208,
+          "combobox": 4,
+          "strong": 16,
+          "image": 7,
+          "group": 2,
+          "MenuListPopup": 4,
+          "spinbutton": 41,
+          "Date": 10,
+          "Legend": 1,
+          "DisclosureTriangle": 1,
+          "option": 15,
+          "radio": 2
+        },
+        "comparisonImages": [
+          {
+            "role": "image",
+            "name": "Owner pay: Estimated $0; Goal $15,000; Practice benchmark not available; Real capacity limit not available.",
+            "properties": []
+          },
+          {
+            "role": "image",
+            "name": "Co-owner pay: Estimated $8,000; Goal $8,000; Practice benchmark not available; Real capacity limit not available.",
+            "properties": []
+          },
+          {
+            "role": "image",
+            "name": "Business Profit: Estimated -$21,732; Goal $20,000; Practice benchmark not available; Real capacity limit not available.",
+            "properties": []
+          },
+          {
+            "role": "image",
+            "name": "Desired Clinicians: Estimated 2; Goal 10; Practice benchmark not available; Real capacity limit not available.",
+            "properties": []
+          },
+          {
+            "role": "image",
+            "name": "Building Fund balance: Recorded $100; Goal $50,000; Practice benchmark not available; Real capacity limit not available.",
+            "properties": []
+          },
+          {
+            "role": "image",
+            "name": "Emergency Reserve balance: Assumed $0; Goal $20,000; Practice benchmark not available; Real capacity limit not available.",
+            "properties": []
+          },
+          {
+            "role": "image",
+            "name": "Growth Fund balance: Assumed $0; Goal $30,000; Practice benchmark not available; Real capacity limit not available.",
+            "properties": []
+          }
+        ]
+      },
+      {
+        "name": "Overview-native-4",
+        "roles": {
+          "RootWebArea": 1,
+          "generic": 16,
+          "banner": 1,
+          "main": 1,
+          "StaticText": 193,
+          "button": 26,
+          "navigation": 3,
+          "link": 1,
+          "sectionheader": 1,
+          "group": 12,
+          "paragraph": 16,
+          "LabelText": 3,
+          "heading": 10,
+          "region": 8,
+          "sectionfooter": 1,
+          "InlineTextBox": 237,
+          "DisclosureTriangle": 11,
+          "combobox": 3,
+          "strong": 23,
+          "image": 1,
+          "MenuListPopup": 3,
+          "option": 23
+        },
+        "comparisonImages": []
+      },
+      {
+        "name": "Sessions-native-4",
+        "roles": {
+          "RootWebArea": 1,
+          "generic": 21,
+          "banner": 1,
+          "main": 1,
+          "StaticText": 137,
+          "button": 25,
+          "navigation": 2,
+          "link": 1,
+          "sectionheader": 1,
+          "LabelText": 1,
+          "group": 10,
+          "sectionfooter": 1,
+          "InlineTextBox": 184,
+          "heading": 6,
+          "combobox": 1,
+          "DisclosureTriangle": 7,
+          "paragraph": 13,
+          "region": 4,
+          "strong": 12,
+          "image": 4,
+          "MenuListPopup": 1,
+          "figure": 1,
+          "option": 9,
+          "Figcaption": 1,
+          "application": 1,
+          "list": 1,
+          "listitem": 2
+        },
+        "comparisonImages": [
+          {
+            "role": "image",
+            "name": "Consultation close rate: Observed not available; Goal not available; Practice benchmark not available; Real capacity limit not available.",
+            "properties": []
+          }
+        ]
+      },
+      {
+        "name": "Team-native-4",
+        "roles": {
+          "RootWebArea": 1,
+          "generic": 17,
+          "banner": 1,
+          "main": 1,
+          "StaticText": 97,
+          "button": 27,
+          "navigation": 3,
+          "link": 1,
+          "sectionheader": 3,
+          "paragraph": 4,
+          "LabelText": 1,
+          "heading": 5,
+          "combobox": 4,
+          "article": 2,
+          "region": 1,
+          "sectionfooter": 1,
+          "InlineTextBox": 129,
+          "group": 4,
+          "MenuListPopup": 4,
+          "strong": 7,
+          "figure": 4,
+          "option": 17,
+          "checkbox": 2,
+          "Figcaption": 4,
+          "image": 4,
+          "DisclosureTriangle": 3
+        },
+        "comparisonImages": []
+      },
+      {
+        "name": "Money-native-4",
+        "roles": {
+          "RootWebArea": 1,
+          "generic": 14,
+          "banner": 1,
+          "main": 1,
+          "StaticText": 102,
+          "button": 15,
+          "navigation": 2,
+          "link": 1,
+          "sectionheader": 2,
+          "group": 7,
+          "paragraph": 4,
+          "LabelText": 3,
+          "region": 1,
+          "sectionfooter": 1,
+          "InlineTextBox": 116,
+          "heading": 2,
+          "DisclosureTriangle": 6,
+          "combobox": 1,
+          "strong": 7,
+          "status": 1,
+          "MenuListPopup": 1,
+          "LineBreak": 1,
+          "table": 1,
+          "Legend": 1,
+          "option": 9,
+          "caption": 1,
+          "rowgroup": 1,
+          "row": 8,
+          "spinbutton": 9,
+          "rowheader": 7,
+          "cell": 35,
+          "columnheader": 6
+        },
+        "comparisonImages": []
+      },
+      {
+        "name": "Growth-native-4",
+        "roles": {
+          "RootWebArea": 1,
+          "generic": 55,
+          "banner": 1,
+          "main": 1,
+          "StaticText": 119,
+          "button": 34,
+          "navigation": 3,
+          "link": 1,
+          "sectionheader": 1,
+          "heading": 4,
+          "paragraph": 5,
+          "LabelText": 2,
+          "region": 1,
+          "sectionfooter": 1,
+          "InlineTextBox": 129,
+          "combobox": 1,
+          "strong": 4,
+          "group": 2,
+          "MenuListPopup": 1,
+          "spinbutton": 1,
+          "table": 1,
+          "DisclosureTriangle": 1,
+          "option": 9,
+          "rowgroup": 1,
+          "row": 13,
+          "rowheader": 12,
+          "cell": 96,
+          "columnheader": 9,
+          "textbox": 48
+        },
+        "comparisonImages": []
+      },
+      {
+        "name": "Goals-native-4",
+        "roles": {
+          "RootWebArea": 1,
+          "generic": 55,
+          "banner": 1,
+          "main": 1,
+          "StaticText": 197,
+          "button": 28,
+          "navigation": 2,
+          "link": 1,
+          "sectionheader": 1,
+          "paragraph": 7,
+          "LabelText": 27,
+          "heading": 8,
+          "sectionfooter": 1,
+          "InlineTextBox": 230,
+          "combobox": 4,
+          "strong": 16,
+          "image": 7,
+          "group": 2,
+          "MenuListPopup": 4,
+          "spinbutton": 41,
+          "Date": 10,
+          "Legend": 1,
+          "DisclosureTriangle": 1,
+          "option": 15,
+          "radio": 2
+        },
+        "comparisonImages": [
+          {
+            "role": "image",
+            "name": "Owner pay: Estimated $0; Goal $15,000; Practice benchmark not available; Real capacity limit not available.",
+            "properties": []
+          },
+          {
+            "role": "image",
+            "name": "Co-owner pay: Estimated $8,000; Goal $8,000; Practice benchmark not available; Real capacity limit not available.",
+            "properties": []
+          },
+          {
+            "role": "image",
+            "name": "Business Profit: Estimated -$21,732; Goal $20,000; Practice benchmark not available; Real capacity limit not available.",
+            "properties": []
+          },
+          {
+            "role": "image",
+            "name": "Desired Clinicians: Estimated 2; Goal 10; Practice benchmark not available; Real capacity limit not available.",
+            "properties": []
+          },
+          {
+            "role": "image",
+            "name": "Building Fund balance: Recorded $100; Goal $50,000; Practice benchmark not available; Real capacity limit not available.",
+            "properties": []
+          },
+          {
+            "role": "image",
+            "name": "Emergency Reserve balance: Assumed $0; Goal $20,000; Practice benchmark not available; Real capacity limit not available.",
+            "properties": []
+          },
+          {
+            "role": "image",
+            "name": "Growth Fund balance: Assumed $0; Goal $30,000; Practice benchmark not available; Real capacity limit not available.",
+            "properties": []
+          }
+        ]
+      }
+    ]
+  },
+  "sessionFocus": {
+    "rawReport": {
+      "path": "/tmp/practice-semantics-zoom-zDjfdA/results.json",
+      "sha256": "ea88d15481c1b0fded863eaa36f9009b9c4b4ff676f2f97babb4508b57328f71"
+    },
+    "provenance": {
+      "commit": "7ef3bd15881fd8a5c5898375ce39d51ba307685f",
+      "tree": "ef54e81c3b54ad83022c60febf91683b73dfc3b4",
+      "runtimeChanges": ""
+    },
+    "syntheticOnly": true,
+    "productionAccess": false,
+    "writes": 0,
+    "browserErrors": [],
+    "matrix": [
+      {
+        "name": "Session tabs: arrows, wrap, roving focus and paired panels at 100%",
+        "status": "PASS"
+      },
+      {
+        "name": "Clinician disclosures: unique targets, state and keyboard toggle at 100%",
+        "status": "PASS"
+      },
+      {
+        "name": "History editor focus and close return, including repeated activation at 100%",
+        "status": "PASS"
+      },
+      {
+        "name": "Entry toggle controls a stable root when open and closed at 100%",
+        "status": "PASS"
+      },
+      {
+        "name": "Single dirty guard preserves input and blocks tab, close and history at 100%",
+        "status": "PASS"
+      },
+      {
+        "name": "Bulk dirty guard preserves input and blocks tab, close and history at 100%",
+        "status": "PASS"
+      },
+      {
+        "name": "Session tabs: arrows, wrap, roving focus and paired panels at 200%",
+        "status": "PASS"
+      },
+      {
+        "name": "Clinician disclosures: unique targets, state and keyboard toggle at 200%",
+        "status": "PASS"
+      },
+      {
+        "name": "History editor focus and close return, including repeated activation at 200%",
+        "status": "PASS"
+      },
+      {
+        "name": "Entry toggle controls a stable root when open and closed at 200%",
+        "status": "PASS"
+      },
+      {
+        "name": "Single dirty guard preserves input and blocks tab, close and history at 200%",
+        "status": "PASS"
+      },
+      {
+        "name": "Bulk dirty guard preserves input and blocks tab, close and history at 200%",
+        "status": "PASS"
+      },
+      {
+        "name": "Session tabs: arrows, wrap, roving focus and paired panels at 400%",
+        "status": "PASS"
+      },
+      {
+        "name": "Clinician disclosures: unique targets, state and keyboard toggle at 400%",
+        "status": "PASS"
+      },
+      {
+        "name": "History editor focus and close return, including repeated activation at 400%",
+        "status": "PASS"
+      },
+      {
+        "name": "Entry toggle controls a stable root when open and closed at 400%",
+        "status": "PASS"
+      },
+      {
+        "name": "Single dirty guard preserves input and blocks tab, close and history at 400%",
+        "status": "PASS"
+      },
+      {
+        "name": "Bulk dirty guard preserves input and blocks tab, close and history at 400%",
+        "status": "PASS"
+      }
+    ],
+    "requestMethods": [
+      "GET"
+    ]
+  },
+  "recordEditor": {
+    "rawReport": {
+      "path": "/private/tmp/record-editor-focus-GFW5aX/results.json",
+      "sha256": "da6ecaaebdc6b81b298e47431d6220b4abdf00aab29ece847011c60885302263"
+    },
+    "sourceSha256": "cbaef4d49b69b7227d16ada9916e311c755960cd461808c31fb835e394c444bd",
+    "results": [
+      {
+        "name": "dirty confirmation",
+        "nativeZoom": 1,
+        "status": "pass",
+        "accessibleName": "Discard unsaved changes?",
+        "description": "Your changes have not been saved. Keep editing to continue, or discard them to close this record."
+      },
+      {
+        "name": "dirty confirmation",
+        "nativeZoom": 2,
+        "status": "pass",
+        "accessibleName": "Discard unsaved changes?",
+        "description": "Your changes have not been saved. Keep editing to continue, or discard them to close this record."
+      },
+      {
+        "name": "dirty confirmation",
+        "nativeZoom": 4,
+        "status": "pass",
+        "accessibleName": "Discard unsaved changes?",
+        "description": "Your changes have not been saved. Keep editing to continue, or discard them to close this record."
+      },
+      {
+        "name": "draft and save callback preservation",
+        "status": "pass"
+      },
+      {
+        "name": "correction callback preservation",
+        "status": "pass"
+      },
+      {
+        "name": "clean closure and no external requests",
+        "status": "pass"
+      }
+    ],
+    "runs": [
+      {
+        "name": "dirty decision rule confirmation and final opener restoration at native 100% zoom",
+        "status": "pass",
+        "stages": [
+          {
+            "message": "Create a fresh synthetic page and reset native zoom to 100%.",
+            "at": "2026-10-19T13:52:44.012Z"
+          },
+          {
+            "message": "Fresh page ready; callback spies and form state are isolated.",
+            "at": "2026-10-19T13:52:44.161Z"
+          },
+          {
+            "message": "Open New decision rule with the keyboard.",
+            "at": "2026-10-19T13:52:44.169Z"
+          },
+          {
+            "message": "Verify Keep editing receives focus, then resume editing.",
+            "at": "2026-10-19T13:52:44.306Z"
+          },
+          {
+            "message": "Verify Keep editing receives focus, then resume editing.",
+            "at": "2026-10-19T13:52:44.436Z"
+          }
+        ],
+        "stage": "Verify Keep editing receives focus, then resume editing.",
+        "finalState": {
+          "focus": "<button>New decision rule</button>",
+          "dialogs": [],
+          "invalid": [],
+          "errors": [],
+          "callbacks": {
+            "closes": 1,
+            "saves": []
+          },
+          "nativeZoom": 1
+        }
+      },
+      {
+        "name": "dirty decision rule confirmation and final opener restoration at native 200% zoom",
+        "status": "pass",
+        "stages": [
+          {
+            "message": "Create a fresh synthetic page and reset native zoom to 100%.",
+            "at": "2026-10-19T13:52:44.540Z"
+          },
+          {
+            "message": "Fresh page ready; callback spies and form state are isolated.",
+            "at": "2026-10-19T13:52:44.668Z"
+          },
+          {
+            "message": "Open New decision rule with the keyboard.",
+            "at": "2026-10-19T13:52:44.686Z"
+          },
+          {
+            "message": "Verify Keep editing receives focus, then resume editing.",
+            "at": "2026-10-19T13:52:44.807Z"
+          },
+          {
+            "message": "Verify Keep editing receives focus, then resume editing.",
+            "at": "2026-10-19T13:52:44.952Z"
+          }
+        ],
+        "stage": "Verify Keep editing receives focus, then resume editing.",
+        "finalState": {
+          "focus": "<button>New decision rule</button>",
+          "dialogs": [],
+          "invalid": [],
+          "errors": [],
+          "callbacks": {
+            "closes": 1,
+            "saves": []
+          },
+          "nativeZoom": 2
+        }
+      },
+      {
+        "name": "dirty decision rule confirmation and final opener restoration at native 400% zoom",
+        "status": "pass",
+        "stages": [
+          {
+            "message": "Create a fresh synthetic page and reset native zoom to 100%.",
+            "at": "2026-10-19T13:52:45.053Z"
+          },
+          {
+            "message": "Fresh page ready; callback spies and form state are isolated.",
+            "at": "2026-10-19T13:52:45.186Z"
+          },
+          {
+            "message": "Open New decision rule with the keyboard.",
+            "at": "2026-10-19T13:52:45.194Z"
+          },
+          {
+            "message": "Verify Keep editing receives focus, then resume editing.",
+            "at": "2026-10-19T13:52:45.311Z"
+          },
+          {
+            "message": "Verify Keep editing receives focus, then resume editing.",
+            "at": "2026-10-19T13:52:45.452Z"
+          }
+        ],
+        "stage": "Verify Keep editing receives focus, then resume editing.",
+        "finalState": {
+          "focus": "<button>New decision rule</button>",
+          "dialogs": [],
+          "invalid": [],
+          "errors": [],
+          "callbacks": {
+            "closes": 1,
+            "saves": []
+          },
+          "nativeZoom": 4
+        }
+      },
+      {
+        "name": "Keep editing preserves tags, open advanced fields, errors, and save callbacks",
+        "status": "pass",
+        "stages": [
+          {
+            "message": "Create a fresh synthetic page and reset native zoom to 100%.",
+            "at": "2026-10-19T13:52:45.558Z"
+          },
+          {
+            "message": "Fresh page ready; callback spies and form state are isolated.",
+            "at": "2026-10-19T13:52:45.684Z"
+          },
+          {
+            "message": "Open Edit category with the keyboard.",
+            "at": "2026-10-19T13:52:45.693Z"
+          },
+          {
+            "message": "Verify Keep editing receives focus, then resume editing.",
+            "at": "2026-10-19T13:52:46.015Z"
+          },
+          {
+            "message": "Verify Keep editing receives focus, then resume editing.",
+            "at": "2026-10-19T13:52:46.075Z"
+          }
+        ],
+        "stage": "Verify Keep editing receives focus, then resume editing.",
+        "finalState": {
+          "focus": "<button>Edit category</button>",
+          "dialogs": [],
+          "invalid": [],
+          "errors": [],
+          "callbacks": {
+            "closes": 1,
+            "saves": [
+              {
+                "record": {
+                  "id": "6f54a406-8e00-4364-a766-64651d3a2cbe",
+                  "name": "Synthetic category",
+                  "archived": false,
+                  "notes": "Synthetic retained advanced notes",
+                  "sourceAttachmentId": null,
+                  "parentId": null,
+                  "kind": "expense",
+                  "order": 0,
+                  "tags": [
+                    "synthetic",
+                    "later"
+                  ]
+                },
+                "corrections": {}
+              },
+              {
+                "record": {
+                  "id": "6f54a406-8e00-4364-a766-64651d3a2cbe",
+                  "name": "Synthetic category",
+                  "archived": false,
+                  "notes": "Synthetic retained advanced notes",
+                  "sourceAttachmentId": null,
+                  "parentId": null,
+                  "kind": "expense",
+                  "order": 0,
+                  "tags": [
+                    "synthetic",
+                    "later"
+                  ]
+                },
+                "corrections": {}
+              }
+            ]
+          },
+          "nativeZoom": 1
+        }
+      },
+      {
+        "name": "correction-only dirty edits restore the same correction field and preserve correction callbacks",
+        "status": "pass",
+        "stages": [
+          {
+            "message": "Create a fresh synthetic page and reset native zoom to 100%.",
+            "at": "2026-10-19T13:52:46.152Z"
+          },
+          {
+            "message": "Fresh page ready; callback spies and form state are isolated.",
+            "at": "2026-10-19T13:52:46.273Z"
+          },
+          {
+            "message": "Open Edit finalized period with the keyboard.",
+            "at": "2026-10-19T13:52:46.273Z"
+          },
+          {
+            "message": "Locate and fill the finalized-period correction field.",
+            "at": "2026-10-19T13:52:46.307Z"
+          },
+          {
+            "message": "Verify Keep editing receives focus, then resume editing.",
+            "at": "2026-10-19T13:52:46.320Z"
+          },
+          {
+            "message": "Verify correction-field focus, node identity, and retained text.",
+            "at": "2026-10-19T13:52:46.329Z"
+          },
+          {
+            "message": "Submit the correction-only change and wait for the dialog to close.",
+            "at": "2026-10-19T13:52:46.338Z"
+          },
+          {
+            "message": "Verify final opener focus and the correction callback payload.",
+            "at": "2026-10-19T13:52:46.540Z"
+          }
+        ],
+        "stage": "Verify final opener focus and the correction callback payload.",
+        "beforeSave": {
+          "focus": "<textarea required=\"\" minlength=\"8\">Synthetic corrected cost evidence</textarea>",
+          "dialogs": [
+            {
+              "title": "Reporting periods",
+              "text": "Reporting periodsEdit saved recordCorrection reason: Synthetic finalized periodSynthetic corrected cost evidenceNamePeriod startPeriod endPractice collections ($)OptionalEarned revenue for services in this period ($)OptionalClinician compensation ($)OptionalEmployer burden ($)OptionalSupport staff payroll ($)OptionalOwner payroll ($)OptionalOwner clinical pay, included in clinician pay ($)OptionalOwner distributions ($)OptionalElia owner distributions, pre-tax actual ($)OptionalErin fixed salary, gross actual ($)OptionalTaxes allocated / paid ($)OptionalTransferred to reserves ($)OptionalClosing available cash ($)OptionalAll expense lines have been reviewedLead-generation figures have been reviewedAdditional settingsNotesOptionalUnsaved changesSaveClose"
+            }
+          ],
+          "invalid": [],
+          "errors": [],
+          "callbacks": {
+            "closes": 0,
+            "saves": []
+          },
+          "nativeZoom": 1
+        },
+        "afterSave": {
+          "focus": "<body style=\"\"><div id=\"root\"><button>New decision rule</button><button>Edit category</button><button>Edit finalized period</button></div><script type=\"module\" src=\"/bundle.js\"></script></body>",
+          "dialogs": [],
+          "invalid": [],
+          "errors": [],
+          "callbacks": {
+            "closes": 1,
+            "saves": [
+              {
+                "record": {
+                  "id": "a9b6d4cf-8868-4a8b-873d-0b3b927180c9",
+                  "name": "Synthetic finalized period",
+                  "archived": false,
+                  "notes": "",
+                  "sourceAttachmentId": null,
+                  "start": "2026-10-01",
+                  "end": "2026-10-31",
+                  "status": "finalized",
+                  "revenue": null,
+                  "earnedRevenue": null,
+                  "clinicianPay": null,
+                  "employerBurden": null,
+                  "staffPay": null,
+                  "ownerPay": null,
+                  "ownerClinicalPay": null,
+                  "ownerDistributionsPretax": null,
+                  "coOwnerSalaryPretax": null,
+                  "distributions": null,
+                  "taxes": null,
+                  "reserves": null,
+                  "closingCash": null,
+                  "expensesComplete": false,
+                  "funnelComplete": false,
+                  "finalizedAt": null,
+                  "correctionReason": "Synthetic original correction"
+                },
+                "corrections": {
+                  "a9b6d4cf-8868-4a8b-873d-0b3b927180c9": "Synthetic corrected cost evidence"
+                }
+              }
+            ]
+          },
+          "nativeZoom": 1
+        },
+        "finalState": {
+          "focus": "<button>Edit finalized period</button>",
+          "dialogs": [],
+          "invalid": [],
+          "errors": [],
+          "callbacks": {
+            "closes": 1,
+            "saves": [
+              {
+                "record": {
+                  "id": "a9b6d4cf-8868-4a8b-873d-0b3b927180c9",
+                  "name": "Synthetic finalized period",
+                  "archived": false,
+                  "notes": "",
+                  "sourceAttachmentId": null,
+                  "start": "2026-10-01",
+                  "end": "2026-10-31",
+                  "status": "finalized",
+                  "revenue": null,
+                  "earnedRevenue": null,
+                  "clinicianPay": null,
+                  "employerBurden": null,
+                  "staffPay": null,
+                  "ownerPay": null,
+                  "ownerClinicalPay": null,
+                  "ownerDistributionsPretax": null,
+                  "coOwnerSalaryPretax": null,
+                  "distributions": null,
+                  "taxes": null,
+                  "reserves": null,
+                  "closingCash": null,
+                  "expensesComplete": false,
+                  "funnelComplete": false,
+                  "finalizedAt": null,
+                  "correctionReason": "Synthetic original correction"
+                },
+                "corrections": {
+                  "a9b6d4cf-8868-4a8b-873d-0b3b927180c9": "Synthetic corrected cost evidence"
+                }
+              }
+            ]
+          },
+          "nativeZoom": 1
+        }
+      },
+      {
+        "name": "clean Escape and close control restore the opener without a save or confirmation",
+        "status": "pass",
+        "stages": [
+          {
+            "message": "Create a fresh synthetic page and reset native zoom to 100%.",
+            "at": "2026-10-19T13:52:46.587Z"
+          },
+          {
+            "message": "Fresh page ready; callback spies and form state are isolated.",
+            "at": "2026-10-19T13:52:46.716Z"
+          },
+          {
+            "message": "Open Edit category with the keyboard.",
+            "at": "2026-10-19T13:52:46.716Z"
+          },
+          {
+            "message": "Open Edit category with the keyboard.",
+            "at": "2026-10-19T13:52:46.749Z"
+          }
+        ],
+        "stage": "Open Edit category with the keyboard.",
+        "finalState": {
+          "focus": "<button>Edit category</button>",
+          "dialogs": [],
+          "invalid": [],
+          "errors": [],
+          "callbacks": {
+            "closes": 1,
+            "saves": []
+          },
+          "nativeZoom": 1
+        }
+      }
+    ],
+    "browserErrors": [],
+    "actualScreenReader": false,
+    "syntheticOnly": true,
+    "productionAccess": false
+  },
+  "existingKeyboardRegression": {
+    "rawReport": {
+      "path": "/tmp/financial-completeness-render-27OSlU/results.json",
+      "sha256": "c856b98f747cf3e822c3d628e21ff5e5d14dd953593260f43a38b0317057646f"
+    },
+    "provenance": {
+      "commit": "7281059e2d1fd970a8be812ff69f5ff3bfda48c3",
+      "tree": "4df56431d15bbe918d314bfb8b4fce3937d247a7"
+    },
+    "syntheticOnly": true,
+    "productionAccess": false,
+    "writes": 0,
+    "browserErrors": [],
+    "matrix": [
+      {
+        "name": "Keyboard Today navigation and visible focus",
+        "status": "PASS"
+      },
+      {
+        "name": "Reports modal Tab trap, reverse Tab, Escape and opener focus",
+        "status": "PASS"
+      },
+      {
+        "name": "Move data modal keyboard/Escape/opener focus",
+        "status": "PASS"
+      },
+      {
+        "name": "Record editor dirty Escape keeps or explicitly discards draft",
+        "status": "PASS"
+      },
+      {
+        "name": "Focused Goal Escape restores value without saving",
+        "status": "PASS"
+      },
+      {
+        "name": "Reload while Goal text remains focused warns and can be cancelled",
+        "status": "PASS"
+      },
+      {
+        "name": "Staged Goal survives section/date changes and blocks workspace switch",
+        "status": "PASS"
+      },
+      {
+        "name": "Bulk lead draft blocks destructive section change and year filter",
+        "status": "PASS"
+      },
+      {
+        "name": "Unsaved month-entry values survive cancelled month-filter change",
+        "status": "PASS"
+      },
+      {
+        "name": "Unblurred saved lead count and source text warn before reload",
+        "status": "PASS"
+      },
+      {
+        "name": "Dialog focus contract autofocus",
+        "status": "PASS"
+      },
+      {
+        "name": "Dialog focus contract veto",
+        "status": "PASS"
+      },
+      {
+        "name": "Dialog focus contract explicit",
+        "status": "PASS"
+      },
+      {
+        "name": "Dialog focus contract uncontrolled",
+        "status": "PASS"
+      },
+      {
+        "name": "desktop Overview reflow",
+        "status": "PASS"
+      },
+      {
+        "name": "desktop Goals reflow",
+        "status": "PASS"
+      },
+      {
+        "name": "desktop Money reflow",
+        "status": "PASS"
+      },
+      {
+        "name": "desktop Growth reflow",
+        "status": "PASS"
+      },
+      {
+        "name": "desktop Reports modal reflow",
+        "status": "PASS"
+      },
+      {
+        "name": "desktop pending review keyboard reachability",
+        "status": "PASS"
+      },
+      {
+        "name": "narrow390 Overview reflow",
+        "status": "PASS"
+      },
+      {
+        "name": "narrow390 Goals reflow",
+        "status": "PASS"
+      },
+      {
+        "name": "narrow390 Money reflow",
+        "status": "PASS"
+      },
+      {
+        "name": "narrow390 Growth reflow",
+        "status": "PASS"
+      },
+      {
+        "name": "narrow390 Reports modal reflow",
+        "status": "PASS"
+      },
+      {
+        "name": "narrow390 pending review keyboard reachability",
+        "status": "PASS"
+      },
+      {
+        "name": "narrow320 Overview reflow",
+        "status": "PASS"
+      },
+      {
+        "name": "narrow320 Goals reflow",
+        "status": "PASS"
+      },
+      {
+        "name": "narrow320 Money reflow",
+        "status": "PASS"
+      },
+      {
+        "name": "narrow320 Growth reflow",
+        "status": "PASS"
+      },
+      {
+        "name": "narrow320 Reports modal reflow",
+        "status": "PASS"
+      },
+      {
+        "name": "narrow320 pending review keyboard reachability",
+        "status": "PASS"
+      }
+    ],
+    "transport": "loopback intercepted fixture GETs; actual components; no database",
+    "requestMethods": null
+  },
+  "deployment": {
+    "performed": false,
+    "pushed": false,
+    "productionWrites": 0
+  },
+  "limits": [
+    "Synthetic fixtures only; no business numbers certified.",
+    "Native zoom uses Chrome Page Zoom in an owned profile; no VoiceOver or other actual screen-reader session.",
+    "Pixel diversity rejects blank captures; visual review is separately documented and is not exhaustive.",
+    "Actual idle crash/restart and separate-database restore have not run; only reviewed tooling and fake safety tests pass.",
+    "No production release, real saves, imports, restores, access grants, host settings, or new spending."
+  ]
+}
