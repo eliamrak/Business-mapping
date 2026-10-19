@@ -1,5 +1,7 @@
 # Business Hub Build Status
 
+Current task status is maintained in [Practice Repair and Update Register](verification/PRACTICE-REPAIR-UPDATE-REGISTER.md). This document is the historical September 20 implementation/roadmap checkpoint; its unreleased/table-count statements and test totals are not current production facts or new repair requirements. Later published decisions, estimate-only financial scope and acceptance evidence supersede those historical statuses.
+
 Checkpoint: 2026-09-20. Working local implementation in all eight areas.
 This is a development preview, not a production release or a claim that every
 advanced item in EXPANSION_PLAN.md is finished.

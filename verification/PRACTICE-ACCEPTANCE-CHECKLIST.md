@@ -1,5 +1,9 @@
 # Practice Acceptance Checklist
 
+## Current Task Register
+
+Use [Practice Repair and Update Register](PRACTICE-REPAIR-UPDATE-REGISTER.md) for the maintained October 19 repair/release/acceptance queue, recovered call decisions 1-11, explicit dependencies and later-phase boundaries. The dated entries below remain historical evidence; completed publications and native acceptance supersede their earlier unchecked boxes. Financial estimates do not require cash tracking or exact payroll reconciliation. The publisher owns the isolated recovery run of frozen `6227adc`; no competing session should be started.
+
 ## October 19 Native PostgreSQL Closure
 
 The historical unchecked native-database items below are superseded for these covered paths by fresh native execution on release `f9a9bb9`, using reviewed test tooling `1d25b28`. Other untested live, provider and accessibility boundaries remain unchanged. See `NATIVE-POSTGRES-ACCEPTANCE.md` and `native-postgres-results.json`.
