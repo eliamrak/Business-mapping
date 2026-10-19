@@ -2,7 +2,7 @@
 
 ## Current Task Register
 
-Use [Practice Repair and Update Register](PRACTICE-REPAIR-UPDATE-REGISTER.md) for the maintained October 19 repair/release/acceptance queue, recovered call decisions 1-11, explicit dependencies and later-phase boundaries. The dated entries below remain historical evidence; completed publications and native acceptance supersede their earlier unchecked boxes. Financial estimates do not require cash tracking or exact payroll reconciliation. The publisher owns the isolated recovery run of frozen `6227adc`; no competing session should be started.
+Use [Practice Repair and Update Register](PRACTICE-REPAIR-UPDATE-REGISTER.md) for the maintained October 19 repair/release/acceptance queue, recovered call decisions 1-11, explicit dependencies and later-phase boundaries. The dated entries below remain historical evidence; completed publications and native acceptance supersede their earlier unchecked boxes. Financial estimates do not require cash tracking or exact payroll reconciliation. Publisher's bounded idle-commit recovery and separate synthetic restore on frozen `6227adc` now pass; its initial dependency setup failure is separately retained. That does not certify power loss, in-flight/load recovery, production restore or actual AT speech. Later Money input/disclosure fixes remain local and unreleased with their own fresh checks.
 
 ## October 19 Native PostgreSQL Closure
 

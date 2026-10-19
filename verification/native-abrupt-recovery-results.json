@@ -1,0 +1,280 @@
+{
+  "kind": "Connector-reported compact extraction plus read-only retained-file comparisons; not the original report bytes",
+  "result": "pass",
+  "source": "Existing authorized Replit environment, app 598acfa5-d138-4827-a862-065182711db4",
+  "attempts": {
+    "failedSetup": 1,
+    "corrected": 1,
+    "overlapping": false
+  },
+  "preparationCorrection": "Only added the disposable lib/api-zod/node_modules symlink to the existing app package dependency directory; zod 3.25.76 already installed",
+  "noSourceChanges": true,
+  "noPackageInstall": true,
+  "noProductionOperations": true,
+  "noPublication": true,
+  "evidence": {
+    "status": "pass",
+    "statusBeforeCleanup": "pass",
+    "phase": "reviewed restore into separate fresh owned database",
+    "startedAt": "2026-10-19T14:23:18.708Z",
+    "finishedAt": "2026-10-19T14:23:39.621Z",
+    "checks": [
+      "Fresh owned loopback native cluster initialized and its identity verified.",
+      "Two acknowledged hub revisions, dated staff terms, attachment bytes, session corrections, full audit rows, and actual 17-table backup match committed SQL.",
+      "Owned API exited by SIGKILL; owned PostgreSQL stopped immediately and restarted in the same data directory; all API and SQL state is unchanged.",
+      "Reviewed preview/digest/confirmation restore into a separate freshly created database reproduces every exported row and complete audit state; source database is unchanged."
+    ],
+    "processExits": [
+      {
+        "name": "source-api",
+        "pid": 1271,
+        "code": null,
+        "signal": "SIGKILL",
+        "requestedSignal": "SIGKILL"
+      },
+      {
+        "name": "restarted-api",
+        "pid": 1300,
+        "code": null,
+        "signal": "SIGTERM",
+        "requestedSignal": "SIGTERM"
+      },
+      {
+        "name": "restore-api",
+        "pid": 1317,
+        "code": null,
+        "signal": "SIGTERM",
+        "requestedSignal": "SIGTERM"
+      }
+    ],
+    "idleBoundary": {
+      "verifiedAt": "2026-10-19T14:23:33.748Z",
+      "activeOtherTransactions": 0,
+      "revision": 2
+    },
+    "backup": {
+      "file": "backup.json",
+      "sha256": "97bbbea2d40a91aaf982f6460a10e0b5309a2c3b0e5bd7c95df290e31002a676",
+      "counts": {
+        "business_goals": 1,
+        "clinicians": 1,
+        "current_reality": 0,
+        "hub_attachments": 1,
+        "hub_history": 2,
+        "hub_workspaces": 1,
+        "practice_import_audit": 0,
+        "practice_import_declarations": 0,
+        "practice_import_packages": 0,
+        "practice_import_snapshots": 0,
+        "scenario_clinicians": 0,
+        "scenario_staff_members": 0,
+        "scenarios": 0,
+        "session_goal_years": 0,
+        "session_record_history": 2,
+        "session_records": 1,
+        "staff_members": 1
+      }
+    },
+    "apiBundleSha256": "910bcd1959c10535f70309a4929f7b89efa73474127e7b1b31b70f3d255fc6d1",
+    "schemaSha256": "51cccc8ba873789db2520159c521898b6e1eeed243d81088215ec85e9b4ad858",
+    "cleanupErrors": [],
+    "source": {
+      "commit": "6227adc15b7f80ab1df11ed54eb631183cba8277",
+      "tree": "5be67166166beb5473ebdf4a06e751381f55ea56",
+      "trackedStatus": ""
+    },
+    "postgres": {
+      "binaryVersion": "postgres (PostgreSQL) 16.10",
+      "server": {
+        "version": "PostgreSQL 16.10 on x86_64-pc-linux-gnu, compiled by clang version 19.1.7, 64-bit",
+        "data_directory": "/tmp/practice-native-abrupt-kwPVHq/cluster/data",
+        "port": "43561",
+        "listen_addresses": "127.0.0.1",
+        "unix_socket_directories": "/tmp/practice-native-abrupt-kwPVHq/cluster/socket",
+        "shared_memory_type": "mmap",
+        "dynamic_shared_memory_type": "posix",
+        "server_address": "127.0.0.1",
+        "server_port": 43561,
+        "postmaster_start": "2026-10-19T14:23:34.168785+00:00"
+      },
+      "postmaster": {
+        "pid": 1291,
+        "startedAt": "1792419813",
+        "dataDirectory": "/tmp/practice-native-abrupt-kwPVHq/cluster/data",
+        "port": 43561,
+        "socketDirectory": "/tmp/practice-native-abrupt-kwPVHq/cluster/socket",
+        "listenAddress": "127.0.0.1"
+      },
+      "events": [
+        {
+          "command": "postgres",
+          "code": 0,
+          "signal": null
+        },
+        {
+          "command": "initdb",
+          "code": 0,
+          "signal": null
+        },
+        {
+          "command": "pg_ctl",
+          "code": 0,
+          "signal": null
+        },
+        {
+          "command": "psql",
+          "code": 0,
+          "signal": null
+        },
+        {
+          "action": "start",
+          "initialize": true,
+          "at": "2026-10-19T14:23:28.319Z"
+        },
+        {
+          "command": "pg_ctl",
+          "code": 0,
+          "signal": null
+        },
+        {
+          "action": "stop",
+          "mode": "immediate",
+          "postmaster": {
+            "pid": 1244,
+            "startedAt": "1792419807",
+            "dataDirectory": "/tmp/practice-native-abrupt-kwPVHq/cluster/data",
+            "port": 43561,
+            "socketDirectory": "/tmp/practice-native-abrupt-kwPVHq/cluster/socket",
+            "listenAddress": "127.0.0.1"
+          },
+          "at": "2026-10-19T14:23:33.885Z"
+        },
+        {
+          "command": "pg_ctl",
+          "code": 0,
+          "signal": null
+        },
+        {
+          "command": "psql",
+          "code": 0,
+          "signal": null
+        },
+        {
+          "action": "start",
+          "initialize": false,
+          "at": "2026-10-19T14:23:35.431Z"
+        },
+        {
+          "command": "pg_ctl",
+          "code": 0,
+          "signal": null
+        },
+        {
+          "action": "stop",
+          "mode": "fast",
+          "postmaster": {
+            "pid": 1291,
+            "startedAt": "1792419813",
+            "dataDirectory": "/tmp/practice-native-abrupt-kwPVHq/cluster/data",
+            "port": 43561,
+            "socketDirectory": "/tmp/practice-native-abrupt-kwPVHq/cluster/socket",
+            "listenAddress": "127.0.0.1"
+          },
+          "at": "2026-10-19T14:23:39.621Z"
+        }
+      ]
+    },
+    "nativeBeforeCrash": {
+      "fixtureId": "a2cb4221-b95f-4acc-8366-16bcbc5798c3",
+      "directory": "/tmp/practice-native-abrupt-kwPVHq/cluster",
+      "dataDirectory": "/tmp/practice-native-abrupt-kwPVHq/cluster/data",
+      "socketDirectory": "/tmp/practice-native-abrupt-kwPVHq/cluster/socket",
+      "port": 43561,
+      "postmaster": {
+        "pid": 1244,
+        "startedAt": "1792419807",
+        "listenAddress": "127.0.0.1"
+      },
+      "startStopEvents": [
+        {
+          "action": "start",
+          "initialize": true,
+          "at": "2026-10-19T14:23:28.319Z"
+        }
+      ]
+    },
+    "nativeAfterRestart": {
+      "fixtureId": "a2cb4221-b95f-4acc-8366-16bcbc5798c3",
+      "directory": "/tmp/practice-native-abrupt-kwPVHq/cluster",
+      "dataDirectory": "/tmp/practice-native-abrupt-kwPVHq/cluster/data",
+      "socketDirectory": "/tmp/practice-native-abrupt-kwPVHq/cluster/socket",
+      "port": 43561,
+      "postmaster": {
+        "pid": 1291,
+        "startedAt": "1792419813",
+        "listenAddress": "127.0.0.1"
+      },
+      "startStopEvents": [
+        {
+          "action": "start",
+          "initialize": true,
+          "at": "2026-10-19T14:23:28.319Z"
+        },
+        {
+          "action": "stop",
+          "mode": "immediate",
+          "at": "2026-10-19T14:23:33.885Z",
+          "postmaster": {
+            "pid": 1244,
+            "startedAt": "1792419807",
+            "dataDirectory": "/tmp/practice-native-abrupt-kwPVHq/cluster/data",
+            "port": 43561,
+            "socketDirectory": "/tmp/practice-native-abrupt-kwPVHq/cluster/socket",
+            "listenAddress": "127.0.0.1"
+          }
+        },
+        {
+          "action": "start",
+          "initialize": false,
+          "at": "2026-10-19T14:23:35.431Z"
+        }
+      ]
+    },
+    "workerExit": {
+      "code": 0,
+      "signal": null
+    },
+    "comparisons": {
+      "beforeEqualsAfterRestart": true,
+      "restoredApiEqualsBeforeApi": true,
+      "restoredSqlEqualsBeforeSql": true,
+      "backupTablesEqualsBeforeSql": true
+    },
+    "evidenceByteSha256": {
+      "before.json": "c975c40e41fda6d0e8636a1fe601eb3ec4ec7db59121287925557f9673eae286",
+      "after-restart.json": "c975c40e41fda6d0e8636a1fe601eb3ec4ec7db59121287925557f9673eae286",
+      "restore.json": "1edd23503b30283c5fb48ef1f9dc8190224298cd50045a7690ef2e0ffd15e095",
+      "backup.json": "e4c5971eb10f6ad89fc6663176d1015b168b05b73aec974c4413ef6e86dcb214",
+      "report.json": "d0a596bb2dd23ae4b072968d2574c7e5e651a7920c23f166d67ddc526b3c43b4",
+      "worker-exit.json": "6380f7ebf1263a94abaaef4f5a1323cf0f4fbc88e37d8f1792ae68f163e18807",
+      "api-build-metafile.json": "169f9455db74b2065d148502f5324c70b733a44d2680a03390a6521295625c6e"
+    },
+    "backupFileByteSha256": "e4c5971eb10f6ad89fc6663176d1015b168b05b73aec974c4413ef6e86dcb214",
+    "backupCanonicalDigestFromReport": "97bbbea2d40a91aaf982f6460a10e0b5309a2c3b0e5bd7c95df290e31002a676",
+    "priorFailedRunByteSha256": {
+      "report.json": "b4fcc65f681709a5c31ca70f3a5713e50ebdab2f4c16a04d7cb65b1f1b127a92",
+      "worker-exit.json": "4f28ce20fdc0de466d37924709e00a12b257475dd0f3c52b34da60ddafc9d814"
+    }
+  },
+  "completedRunAndPreservation": {
+    "replId": "598acfa5-d138-4827-a862-065182711db4",
+    "phase": "paused",
+    "response": "I’ll validate the temporary checkout, source hashes, existing dependency target, and absence of the prior run’s processes before changing anything. If the disposable package-local link is still absent and the installed target is intact, I’ll add only that symlink, verify zod resolution, and submit the one corrected harness run.\nThe disposable link now points to the existing app package-local node_modules; the temporary checkout resolves zod 3.25.76, and both pinned source hashes still match. I’m starting the one corrected invocation with the required minimal environment.\nThe corrected run completed with a pass. I’ll now read its retained report and worker exit, verify report hashes and source/app checkout identity, and confirm the newly owned API/PostgreSQL processes have exited. I will not run the harness again.\nThe corrected single run passed. It used only the disposable checkout, temporary dependency link, synthetic records, and a newly owned loopback PostgreSQL cluster. No production database, app publication, or app behavior change was involved.\n\nSource and corrected dependency wiring\n\nBundle: 46,892 bytes; SHA-256 5d9f989fc2dae7b09c690cffadf73ac9e20761736a8c7e188c2250b7d223b0a4.\nTemporary checkout: /tmp/practice-abrupt-recovery-41g8m3, commit 6227adc15b7f80ab1df11ed54eb631183cba8277, tree 5be67166166beb5473ebdf4a06e751381f55ea56; tracked source clean.\nHarness SHA-256: dcff3ae546a9056e10e110ad2ae0ceff76273764953283d376783068d5be08f1.\nPostgreSQL fixture SHA-256: bfeb7815f2fd4a21a97cadea79646ddc333bfa0a8cbb777a224c4e6d65ea2b68.\nAdded only this temporary symlink: /tmp/practice-abrupt-recovery-41g8m3/lib/api-zod/node_modules → /home/runner/workspace/lib/api-zod/node_modules. It resolves zod version 3.25.76; no package was installed or changed.\n\nRun and recovery evidence\n\nOutput directory: /tmp/practice-native-abrupt-kwPVHq.\nProcess and worker exits: command 0; worker {\"code\":0,\"signal\":null}.\nreport.json: 115,867 bytes; SHA-256 d0a596bb2dd23ae4b072968d2574c7e5e651a7920c23f166d67ddc526b3c43b4.\nworker-exit.json: 34 bytes; SHA-256 6380f7ebf1263a94abaaef4f5a1323cf0f4fbc88e37d8f1792ae68f163e18807.\nAPI bundle SHA-256: 910bcd1959c10535f70309a4929f7b89efa73474127e7b1b31b70f3d255fc6d1.\nPostgreSQL 16.10 ran on 127.0.0.1:43561, with data directory /tmp/practice-native-abrupt-kwPVHq/cluster/data, socket directory /tmp/practice-native-abrupt-kwPVHq/cluster/socket, shared memory mmap, and dynamic shared memory posix. Reported server and owned-cluster identities matched.\nIdle boundary verified at revision 2 with 0 active other transactions. The source API exited by requested SIGKILL; the owned cluster was immediately stopped and restarted in the same data directory.\nBefore-stop backup matched committed SQL. After restart, API and SQL state matched the pre-stop state. Restore into a separate fresh synthetic database reproduced the exported rows and audit state; the original synthetic source database remained unchanged.\nBackup digest: 97bbbea2d40a91aaf982f6460a10e0b5309a2c3b0e5bd7c95df290e31002a676. Counts across its 17 tables:\n\n{\n  \"business_goals\": 1,\n  \"clinicians\": 1,\n  \"current_reality\": 0,\n  \"hub_attachments\": 1,\n  \"hub_history\": 2,\n  \"hub_workspaces\": 1,\n  \"practice_import_audit\": 0,\n  \"practice_import_declarations\": 0,\n  \"practice_import_packages\": 0,\n  \"practice_import_snapshots\": 0,\n  \"scenario_clinicians\": 0,\n  \"scenario_staff_members\": 0,\n  \"scenarios\": 0,\n  \"session_goal_years\": 0,\n  \"session_record_history\": 2,\n  \"session_records\": 1,\n  \"staff_members\": 1\n}\n\nCleanup and preservation\n\nCleanup errors were empty. All three API children exited; no PostgreSQL process remains, the run’s postmaster.pid is absent, and no owned API process remains. Synthetic data and diagnostics were retained as the harness specifies.\n\nThe prior failed-run evidence remains unchanged: report SHA-256 b4fcc65f681709a5c31ca70f3a5713e50ebdab2f4c16a04d7cb65b1f1b127a92; worker-exit SHA-256 4f28ce20fdc0de466d37924709e00a12b257475dd0f3c52b34da60ddafc9d814.\n\nThe app checkout remains clean at commit d35f1dd3dbeadd45e6948287f00e1ac97b434e77, tree 8e7626ca8ec3f3939d0ba59814bd6ac64f34d0c2. The guard suites were separately recorded as 27 passed, 0 failed, 0 skipped. This evidence covers idle acknowledged commits and the tested restore path; it does not certify in-flight transactions, power loss, concurrency, or load."
+  },
+  "limits": [
+    "Idle acknowledged commits and this synthetic restore path only",
+    "Not in-flight transaction, power-loss, concurrency or load certification",
+    "Actual screen-reader speech untested"
+  ],
+  "priorFailureRecord": "native-recovery-6227adc-result.json"
+}

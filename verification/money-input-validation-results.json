@@ -1,0 +1,2519 @@
+{
+  "runtime": {
+    "commit": "e9a2c6c638b423afd3cd46cfdf74138cdd09a7e9",
+    "tree": "23acd7dec844256a3b78103f1394a3bf8977bcb5",
+    "component": "artifacts/comp-dashboard/src/components/practice/profit-first-planning.tsx",
+    "componentSha256": "b1e98d4bce6791cf5a79a1f3fb4fe74b64fe269016b52d2e4cf788c7596911da"
+  },
+  "scope": {
+    "syntheticOnly": true,
+    "productionAccess": false,
+    "productionWrites": 0,
+    "pushed": false,
+    "deployed": false,
+    "actualScreenReaderSpeech": false
+  },
+  "authorChecks": {
+    "handlerTests": 50,
+    "unitTests": 792,
+    "dashboardTypecheck": "pass",
+    "dashboardBuild": "pass",
+    "existingViteAdvisoriesOnly": true
+  },
+  "independentReview": {
+    "reviewer": "Gauss",
+    "agent": "01a15480-c916-7798-a377-13f19300c0f4",
+    "findings": [],
+    "handlerTests": 50,
+    "modelTests": 24,
+    "types": "pass",
+    "browserNotRerun": true,
+    "visualInspectionNotPerformed": true
+  },
+  "inputBrowser": {
+    "file": "/private/tmp/profit-first-planning-input-render-zGgUPx/results.json",
+    "sha256": "8c21649da62c458fbc43a40b169612d6b6a4732d03a4767af51be66811f8ebf0",
+    "provenance": {
+      "commit": "f8caeb5995d3dc5b6465a61ab77dfe936cd007f1",
+      "tree": "d37e72168e88ad2d9293e52c7938a48c496a51c2"
+    },
+    "browserErrors": [],
+    "status": "pass",
+    "requests": [
+      {
+        "method": "GET",
+        "url": "http://127.0.0.1:52854/",
+        "allowed": true
+      },
+      {
+        "method": "GET",
+        "url": "http://127.0.0.1:52854/styles.css",
+        "allowed": true
+      },
+      {
+        "method": "GET",
+        "url": "http://127.0.0.1:52854/bundle.js",
+        "allowed": true
+      }
+    ],
+    "cases": [
+      {
+        "name": "initial-negative-estimate",
+        "width": 1280,
+        "height": 900,
+        "status": "pass",
+        "error": {
+          "invalid": "true",
+          "id": "«r1»-estimate:revenue",
+          "role": "alert",
+          "text": "Enter a finite, nonnegative amount up to 10,000,000,000, or leave blank for Unknown.",
+          "visible": true
+        }
+      },
+      {
+        "name": "initial-negative-floor",
+        "width": 1280,
+        "height": 900,
+        "status": "pass",
+        "error": {
+          "invalid": "true",
+          "id": "«r2»-floor:business-profit",
+          "role": "alert",
+          "text": "Enter a finite, nonnegative percentage, or leave blank for Unknown.",
+          "visible": true
+        }
+      },
+      {
+        "name": "native-estimate-minus",
+        "width": 1280,
+        "height": 900,
+        "status": "pass",
+        "native": {
+          "value": "",
+          "badInput": true
+        },
+        "nativeBadInputEvents": [
+          {
+            "type": "input",
+            "label": "Monthly billed revenue estimate",
+            "value": "",
+            "badInput": true,
+            "rangeOverflow": false
+          }
+        ]
+      },
+      {
+        "name": "native-estimate-exponent",
+        "width": 1280,
+        "height": 900,
+        "status": "pass",
+        "native": {
+          "value": "",
+          "badInput": true
+        },
+        "nativeBadInputEvents": [
+          {
+            "type": "input",
+            "label": "Monthly billed revenue estimate",
+            "value": "",
+            "badInput": true,
+            "rangeOverflow": false
+          }
+        ]
+      },
+      {
+        "name": "native-floor-minus",
+        "width": 1280,
+        "height": 900,
+        "status": "pass",
+        "native": {
+          "value": "",
+          "badInput": true
+        },
+        "nativeBadInputEvents": [
+          {
+            "type": "input",
+            "label": "Business profit scenario percentage floor",
+            "value": "",
+            "badInput": true,
+            "rangeOverflow": false
+          }
+        ]
+      },
+      {
+        "name": "native-floor-exponent",
+        "width": 1280,
+        "height": 900,
+        "status": "pass",
+        "native": {
+          "value": "",
+          "badInput": true
+        },
+        "nativeBadInputEvents": [
+          {
+            "type": "input",
+            "label": "Business profit scenario percentage floor",
+            "value": "",
+            "badInput": true,
+            "rangeOverflow": false
+          }
+        ]
+      },
+      {
+        "name": "native-goal-minus",
+        "width": 1280,
+        "height": 900,
+        "status": "pass",
+        "native": {
+          "value": "",
+          "badInput": true
+        },
+        "nativeBadInputEvents": [
+          {
+            "type": "input",
+            "label": "Building fund monthly contribution",
+            "value": "",
+            "badInput": true,
+            "rangeOverflow": false
+          }
+        ]
+      },
+      {
+        "name": "native-goal-exponent",
+        "width": 1280,
+        "height": 900,
+        "status": "pass",
+        "native": {
+          "value": "",
+          "badInput": true
+        },
+        "nativeBadInputEvents": [
+          {
+            "type": "input",
+            "label": "Building fund monthly contribution",
+            "value": "",
+            "badInput": true,
+            "rangeOverflow": false
+          }
+        ]
+      },
+      {
+        "name": "intermediate-preview-blocks-grouped-staging",
+        "width": 1280,
+        "height": 900,
+        "status": "pass"
+      },
+      {
+        "name": "cost-disclosure-keeps-active-input-visible",
+        "width": 1280,
+        "height": 900,
+        "status": "pass"
+      },
+      {
+        "name": "intentional-blank-zero-and-infeasible-floor",
+        "width": 1280,
+        "height": 900,
+        "status": "pass"
+      },
+      {
+        "name": "money-maximum-before-staging",
+        "width": 1280,
+        "height": 900,
+        "status": "pass"
+      },
+      {
+        "name": "preset-goal-invalid-corrected",
+        "width": 1280,
+        "height": 900,
+        "status": "pass"
+      },
+      {
+        "name": "custom-goal-invalid-corrected",
+        "width": 1280,
+        "height": 900,
+        "status": "pass"
+      },
+      {
+        "name": "initial-negative-estimate",
+        "width": 390,
+        "height": 844,
+        "status": "pass",
+        "error": {
+          "invalid": "true",
+          "id": "«rf»-estimate:revenue",
+          "role": "alert",
+          "text": "Enter a finite, nonnegative amount up to 10,000,000,000, or leave blank for Unknown.",
+          "visible": true
+        }
+      },
+      {
+        "name": "initial-negative-floor",
+        "width": 390,
+        "height": 844,
+        "status": "pass",
+        "error": {
+          "invalid": "true",
+          "id": "«rg»-floor:business-profit",
+          "role": "alert",
+          "text": "Enter a finite, nonnegative percentage, or leave blank for Unknown.",
+          "visible": true
+        }
+      },
+      {
+        "name": "native-estimate-minus",
+        "width": 390,
+        "height": 844,
+        "status": "pass",
+        "native": {
+          "value": "",
+          "badInput": true
+        },
+        "nativeBadInputEvents": [
+          {
+            "type": "input",
+            "label": "Monthly billed revenue estimate",
+            "value": "",
+            "badInput": true,
+            "rangeOverflow": false
+          }
+        ]
+      },
+      {
+        "name": "native-estimate-exponent",
+        "width": 390,
+        "height": 844,
+        "status": "pass",
+        "native": {
+          "value": "",
+          "badInput": true
+        },
+        "nativeBadInputEvents": [
+          {
+            "type": "input",
+            "label": "Monthly billed revenue estimate",
+            "value": "",
+            "badInput": true,
+            "rangeOverflow": false
+          }
+        ]
+      },
+      {
+        "name": "native-floor-minus",
+        "width": 390,
+        "height": 844,
+        "status": "pass",
+        "native": {
+          "value": "",
+          "badInput": true
+        },
+        "nativeBadInputEvents": [
+          {
+            "type": "input",
+            "label": "Business profit scenario percentage floor",
+            "value": "",
+            "badInput": true,
+            "rangeOverflow": false
+          }
+        ]
+      },
+      {
+        "name": "native-floor-exponent",
+        "width": 390,
+        "height": 844,
+        "status": "pass",
+        "native": {
+          "value": "",
+          "badInput": true
+        },
+        "nativeBadInputEvents": [
+          {
+            "type": "input",
+            "label": "Business profit scenario percentage floor",
+            "value": "",
+            "badInput": true,
+            "rangeOverflow": false
+          }
+        ]
+      },
+      {
+        "name": "native-goal-minus",
+        "width": 390,
+        "height": 844,
+        "status": "pass",
+        "native": {
+          "value": "",
+          "badInput": true
+        },
+        "nativeBadInputEvents": [
+          {
+            "type": "input",
+            "label": "Building fund monthly contribution",
+            "value": "",
+            "badInput": true,
+            "rangeOverflow": false
+          }
+        ]
+      },
+      {
+        "name": "native-goal-exponent",
+        "width": 390,
+        "height": 844,
+        "status": "pass",
+        "native": {
+          "value": "",
+          "badInput": true
+        },
+        "nativeBadInputEvents": [
+          {
+            "type": "input",
+            "label": "Building fund monthly contribution",
+            "value": "",
+            "badInput": true,
+            "rangeOverflow": false
+          }
+        ]
+      },
+      {
+        "name": "intermediate-preview-blocks-grouped-staging",
+        "width": 390,
+        "height": 844,
+        "status": "pass"
+      },
+      {
+        "name": "cost-disclosure-keeps-active-input-visible",
+        "width": 390,
+        "height": 844,
+        "status": "pass"
+      },
+      {
+        "name": "intentional-blank-zero-and-infeasible-floor",
+        "width": 390,
+        "height": 844,
+        "status": "pass"
+      },
+      {
+        "name": "money-maximum-before-staging",
+        "width": 390,
+        "height": 844,
+        "status": "pass"
+      },
+      {
+        "name": "preset-goal-invalid-corrected",
+        "width": 390,
+        "height": 844,
+        "status": "pass"
+      },
+      {
+        "name": "custom-goal-invalid-corrected",
+        "width": 390,
+        "height": 844,
+        "status": "pass"
+      }
+    ],
+    "captures": [
+      {
+        "name": "initial-negative-estimate",
+        "screenshot": "1280-initial-negative-estimate.png",
+        "width": 1280,
+        "height": 900,
+        "dpr": 1,
+        "scrollWidth": 1280,
+        "clientWidth": 1280,
+        "file": "/private/tmp/profit-first-planning-input-render-zGgUPx/1280-initial-negative-estimate.png",
+        "sha256": "d3a97e32d36e36fb54bd6b1ec759c84569796d90e3dc36545d37213573942820"
+      },
+      {
+        "name": "initial-negative-floor",
+        "screenshot": "1280-initial-negative-floor.png",
+        "width": 1280,
+        "height": 900,
+        "dpr": 1,
+        "scrollWidth": 1280,
+        "clientWidth": 1280,
+        "file": "/private/tmp/profit-first-planning-input-render-zGgUPx/1280-initial-negative-floor.png",
+        "sha256": "bbf8dc21ddba9ba2e2a5850dec7ce9621b0ebc96995fe165438ddcb665511703"
+      },
+      {
+        "name": "native-estimate-minus",
+        "screenshot": "1280-native-estimate-minus.png",
+        "width": 1280,
+        "height": 900,
+        "dpr": 1,
+        "scrollWidth": 1280,
+        "clientWidth": 1280,
+        "file": "/private/tmp/profit-first-planning-input-render-zGgUPx/1280-native-estimate-minus.png",
+        "sha256": "d7f16371929ffee8acabe2744708ad04978b0b6555e0c44a84d725206a0738e9"
+      },
+      {
+        "name": "native-estimate-exponent",
+        "screenshot": "1280-native-estimate-exponent.png",
+        "width": 1280,
+        "height": 900,
+        "dpr": 1,
+        "scrollWidth": 1280,
+        "clientWidth": 1280,
+        "file": "/private/tmp/profit-first-planning-input-render-zGgUPx/1280-native-estimate-exponent.png",
+        "sha256": "f667564092344fe66d687a8ff77328e047e6ffd1ec15ec96b41a02372382246c"
+      },
+      {
+        "name": "native-floor-minus",
+        "screenshot": "1280-native-floor-minus.png",
+        "width": 1280,
+        "height": 900,
+        "dpr": 1,
+        "scrollWidth": 1280,
+        "clientWidth": 1280,
+        "file": "/private/tmp/profit-first-planning-input-render-zGgUPx/1280-native-floor-minus.png",
+        "sha256": "e255143b4028f1e3e8183801e09799860d08566d1fa4deddb694a614160728c9"
+      },
+      {
+        "name": "native-floor-exponent",
+        "screenshot": "1280-native-floor-exponent.png",
+        "width": 1280,
+        "height": 900,
+        "dpr": 1,
+        "scrollWidth": 1280,
+        "clientWidth": 1280,
+        "file": "/private/tmp/profit-first-planning-input-render-zGgUPx/1280-native-floor-exponent.png",
+        "sha256": "0e9ce81dc17ee2455c0f00bad57ed6e64fc8d9a9f893e082eb6d38b5320214bd"
+      },
+      {
+        "name": "native-goal-minus",
+        "screenshot": "1280-native-goal-minus.png",
+        "width": 1280,
+        "height": 900,
+        "dpr": 1,
+        "scrollWidth": 1280,
+        "clientWidth": 1280,
+        "file": "/private/tmp/profit-first-planning-input-render-zGgUPx/1280-native-goal-minus.png",
+        "sha256": "1e442b2464bb6dca4d5182e8f729c07f3c180ae4b1f2966820d46a8e5a4ffd57"
+      },
+      {
+        "name": "native-goal-exponent",
+        "screenshot": "1280-native-goal-exponent.png",
+        "width": 1280,
+        "height": 900,
+        "dpr": 1,
+        "scrollWidth": 1280,
+        "clientWidth": 1280,
+        "file": "/private/tmp/profit-first-planning-input-render-zGgUPx/1280-native-goal-exponent.png",
+        "sha256": "cad91fcba90db6816489010577fa5305db15d8e2e6774046f4c8c7fda626576b"
+      },
+      {
+        "name": "intermediate-preview-blocks-grouped-staging",
+        "screenshot": "1280-intermediate-preview-blocks-grouped-staging.png",
+        "width": 1280,
+        "height": 900,
+        "dpr": 1,
+        "scrollWidth": 1280,
+        "clientWidth": 1280,
+        "file": "/private/tmp/profit-first-planning-input-render-zGgUPx/1280-intermediate-preview-blocks-grouped-staging.png",
+        "sha256": "9a39dd0a512415a3e3fddc4c3d05ae8262104c9b5a02aed0469aebf5a3adc33a"
+      },
+      {
+        "name": "cost-disclosure-keeps-active-input-visible",
+        "screenshot": "1280-cost-disclosure-keeps-active-input-visible.png",
+        "width": 1280,
+        "height": 900,
+        "dpr": 1,
+        "scrollWidth": 1280,
+        "clientWidth": 1280,
+        "file": "/private/tmp/profit-first-planning-input-render-zGgUPx/1280-cost-disclosure-keeps-active-input-visible.png",
+        "sha256": "6b1b88babf65bc316aa75f742377722d3980b00d82d75ff925afd7f994280a3c"
+      },
+      {
+        "name": "intentional-blank-zero-and-infeasible-floor",
+        "screenshot": "1280-intentional-blank-zero-and-infeasible-floor.png",
+        "width": 1280,
+        "height": 900,
+        "dpr": 1,
+        "scrollWidth": 1280,
+        "clientWidth": 1280,
+        "file": "/private/tmp/profit-first-planning-input-render-zGgUPx/1280-intentional-blank-zero-and-infeasible-floor.png",
+        "sha256": "523a6c75a5dedc86ac4fcbc278528ec86d0256d1f732cf8c287ccc379a519217"
+      },
+      {
+        "name": "money-maximum-before-staging",
+        "screenshot": "1280-money-maximum-before-staging.png",
+        "width": 1280,
+        "height": 900,
+        "dpr": 1,
+        "scrollWidth": 1280,
+        "clientWidth": 1280,
+        "file": "/private/tmp/profit-first-planning-input-render-zGgUPx/1280-money-maximum-before-staging.png",
+        "sha256": "376f5d52fdb9ac0dc3b41836a6cdd9833f10ac75ccf7c715b05ba4701d51d23a"
+      },
+      {
+        "name": "preset-goal-invalid-corrected",
+        "screenshot": "1280-preset-goal-invalid-corrected.png",
+        "width": 1280,
+        "height": 900,
+        "dpr": 1,
+        "scrollWidth": 1280,
+        "clientWidth": 1280,
+        "file": "/private/tmp/profit-first-planning-input-render-zGgUPx/1280-preset-goal-invalid-corrected.png",
+        "sha256": "04532a4a39917f3c3a71597dff74f304506df7039f378ac71084b5aeddfbbaec"
+      },
+      {
+        "name": "custom-goal-invalid-corrected",
+        "screenshot": "1280-custom-goal-invalid-corrected.png",
+        "width": 1280,
+        "height": 900,
+        "dpr": 1,
+        "scrollWidth": 1280,
+        "clientWidth": 1280,
+        "file": "/private/tmp/profit-first-planning-input-render-zGgUPx/1280-custom-goal-invalid-corrected.png",
+        "sha256": "8fffcec9b067b337bc84de2a416c96c3cfa8de899a19e032daf54bd8aee11927"
+      },
+      {
+        "name": "initial-negative-estimate",
+        "screenshot": "390-initial-negative-estimate.png",
+        "width": 390,
+        "height": 844,
+        "dpr": 1,
+        "scrollWidth": 390,
+        "clientWidth": 390,
+        "file": "/private/tmp/profit-first-planning-input-render-zGgUPx/390-initial-negative-estimate.png",
+        "sha256": "7e14272159ee988f9470f73f6e3203230e0b962eaca3d59d7c1de71950607813"
+      },
+      {
+        "name": "initial-negative-floor",
+        "screenshot": "390-initial-negative-floor.png",
+        "width": 390,
+        "height": 844,
+        "dpr": 1,
+        "scrollWidth": 390,
+        "clientWidth": 390,
+        "file": "/private/tmp/profit-first-planning-input-render-zGgUPx/390-initial-negative-floor.png",
+        "sha256": "8b9b5501ed23f987e0282b872218702042a9f6f042e8f88e4d76a885fcd4f0a2"
+      },
+      {
+        "name": "native-estimate-minus",
+        "screenshot": "390-native-estimate-minus.png",
+        "width": 390,
+        "height": 844,
+        "dpr": 1,
+        "scrollWidth": 390,
+        "clientWidth": 390,
+        "file": "/private/tmp/profit-first-planning-input-render-zGgUPx/390-native-estimate-minus.png",
+        "sha256": "7a401eedb6e2fb13482fee822acd5e120f9a31c71d6b72806e1c4d3502fa5d8f"
+      },
+      {
+        "name": "native-estimate-exponent",
+        "screenshot": "390-native-estimate-exponent.png",
+        "width": 390,
+        "height": 844,
+        "dpr": 1,
+        "scrollWidth": 390,
+        "clientWidth": 390,
+        "file": "/private/tmp/profit-first-planning-input-render-zGgUPx/390-native-estimate-exponent.png",
+        "sha256": "a339595d4acc62f360a3a880c4eb1f59c9ca323ebeb11da0e7de82ac828b4440"
+      },
+      {
+        "name": "native-floor-minus",
+        "screenshot": "390-native-floor-minus.png",
+        "width": 390,
+        "height": 844,
+        "dpr": 1,
+        "scrollWidth": 390,
+        "clientWidth": 390,
+        "file": "/private/tmp/profit-first-planning-input-render-zGgUPx/390-native-floor-minus.png",
+        "sha256": "7a9a63c9e9a0faaa60cc956524cda2846e9fe67625c959b1a42067be41e9910d"
+      },
+      {
+        "name": "native-floor-exponent",
+        "screenshot": "390-native-floor-exponent.png",
+        "width": 390,
+        "height": 844,
+        "dpr": 1,
+        "scrollWidth": 390,
+        "clientWidth": 390,
+        "file": "/private/tmp/profit-first-planning-input-render-zGgUPx/390-native-floor-exponent.png",
+        "sha256": "9d0dd3d2cdd5ac3ed8183c351f8e1334ef2fecb1e685b154112e0631f520fb7f"
+      },
+      {
+        "name": "native-goal-minus",
+        "screenshot": "390-native-goal-minus.png",
+        "width": 390,
+        "height": 844,
+        "dpr": 1,
+        "scrollWidth": 390,
+        "clientWidth": 390,
+        "file": "/private/tmp/profit-first-planning-input-render-zGgUPx/390-native-goal-minus.png",
+        "sha256": "eaa999d28d82dd78654b288793875bd80f506c594d28251598c38c89b6a2d4fd"
+      },
+      {
+        "name": "native-goal-exponent",
+        "screenshot": "390-native-goal-exponent.png",
+        "width": 390,
+        "height": 844,
+        "dpr": 1,
+        "scrollWidth": 390,
+        "clientWidth": 390,
+        "file": "/private/tmp/profit-first-planning-input-render-zGgUPx/390-native-goal-exponent.png",
+        "sha256": "155d2f294039b0f4845edb5ffb7b704b1261cb5b5370d7a7e932a5c8d7fd7108"
+      },
+      {
+        "name": "intermediate-preview-blocks-grouped-staging",
+        "screenshot": "390-intermediate-preview-blocks-grouped-staging.png",
+        "width": 390,
+        "height": 844,
+        "dpr": 1,
+        "scrollWidth": 390,
+        "clientWidth": 390,
+        "file": "/private/tmp/profit-first-planning-input-render-zGgUPx/390-intermediate-preview-blocks-grouped-staging.png",
+        "sha256": "bcd03bf49041d9c6bd5ea7ff3e01500f373990591afacf30f3ed7260003879f2"
+      },
+      {
+        "name": "cost-disclosure-keeps-active-input-visible",
+        "screenshot": "390-cost-disclosure-keeps-active-input-visible.png",
+        "width": 390,
+        "height": 844,
+        "dpr": 1,
+        "scrollWidth": 390,
+        "clientWidth": 390,
+        "file": "/private/tmp/profit-first-planning-input-render-zGgUPx/390-cost-disclosure-keeps-active-input-visible.png",
+        "sha256": "1483a4d9cebf412309c1988c66e2787d3d1b4304321814d310bbfbd14efa8eff"
+      },
+      {
+        "name": "intentional-blank-zero-and-infeasible-floor",
+        "screenshot": "390-intentional-blank-zero-and-infeasible-floor.png",
+        "width": 390,
+        "height": 844,
+        "dpr": 1,
+        "scrollWidth": 390,
+        "clientWidth": 390,
+        "file": "/private/tmp/profit-first-planning-input-render-zGgUPx/390-intentional-blank-zero-and-infeasible-floor.png",
+        "sha256": "569c5d1fed973689133f1cdd54662607b8d2c519d112f8152069a0fc5fd96d19"
+      },
+      {
+        "name": "money-maximum-before-staging",
+        "screenshot": "390-money-maximum-before-staging.png",
+        "width": 390,
+        "height": 844,
+        "dpr": 1,
+        "scrollWidth": 390,
+        "clientWidth": 390,
+        "file": "/private/tmp/profit-first-planning-input-render-zGgUPx/390-money-maximum-before-staging.png",
+        "sha256": "e8155dd5331e44b47c1c8b9dd534f3d87d512c660f9a11c7496c382c135f2798"
+      },
+      {
+        "name": "preset-goal-invalid-corrected",
+        "screenshot": "390-preset-goal-invalid-corrected.png",
+        "width": 390,
+        "height": 844,
+        "dpr": 1,
+        "scrollWidth": 390,
+        "clientWidth": 390,
+        "file": "/private/tmp/profit-first-planning-input-render-zGgUPx/390-preset-goal-invalid-corrected.png",
+        "sha256": "873e3f5bc5ca81fd47607a47c31be814fb09e8df8ae6a43cf0cc5afcc53cb1ce"
+      },
+      {
+        "name": "custom-goal-invalid-corrected",
+        "screenshot": "390-custom-goal-invalid-corrected.png",
+        "width": 390,
+        "height": 844,
+        "dpr": 1,
+        "scrollWidth": 390,
+        "clientWidth": 390,
+        "file": "/private/tmp/profit-first-planning-input-render-zGgUPx/390-custom-goal-invalid-corrected.png",
+        "sha256": "2190e46c30367eadb1969dcd89892a8e596adfbd078280a5a99e62bfcaa9fca0"
+      }
+    ]
+  },
+  "integratedBrowser": {
+    "file": "/tmp/recovered-live-decisions-K8kCzU/results.json",
+    "sha256": "6876d28b765f101fb9c99c12d506361bf61e5212e50e332188349579738e4fc0",
+    "provenance": {
+      "commit": "8695f5370e682b09d00bf4c39df816da4e5834e2",
+      "tree": "327dded6791f212ecbe9e312dbc332b87e2db72f"
+    },
+    "browserErrors": [],
+    "checks": [
+      {
+        "name": "money-without-finalized-periods",
+        "width": 1280,
+        "height": 900,
+        "url": "/workspace",
+        "title": "Money",
+        "scrollWidth": 1280,
+        "clientWidth": 1280,
+        "buttonCount": 25,
+        "text": "EMC\nEMCounseling\nPractice workspace\nToday\nLong Term Goals\n1\nSandbox\nTODAY\n01\nOverview\n02\nSessions\n03\nTeam\n04\nMoney\n05\nGrowth\n06\nGoals\nData & imports\nSettings\nReference layout\nCurrent business\nMoney\nReports\nMove data\nNew scenario\nProjection basis\n\nSelected dates govern billed-charge estimates and recorded actuals separately. Missing source coverage or model inputs stay unknown; estimates do not require bank reconciliation.\n\nPeriod\n30 days\n60 days\n90 days\n6 months\nYear\nOverall\nLast 4 completed pay periods\nLast 4 completed weeks\nCustom dates\nMoney planning estimates\n\n2026-10-01 to 2026-10-31 · current-month planning scenario; complete-period observed sessions through 2026-10-07; clinician-card fees and configured dated costs, not historical billed actuals or bank cash\n\nEstimated monthly billed income\n$1,310\nMonthly costs and goals estimate\n$41,815\nRequired share of estimated income\n3,191.7%\n\nPlanned costs and goals exceed estimated income\nEstimated monthly shortfall: $40,505.\n\nEstimated monthly revenue needed: $43,068. Additional estimated revenue needed: $41,757.\n\nMonthly funding estimates; confirmed current allocation totals 100%\nBucket\tCurrent %\tCurrent estimate\tRequired %\tRequired estimate\tScenario floor %\nBusiness profit\t2%\t$26\t1,526.6%\t$20,000\t\nTaxes\t3%\t$39\t3%\t$39\t\nOperating expenses\t28%\t$367\t919.3%\t$12,043\t\nOwner payroll\t27%\t$354\t610.6%\t$8,000\t\nTherapist payroll\t36%\t$472\t55.9%\t$732\t\nAdmin payroll\t4%\t$52\t76.3%\t$1,000\t\nDistributions\t0%\t$0\t0%\t$0\t\n\nProtected configured Erin / co-owner salary estimate: $8,000 per month, included once in Owner payroll before optional goals.\n\nMonthly funding goals\nBuilding fund monthly contribution\nMarketing monthly funding\nCost estimates and source periods\nPlanning estimate assumptions\nObserved planning basis and limitations\nReported activity, recorded actuals and dated source settings\nToday\nForecast checks\n$1",
+        "localAuthErrors": [],
+        "topNavigation": true
+      },
+      {
+        "name": "money-without-finalized-periods",
+        "width": 390,
+        "height": 900,
+        "url": "/workspace",
+        "title": "Money",
+        "scrollWidth": 390,
+        "clientWidth": 390,
+        "buttonCount": 25,
+        "text": "EMC\nEMCounseling\nToday\nLong Term Goals\n1\nSandbox\nTODAY\nOverview\nSessions\nTeam\nMoney\nGrowth\nGoals\nData & imports\nSettings\nReference layout\nCurrent business\nMoney\nReports\nMove data\nNew scenario\nProjection basis\n\nSelected dates govern billed-charge estimates and recorded actuals separately. Missing source coverage or model inputs stay unknown; estimates do not require bank reconciliation.\n\nPeriod\n30 days\n60 days\n90 days\n6 months\nYear\nOverall\nLast 4 completed pay periods\nLast 4 completed weeks\nCustom dates\nMoney planning estimates\n\n2026-10-01 to 2026-10-31 · current-month planning scenario; complete-period observed sessions through 2026-10-07; clinician-card fees and configured dated costs, not historical billed actuals or bank cash\n\nEstimated monthly billed income\n$1,310\nMonthly costs and goals estimate\n$41,815\nRequired share of estimated income\n3,191.7%\n\nPlanned costs and goals exceed estimated income\nEstimated monthly shortfall: $40,505.\n\nEstimated monthly revenue needed: $43,068. Additional estimated revenue needed: $41,757.\n\nMonthly funding estimates; confirmed current allocation totals 100%\nBucket\tCurrent %\tCurrent estimate\tRequired %\tRequired estimate\tScenario floor %\nBusiness profit\t2%\t$26\t1,526.6%\t$20,000\t\nTaxes\t3%\t$39\t3%\t$39\t\nOperating expenses\t28%\t$367\t919.3%\t$12,043\t\nOwner payroll\t27%\t$354\t610.6%\t$8,000\t\nTherapist payroll\t36%\t$472\t55.9%\t$732\t\nAdmin payroll\t4%\t$52\t76.3%\t$1,000\t\nDistributions\t0%\t$0\t0%\t$0\t\n\nProtected configured Erin / co-owner salary estimate: $8,000 per month, included once in Owner payroll before optional goals.\n\nMonthly funding goals\nBuilding fund monthly contribution\nMarketing monthly funding\nCost estimates and source periods\nPlanning estimate assumptions\nObserved planning basis and limitations\nReported activity, recorded actuals and dated source settings\nToday\nForecast checks\n$1",
+        "localAuthErrors": [],
+        "topNavigation": true
+      },
+      {
+        "name": "infeasible-editable-plan",
+        "width": 1280,
+        "height": 900,
+        "url": "/workspace",
+        "title": "Money",
+        "scrollWidth": 1280,
+        "clientWidth": 1280,
+        "buttonCount": 27,
+        "text": "EMC\nEMCounseling\nPractice workspace\nToday\nLong Term Goals\n1\nSandbox\nTODAY\n01\nOverview\n02\nSessions\n03\nTeam\n04\nMoney\n05\nGrowth\n06\nGoals\nData & imports\nSettings\nReference layout\nCurrent business\nMoney\nReports\nMove data\nNew scenario\nProjection basis\n\nSelected dates govern billed-charge estimates and recorded actuals separately. Missing source coverage or model inputs stay unknown; estimates do not require bank reconciliation.\n\nPeriod\n30 days\n60 days\n90 days\n6 months\nYear\nOverall\nLast 4 completed pay periods\nLast 4 completed weeks\nCustom dates\nMoney planning estimates\n\n2026-10-01 to 2026-10-31 · current-month planning scenario; complete-period observed sessions through 2026-10-07; clinician-card fees and configured dated costs, not historical billed actuals or bank cash\n\nEstimated monthly billed income\n$1,310\nMonthly costs and goals estimate\n$43,815\nRequired share of estimated income\n3,344.3%\n\nPlanned costs and goals exceed estimated income\nEstimated monthly shortfall: $42,505.\n\nEstimated monthly revenue needed: Unknown. Additional estimated revenue needed: Unknown.\n\nThe percentage floors leave no room for fixed costs or additional goals. Higher revenue alone cannot fund this scenario.\n\nMonthly funding estimates; confirmed current allocation totals 100%\nBucket\tCurrent %\tCurrent estimate\tRequired %\tRequired estimate\tScenario floor %\nBusiness profit\t2%\t$26\t1,679.2%\t$22,000\t\nTaxes\t3%\t$39\t3%\t$39\t\nOperating expenses\t28%\t$367\t919.3%\t$12,043\t\nOwner payroll\t27%\t$354\t610.6%\t$8,000\t\nTherapist payroll\t36%\t$472\t55.9%\t$732\t\nAdmin payroll\t4%\t$52\t76.3%\t$1,000\t\nDistributions\t0%\t$0\t0%\t$0\t\n\nProtected configured Erin / co-owner salary estimate: $8,000 per month, included once in Owner payroll before optional goals.\n\nMonthly funding goals\nBuilding fund monthly contribution\nMarketing monthly funding\nCost estimates and source periods\nPlanning estimate assumptions\nObserved planning basis and limitations\nReported activity, recorded actuals and dated source settings\n1 pending change\nThese edits ",
+        "localAuthErrors": [],
+        "topNavigation": true
+      },
+      {
+        "name": "infeasible-editable-plan",
+        "width": 390,
+        "height": 900,
+        "url": "/workspace",
+        "title": "Money",
+        "scrollWidth": 390,
+        "clientWidth": 390,
+        "buttonCount": 27,
+        "text": "EMC\nEMCounseling\nToday\nLong Term Goals\n1\nSandbox\nTODAY\nOverview\nSessions\nTeam\nMoney\nGrowth\nGoals\nData & imports\nSettings\nReference layout\nCurrent business\nMoney\nReports\nMove data\nNew scenario\nProjection basis\n\nSelected dates govern billed-charge estimates and recorded actuals separately. Missing source coverage or model inputs stay unknown; estimates do not require bank reconciliation.\n\nPeriod\n30 days\n60 days\n90 days\n6 months\nYear\nOverall\nLast 4 completed pay periods\nLast 4 completed weeks\nCustom dates\nMoney planning estimates\n\n2026-10-01 to 2026-10-31 · current-month planning scenario; complete-period observed sessions through 2026-10-07; clinician-card fees and configured dated costs, not historical billed actuals or bank cash\n\nEstimated monthly billed income\n$1,310\nMonthly costs and goals estimate\n$43,815\nRequired share of estimated income\n3,344.3%\n\nPlanned costs and goals exceed estimated income\nEstimated monthly shortfall: $42,505.\n\nEstimated monthly revenue needed: Unknown. Additional estimated revenue needed: Unknown.\n\nThe percentage floors leave no room for fixed costs or additional goals. Higher revenue alone cannot fund this scenario.\n\nMonthly funding estimates; confirmed current allocation totals 100%\nBucket\tCurrent %\tCurrent estimate\tRequired %\tRequired estimate\tScenario floor %\nBusiness profit\t2%\t$26\t1,679.2%\t$22,000\t\nTaxes\t3%\t$39\t3%\t$39\t\nOperating expenses\t28%\t$367\t919.3%\t$12,043\t\nOwner payroll\t27%\t$354\t610.6%\t$8,000\t\nTherapist payroll\t36%\t$472\t55.9%\t$732\t\nAdmin payroll\t4%\t$52\t76.3%\t$1,000\t\nDistributions\t0%\t$0\t0%\t$0\t\n\nProtected configured Erin / co-owner salary estimate: $8,000 per month, included once in Owner payroll before optional goals.\n\nMonthly funding goals\nBuilding fund monthly contribution\nMarketing monthly funding\nCost estimates and source periods\nPlanning estimate assumptions\nObserved planning basis and limitations\nReported activity, recorded actuals and dated source settings\n1 pending change\nThese edits are not saved yet.\nReview changes\nDis",
+        "localAuthErrors": [],
+        "topNavigation": true
+      },
+      {
+        "name": "sessions-consultations-history",
+        "width": 1280,
+        "height": 900,
+        "url": "/workspace",
+        "title": "Sessions",
+        "scrollWidth": 1280,
+        "clientWidth": 1280,
+        "buttonCount": 25,
+        "text": "EMC\nEMCounseling\nPractice workspace\nToday\nLong Term Goals\n1\nSandbox\nTODAY\n01\nOverview\n02\nSessions\n03\nTeam\n04\nMoney\n05\nGrowth\n06\nGoals\nData & imports\nSettings\nReference layout\nCurrent business\nSessions\nReports\nMove data\nNew scenario\n\nPeriod\n30 days\n60 days\n90 days\n6 months\nYear\nOverall\nLast 4 completed pay periods\nLast 4 completed weeks\nCustom dates\nWhole Practice\nElia\nErin\nCompare\nImport details\nTrailing 3 months\nTrailing year\n\nHistorical performance · complete calendar months: 2026-07-01 to 2026-09-30 · observations through 2026-10-14\n\nAverage monthly attrition: 2026-07-01 to 2026-09-30 · 90-day follow-up; latest eligible ending 2026-07-09. Only covered mature months contribute; zero eligible months means the monthly average is unknown.\n\nTotal sessions\n20\nWhole Practice · selected-window total\n\nEligible observed total; selected-window coverage incomplete · 23 included days\n\nSessions\n\nWhole Practice · Sep 15, 26 - Oct 14, 26\n\n6.1\nComplete-period sessions / week\n\n20 eligible sessions · 23 complete-period calendar days · incomplete periods excluded\n\nSep 15\nSep 28\nOct 5\nOct 14\n0\n15\n30\n60\nSessionsCapacity\nSession entry, history and hiring\nRetention\n\nWhole Practice · 2026-07-01 to 2026-09-30\n\n0\nretained / 0 evaluated starts\n\n10 pending starts\n\nObserved retention\n-\nUnknown\nSource and calculation\nAverage monthly attrition\n\nWhole Practice · 2026-07-01 to 2026-09-30\n\n--\nclient endings / mature month\n\n0 fully observed mature months\n\nLatest eligible ending date: 2026-07-09\n\nSource and calculation\nConsult → treatment conversion\n\nSelected activity dates: 2026-09-15 to 2026-10-14. Current-team consultation cohorts, with all treatment follow-up retained · one calendar-month follow-up window\n\nWhole Practice\nElia\nErin\nCompare with Whole Practice\n--\n0 treatment starts of 0 evaluated; 0 treatment-start candidates; 0 pending\n Observed\n\nObserved conversions; report coverage is unverified. 0 journeys remain pending.\n\nConsultations\n0\nObserved treatment starts\n0\nConfirmed closes\n0\nEvaluate",
+        "localAuthErrors": [],
+        "topNavigation": true
+      },
+      {
+        "name": "sessions-consultations-history",
+        "width": 390,
+        "height": 900,
+        "url": "/workspace",
+        "title": "Sessions",
+        "scrollWidth": 390,
+        "clientWidth": 390,
+        "buttonCount": 25,
+        "text": "EMC\nEMCounseling\nToday\nLong Term Goals\n1\nSandbox\nTODAY\nOverview\nSessions\nTeam\nMoney\nGrowth\nGoals\nData & imports\nSettings\nReference layout\nCurrent business\nSessions\nReports\nMove data\nNew scenario\n\nPeriod\n30 days\n60 days\n90 days\n6 months\nYear\nOverall\nLast 4 completed pay periods\nLast 4 completed weeks\nCustom dates\nWhole Practice\nElia\nErin\nCompare\nImport details\nTrailing 3 months\nTrailing year\n\nHistorical performance · complete calendar months: 2026-07-01 to 2026-09-30 · observations through 2026-10-14\n\nAverage monthly attrition: 2026-07-01 to 2026-09-30 · 90-day follow-up; latest eligible ending 2026-07-09. Only covered mature months contribute; zero eligible months means the monthly average is unknown.\n\nTotal sessions\n20\nWhole Practice · selected-window total\n\nEligible observed total; selected-window coverage incomplete · 23 included days\n\nSessions\n\nWhole Practice · Sep 15, 26 - Oct 14, 26\n\n6.1\nComplete-period sessions / week\n\n20 eligible sessions · 23 complete-period calendar days · incomplete periods excluded\n\nSep 15\nSep 28\nOct 14\n0\n15\n30\n60\nSessionsCapacity\nSession entry, history and hiring\nRetention\n\nWhole Practice · 2026-07-01 to 2026-09-30\n\n0\nretained / 0 evaluated starts\n\n10 pending starts\n\nObserved retention\n-\nUnknown\nSource and calculation\nAverage monthly attrition\n\nWhole Practice · 2026-07-01 to 2026-09-30\n\n--\nclient endings / mature month\n\n0 fully observed mature months\n\nLatest eligible ending date: 2026-07-09\n\nSource and calculation\nConsult → treatment conversion\n\nSelected activity dates: 2026-09-15 to 2026-10-14. Current-team consultation cohorts, with all treatment follow-up retained · one calendar-month follow-up window\n\nWhole Practice\nElia\nErin\nCompare with Whole Practice\n--\n0 treatment starts of 0 evaluated; 0 treatment-start candidates; 0 pending\n Observed\n\nObserved conversions; report coverage is unverified. 0 journeys remain pending.\n\nConsultations\n0\nObserved treatment starts\n0\nConfirmed closes\n0\nEvaluated\n0\nPending\n0\nNeeds attribution\n0\nMissing m",
+        "localAuthErrors": [],
+        "topNavigation": true
+      },
+      {
+        "name": "team-year-history",
+        "width": 1280,
+        "height": 900,
+        "url": "/workspace",
+        "title": "Team",
+        "scrollWidth": 1280,
+        "clientWidth": 1280,
+        "buttonCount": 27,
+        "text": "EMC\nEMCounseling\nPractice workspace\nToday\nLong Term Goals\n1\nSandbox\nTODAY\n01\nOverview\n02\nSessions\n03\nTeam\n04\nMoney\n05\nGrowth\n06\nGoals\nData & imports\nSettings\nReference layout\nCurrent business\nTeam\nReports\nMove data\nNew scenario\nClinician KPIs\nPay structure\nPay comparison\n\nSession activity uses the selected dates.\n\nPeriod\n30 days\n60 days\n90 days\n6 months\nYear\nOverall\nLast 4 completed pay periods\nLast 4 completed weeks\nCustom dates\nTrailing 3 months\nTrailing year\n\nHistorical performance · complete calendar months: 2025-10-01 to 2026-09-30 · observations through 2026-10-14\n\nAverage monthly attrition: 2025-10-01 to 2026-09-30 · 90-day follow-up; latest eligible ending 2026-07-09. Only covered mature months contribute; zero eligible months means the monthly average is unknown.\n\nClinical staff\n\n2 clinicians\n\nUnassigned staff\nYear 1 Baseline\nManage team\nE\nElia\nOn team\n1099\nW2\nOwner\nSessions\n10 total sessions\n3 / wk\n10 eligible visits / 23 complete-period days · incomplete periods excluded\nRetention\n-\nUnknown; Practice average 50%\nPractice average\n50%\n0 evaluated starts; 5 pending; observed, coverage unverified\nAverage monthly attrition\n0\n6 fully observed mature months\nConfirmed close\n-\nUnknown; Practice average 50%\nPractice average\n50%\n0 confirmed / 0 evaluated; 1 consultations; 1 pending\nClinician details\nE\nErin\nOn team\n1099\nW2\nOwner\nSessions\n10 total sessions\n3 / wk\n10 eligible visits / 23 complete-period days · incomplete periods excluded\nRetention\n50%\n50%; Practice average 50%\nPractice average\n50%\n2 evaluated starts; 5 pending; observed, coverage unverified\nAverage monthly attrition\n0.2\n6 fully observed mature months\nConfirmed close\n-\nUnknown; Practice average 50%\nPractice average\n50%\n0 confirmed / 0 evaluated; 1 consultations; 1 pending\nClinician details\nNonclinical staff\nManage staff\nSynthetic coordinator\nSalary\n$1,000 monthly practice cost\nFuture pay changes\nHiring costs\nCompare clinician pay\nToday\nForecast checks\n20",
+        "localAuthErrors": [],
+        "topNavigation": true
+      },
+      {
+        "name": "team-year-history",
+        "width": 390,
+        "height": 900,
+        "url": "/workspace",
+        "title": "Team",
+        "scrollWidth": 390,
+        "clientWidth": 390,
+        "buttonCount": 27,
+        "text": "EMC\nEMCounseling\nToday\nLong Term Goals\n1\nSandbox\nTODAY\nOverview\nSessions\nTeam\nMoney\nGrowth\nGoals\nData & imports\nSettings\nReference layout\nCurrent business\nTeam\nReports\nMove data\nNew scenario\nClinician KPIs\nPay structure\nPay comparison\n\nSession activity uses the selected dates.\n\nPeriod\n30 days\n60 days\n90 days\n6 months\nYear\nOverall\nLast 4 completed pay periods\nLast 4 completed weeks\nCustom dates\nTrailing 3 months\nTrailing year\n\nHistorical performance · complete calendar months: 2025-10-01 to 2026-09-30 · observations through 2026-10-14\n\nAverage monthly attrition: 2025-10-01 to 2026-09-30 · 90-day follow-up; latest eligible ending 2026-07-09. Only covered mature months contribute; zero eligible months means the monthly average is unknown.\n\nClinical staff\n\n2 clinicians\n\nUnassigned staff\nYear 1 Baseline\nManage team\nE\nElia\nOn team\n1099\nW2\nOwner\nSessions\n10 total sessions\n3 / wk\n10 eligible visits / 23 complete-period days · incomplete periods excluded\nRetention\n-\nUnknown; Practice average 50%\nPractice average\n50%\n0 evaluated starts; 5 pending; observed, coverage unverified\nAverage monthly attrition\n0\n6 fully observed mature months\nConfirmed close\n-\nUnknown; Practice average 50%\nPractice average\n50%\n0 confirmed / 0 evaluated; 1 consultations; 1 pending\nClinician details\nE\nErin\nOn team\n1099\nW2\nOwner\nSessions\n10 total sessions\n3 / wk\n10 eligible visits / 23 complete-period days · incomplete periods excluded\nRetention\n50%\n50%; Practice average 50%\nPractice average\n50%\n2 evaluated starts; 5 pending; observed, coverage unverified\nAverage monthly attrition\n0.2\n6 fully observed mature months\nConfirmed close\n-\nUnknown; Practice average 50%\nPractice average\n50%\n0 confirmed / 0 evaluated; 1 consultations; 1 pending\nClinician details\nNonclinical staff\nManage staff\nSynthetic coordinator\nSalary\n$1,000 monthly practice cost\nFuture pay changes\nHiring costs\nCompare clinician pay\nToday\nForecast checks\n20",
+        "localAuthErrors": [],
+        "topNavigation": true
+      },
+      {
+        "name": "overview-year-history",
+        "width": 1280,
+        "height": 900,
+        "url": "/workspace",
+        "title": "Overview",
+        "scrollWidth": 1280,
+        "clientWidth": 1280,
+        "buttonCount": 31,
+        "text": "EMC\nEMCounseling\nPractice workspace\nToday\nLong Term Goals\n1\nSandbox\nTODAY\n01\nOverview\n02\nSessions\n03\nTeam\n04\nMoney\n05\nGrowth\n06\nGoals\nData & imports\nSettings\nReference layout\nCurrent business\nOverview\nReports\nNew scenario\nProjection basis\nOverview\nCompensation baseline\n\nReporting period carries across tabs. Monthly money forecasts and targets retain their labeled month or annual basis.\n\nPeriod\n30 days\n60 days\n90 days\n6 months\nYear\nOverall\nLast 4 completed pay periods\nLast 4 completed weeks\nCustom dates\nPractice summary\n\nForecast / Oct 2026\n\nMonth\nOct 2026\nNov 2026\nDec 2026\nJan 2027\nFeb 2027\nMar 2027\nApr 2027\nMay 2027\nJun 2027\nJul 2027\nAug 2027\nSep 2027\nCompare with\nNo goal comparison\nSynthetic focused plan\nImports\n2 converted snapshots loaded\nImport review stays separate from manual session entry and forecast assumptions.\nOpen Imports\nEstimated monthly surplus\n\nOct 2026 · billed-charge history and future clinician-card estimate · configured pay dates respected\n\n-$20,754\nAfter estimated clinician pay and practice costs\nMoney\nDetails\nTotal sessions\n\n30 days · complete report periods only\n\n20\nSelected-window total sessions\n6.1\nComplete-period calendar-week average\n\n20 eligible sessions / 23 included days · incomplete periods excluded\n\nSessions\nDetails\nClient growth\n\n30 days · recorded treatment history\n\nNew treatment starts\n20\nRetained-client departures\n--\nRetention & attrition\nDetails\nFinancial estimate\n\n2026 current-year progress · complete report periods through 2026-10-07; forecast estimate 2026-10-08 to 2026-12-31. Not collected cash. Configured pay dates respected; legacy card assumptions disclosed in Money.\n\nActual reported charged fees · 2026-01-01 to 2026-10-07 · billing coverage complete\n$294,699\nActual billed session income · financial coverage incomplete\n$294,699\nFuture estimated revenue · 2026-10-08 to 2026-12-31\n$3,592\nActual operating profit\n--\nHistorical operating profit estimate · configured costs, not paid actuals\n$84,914\nFuture estimated operating pr",
+        "localAuthErrors": [],
+        "topNavigation": true
+      },
+      {
+        "name": "overview-year-history",
+        "width": 390,
+        "height": 900,
+        "url": "/workspace",
+        "title": "Overview",
+        "scrollWidth": 390,
+        "clientWidth": 390,
+        "buttonCount": 31,
+        "text": "EMC\nEMCounseling\nToday\nLong Term Goals\n1\nSandbox\nTODAY\nOverview\nSessions\nTeam\nMoney\nGrowth\nGoals\nData & imports\nSettings\nReference layout\nCurrent business\nOverview\nReports\nNew scenario\nProjection basis\nOverview\nCompensation baseline\n\nReporting period carries across tabs. Monthly money forecasts and targets retain their labeled month or annual basis.\n\nPeriod\n30 days\n60 days\n90 days\n6 months\nYear\nOverall\nLast 4 completed pay periods\nLast 4 completed weeks\nCustom dates\nPractice summary\n\nForecast / Oct 2026\n\nMonth\nOct 2026\nNov 2026\nDec 2026\nJan 2027\nFeb 2027\nMar 2027\nApr 2027\nMay 2027\nJun 2027\nJul 2027\nAug 2027\nSep 2027\nCompare with\nNo goal comparison\nSynthetic focused plan\nImports\n2 converted snapshots loaded\nImport review stays separate from manual session entry and forecast assumptions.\nOpen Imports\nEstimated monthly surplus\n\nOct 2026 · billed-charge history and future clinician-card estimate · configured pay dates respected\n\n-$20,754\nAfter estimated clinician pay and practice costs\nMoney\nDetails\nTotal sessions\n\n30 days · complete report periods only\n\n20\nSelected-window total sessions\n6.1\nComplete-period calendar-week average\n\n20 eligible sessions / 23 included days · incomplete periods excluded\n\nSessions\nDetails\nClient growth\n\n30 days · recorded treatment history\n\nNew treatment starts\n20\nRetained-client departures\n--\nRetention & attrition\nDetails\nFinancial estimate\n\n2026 current-year progress · complete report periods through 2026-10-07; forecast estimate 2026-10-08 to 2026-12-31. Not collected cash. Configured pay dates respected; legacy card assumptions disclosed in Money.\n\nActual reported charged fees · 2026-01-01 to 2026-10-07 · billing coverage complete\n$294,699\nActual billed session income · financial coverage incomplete\n$294,699\nFuture estimated revenue · 2026-10-08 to 2026-12-31\n$3,592\nActual operating profit\n--\nHistorical operating profit estimate · configured costs, not paid actuals\n$84,914\nFuture estimated operating profit\n-$56,816\nCurrent-year source and",
+        "localAuthErrors": [],
+        "topNavigation": true
+      },
+      {
+        "name": "growth-rooms-no-consults",
+        "width": 1280,
+        "height": 900,
+        "url": "/workspace",
+        "title": "Growth",
+        "scrollWidth": 1280,
+        "clientWidth": 1280,
+        "buttonCount": 34,
+        "text": "EMC\nEMCounseling\nPractice workspace\nToday\nLong Term Goals\n1\nSandbox\nTODAY\n01\nOverview\n02\nSessions\n03\nTeam\n04\nMoney\n05\nGrowth\n06\nGoals\nData & imports\nSettings\nReference layout\nCurrent business\nGrowth\nReports\nMove data\nNew scenario\nMarketing\n\nAd spend drives lead estimates. Service costs complete the marketing total.\n\nAdd campaign\n\nSelected activity dates apply to leads, sessions and consultations.\n\nPeriod\n30 days\n60 days\n90 days\n6 months\nYear\nOverall\nLast 4 completed pay periods\nLast 4 completed weeks\nCustom dates\nAd spend / month\n$0\nServices & campaign costs\n$0\nTotal marketing cost\n$0\n\nCount agency fees and retainers either inside a campaign or as a marketing service cost, not both.\n\nLeads & campaigns\nRooms\nMarketing services and retainers\nAdd cost\n\nUse this for agency fees or ongoing marketing services not already included in a campaign above. General practice technology belongs in Operating expenses.\n\nYear totals\nMonth details\nYear\n0 months ready to save\nMonth\tLeads\tConsults scheduled\tConsults attended\tClients booked\tSchedule rate\tShow rate\tConsult close rate\tOverall close rate\nJanuary\t\t\t\t\t-\t-\t-\t-\nFebruary\t\t\t\t\t-\t-\t-\t-\nMarch\t\t\t\t\t-\t-\t-\t-\nApril\t\t\t\t\t-\t-\t-\t-\nMay\t\t\t\t\t-\t-\t-\t-\nJune\t\t\t\t\t-\t-\t-\t-\nJuly\t\t\t\t\t-\t-\t-\t-\nAugust\t\t\t\t\t-\t-\t-\t-\nSeptember\t\t\t\t\t-\t-\t-\t-\nOctober\t\t\t\t\t-\t-\t-\t-\nNovember\t\t\t\t\t-\t-\t-\t-\nDecember\t\t\t\t\t-\t-\t-\t-\nReady for monthly totals\n2026\nSave months\nNo lead sources set up yet\n\nAdd Google Ads, Meta, referrals, or another source to estimate leads and record results in one place.\n\nToday\nForecast checks\n20",
+        "localAuthErrors": [],
+        "topNavigation": true
+      },
+      {
+        "name": "growth-rooms-no-consults",
+        "width": 390,
+        "height": 900,
+        "url": "/workspace",
+        "title": "Growth",
+        "scrollWidth": 390,
+        "clientWidth": 390,
+        "buttonCount": 34,
+        "text": "EMC\nEMCounseling\nToday\nLong Term Goals\n1\nSandbox\nTODAY\nOverview\nSessions\nTeam\nMoney\nGrowth\nGoals\nData & imports\nSettings\nReference layout\nCurrent business\nGrowth\nReports\nMove data\nNew scenario\nMarketing\n\nAd spend drives lead estimates. Service costs complete the marketing total.\n\nAdd campaign\n\nSelected activity dates apply to leads, sessions and consultations.\n\nPeriod\n30 days\n60 days\n90 days\n6 months\nYear\nOverall\nLast 4 completed pay periods\nLast 4 completed weeks\nCustom dates\nAd spend / month\n$0\nServices & campaign costs\n$0\nTotal marketing cost\n$0\n\nCount agency fees and retainers either inside a campaign or as a marketing service cost, not both.\n\nLeads & campaigns\nRooms\nMarketing services and retainers\nAdd cost\n\nUse this for agency fees or ongoing marketing services not already included in a campaign above. General practice technology belongs in Operating expenses.\n\nYear totals\nMonth details\nYear\n0 months ready to save\nMonth\tLeads\tConsults scheduled\tConsults attended\tClients booked\tSchedule rate\tShow rate\tConsult close rate\tOverall close rate\nJanuary\t\t\t\t\t-\t-\t-\t-\nFebruary\t\t\t\t\t-\t-\t-\t-\nMarch\t\t\t\t\t-\t-\t-\t-\nApril\t\t\t\t\t-\t-\t-\t-\nMay\t\t\t\t\t-\t-\t-\t-\nJune\t\t\t\t\t-\t-\t-\t-\nJuly\t\t\t\t\t-\t-\t-\t-\nAugust\t\t\t\t\t-\t-\t-\t-\nSeptember\t\t\t\t\t-\t-\t-\t-\nOctober\t\t\t\t\t-\t-\t-\t-\nNovember\t\t\t\t\t-\t-\t-\t-\nDecember\t\t\t\t\t-\t-\t-\t-\nReady for monthly totals\n2026\nSave months\nNo lead sources set up yet\n\nAdd Google Ads, Meta, referrals, or another source to estimate leads and record results in one place.\n\nToday\nForecast checks\n20",
+        "localAuthErrors": [],
+        "topNavigation": true
+      },
+      {
+        "name": "sandbox-infeasible-editable",
+        "width": 1280,
+        "height": 900,
+        "url": "/workspace",
+        "title": "Sandbox",
+        "scrollWidth": 1280,
+        "clientWidth": 1280,
+        "buttonCount": 38,
+        "text": "EMC\nNew business\nPractice workspace\nToday\nLong Term Goals\n1\nSandbox\nTODAY\n01\nOverview\n02\nSessions\n03\nTeam\n04\nMoney\n05\nGrowth\n06\nGoals\nData & imports\nSettings\nIndependent model\nSandbox\nMove data\nSaved models\nCopy to Long Term Goals\nSave model\nOverview\nSessions\nTeam\nMoney\nGrowth\nGoals\nWorking copy\nSandbox only\nStarting month\nLooking ahead\n3 months\n6 months\n12 months\n24 months\n36 months\n60 months\nTimed changes\nMoney planning estimates\n\n2026-11-01 to 2026-11-30 · Sandbox monthly forecast estimate; Today is unchanged\n\nEstimated monthly billed income\n$0\nMonthly costs and goals estimate\nUnknown\nRequired share of estimated income\nUnknown\n\nPlanned costs and goals exceed estimated income\nEstimated monthly shortfall: $2,000 or more; some assumptions are missing.\n\nEstimated monthly revenue needed: Unknown. Additional estimated revenue needed: Unknown.\n\nMonthly funding estimates; confirmed current allocation totals 100%\nBucket\tCurrent %\tCurrent estimate\tRequired %\tRequired estimate\tScenario floor %\nBusiness profit\t2%\t$0\tUnknown\t$2,000\t\nTaxes\t3%\t$0\tUnknown\t$0\t\nOperating expenses\t28%\t$0\tUnknown\tUnknown\t\nOwner payroll\t27%\t$0\tUnknown\t$0\t\nTherapist payroll\t36%\t$0\tUnknown\t$0\t\nAdmin payroll\t4%\t$0\tUnknown\t$0\t\nDistributions\t0%\t$0\tUnknown\t$0\t\n\nProtected configured Erin / co-owner salary estimate: $0 per month, included once in Owner payroll before optional goals.\n\nMonthly funding goals\nBuilding fund monthly contribution\nMarketing monthly funding\nCost estimates and source periods\nMonthly billed revenue estimate\nOverhead set-aside estimate\n2025-11-01 to 2026-10-31; configured operating budget accrual / 12\nExisting marketing estimate\n2026-11-01 to 2026-11-30 · Sandbox monthly forecast estimate; Today is unchanged\nProcessing cost estimate\n2026-11-01 to 2026-11-30 · Sandbox monthly forecast estimate; Today is unchanged\nOwner clinical payroll estimate\n2026-11-01 to 2026-11-30 · Sandbox monthly forecast estimate; Today is unchanged\nProtected Erin / configured co-owner salary estimate\n2026-11-01 ",
+        "localAuthErrors": [],
+        "topNavigation": true
+      },
+      {
+        "name": "sandbox-infeasible-editable",
+        "width": 390,
+        "height": 900,
+        "url": "/workspace",
+        "title": "Sandbox",
+        "scrollWidth": 390,
+        "clientWidth": 390,
+        "buttonCount": 38,
+        "text": "EMC\nNew business\nToday\nLong Term Goals\n1\nSandbox\nTODAY\nOverview\nSessions\nTeam\nMoney\nGrowth\nGoals\nData & imports\nSettings\nIndependent model\nSandbox\nMove data\nSaved models\nCopy to Long Term Goals\nSave model\nOverview\nSessions\nTeam\nMoney\nGrowth\nGoals\nWorking copy\nSandbox only\nStarting month\nLooking ahead\n3 months\n6 months\n12 months\n24 months\n36 months\n60 months\nTimed changes\nMoney planning estimates\n\n2026-11-01 to 2026-11-30 · Sandbox monthly forecast estimate; Today is unchanged\n\nEstimated monthly billed income\n$0\nMonthly costs and goals estimate\nUnknown\nRequired share of estimated income\nUnknown\n\nPlanned costs and goals exceed estimated income\nEstimated monthly shortfall: $2,000 or more; some assumptions are missing.\n\nEstimated monthly revenue needed: Unknown. Additional estimated revenue needed: Unknown.\n\nMonthly funding estimates; confirmed current allocation totals 100%\nBucket\tCurrent %\tCurrent estimate\tRequired %\tRequired estimate\tScenario floor %\nBusiness profit\t2%\t$0\tUnknown\t$2,000\t\nTaxes\t3%\t$0\tUnknown\t$0\t\nOperating expenses\t28%\t$0\tUnknown\tUnknown\t\nOwner payroll\t27%\t$0\tUnknown\t$0\t\nTherapist payroll\t36%\t$0\tUnknown\t$0\t\nAdmin payroll\t4%\t$0\tUnknown\t$0\t\nDistributions\t0%\t$0\tUnknown\t$0\t\n\nProtected configured Erin / co-owner salary estimate: $0 per month, included once in Owner payroll before optional goals.\n\nMonthly funding goals\nBuilding fund monthly contribution\nMarketing monthly funding\nCost estimates and source periods\nMonthly billed revenue estimate\nOverhead set-aside estimate\n2025-11-01 to 2026-10-31; configured operating budget accrual / 12\nExisting marketing estimate\n2026-11-01 to 2026-11-30 · Sandbox monthly forecast estimate; Today is unchanged\nProcessing cost estimate\n2026-11-01 to 2026-11-30 · Sandbox monthly forecast estimate; Today is unchanged\nOwner clinical payroll estimate\n2026-11-01 to 2026-11-30 · Sandbox monthly forecast estimate; Today is unchanged\nProtected Erin / configured co-owner salary estimate\n2026-11-01 to 2026-11-30 · Sandbox monthly forec",
+        "localAuthErrors": [],
+        "topNavigation": true
+      }
+    ],
+    "syntheticHubSaves": 4,
+    "sourceFactsUnchanged": true
+  },
+  "keyboard": {
+    "file": "/tmp/financial-completeness-render-ko9vXi/results.json",
+    "sha256": "dffad6760230a2a494314c732599b76f13cd8e5498c1f061c8b6e2ddd842c710",
+    "provenance": {
+      "commit": "8695f5370e682b09d00bf4c39df816da4e5834e2",
+      "tree": "327dded6791f212ecbe9e312dbc332b87e2db72f"
+    },
+    "browserErrors": [],
+    "matrix": [
+      {
+        "name": "Keyboard Today navigation and visible focus",
+        "status": "PASS"
+      },
+      {
+        "name": "Reports modal Tab trap, reverse Tab, Escape and opener focus",
+        "status": "PASS"
+      },
+      {
+        "name": "Move data modal keyboard/Escape/opener focus",
+        "status": "PASS"
+      },
+      {
+        "name": "Record editor dirty Escape keeps or explicitly discards draft",
+        "status": "PASS"
+      },
+      {
+        "name": "Focused Goal Escape restores value without saving",
+        "status": "PASS"
+      },
+      {
+        "name": "Reload while Goal text remains focused warns and can be cancelled",
+        "status": "PASS"
+      },
+      {
+        "name": "Staged Goal survives section/date changes and blocks workspace switch",
+        "status": "PASS"
+      },
+      {
+        "name": "Bulk lead draft blocks destructive section change and year filter",
+        "status": "PASS"
+      },
+      {
+        "name": "Unsaved month-entry values survive cancelled month-filter change",
+        "status": "PASS"
+      },
+      {
+        "name": "Unblurred saved lead count and source text warn before reload",
+        "status": "PASS"
+      },
+      {
+        "name": "Dialog focus contract autofocus",
+        "status": "PASS"
+      },
+      {
+        "name": "Dialog focus contract veto",
+        "status": "PASS"
+      },
+      {
+        "name": "Dialog focus contract explicit",
+        "status": "PASS"
+      },
+      {
+        "name": "Dialog focus contract uncontrolled",
+        "status": "PASS"
+      },
+      {
+        "name": "desktop Overview reflow",
+        "status": "PASS"
+      },
+      {
+        "name": "desktop Goals reflow",
+        "status": "PASS"
+      },
+      {
+        "name": "desktop Money reflow",
+        "status": "PASS"
+      },
+      {
+        "name": "desktop Growth reflow",
+        "status": "PASS"
+      },
+      {
+        "name": "desktop Reports modal reflow",
+        "status": "PASS"
+      },
+      {
+        "name": "desktop pending review keyboard reachability",
+        "status": "PASS"
+      },
+      {
+        "name": "narrow390 Overview reflow",
+        "status": "PASS"
+      },
+      {
+        "name": "narrow390 Goals reflow",
+        "status": "PASS"
+      },
+      {
+        "name": "narrow390 Money reflow",
+        "status": "PASS"
+      },
+      {
+        "name": "narrow390 Growth reflow",
+        "status": "PASS"
+      },
+      {
+        "name": "narrow390 Reports modal reflow",
+        "status": "PASS"
+      },
+      {
+        "name": "narrow390 pending review keyboard reachability",
+        "status": "PASS"
+      },
+      {
+        "name": "narrow320 Overview reflow",
+        "status": "PASS"
+      },
+      {
+        "name": "narrow320 Goals reflow",
+        "status": "PASS"
+      },
+      {
+        "name": "narrow320 Money reflow",
+        "status": "PASS"
+      },
+      {
+        "name": "narrow320 Growth reflow",
+        "status": "PASS"
+      },
+      {
+        "name": "narrow320 Reports modal reflow",
+        "status": "PASS"
+      },
+      {
+        "name": "narrow320 pending review keyboard reachability",
+        "status": "PASS"
+      }
+    ],
+    "geometry": [
+      {
+        "name": "desktop-overview",
+        "width": 1280,
+        "height": 900,
+        "dpr": 1,
+        "scroll": 1280,
+        "client": 1280,
+        "dialog": null
+      },
+      {
+        "name": "desktop-goals",
+        "width": 1280,
+        "height": 900,
+        "dpr": 1,
+        "scroll": 1280,
+        "client": 1280,
+        "dialog": null
+      },
+      {
+        "name": "desktop-money",
+        "width": 1280,
+        "height": 900,
+        "dpr": 1,
+        "scroll": 1280,
+        "client": 1280,
+        "dialog": null
+      },
+      {
+        "name": "desktop-growth",
+        "width": 1280,
+        "height": 900,
+        "dpr": 1,
+        "scroll": 1280,
+        "client": 1280,
+        "dialog": null
+      },
+      {
+        "name": "desktop-reports",
+        "width": 1280,
+        "height": 900,
+        "dpr": 1,
+        "scroll": 1280,
+        "client": 1280,
+        "dialog": {
+          "left": 115,
+          "right": 1165,
+          "top": 182.171875,
+          "bottom": 717.828125,
+          "scrollHeight": 534,
+          "clientHeight": 534
+        }
+      },
+      {
+        "name": "desktop-pending-review",
+        "width": 1280,
+        "height": 900,
+        "dpr": 1,
+        "scroll": 1280,
+        "client": 1280,
+        "dialog": null
+      },
+      {
+        "name": "narrow390-overview",
+        "width": 390,
+        "height": 900,
+        "dpr": 1,
+        "scroll": 390,
+        "client": 390,
+        "dialog": null
+      },
+      {
+        "name": "narrow390-goals",
+        "width": 390,
+        "height": 900,
+        "dpr": 1,
+        "scroll": 390,
+        "client": 390,
+        "dialog": null
+      },
+      {
+        "name": "narrow390-money",
+        "width": 390,
+        "height": 900,
+        "dpr": 1,
+        "scroll": 390,
+        "client": 390,
+        "dialog": null
+      },
+      {
+        "name": "narrow390-growth",
+        "width": 390,
+        "height": 900,
+        "dpr": 1,
+        "scroll": 390,
+        "client": 390,
+        "dialog": null
+      },
+      {
+        "name": "narrow390-reports",
+        "width": 390,
+        "height": 900,
+        "dpr": 1,
+        "scroll": 390,
+        "client": 390,
+        "dialog": {
+          "left": 9.75,
+          "right": 380.25,
+          "top": 45,
+          "bottom": 855,
+          "scrollHeight": 1025,
+          "clientHeight": 808
+        }
+      },
+      {
+        "name": "narrow390-pending-review",
+        "width": 390,
+        "height": 900,
+        "dpr": 1,
+        "scroll": 390,
+        "client": 390,
+        "dialog": null
+      },
+      {
+        "name": "narrow320-overview",
+        "width": 320,
+        "height": 800,
+        "dpr": 1,
+        "scroll": 320,
+        "client": 320,
+        "dialog": null
+      },
+      {
+        "name": "narrow320-goals",
+        "width": 320,
+        "height": 800,
+        "dpr": 1,
+        "scroll": 320,
+        "client": 320,
+        "dialog": null
+      },
+      {
+        "name": "narrow320-money",
+        "width": 320,
+        "height": 800,
+        "dpr": 1,
+        "scroll": 320,
+        "client": 320,
+        "dialog": null
+      },
+      {
+        "name": "narrow320-growth",
+        "width": 320,
+        "height": 800,
+        "dpr": 1,
+        "scroll": 320,
+        "client": 320,
+        "dialog": null
+      },
+      {
+        "name": "narrow320-reports",
+        "width": 320,
+        "height": 800,
+        "dpr": 1,
+        "scroll": 320,
+        "client": 320,
+        "dialog": {
+          "left": 8,
+          "right": 312,
+          "top": 40,
+          "bottom": 760,
+          "scrollHeight": 1183,
+          "clientHeight": 718
+        }
+      },
+      {
+        "name": "narrow320-pending-review",
+        "width": 320,
+        "height": 800,
+        "dpr": 1,
+        "scroll": 320,
+        "client": 320,
+        "dialog": null
+      }
+    ]
+  },
+  "nativeZoom": {
+    "file": "/tmp/practice-semantics-zoom-T2ctHm/results.json",
+    "sha256": "295015e0b92cbd2ba5fee02c1d3e6440fcea61ca2f2bba139587e2157b39014d",
+    "provenance": {
+      "commit": "8695f5370e682b09d00bf4c39df816da4e5834e2",
+      "tree": "327dded6791f212ecbe9e312dbc332b87e2db72f",
+      "runtimeChanges": ""
+    },
+    "browserErrors": [],
+    "matrix": [
+      {
+        "name": "Overview native accessibility landmarks and control names",
+        "status": "PASS"
+      },
+      {
+        "name": "Sessions native accessibility landmarks and control names",
+        "status": "PASS"
+      },
+      {
+        "name": "Team native accessibility landmarks and control names",
+        "status": "PASS"
+      },
+      {
+        "name": "Money native accessibility landmarks and control names",
+        "status": "PASS"
+      },
+      {
+        "name": "Growth native accessibility landmarks and control names",
+        "status": "PASS"
+      },
+      {
+        "name": "Goals native accessibility landmarks and control names",
+        "status": "PASS"
+      },
+      {
+        "name": "Growth uses navigation rather than an incomplete tab widget",
+        "status": "PASS"
+      },
+      {
+        "name": "Session tabs expose paired panels and native arrow-key navigation",
+        "status": "PASS"
+      },
+      {
+        "name": "Session detail disclosure exposes clinician, state and controlled region",
+        "status": "PASS"
+      },
+      {
+        "name": "Recorded period activation moves focus to the editor and close returns it",
+        "status": "PASS"
+      },
+      {
+        "name": "Dirty record confirmation has a named focus transition and restores the field",
+        "status": "PASS"
+      },
+      {
+        "name": "Comparison graphics expose metric values, goal and benchmark as text",
+        "status": "PASS"
+      },
+      {
+        "name": "Representative graphics retain exact fixture values and explicit unknowns",
+        "status": "PASS"
+      },
+      {
+        "name": "Consultation graphic exposes percentage units for a known fixture rate",
+        "status": "PASS"
+      },
+      {
+        "name": "Invalid numeric inputs expose the validation error without a save",
+        "status": "PASS"
+      },
+      {
+        "name": "Overview at native 100% zoom",
+        "status": "PASS"
+      },
+      {
+        "name": "Sessions at native 100% zoom",
+        "status": "PASS"
+      },
+      {
+        "name": "Team at native 100% zoom",
+        "status": "PASS"
+      },
+      {
+        "name": "Money at native 100% zoom",
+        "status": "PASS"
+      },
+      {
+        "name": "Growth at native 100% zoom",
+        "status": "PASS"
+      },
+      {
+        "name": "Goals at native 100% zoom",
+        "status": "PASS"
+      },
+      {
+        "name": "Reports modal keyboard trap and reflow at native 100%",
+        "status": "PASS"
+      },
+      {
+        "name": "Pending review commands remain keyboard reachable at native 100%",
+        "status": "PASS"
+      },
+      {
+        "name": "Overview at native 200% zoom",
+        "status": "PASS"
+      },
+      {
+        "name": "Sessions at native 200% zoom",
+        "status": "PASS"
+      },
+      {
+        "name": "Team at native 200% zoom",
+        "status": "PASS"
+      },
+      {
+        "name": "Money at native 200% zoom",
+        "status": "PASS"
+      },
+      {
+        "name": "Growth at native 200% zoom",
+        "status": "PASS"
+      },
+      {
+        "name": "Goals at native 200% zoom",
+        "status": "PASS"
+      },
+      {
+        "name": "Reports modal keyboard trap and reflow at native 200%",
+        "status": "PASS"
+      },
+      {
+        "name": "Pending review commands remain keyboard reachable at native 200%",
+        "status": "PASS"
+      },
+      {
+        "name": "Overview at native 400% zoom",
+        "status": "PASS"
+      },
+      {
+        "name": "Sessions at native 400% zoom",
+        "status": "PASS"
+      },
+      {
+        "name": "Team at native 400% zoom",
+        "status": "PASS"
+      },
+      {
+        "name": "Money at native 400% zoom",
+        "status": "PASS"
+      },
+      {
+        "name": "Growth at native 400% zoom",
+        "status": "PASS"
+      },
+      {
+        "name": "Goals at native 400% zoom",
+        "status": "PASS"
+      },
+      {
+        "name": "Reports modal keyboard trap and reflow at native 400%",
+        "status": "PASS"
+      },
+      {
+        "name": "Pending review commands remain keyboard reachable at native 400%",
+        "status": "PASS"
+      }
+    ],
+    "geometry": [
+      {
+        "name": "native-1-overview",
+        "nativeZoom": 1,
+        "nativeSetting": "1",
+        "viewport": {
+          "width": 1280,
+          "height": 900
+        },
+        "width": 1280,
+        "height": 900,
+        "outerWidth": 1280,
+        "outerHeight": 900,
+        "dpr": 1,
+        "visualScale": 1,
+        "cssZoom": "1",
+        "scroll": 1280,
+        "client": 1280,
+        "pngWidth": 1280,
+        "pngHeight": 900,
+        "sampledColors": 62,
+        "capture": "CDP compositor viewport, no document clip or beyond-viewport capture",
+        "file": "/tmp/practice-semantics-zoom-T2ctHm/native-1-overview.png",
+        "sha256": "44f89eac5daf86dbb1417eafe300b3cf9a1d051be8e7f5aa2e174548ec8947c0"
+      },
+      {
+        "name": "native-1-overview-content",
+        "nativeZoom": 1,
+        "nativeSetting": "1",
+        "viewport": {
+          "width": 1280,
+          "height": 900
+        },
+        "width": 1280,
+        "height": 900,
+        "outerWidth": 1280,
+        "outerHeight": 900,
+        "dpr": 1,
+        "visualScale": 1,
+        "cssZoom": "1",
+        "scroll": 1280,
+        "client": 1280,
+        "pngWidth": 1280,
+        "pngHeight": 900,
+        "sampledColors": 56,
+        "capture": "CDP compositor viewport, no document clip or beyond-viewport capture",
+        "file": "/tmp/practice-semantics-zoom-T2ctHm/native-1-overview-content.png",
+        "sha256": "d505cea58026c736a36cf89aa97f189a8981f0656e66da76a49ffbb16372eb87"
+      },
+      {
+        "name": "native-1-sessions",
+        "nativeZoom": 1,
+        "nativeSetting": "1",
+        "viewport": {
+          "width": 1280,
+          "height": 900
+        },
+        "width": 1280,
+        "height": 900,
+        "outerWidth": 1280,
+        "outerHeight": 900,
+        "dpr": 1,
+        "visualScale": 1,
+        "cssZoom": "1",
+        "scroll": 1280,
+        "client": 1280,
+        "pngWidth": 1280,
+        "pngHeight": 900,
+        "sampledColors": 65,
+        "capture": "CDP compositor viewport, no document clip or beyond-viewport capture",
+        "file": "/tmp/practice-semantics-zoom-T2ctHm/native-1-sessions.png",
+        "sha256": "3aa2ecd83f8e6520f24e01c8529b3748311ffe1d84a179262196f7ff0bcef46c"
+      },
+      {
+        "name": "native-1-sessions-content",
+        "nativeZoom": 1,
+        "nativeSetting": "1",
+        "viewport": {
+          "width": 1280,
+          "height": 900
+        },
+        "width": 1280,
+        "height": 900,
+        "outerWidth": 1280,
+        "outerHeight": 900,
+        "dpr": 1,
+        "visualScale": 1,
+        "cssZoom": "1",
+        "scroll": 1280,
+        "client": 1280,
+        "pngWidth": 1280,
+        "pngHeight": 900,
+        "sampledColors": 63,
+        "capture": "CDP compositor viewport, no document clip or beyond-viewport capture",
+        "file": "/tmp/practice-semantics-zoom-T2ctHm/native-1-sessions-content.png",
+        "sha256": "817eadc4229fac66d5e3930ba97b15c1b7d78d9b71dc9e2b62fc682b6b62e06c"
+      },
+      {
+        "name": "native-1-team",
+        "nativeZoom": 1,
+        "nativeSetting": "1",
+        "viewport": {
+          "width": 1280,
+          "height": 900
+        },
+        "width": 1280,
+        "height": 900,
+        "outerWidth": 1280,
+        "outerHeight": 900,
+        "dpr": 1,
+        "visualScale": 1,
+        "cssZoom": "1",
+        "scroll": 1280,
+        "client": 1280,
+        "pngWidth": 1280,
+        "pngHeight": 900,
+        "sampledColors": 60,
+        "capture": "CDP compositor viewport, no document clip or beyond-viewport capture",
+        "file": "/tmp/practice-semantics-zoom-T2ctHm/native-1-team.png",
+        "sha256": "c08b871c7864e0cee205a7488c2cd4aeb40860a927181b0d5a85d9ace77efd12"
+      },
+      {
+        "name": "native-1-team-content",
+        "nativeZoom": 1,
+        "nativeSetting": "1",
+        "viewport": {
+          "width": 1280,
+          "height": 900
+        },
+        "width": 1280,
+        "height": 900,
+        "outerWidth": 1280,
+        "outerHeight": 900,
+        "dpr": 1,
+        "visualScale": 1,
+        "cssZoom": "1",
+        "scroll": 1280,
+        "client": 1280,
+        "pngWidth": 1280,
+        "pngHeight": 900,
+        "sampledColors": 54,
+        "capture": "CDP compositor viewport, no document clip or beyond-viewport capture",
+        "file": "/tmp/practice-semantics-zoom-T2ctHm/native-1-team-content.png",
+        "sha256": "f5bf746b000f3f24fc670a320d32fb189bcae88589c5703556b9af559f7d84fe"
+      },
+      {
+        "name": "native-1-money",
+        "nativeZoom": 1,
+        "nativeSetting": "1",
+        "viewport": {
+          "width": 1280,
+          "height": 900
+        },
+        "width": 1280,
+        "height": 900,
+        "outerWidth": 1280,
+        "outerHeight": 900,
+        "dpr": 1,
+        "visualScale": 1,
+        "cssZoom": "1",
+        "scroll": 1280,
+        "client": 1280,
+        "pngWidth": 1280,
+        "pngHeight": 900,
+        "sampledColors": 82,
+        "capture": "CDP compositor viewport, no document clip or beyond-viewport capture",
+        "file": "/tmp/practice-semantics-zoom-T2ctHm/native-1-money.png",
+        "sha256": "ca22dba637cab9eedcd8ac9dde2ec908f7d2da8baf32657d4fc37ff8f45e8975"
+      },
+      {
+        "name": "native-1-money-content",
+        "nativeZoom": 1,
+        "nativeSetting": "1",
+        "viewport": {
+          "width": 1280,
+          "height": 900
+        },
+        "width": 1280,
+        "height": 900,
+        "outerWidth": 1280,
+        "outerHeight": 900,
+        "dpr": 1,
+        "visualScale": 1,
+        "cssZoom": "1",
+        "scroll": 1280,
+        "client": 1280,
+        "pngWidth": 1280,
+        "pngHeight": 900,
+        "sampledColors": 74,
+        "capture": "CDP compositor viewport, no document clip or beyond-viewport capture",
+        "file": "/tmp/practice-semantics-zoom-T2ctHm/native-1-money-content.png",
+        "sha256": "7aebcfd48741de610805e9e1b0f522293ef492a2aeaa74ed0701a6fb1aa59aaf"
+      },
+      {
+        "name": "native-1-growth",
+        "nativeZoom": 1,
+        "nativeSetting": "1",
+        "viewport": {
+          "width": 1280,
+          "height": 900
+        },
+        "width": 1280,
+        "height": 900,
+        "outerWidth": 1280,
+        "outerHeight": 900,
+        "dpr": 1,
+        "visualScale": 1,
+        "cssZoom": "1",
+        "scroll": 1280,
+        "client": 1280,
+        "pngWidth": 1280,
+        "pngHeight": 900,
+        "sampledColors": 59,
+        "capture": "CDP compositor viewport, no document clip or beyond-viewport capture",
+        "file": "/tmp/practice-semantics-zoom-T2ctHm/native-1-growth.png",
+        "sha256": "8b94466ad84c1e6288f8730f614a6c113c1eb6af86b4df56a283687388dd3219"
+      },
+      {
+        "name": "native-1-growth-content",
+        "nativeZoom": 1,
+        "nativeSetting": "1",
+        "viewport": {
+          "width": 1280,
+          "height": 900
+        },
+        "width": 1280,
+        "height": 900,
+        "outerWidth": 1280,
+        "outerHeight": 900,
+        "dpr": 1,
+        "visualScale": 1,
+        "cssZoom": "1",
+        "scroll": 1280,
+        "client": 1280,
+        "pngWidth": 1280,
+        "pngHeight": 900,
+        "sampledColors": 51,
+        "capture": "CDP compositor viewport, no document clip or beyond-viewport capture",
+        "file": "/tmp/practice-semantics-zoom-T2ctHm/native-1-growth-content.png",
+        "sha256": "fb9fec72eea7efece383718c750970b4c2817cbb75ec46ff7d9b15f1dcc64b1b"
+      },
+      {
+        "name": "native-1-goals",
+        "nativeZoom": 1,
+        "nativeSetting": "1",
+        "viewport": {
+          "width": 1280,
+          "height": 900
+        },
+        "width": 1280,
+        "height": 900,
+        "outerWidth": 1280,
+        "outerHeight": 900,
+        "dpr": 1,
+        "visualScale": 1,
+        "cssZoom": "1",
+        "scroll": 1280,
+        "client": 1280,
+        "pngWidth": 1280,
+        "pngHeight": 900,
+        "sampledColors": 62,
+        "capture": "CDP compositor viewport, no document clip or beyond-viewport capture",
+        "file": "/tmp/practice-semantics-zoom-T2ctHm/native-1-goals.png",
+        "sha256": "c332885c79ce23837d24d87e4da8681971bfc09749e07205a9eaaad8f42fc801"
+      },
+      {
+        "name": "native-1-goals-content",
+        "nativeZoom": 1,
+        "nativeSetting": "1",
+        "viewport": {
+          "width": 1280,
+          "height": 900
+        },
+        "width": 1280,
+        "height": 900,
+        "outerWidth": 1280,
+        "outerHeight": 900,
+        "dpr": 1,
+        "visualScale": 1,
+        "cssZoom": "1",
+        "scroll": 1280,
+        "client": 1280,
+        "pngWidth": 1280,
+        "pngHeight": 900,
+        "sampledColors": 59,
+        "capture": "CDP compositor viewport, no document clip or beyond-viewport capture",
+        "file": "/tmp/practice-semantics-zoom-T2ctHm/native-1-goals-content.png",
+        "sha256": "512651cb90c03bb9614b1a82115f3c1e699ae59371e3709f1567d9c8597ca2a6"
+      },
+      {
+        "name": "native-1-reports",
+        "nativeZoom": 1,
+        "nativeSetting": "1",
+        "viewport": {
+          "width": 1280,
+          "height": 900
+        },
+        "width": 1280,
+        "height": 900,
+        "outerWidth": 1280,
+        "outerHeight": 900,
+        "dpr": 1,
+        "visualScale": 1,
+        "cssZoom": "1",
+        "scroll": 1280,
+        "client": 1280,
+        "pngWidth": 1280,
+        "pngHeight": 900,
+        "sampledColors": 70,
+        "capture": "CDP compositor viewport, no document clip or beyond-viewport capture",
+        "file": "/tmp/practice-semantics-zoom-T2ctHm/native-1-reports.png",
+        "sha256": "823286ebd90b1c1e3bb614e89bbb30e1f231f82b21591b7b5e7efee841d6c77b"
+      },
+      {
+        "name": "native-1-pending",
+        "nativeZoom": 1,
+        "nativeSetting": "1",
+        "viewport": {
+          "width": 1280,
+          "height": 900
+        },
+        "width": 1280,
+        "height": 900,
+        "outerWidth": 1280,
+        "outerHeight": 900,
+        "dpr": 1,
+        "visualScale": 1,
+        "cssZoom": "1",
+        "scroll": 1280,
+        "client": 1280,
+        "pngWidth": 1280,
+        "pngHeight": 900,
+        "sampledColors": 58,
+        "capture": "CDP compositor viewport, no document clip or beyond-viewport capture",
+        "file": "/tmp/practice-semantics-zoom-T2ctHm/native-1-pending.png",
+        "sha256": "55213b43b84b653ee1fef5f34897536d1e1586996d71f521c10ea7d736656987"
+      },
+      {
+        "name": "native-2-overview",
+        "nativeZoom": 2,
+        "nativeSetting": "2",
+        "viewport": {
+          "width": 1280,
+          "height": 900
+        },
+        "width": 640,
+        "height": 450,
+        "outerWidth": 1280,
+        "outerHeight": 900,
+        "dpr": 2,
+        "visualScale": 1,
+        "cssZoom": "1",
+        "scroll": 640,
+        "client": 640,
+        "pngWidth": 1280,
+        "pngHeight": 900,
+        "sampledColors": 62,
+        "capture": "CDP compositor viewport, no document clip or beyond-viewport capture",
+        "file": "/tmp/practice-semantics-zoom-T2ctHm/native-2-overview.png",
+        "sha256": "a611b3283b283a3364eab425fa6171bf91bff18e51950113b7de3c49b1adaa4b"
+      },
+      {
+        "name": "native-2-overview-content",
+        "nativeZoom": 2,
+        "nativeSetting": "2",
+        "viewport": {
+          "width": 1280,
+          "height": 900
+        },
+        "width": 640,
+        "height": 450,
+        "outerWidth": 1280,
+        "outerHeight": 900,
+        "dpr": 2,
+        "visualScale": 1,
+        "cssZoom": "1",
+        "scroll": 640,
+        "client": 640,
+        "pngWidth": 1280,
+        "pngHeight": 900,
+        "sampledColors": 51,
+        "capture": "CDP compositor viewport, no document clip or beyond-viewport capture",
+        "file": "/tmp/practice-semantics-zoom-T2ctHm/native-2-overview-content.png",
+        "sha256": "140a995e788f8212cace2d4d2d9f03f4e21eb108905bca1569bb05d788641feb"
+      },
+      {
+        "name": "native-2-sessions",
+        "nativeZoom": 2,
+        "nativeSetting": "2",
+        "viewport": {
+          "width": 1280,
+          "height": 900
+        },
+        "width": 640,
+        "height": 450,
+        "outerWidth": 1280,
+        "outerHeight": 900,
+        "dpr": 2,
+        "visualScale": 1,
+        "cssZoom": "1",
+        "scroll": 640,
+        "client": 640,
+        "pngWidth": 1280,
+        "pngHeight": 900,
+        "sampledColors": 62,
+        "capture": "CDP compositor viewport, no document clip or beyond-viewport capture",
+        "file": "/tmp/practice-semantics-zoom-T2ctHm/native-2-sessions.png",
+        "sha256": "25bf50ac2851a174d930f9444e2bfc616f8b6f4dcf7e056fee31727cb32f5b81"
+      },
+      {
+        "name": "native-2-sessions-content",
+        "nativeZoom": 2,
+        "nativeSetting": "2",
+        "viewport": {
+          "width": 1280,
+          "height": 900
+        },
+        "width": 640,
+        "height": 450,
+        "outerWidth": 1280,
+        "outerHeight": 900,
+        "dpr": 2,
+        "visualScale": 1,
+        "cssZoom": "1",
+        "scroll": 640,
+        "client": 640,
+        "pngWidth": 1280,
+        "pngHeight": 900,
+        "sampledColors": 45,
+        "capture": "CDP compositor viewport, no document clip or beyond-viewport capture",
+        "file": "/tmp/practice-semantics-zoom-T2ctHm/native-2-sessions-content.png",
+        "sha256": "b2f0e7584a8ac76fa81bca21b190b535484c3cdfce4f402f3fcb65e56be1e558"
+      },
+      {
+        "name": "native-2-team",
+        "nativeZoom": 2,
+        "nativeSetting": "2",
+        "viewport": {
+          "width": 1280,
+          "height": 900
+        },
+        "width": 640,
+        "height": 450,
+        "outerWidth": 1280,
+        "outerHeight": 900,
+        "dpr": 2,
+        "visualScale": 1,
+        "cssZoom": "1",
+        "scroll": 640,
+        "client": 640,
+        "pngWidth": 1280,
+        "pngHeight": 900,
+        "sampledColors": 58,
+        "capture": "CDP compositor viewport, no document clip or beyond-viewport capture",
+        "file": "/tmp/practice-semantics-zoom-T2ctHm/native-2-team.png",
+        "sha256": "ee453318ee4abfd1a1a75fbd0dd3a3c668e53253c6d392d7f38fee584d72cca6"
+      },
+      {
+        "name": "native-2-team-content",
+        "nativeZoom": 2,
+        "nativeSetting": "2",
+        "viewport": {
+          "width": 1280,
+          "height": 900
+        },
+        "width": 640,
+        "height": 450,
+        "outerWidth": 1280,
+        "outerHeight": 900,
+        "dpr": 2,
+        "visualScale": 1,
+        "cssZoom": "1",
+        "scroll": 640,
+        "client": 640,
+        "pngWidth": 1280,
+        "pngHeight": 900,
+        "sampledColors": 52,
+        "capture": "CDP compositor viewport, no document clip or beyond-viewport capture",
+        "file": "/tmp/practice-semantics-zoom-T2ctHm/native-2-team-content.png",
+        "sha256": "415a7aa190164706a339dc464b87a9b6c56b229681dbd349578f33970d97736f"
+      },
+      {
+        "name": "native-2-money",
+        "nativeZoom": 2,
+        "nativeSetting": "2",
+        "viewport": {
+          "width": 1280,
+          "height": 900
+        },
+        "width": 640,
+        "height": 450,
+        "outerWidth": 1280,
+        "outerHeight": 900,
+        "dpr": 2,
+        "visualScale": 1,
+        "cssZoom": "1",
+        "scroll": 640,
+        "client": 640,
+        "pngWidth": 1280,
+        "pngHeight": 900,
+        "sampledColors": 60,
+        "capture": "CDP compositor viewport, no document clip or beyond-viewport capture",
+        "file": "/tmp/practice-semantics-zoom-T2ctHm/native-2-money.png",
+        "sha256": "92e6b076a6d5ddc2143d4a95c6ebbba9b9e51df4223497a8be06f9661dcd0d43"
+      },
+      {
+        "name": "native-2-money-content",
+        "nativeZoom": 2,
+        "nativeSetting": "2",
+        "viewport": {
+          "width": 1280,
+          "height": 900
+        },
+        "width": 640,
+        "height": 450,
+        "outerWidth": 1280,
+        "outerHeight": 900,
+        "dpr": 2,
+        "visualScale": 1,
+        "cssZoom": "1",
+        "scroll": 640,
+        "client": 640,
+        "pngWidth": 1280,
+        "pngHeight": 900,
+        "sampledColors": 77,
+        "capture": "CDP compositor viewport, no document clip or beyond-viewport capture",
+        "file": "/tmp/practice-semantics-zoom-T2ctHm/native-2-money-content.png",
+        "sha256": "114ce7d30d63df5c5368d1739ae9682168f3fc629dfbeed8f6239acbe5f5822e"
+      },
+      {
+        "name": "native-2-growth",
+        "nativeZoom": 2,
+        "nativeSetting": "2",
+        "viewport": {
+          "width": 1280,
+          "height": 900
+        },
+        "width": 640,
+        "height": 450,
+        "outerWidth": 1280,
+        "outerHeight": 900,
+        "dpr": 2,
+        "visualScale": 1,
+        "cssZoom": "1",
+        "scroll": 640,
+        "client": 640,
+        "pngWidth": 1280,
+        "pngHeight": 900,
+        "sampledColors": 63,
+        "capture": "CDP compositor viewport, no document clip or beyond-viewport capture",
+        "file": "/tmp/practice-semantics-zoom-T2ctHm/native-2-growth.png",
+        "sha256": "86a132d02e04b393af0c94261893870655fdb8038049fd90c8fc2bb53765be3a"
+      },
+      {
+        "name": "native-2-growth-content",
+        "nativeZoom": 2,
+        "nativeSetting": "2",
+        "viewport": {
+          "width": 1280,
+          "height": 900
+        },
+        "width": 640,
+        "height": 450,
+        "outerWidth": 1280,
+        "outerHeight": 900,
+        "dpr": 2,
+        "visualScale": 1,
+        "cssZoom": "1",
+        "scroll": 640,
+        "client": 640,
+        "pngWidth": 1280,
+        "pngHeight": 900,
+        "sampledColors": 47,
+        "capture": "CDP compositor viewport, no document clip or beyond-viewport capture",
+        "file": "/tmp/practice-semantics-zoom-T2ctHm/native-2-growth-content.png",
+        "sha256": "39dde163e71d89d9eaf477f00cc72059c850e145e147cb15c4c13d2e6904e3eb"
+      },
+      {
+        "name": "native-2-goals",
+        "nativeZoom": 2,
+        "nativeSetting": "2",
+        "viewport": {
+          "width": 1280,
+          "height": 900
+        },
+        "width": 640,
+        "height": 450,
+        "outerWidth": 1280,
+        "outerHeight": 900,
+        "dpr": 2,
+        "visualScale": 1,
+        "cssZoom": "1",
+        "scroll": 640,
+        "client": 640,
+        "pngWidth": 1280,
+        "pngHeight": 900,
+        "sampledColors": 61,
+        "capture": "CDP compositor viewport, no document clip or beyond-viewport capture",
+        "file": "/tmp/practice-semantics-zoom-T2ctHm/native-2-goals.png",
+        "sha256": "daf31c701b571132ffe87275a23e7a6477b31e264b7d0ce48c57ca03a78925a0"
+      },
+      {
+        "name": "native-2-goals-content",
+        "nativeZoom": 2,
+        "nativeSetting": "2",
+        "viewport": {
+          "width": 1280,
+          "height": 900
+        },
+        "width": 640,
+        "height": 450,
+        "outerWidth": 1280,
+        "outerHeight": 900,
+        "dpr": 2,
+        "visualScale": 1,
+        "cssZoom": "1",
+        "scroll": 640,
+        "client": 640,
+        "pngWidth": 1280,
+        "pngHeight": 900,
+        "sampledColors": 46,
+        "capture": "CDP compositor viewport, no document clip or beyond-viewport capture",
+        "file": "/tmp/practice-semantics-zoom-T2ctHm/native-2-goals-content.png",
+        "sha256": "02dae7d8c0d08555fffe7faa894aff52510141705f7fc7dea6a8d46c44fd6b08"
+      },
+      {
+        "name": "native-2-reports",
+        "nativeZoom": 2,
+        "nativeSetting": "2",
+        "viewport": {
+          "width": 1280,
+          "height": 900
+        },
+        "width": 640,
+        "height": 450,
+        "outerWidth": 1280,
+        "outerHeight": 900,
+        "dpr": 2,
+        "visualScale": 1,
+        "cssZoom": "1",
+        "scroll": 640,
+        "client": 640,
+        "pngWidth": 1280,
+        "pngHeight": 900,
+        "sampledColors": 67,
+        "capture": "CDP compositor viewport, no document clip or beyond-viewport capture",
+        "file": "/tmp/practice-semantics-zoom-T2ctHm/native-2-reports.png",
+        "sha256": "7ffa5a84bc59861e24e71b43ee8491dceea37225092e112b7a7ff22ea395abc8"
+      },
+      {
+        "name": "native-2-pending",
+        "nativeZoom": 2,
+        "nativeSetting": "2",
+        "viewport": {
+          "width": 1280,
+          "height": 900
+        },
+        "width": 640,
+        "height": 450,
+        "outerWidth": 1280,
+        "outerHeight": 900,
+        "dpr": 2,
+        "visualScale": 1,
+        "cssZoom": "1",
+        "scroll": 640,
+        "client": 640,
+        "pngWidth": 1280,
+        "pngHeight": 900,
+        "sampledColors": 56,
+        "capture": "CDP compositor viewport, no document clip or beyond-viewport capture",
+        "file": "/tmp/practice-semantics-zoom-T2ctHm/native-2-pending.png",
+        "sha256": "386f8af37510d3bee1e9e44b287fe7d704dcf3d313f6ab37c2f2558a5bd27ec6"
+      },
+      {
+        "name": "native-4-overview",
+        "nativeZoom": 4,
+        "nativeSetting": "4",
+        "viewport": {
+          "width": 1280,
+          "height": 900
+        },
+        "width": 320,
+        "height": 225,
+        "outerWidth": 1280,
+        "outerHeight": 900,
+        "dpr": 4,
+        "visualScale": 1,
+        "cssZoom": "1",
+        "scroll": 320,
+        "client": 320,
+        "pngWidth": 1280,
+        "pngHeight": 900,
+        "sampledColors": 58,
+        "capture": "CDP compositor viewport, no document clip or beyond-viewport capture",
+        "file": "/tmp/practice-semantics-zoom-T2ctHm/native-4-overview.png",
+        "sha256": "2b23fc15c6a075ac6836717efea9ec91243818bb1a892cc00d833ce7b4f4fdfc"
+      },
+      {
+        "name": "native-4-overview-content",
+        "nativeZoom": 4,
+        "nativeSetting": "4",
+        "viewport": {
+          "width": 1280,
+          "height": 900
+        },
+        "width": 320,
+        "height": 225,
+        "outerWidth": 1280,
+        "outerHeight": 900,
+        "dpr": 4,
+        "visualScale": 1,
+        "cssZoom": "1",
+        "scroll": 320,
+        "client": 320,
+        "pngWidth": 1280,
+        "pngHeight": 900,
+        "sampledColors": 45,
+        "capture": "CDP compositor viewport, no document clip or beyond-viewport capture",
+        "file": "/tmp/practice-semantics-zoom-T2ctHm/native-4-overview-content.png",
+        "sha256": "19d7300659219cdd306079dde35fe226daf775ecb85cf190c0c07a53824bd6b7"
+      },
+      {
+        "name": "native-4-sessions",
+        "nativeZoom": 4,
+        "nativeSetting": "4",
+        "viewport": {
+          "width": 1280,
+          "height": 900
+        },
+        "width": 320,
+        "height": 225,
+        "outerWidth": 1280,
+        "outerHeight": 900,
+        "dpr": 4,
+        "visualScale": 1,
+        "cssZoom": "1",
+        "scroll": 320,
+        "client": 320,
+        "pngWidth": 1280,
+        "pngHeight": 900,
+        "sampledColors": 41,
+        "capture": "CDP compositor viewport, no document clip or beyond-viewport capture",
+        "file": "/tmp/practice-semantics-zoom-T2ctHm/native-4-sessions.png",
+        "sha256": "86185d76c3041245e5de2ee7f0ea7a9c9709271c1ac51bfed34991a34a6ff717"
+      },
+      {
+        "name": "native-4-sessions-content",
+        "nativeZoom": 4,
+        "nativeSetting": "4",
+        "viewport": {
+          "width": 1280,
+          "height": 900
+        },
+        "width": 320,
+        "height": 225,
+        "outerWidth": 1280,
+        "outerHeight": 900,
+        "dpr": 4,
+        "visualScale": 1,
+        "cssZoom": "1",
+        "scroll": 320,
+        "client": 320,
+        "pngWidth": 1280,
+        "pngHeight": 900,
+        "sampledColors": 46,
+        "capture": "CDP compositor viewport, no document clip or beyond-viewport capture",
+        "file": "/tmp/practice-semantics-zoom-T2ctHm/native-4-sessions-content.png",
+        "sha256": "d7c8ab1b4a53714b81f8f64f98eaa169046fc8f39da457a5fb7386a06d6bc0d8"
+      },
+      {
+        "name": "native-4-team",
+        "nativeZoom": 4,
+        "nativeSetting": "4",
+        "viewport": {
+          "width": 1280,
+          "height": 900
+        },
+        "width": 320,
+        "height": 225,
+        "outerWidth": 1280,
+        "outerHeight": 900,
+        "dpr": 4,
+        "visualScale": 1,
+        "cssZoom": "1",
+        "scroll": 320,
+        "client": 320,
+        "pngWidth": 1280,
+        "pngHeight": 900,
+        "sampledColors": 42,
+        "capture": "CDP compositor viewport, no document clip or beyond-viewport capture",
+        "file": "/tmp/practice-semantics-zoom-T2ctHm/native-4-team.png",
+        "sha256": "bc64bed0fb4431e3ed4ef2f6d1c2de5eef5e5f63b6d7b80b1264a3809f0715d4"
+      },
+      {
+        "name": "native-4-team-content",
+        "nativeZoom": 4,
+        "nativeSetting": "4",
+        "viewport": {
+          "width": 1280,
+          "height": 900
+        },
+        "width": 320,
+        "height": 225,
+        "outerWidth": 1280,
+        "outerHeight": 900,
+        "dpr": 4,
+        "visualScale": 1,
+        "cssZoom": "1",
+        "scroll": 320,
+        "client": 320,
+        "pngWidth": 1280,
+        "pngHeight": 900,
+        "sampledColors": 40,
+        "capture": "CDP compositor viewport, no document clip or beyond-viewport capture",
+        "file": "/tmp/practice-semantics-zoom-T2ctHm/native-4-team-content.png",
+        "sha256": "574e256db925236abb8a6d304abd108bd07ae1fc7379221a4af3cc714568861c"
+      },
+      {
+        "name": "native-4-money",
+        "nativeZoom": 4,
+        "nativeSetting": "4",
+        "viewport": {
+          "width": 1280,
+          "height": 900
+        },
+        "width": 320,
+        "height": 225,
+        "outerWidth": 1280,
+        "outerHeight": 900,
+        "dpr": 4,
+        "visualScale": 1,
+        "cssZoom": "1",
+        "scroll": 320,
+        "client": 320,
+        "pngWidth": 1280,
+        "pngHeight": 900,
+        "sampledColors": 44,
+        "capture": "CDP compositor viewport, no document clip or beyond-viewport capture",
+        "file": "/tmp/practice-semantics-zoom-T2ctHm/native-4-money.png",
+        "sha256": "f352864ea8c89a9c132110829f168cd6383d1cce9f101e5b68c043adff84f0ee"
+      },
+      {
+        "name": "native-4-money-content",
+        "nativeZoom": 4,
+        "nativeSetting": "4",
+        "viewport": {
+          "width": 1280,
+          "height": 900
+        },
+        "width": 320,
+        "height": 225,
+        "outerWidth": 1280,
+        "outerHeight": 900,
+        "dpr": 4,
+        "visualScale": 1,
+        "cssZoom": "1",
+        "scroll": 320,
+        "client": 320,
+        "pngWidth": 1280,
+        "pngHeight": 900,
+        "sampledColors": 46,
+        "capture": "CDP compositor viewport, no document clip or beyond-viewport capture",
+        "file": "/tmp/practice-semantics-zoom-T2ctHm/native-4-money-content.png",
+        "sha256": "9c56fd446614e81be45b697030fa210f35d10169ce67fa08304c5c23a448487b"
+      },
+      {
+        "name": "native-4-growth",
+        "nativeZoom": 4,
+        "nativeSetting": "4",
+        "viewport": {
+          "width": 1280,
+          "height": 900
+        },
+        "width": 320,
+        "height": 225,
+        "outerWidth": 1280,
+        "outerHeight": 900,
+        "dpr": 4,
+        "visualScale": 1,
+        "cssZoom": "1",
+        "scroll": 320,
+        "client": 320,
+        "pngWidth": 1280,
+        "pngHeight": 900,
+        "sampledColors": 44,
+        "capture": "CDP compositor viewport, no document clip or beyond-viewport capture",
+        "file": "/tmp/practice-semantics-zoom-T2ctHm/native-4-growth.png",
+        "sha256": "f1207d288227daf27d51266345163b22d62dd358d8ffeb21454bcb03739c5f3e"
+      },
+      {
+        "name": "native-4-growth-content",
+        "nativeZoom": 4,
+        "nativeSetting": "4",
+        "viewport": {
+          "width": 1280,
+          "height": 900
+        },
+        "width": 320,
+        "height": 225,
+        "outerWidth": 1280,
+        "outerHeight": 900,
+        "dpr": 4,
+        "visualScale": 1,
+        "cssZoom": "1",
+        "scroll": 320,
+        "client": 320,
+        "pngWidth": 1280,
+        "pngHeight": 900,
+        "sampledColors": 44,
+        "capture": "CDP compositor viewport, no document clip or beyond-viewport capture",
+        "file": "/tmp/practice-semantics-zoom-T2ctHm/native-4-growth-content.png",
+        "sha256": "4cf37b0aec45ea5eb17218e3bbf6cb5ed0fbcc07b0b478463105d3823c08093c"
+      },
+      {
+        "name": "native-4-goals",
+        "nativeZoom": 4,
+        "nativeSetting": "4",
+        "viewport": {
+          "width": 1280,
+          "height": 900
+        },
+        "width": 320,
+        "height": 225,
+        "outerWidth": 1280,
+        "outerHeight": 900,
+        "dpr": 4,
+        "visualScale": 1,
+        "cssZoom": "1",
+        "scroll": 320,
+        "client": 320,
+        "pngWidth": 1280,
+        "pngHeight": 900,
+        "sampledColors": 42,
+        "capture": "CDP compositor viewport, no document clip or beyond-viewport capture",
+        "file": "/tmp/practice-semantics-zoom-T2ctHm/native-4-goals.png",
+        "sha256": "51f0811c79ebce01c3311728f13b3ba50afef7cc27e7585867e5a85731840f78"
+      },
+      {
+        "name": "native-4-goals-content",
+        "nativeZoom": 4,
+        "nativeSetting": "4",
+        "viewport": {
+          "width": 1280,
+          "height": 900
+        },
+        "width": 320,
+        "height": 225,
+        "outerWidth": 1280,
+        "outerHeight": 900,
+        "dpr": 4,
+        "visualScale": 1,
+        "cssZoom": "1",
+        "scroll": 320,
+        "client": 320,
+        "pngWidth": 1280,
+        "pngHeight": 900,
+        "sampledColors": 53,
+        "capture": "CDP compositor viewport, no document clip or beyond-viewport capture",
+        "file": "/tmp/practice-semantics-zoom-T2ctHm/native-4-goals-content.png",
+        "sha256": "ef07750d2aeb88beb0fd84a9f58c791fcc7bb41bbeb2c635c1e3c5621338975b"
+      },
+      {
+        "name": "native-4-reports",
+        "nativeZoom": 4,
+        "nativeSetting": "4",
+        "viewport": {
+          "width": 1280,
+          "height": 900
+        },
+        "width": 320,
+        "height": 225,
+        "outerWidth": 1280,
+        "outerHeight": 900,
+        "dpr": 4,
+        "visualScale": 1,
+        "cssZoom": "1",
+        "scroll": 320,
+        "client": 320,
+        "pngWidth": 1280,
+        "pngHeight": 900,
+        "sampledColors": 55,
+        "capture": "CDP compositor viewport, no document clip or beyond-viewport capture",
+        "file": "/tmp/practice-semantics-zoom-T2ctHm/native-4-reports.png",
+        "sha256": "f5fb07c7688fb4eaa7c33ac850af0ca4dd30bfcc6b018ce2c1bc870ea02c5909"
+      },
+      {
+        "name": "native-4-pending",
+        "nativeZoom": 4,
+        "nativeSetting": "4",
+        "viewport": {
+          "width": 1280,
+          "height": 900
+        },
+        "width": 320,
+        "height": 225,
+        "outerWidth": 1280,
+        "outerHeight": 900,
+        "dpr": 4,
+        "visualScale": 1,
+        "cssZoom": "1",
+        "scroll": 320,
+        "client": 320,
+        "pngWidth": 1280,
+        "pngHeight": 900,
+        "sampledColors": 57,
+        "capture": "CDP compositor viewport, no document clip or beyond-viewport capture",
+        "file": "/tmp/practice-semantics-zoom-T2ctHm/native-4-pending.png",
+        "sha256": "f26ea3175b091ebb197acb54d6bec6cf79620666dd1825694b4f24e5a81bc28b"
+      }
+    ]
+  },
+  "failedBrowserAttempts": [
+    {
+      "file": "/private/tmp/profit-first-planning-input-render-Edr1GT/results.json",
+      "sha256": "4707af9852ec675d53f6bb00e20284689b70f76132a1e1361b78bfc316062dce",
+      "provenance": {
+        "commit": "7f0f59d474557baad00b0391bfb9cc9e4b4e6b52",
+        "tree": "95513323147469f929ea5e804bf5c0d79caf0901"
+      },
+      "browserErrors": [],
+      "status": "fail",
+      "cases": [
+        {
+          "name": "initial-negative-estimate",
+          "status": "pass",
+          "error": {
+            "invalid": "true",
+            "id": "«r1»-estimate:revenue",
+            "role": "alert",
+            "text": "Enter a finite, nonnegative amount up to 10,000,000,000, or leave blank for Unknown.",
+            "visible": true
+          }
+        },
+        {
+          "name": "initial-negative-floor",
+          "status": "pass",
+          "error": {
+            "invalid": "true",
+            "id": "«r2»-floor:business-profit",
+            "role": "alert",
+            "text": "Enter a finite, nonnegative percentage, or leave blank for Unknown.",
+            "visible": true
+          }
+        },
+        {
+          "name": "native-estimate-minus",
+          "status": "pass"
+        },
+        {
+          "name": "native-estimate-exponent",
+          "status": "pass"
+        },
+        {
+          "name": "native-floor-minus",
+          "status": "pass"
+        },
+        {
+          "name": "native-floor-exponent",
+          "status": "pass"
+        },
+        {
+          "name": "native-goal-minus",
+          "status": "pass"
+        },
+        {
+          "name": "native-goal-exponent",
+          "status": "pass"
+        },
+        {
+          "name": "intermediate-preview-blocks-grouped-staging",
+          "status": "pass"
+        },
+        {
+          "name": "intentional-blank-zero-and-infeasible-floor",
+          "status": "fail",
+          "error": "locator.fill: Timeout 5000ms exceeded.\nCall log:\n\u001b[2m  - waiting for getByLabel('Monthly billed revenue estimate', { exact: true })\u001b[22m\n\u001b[2m    - locator resolved to <input min=\"0\" step=\"any\" value=\"0.00\" type=\"number\" max=\"10000000000\" aria-invalid=\"false\" aria-label=\"Monthly billed revenue estimate\"/>\u001b[22m\n\u001b[2m    - fill(\"10000\")\u001b[22m\n\u001b[2m  - attempting fill action\u001b[22m\n\u001b[2m    2 × waiting for element to be visible, enabled and editable\u001b[22m\n\u001b[2m      - element is not visible\u001b[22m\n\u001b[2m    - retrying fill action\u001b[22m\n\u001b[2m    - waiting 20ms\u001b[22m\n\u001b[2m    2 × waiting for element to be visible, enabled and editable\u001b[22m\n\u001b[2m      - element is not visible\u001b[22m\n\u001b[2m    - retrying fill action\u001b[22m\n\u001b[2m      - waiting 100ms\u001b[22m\n\u001b[2m    10 × waiting for element to be visible, enabled and editable\u001b[22m\n\u001b[2m       - element is not visible\u001b[22m\n\u001b[2m     - retrying fill action\u001b[22m\n\u001b[2m       - waiting 500ms\u001b[22m\n\n    at change (/Users/eliam/Documents/Codex/2026-10-14/task-2/practice-app-durable-history/verification/profit-first-planning-input-render.mjs:112:61)\n    at /Users/eliam/Documents/Codex/2026-10-14/task-2/practice-app-durable-history/verification/profit-first-planning-input-render.mjs:271:15\n    at async check (/Users/eliam/Documents/Codex/2026-10-14/task-2/practice-app-durable-history/verification/profit-first-planning-input-render.mjs:163:5)\n    at async runRender (/Users/eliam/Documents/Codex/2026-10-14/task-2/practice-app-durable-history/verification/profit-first-planning-input-render.mjs:266:7)\n    at async file:///Users/eliam/Documents/Codex/2026-10-14/task-2/practice-app-durable-history/verification/profit-first-planning-input-render.mjs:93:3"
+        }
+      ]
+    },
+    {
+      "file": "/private/tmp/profit-first-planning-input-render-jYvxMn/results.json",
+      "sha256": "02055d2a5ee862bc4e9a96046ce100280895ed5b3549f40e8f2585a3a38207ce",
+      "provenance": {
+        "commit": "e9a2c6c638b423afd3cd46cfdf74138cdd09a7e9",
+        "tree": "23acd7dec844256a3b78103f1394a3bf8977bcb5"
+      },
+      "browserErrors": [],
+      "status": "fail",
+      "cases": [
+        {
+          "name": "initial-negative-estimate",
+          "status": "fail",
+          "error": "AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:\n\n'10000.00' !== '-1'\n\n    at file:///Users/eliam/Documents/Codex/2026-10-14/task-2/practice-app-durable-history/verification/profit-first-planning-input-render.mjs:213:16\n    at async check (file:///Users/eliam/Documents/Codex/2026-10-14/task-2/practice-app-durable-history/verification/profit-first-planning-input-render.mjs:163:5)\n    at async runRender (file:///Users/eliam/Documents/Codex/2026-10-14/task-2/practice-app-durable-history/verification/profit-first-planning-input-render.mjs:209:7)\n    at async file:///Users/eliam/Documents/Codex/2026-10-14/task-2/practice-app-durable-history/verification/profit-first-planning-input-render.mjs:93:3"
+        }
+      ]
+    }
+  ],
+  "nativeRecovery": {
+    "record": "verification/native-abrupt-recovery-results.json",
+    "sha256": "6bf6707cebc329c7b949ec4c625a5fcbf8b598d8ba43421c8d54eca376c43842",
+    "source": "6227adc15b7f80ab1df11ed54eb631183cba8277",
+    "result": "pass",
+    "initialFailureRecord": "verification/native-abrupt-recovery-initial-setup-failure.json",
+    "limits": "Idle acknowledged commits and tested synthetic restore only; no in-flight/power-loss/load/production/AT speech certification"
+  },
+  "remaining": [
+    "Parent-controlled exact-source release/preservation/publication and read-only live verification.",
+    "Owner feedback, actual AT speech, broader browser/wrapper and fresh external-provider boundaries remain separately scoped."
+  ]
+}
