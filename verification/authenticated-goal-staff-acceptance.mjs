@@ -8,15 +8,19 @@ import { fileURLToPath } from "node:url";
 import { spawn, execFileSync } from "node:child_process";
 import { createHash, randomUUID } from "node:crypto";
 import { syntheticClerkFixture } from "../artifacts/api-server/test/synthetic-clerk.mjs";
+import { createNativePostgresFixture, sanitizeNativeParentEnvironment } from "./native-postgres-fixture.mjs";
+
+const removedDatabaseEnvironment = sanitizeNativeParentEnvironment();
 
 const repo = fileURLToPath(new URL("../", import.meta.url));
+const nativeBin = process.env.PRACTICE_NATIVE_POSTGRES_BIN;
 const runtime = process.env.PRACTICE_ACCEPTANCE_RUNTIME;
-if (!runtime || !runtime.startsWith("/tmp/")) throw new Error("Set PRACTICE_ACCEPTANCE_RUNTIME to a temporary test-only dependency directory.");
+if ((!nativeBin && !runtime) || (runtime && !runtime.startsWith("/tmp/"))) throw new Error("Embedded mode requires PRACTICE_ACCEPTANCE_RUNTIME in a temporary test-only dependency directory.");
 const require = createRequire(path.join(repo, "artifacts/api-server/package.json"));
 const dbRequire = createRequire(path.join(repo, "lib/db/package.json"));
-const temporaryRequire = createRequire(path.join(runtime, "package.json"));
-const { PGlite } = temporaryRequire("@electric-sql/pglite");
-const { PGLiteSocketServer } = temporaryRequire("@electric-sql/pglite-socket");
+const temporaryRequire = nativeBin ? null : createRequire(path.join(runtime, "package.json"));
+const PGlite = nativeBin ? null : temporaryRequire("@electric-sql/pglite").PGlite;
+const PGLiteSocketServer = nativeBin ? null : temporaryRequire("@electric-sql/pglite-socket").PGLiteSocketServer;
 const { build } = require("esbuild");
 const { generateDrizzleJson, generateMigration } = dbRequire("drizzle-kit/api");
 const out = process.env.PRACTICE_ACCEPTANCE_OUTPUT ?? await fs.mkdtemp("/tmp/practice-auth-saves-");
@@ -30,10 +34,11 @@ try {
 const clerk = syntheticClerkFixture();
 const token = clerk.token("owner@example.test");
 const checks = [];
-let database, socket, child, base, uiBase, browser, page, appLog = "", ui;
+let database, socket, nativeDatabase, child, base, uiBase, browser, page, appLog = "", ui;
+let acceptanceResult;
 const requests = [], browserErrors = [], screenshots = [];
 const git = (...args) => execFileSync("git", args, { cwd: repo, encoding: "utf8" }).trim();
-const buildProvenance = { commit: git("rev-parse", "HEAD"), tree: git("rev-parse", "HEAD^{tree}") };
+const buildProvenance = { commit: git("rev-parse", "HEAD"), tree: git("rev-parse", "HEAD^{tree}"), harnessSha256: createHash("sha256").update(await fs.readFile(fileURLToPath(import.meta.url))).digest("hex"), removedDatabaseEnvironment };
 const runtimeChanges = git("diff", "HEAD", "--name-only", "--", "lib", "artifacts", "package.json", "pnpm-lock.yaml");
 assert.equal(runtimeChanges, "", "Commit runtime changes before acceptance so source provenance is exact.");
 async function freePort() {
@@ -48,15 +53,24 @@ async function moduleFrom(contents) {
   return import("data:text/javascript;base64," + Buffer.from(result.outputFiles[0].text).toString("base64"));
 }
 async function startDatabase(initialize = false) {
-  database = await PGlite.create({ dataDir });
+  if (nativeBin) {
+    nativeDatabase ??= await createNativePostgresFixture({ directory: path.join(out, "native-postgres"), binDirectory: nativeBin });
+    await nativeDatabase.start(initialize);
+    const client = new (dbRequire("pg").Client)({ connectionString: nativeDatabase.connectionString });
+    await client.connect();
+    database = { query: (sql, params) => client.query(sql, params), exec: sql => client.query(sql), close: () => client.end() };
+  } else database = await PGlite.create({ dataDir });
   if (initialize) {
     const schema = await moduleFrom('export * from "./lib/db/src/schema/index.ts";');
     const statements = await generateMigration(generateDrizzleJson({}), generateDrizzleJson(schema));
     for (const statement of statements) await database.exec(statement);
   }
-  socket = new PGLiteSocketServer({ db: database, host: "127.0.0.1", port: await freePort(), maxConnections: 20 });
-  await socket.start();
+  if (!nativeBin) {
+    socket = new PGLiteSocketServer({ db: database, host: "127.0.0.1", port: await freePort(), maxConnections: 20 });
+    await socket.start();
+  }
 }
+const databaseUrl = () => nativeBin ? nativeDatabase.connectionString : "postgresql://postgres:postgres@" + socket.getServerConn() + "/postgres";
 async function call(endpoint, body, method = body ? "POST" : "GET", bearer = token, origin = uiBase ?? base) {
   const response = await fetch(base + "/api" + endpoint, {
     method, headers: { ...(bearer ? { authorization: "Bearer " + bearer } : {}), ...(body ? { "content-type": "application/json" } : {}), ...(origin ? { origin } : {}) },
@@ -70,7 +84,7 @@ async function startApi(origin) {
   const port = await freePort();
   base = "http://127.0.0.1:" + port;
   const env = Object.fromEntries(["PATH", "HOME", "TMPDIR", "LANG"].filter(key => process.env[key]).map(key => [key, process.env[key]]));
-  Object.assign(env, clerk.env, { DATABASE_URL: "postgresql://postgres:postgres@" + socket.getServerConn() + "/postgres", NODE_ENV: "development", HOST: "127.0.0.1", PORT: String(port), LOCAL_PREVIEW: "false", SEED_DEMO_DATA: "false", EMC_OWNER_EMAIL: "owner@example.test", EMC_PRACTICE_ID: "synthetic-goal-staff", APP_ORIGIN: origin ?? base });
+  Object.assign(env, clerk.env, { DATABASE_URL: databaseUrl(), NODE_ENV: "development", HOST: "127.0.0.1", PORT: String(port), LOCAL_PREVIEW: "false", SEED_DEMO_DATA: "false", EMC_OWNER_EMAIL: "owner@example.test", EMC_PRACTICE_ID: "synthetic-goal-staff", APP_ORIGIN: origin ?? base });
   child = spawn(process.execPath, ["artifacts/api-server/dist/index.mjs"], { cwd: repo, env, stdio: ["ignore", "pipe", "pipe"] });
   child.stdout.on("data", data => { appLog += data; });
   child.stderr.on("data", data => { appLog += data; });
@@ -90,12 +104,16 @@ async function stopApi() {
   child = null;
 }
 async function stopDatabase() {
-  if (socket) await socket.stop();
-  socket = null;
-  // The socket adapter schedules detach callbacks after its server closes.
-  await new Promise(resolve => setTimeout(resolve, 100));
-  if (database) await database.close();
-  database = null;
+  try {
+    if (socket) await socket.stop();
+    socket = null;
+    // The socket adapter schedules detach callbacks after its server closes.
+    await new Promise(resolve => setTimeout(resolve, 100));
+    if (database) await database.close();
+  } finally {
+    database = null;
+    if (nativeDatabase) await nativeDatabase.stop();
+  }
 }
 async function startUi() {
   const bundled = await build({
@@ -133,6 +151,8 @@ async function section(name) {
 const owner = () => page.locator(".pw-edit-item", { has: page.getByRole("heading", { name: "Owner pay", exact: true }) });
 async function staffEditor() {
   await section("Money");
+  const reference = page.getByText("Reported activity, recorded actuals and dated source settings", { exact: true });
+  if (await reference.count() && !await reference.evaluate(node => node.parentElement.open)) await reference.click();
   await page.getByText("Edit dated money sources", { exact: true }).click();
   await page.getByText("Support staff pay", { exact: true }).click();
   await page.getByLabel("Synthetic Coordinator hourly rate", { exact: true }).waitFor();
@@ -160,7 +180,7 @@ try {
   execFileSync(process.execPath, ["node_modules/vite/bin/vite.js", "build"], { cwd: path.join(repo, "artifacts/comp-dashboard"), env: { ...process.env, PORT: "4318", BASE_PATH: "/" }, stdio: "pipe" });
   buildProvenance.apiBundleSha256 = createHash("sha256").update(await fs.readFile(path.join(repo, "artifacts/api-server/dist/index.mjs"))).digest("hex");
   await startDatabase(true);
-  const wire = new (dbRequire("pg").Client)({ connectionString: "postgresql://postgres:postgres@" + socket.getServerConn() + "/postgres" });
+  const wire = new (dbRequire("pg").Client)({ connectionString: databaseUrl() });
   await wire.connect();
   try {
     assert.equal((await wire.query("select $1::text as value", ["synthetic"])).rows[0].value, "synthetic");
@@ -296,20 +316,34 @@ try {
   await page.getByLabel("Synthetic Coordinator rate start date", { exact: true }).fill("2026-10-16");
   assert.equal(await page.getByLabel("Synthetic Coordinator hourly rate", { exact: true }).inputValue(), "24");
   assert.deepEqual((await call("/staff")).data.find(member => member.id === sourceStaff.id), sourceStaff);
-  checks.push("API and embedded database fully stopped/reopened fromdisk; annualgoal,staffterms,source staff,audit and revision survive; UI reload confirms");
+  checks.push(`API and ${nativeBin ? "native PostgreSQL server" : "embedded database"} fully stopped/reopened fromdisk; annualgoal,staffterms,source staff,audit and revision survive; UI reload confirms`);
   assert.deepEqual(browserErrors, []);
   assert.equal(requests.filter(request => request.method === "POST").length, 6);
   assert.ok(requests.filter(request => request.method === "POST").every(request => request.path === "/api/hub" && request.status === 200));
-  const result = { candidate: buildProvenance.commit, sourceTree: buildProvenance.tree, buildProvenance, environment: { engine: version, storage: "filesystem-backed embedded PostgreSQL over loopback wire protocol, unchangedpg/DrizzleAPI", authentication: "actual Clerk middleware and requireAccess; fresh local RS256 key; frontend identity hook fixture,notGoogleOAuth", nativePostgres: "unavailable:hostSysVshared-memoryexhausted", realBusinessData: false, productionAccess: false, externalRequestsAllowed: false }, checks, browserErrors, screenshots, requests, finalRevision: durable.revision, auditRows: historyBefore.length, staffTerms: durable.data.staffTerms, annualGoal: durable.data.goals.find(goal => goal.name === "Owner pay") };
-  await fs.writeFile(path.join(out, "results.json"), JSON.stringify(result, null, 2) + "\n");
-  console.log(JSON.stringify({ out, checks: checks.length, finalRevision: durable.revision, auditRows: historyBefore.length, browserErrors, screenshots: screenshots.length }));
+  const result = { candidate: buildProvenance.commit, sourceTree: buildProvenance.tree, buildProvenance, environment: { engine: version, storage: nativeBin ? "disposable native PostgreSQL over loopback, unchanged pg/Drizzle API" : "filesystem-backed embedded PostgreSQL over loopback wire protocol, unchangedpg/DrizzleAPI", authentication: "actual Clerk middleware and requireAccess; fresh local RS256 key; frontend identity hook fixture,notGoogleOAuth", nativePostgres: nativeBin ? nativeDatabase.ownershipEvidence : "unavailable:hostSysVshared-memoryexhausted", realBusinessData: false, productionAccess: false, externalRequestsAllowed: false }, checks, browserErrors, screenshots, requests, finalRevision: durable.revision, auditRows: historyBefore.length, staffTerms: durable.data.staffTerms, annualGoal: durable.data.goals.find(goal => goal.name === "Owner pay") };
+  acceptanceResult = result;
 } catch (error) {
   if (page) await page.screenshot({ path: path.join(out, "failure.png"), fullPage: true }).catch(() => {});
   console.error(JSON.stringify({ out, message: error.message?.split("data:text/javascript")[0], browserErrors, body: page ? (await page.locator("body").innerText().catch(() => "")).slice(0, 2200) : null, appLog: appLog.slice(-2000) }));
   process.exitCode = 1;
 } finally {
-  if (browser) await browser.close();
-  if (ui) await new Promise(resolve => ui.close(resolve));
-  await stopApi();
-  await stopDatabase();
+  const cleanupErrors = [];
+  for (const [name, cleanup] of [
+    ["browser", async () => { if (browser) await browser.close(); }],
+    ["ui", async () => { if (ui) await new Promise(resolve => ui.close(resolve)); }],
+    ["api", stopApi],
+    ["database", stopDatabase],
+  ]) {
+    try { await cleanup(); } catch (error) { cleanupErrors.push({ name, message: error.message }); }
+  }
+  const cleanup = { status: cleanupErrors.length ? "cleanup-failed" : "complete", errors: cleanupErrors,
+    ...(nativeDatabase ? { nativePostgres: nativeDatabase.ownershipEvidence } : {}) };
+  await fs.writeFile(path.join(out, "cleanup.json"), JSON.stringify(cleanup, null, 2) + "\n");
+  if (cleanupErrors.length) { process.exitCode = 1; console.error(JSON.stringify({ out, cleanup })); }
+  if (acceptanceResult) {
+    acceptanceResult.status = cleanupErrors.length ? "cleanup-failed" : "pass";
+    acceptanceResult.cleanup = cleanup;
+    await fs.writeFile(path.join(out, "results.json"), JSON.stringify(acceptanceResult, null, 2) + "\n");
+    console.log(JSON.stringify({ out, status: acceptanceResult.status, checks: checks.length, finalRevision: acceptanceResult.finalRevision, auditRows: acceptanceResult.auditRows, browserErrors, screenshots: screenshots.length }));
+  }
 }
