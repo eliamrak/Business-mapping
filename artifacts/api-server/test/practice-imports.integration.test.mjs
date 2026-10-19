@@ -8,6 +8,7 @@ import { join } from "node:path";
 import net from "node:net";
 import express from "express";
 import { createHash } from "node:crypto";
+import { isolatedDatabaseBundle, assertIsolatedDatabaseBundle } from "../../../verification/isolated-database-bundle.mjs";
 
 const require = createRequire(new URL("../package.json", import.meta.url));
 const { Client } = createRequire(
@@ -211,13 +212,18 @@ before(async () => {
       export { pool } from "${new URL("../../../lib/db/src/index.ts", import.meta.url).pathname}";
     `,
   );
-  esbuild.buildSync({
+  const repo = new URL("../../../", import.meta.url).pathname;
+  const build = await esbuild.build({
     entryPoints: [bundleSource],
+    absWorkingDir: repo,
     bundle: true,
     format: "cjs",
     platform: "node",
     outfile: bundledEntry,
+    metafile: true,
+    plugins: [isolatedDatabaseBundle(repo)],
   });
+  assertIsolatedDatabaseBundle(build.metafile, repo);
   const bundled = require(bundledEntry);
   const route = bundled.default;
   pool = bundled.pool;

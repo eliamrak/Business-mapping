@@ -47,3 +47,24 @@ Independent review reproduced and then cleared root ownership, parent-environmen
 Final embedded compatibility replay: `/tmp/practice-auth-saves-ecMyCd/results.json`, status `pass`, nine check groups, revision7, seven audit rows, eight captures, no browser errors, cleanup complete. This remains explicitly embedded evidence, not native acceptance.
 
 For disposable native execution, use the installed native binary directory in `PRACTICE_NATIVE_POSTGRES_BIN` and run `node verification/native-postgres-gated-suites.mjs`. Then run `node verification/authenticated-goal-staff-acceptance.mjs` with that same binary directory, the existing Chromium path in `PRACTICE_BROWSER_PATH`, and an existing Playwright package path in `PRACTICE_PLAYWRIGHT_PACKAGE`. Native mode does not require PGlite dependencies. Both tools create and own separate fresh temporary clusters. Use the reviewed temporary checkout; do not point either tool at an existing database or change the app checkout, production configuration or deployment.
+
+## First Native Run and Demonstrated Test Defect
+
+Replit's native PostgreSQL16.10 started successfully for reviewed tooling `d90310a`. The corrected isolated invocation used Node24.13.0 with an empty inherited environment and explicit PostgreSQL, Python and Node paths. The temporary checkout reused installed dependencies by symlink; the app checkout remained clean at `d35f1dd3dbeadd45e6948287f00e1ac97b434e77`.
+
+| Suite | Result |
+| --- | --- |
+| hub.integration |17/17 passed; exit0|
+| practice-imports.integration |10 individual cases passed; file-level teardown failed; exit1|
+| session-goals.persistence |1/1 passed; exit0|
+| sessions.integration |12/12 passed; exit0|
+
+The runner report at `/tmp/practice-native-gated-eMSKpk/report.json` has SHA256 `ec613ab2ed72dfe4b07f54b9d722bd313ed312abf0d2ae8b20cdc0c11574ac14`. API and owned PostgreSQL processes stopped. Overall result is a failure, not a pass.
+
+Retained bundle inspection proved that the import test compiled two identical-source database modules with different identities: the route's `@workspace/db` resolved through linked dependencies into the app checkout, while its exported cleanup pool came from the temporary checkout. Thus `pool.end()` drained the wrong pool. Forced disposable-database removal then caused two late PostgreSQL termination errors. No import assertion failed, and no production database was involved.
+
+The narrow test repair pins `@workspace/db` and its schema to the disposable checkout, uses asynchronous esbuild to support that resolver, and asserts exactly one owned database module before loading the bundle. A symlinked-dependency regression proves distinct route/cleanup objects before the fix and identical objects after it. Independent review also bundled the actual route and verified one owned module; no assertions or asynchronous errors were suppressed. This changes test infrastructure only, not the production route or database pool implementation.
+
+The native save/restart harness was not run in the first operation because Playwright was absent. That dependency blocker was not an access denial. A free, isolated public-registry install now pins Playwright1.64.1 under `/tmp/practice-playwright-runtime-20261019`, with scripts/audit/funding checks disabled, no browser download, and no production settings or credentials. Its lock records integrity `sha512-HCrVhHr5QQuwYoswEUGTb7gGp522yflbv/ST8nF4sFWGuLjQCt17Q/EubpGGSNKYn1tsTCPZxqHhHCfVURu7UA==`. A headless about:blank smoke test with the existing Chromium passed with zero external requests. The app's package files and dependencies remained unchanged.
+
+A new pinned native run is still required to certify the repaired teardown and the full save/restart harness.
