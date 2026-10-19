@@ -25,6 +25,8 @@ const checks=String.raw`
 const requests=[];
 await page.route('**/*',route=>{const req=route.request();if(new URL(req.url()).hostname!=='127.0.0.1')return route.abort();requests.push({method:req.method(),path:new URL(req.url()).pathname});return route.fallback();});
 workspace.periods=[];
+for(const clinician of ['Elia','Erin'])for(const date of ['2026-09-24','2026-10-07'])snapshots[0].rows.push(...Array.from({length:5},(_,index)=>attendance('synthetic-planning-'+clinician+'-'+date+'-'+index,clinician,date)));
+snapshots[0].coverageEnd='2026-10-07';
 Object.assign(workspace,(await import('file://'+process.cwd()+'/lib/practice/src/hub/model.ts')).workspaceSchema.parse(workspace));
 const original={goals:structuredClone(workspace.goals),context:structuredClone(context),snapshots:structuredClone(snapshots),transactions:structuredClone(workspace.transactions)};
 const savePending=async()=>{const pending=page.getByLabel('Pending practice edits',{exact:true});await pending.getByRole('button',{name:'Review changes',exact:true}).click();await pending.getByRole('button',{name:'Save changes',exact:true}).click();await pending.waitFor({state:'hidden'});};
