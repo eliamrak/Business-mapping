@@ -75,7 +75,7 @@ await clickSection('Overview');assert.equal(await history.innerText(),yearHistor
 for(const width of [1280,390])await capture('overview-year-history',width,900);
 await clickSection('Growth');
 assert.equal(await page.getByText('Review client attribution candidates',{exact:true}).count(),0);
-assert.ok(await page.getByRole('tab',{name:'Rooms',exact:true}).count()>0);
+assert.equal(await page.getByRole('navigation',{name:'Growth views',exact:true}).getByRole('button',{name:'Rooms',exact:true}).count(),1);
 for(const width of [1280,390])await capture('growth-rooms-no-consults',width,900);
 workspace.settings.familyW2ClinicianId=null;workspace.settings.ownerPayrollOverride=false;workspace.settings.ownerPayrollMonthly=0;
 workspace.categories.push({id:uuid('9910'),name:'Synthetic owner cost',kind:'owner'});
