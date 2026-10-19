@@ -2653,6 +2653,7 @@
   font-size: 12px;
 }
 .pw-segmented [aria-selected="true"],
+.pw-segmented [aria-current="page"],
 .pw-segmented [aria-pressed="true"] {
   background: white;
   color: #f2f4f5;

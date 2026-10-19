@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { Save, Plus, Trash2 } from "lucide-react";
 import {
   Dialog,
@@ -130,6 +130,12 @@ export default function RecordEditor({
     [saving, setSaving] = useState(false),
     [discard, setDiscard] = useState(false),
     [corrections, setCorrections] = useState<Record<string, string>>({});
+  const editingFocus = useRef<HTMLElement | null>(null);
+  const keepEditing = useRef<HTMLButtonElement | null>(null);
+  useLayoutEffect(() => {
+    if (discard) keepEditing.current?.focus();
+    else if (editingFocus.current?.isConnected) editingFocus.current.focus();
+  }, [discard]);
   const finalized = workspace.periods.filter(
     (p) =>
       p.status === "finalized" &&
@@ -251,18 +257,25 @@ export default function RecordEditor({
         }}
       >
         <DialogHeader>
-          <DialogTitle>{labels[collection]}</DialogTitle>
+          <DialogTitle>
+            {discard ? "Discard unsaved changes?" : labels[collection]}
+          </DialogTitle>
           <DialogDescription>
-            {workspace[collection].some((x) => x.id === record.id)
-              ? "Edit saved record"
-              : "New record"}
+            {discard
+              ? "Your changes have not been saved. Keep editing to continue, or discard them to close this record."
+              : workspace[collection].some((x) => x.id === record.id)
+                ? "Edit saved record"
+                : "New record"}
           </DialogDescription>
         </DialogHeader>
-        {discard ? (
+        {discard && (
           <div>
-            <h3>Discard unsaved changes?</h3>
             <div className="pr-dialog-actions">
-              <button className="pr-button" onClick={() => setDiscard(false)}>
+              <button
+                ref={keepEditing}
+                className="pr-button"
+                onClick={() => setDiscard(false)}
+              >
                 Keep editing
               </button>
               <button className="pr-button" onClick={onClose}>
@@ -270,8 +283,15 @@ export default function RecordEditor({
               </button>
             </div>
           </div>
-        ) : (
-          <form onSubmit={save}>
+        )}
+          <form
+            hidden={discard}
+            onFocusCapture={(event) => {
+              if (event.target instanceof HTMLElement)
+                editingFocus.current = event.target;
+            }}
+            onSubmit={save}
+          >
             {finalized.map((p) => (
               <label className="pr-field" key={p.id}>
                 Correction reason: {p.name}
@@ -657,7 +677,6 @@ export default function RecordEditor({
               </button>
             </div>
           </form>
-        )}
       </DialogContent>
     </Dialog>
   );

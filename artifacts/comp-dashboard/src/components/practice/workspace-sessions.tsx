@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useEffect, useId, useMemo, useRef, useState, type ReactNode } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { ApiError } from "@workspace/api-client-react";
 import { CartesianGrid, Legend, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
@@ -44,6 +44,7 @@ import { buildCompleteSessionTrend as buildSessionTrend, completePeriodSessionSu
 import SessionImportDialog from "./session-import-dialog";
 import BulkSessionEntry from "./bulk-session-entry";
 import MetricComparison from "./metric-comparison";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 type Draft = {
   completed: string;
@@ -179,6 +180,22 @@ export default function WorkspaceSessions({
   const [entryOpen, setEntryOpen] = useState(!practiceRecords.length);
   const [compactDetailsOpen, setCompactDetailsOpen] = useState(false);
   const entryRef = useRef<HTMLDivElement>(null);
+  const historyOpener = useRef<HTMLButtonElement | null>(null);
+  const focusEntry = useRef(false);
+  const entryId = useId();
+  const detailsId = useId();
+  useEffect(() => {
+    if (!entryOpen || !focusEntry.current) return;
+    // Radix may reveal a previously hidden panel after this component's effect.
+    const frame = requestAnimationFrame(() => {
+      if (entryRef.current) {
+        focusEntry.current = false;
+        entryRef.current.focus();
+        entryRef.current.scrollIntoView({ block: "start" });
+      }
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [entryOpen, range]);
   const [bulkState, setBulkState] = useState({ dirty: false, busy: false });
   const [historyRange, setHistoryRange] = useState("4periods");
   const [hireThreshold, setHireThreshold] = useState(80);
@@ -764,25 +781,33 @@ export default function WorkspaceSessions({
       {!sandbox && (
         <div className="pw-session-entry-control">
           <button className="pw-button" type="button" aria-expanded={entryOpen}
+            aria-controls={entryId}
             disabled={entryOpen && (dirty || busy || bulkState.dirty || bulkState.busy)}
-            onClick={() => setEntryOpen(!entryOpen)}>
+            onClick={() => {
+              setEntryOpen(!entryOpen);
+              if (entryOpen && historyOpener.current?.isConnected) historyOpener.current.focus();
+              historyOpener.current = null;
+            }}>
             <PencilLine /> {entryOpen ? "Close entry" : "Enter or edit totals"}
           </button>
         </div>
       )}
 
-      {!sandbox && entryOpen && <div ref={entryRef}>
-        <div className="pw-segmented pw-session-entry-modes" role="tablist" aria-label="Session entry">
-          <button role="tab" aria-selected={entryMode === "single"}
+      {!sandbox && <div id={entryId} hidden={!entryOpen}>
+      {entryOpen && <Tabs value={entryMode} onValueChange={(next) => {
+        if (next === "single" && !bulkState.dirty && !bulkState.busy) setEntryMode(next);
+        if (next === "bulk" && !dirty && !busy) setEntryMode(next);
+      }}>
+        <TabsList className="pw-segmented pw-session-entry-modes" aria-label="Session entry">
+          <TabsTrigger value="single"
             disabled={bulkState.dirty || bulkState.busy}
-            onClick={() => setEntryMode("single")}>One period</button>
-          <button role="tab" aria-selected={entryMode === "bulk"}
+          >One period</TabsTrigger>
+          <TabsTrigger value="bulk"
             disabled={dirty || busy}
-            onClick={() => setEntryMode("bulk")}>Bulk entry</button>
-        </div>
+          >Bulk entry</TabsTrigger>
+        </TabsList>
 
-      {entryMode === "single" && (
-        <div className="pw-session-entry">
+        <TabsContent value="single" className="pw-session-entry" ref={entryRef} tabIndex={-1}>
           <div className="pw-session-toolbar">
             <button
               className="pw-icon"
@@ -898,6 +923,9 @@ export default function WorkspaceSessions({
                     </span>
                     <button
                       type="button"
+                      aria-label={`${expanded.has(person.id) ? "Hide" : "Add"} details for ${person.label}`}
+                      aria-expanded={expanded.has(person.id)}
+                      aria-controls={`${detailsId}-${person.id}`}
                       onClick={() =>
                         setExpanded((current) => {
                           const next = new Set(current);
@@ -911,6 +939,7 @@ export default function WorkspaceSessions({
                       {expanded.has(person.id) ? "Hide details" : "Add details"}
                     </button>
                   </div>
+                  <div id={`${detailsId}-${person.id}`} hidden={!expanded.has(person.id)}>
                   {expanded.has(person.id) && (
                     <div className="pw-session-extra">
                       {(
@@ -939,6 +968,7 @@ export default function WorkspaceSessions({
                       ))}
                     </div>
                   )}
+                  </div>
                 </article>
               );
             })}
@@ -973,10 +1003,9 @@ export default function WorkspaceSessions({
               <Save /> {busy ? "Saving..." : "Save team totals"}
             </button>
           </div>
-        </div>
-      )}
+        </TabsContent>
 
-      {entryMode === "bulk" && (
+      <TabsContent value="bulk">
         <BulkSessionEntry
           people={people}
           records={manualRecords}
@@ -985,7 +1014,8 @@ export default function WorkspaceSessions({
           onStateChange={setBulkState}
           goals={annualGoals}
         />
-      )}
+      </TabsContent>
+      </Tabs>}
       </div>}
 
       {sandbox && (
@@ -1022,12 +1052,13 @@ export default function WorkspaceSessions({
               <tr key={`${period.start}-${period.end}`}>
                 <th>
                   <button
-                    disabled={dirty || bulkState.dirty || bulkState.busy || sandbox}
-                    onClick={() => {
+                    disabled={dirty || busy || bulkState.dirty || bulkState.busy || sandbox}
+                    onClick={(event) => {
+                      historyOpener.current = event.currentTarget;
+                      focusEntry.current = true;
                       setRange({ start: period.start, end: period.end });
                       setEntryMode("single");
                       setEntryOpen(true);
-                      requestAnimationFrame(() => entryRef.current?.scrollIntoView({ block: "start" }));
                     }}
                   >
                     <strong>{shortDate(period.start)}</strong>

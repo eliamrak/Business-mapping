@@ -437,14 +437,18 @@ function NumberField({
 }) {
   const [text, setText] = useState(String(value));
   const [error, setError] = useState("");
+  const [invalid, setInvalid] = useState(false);
+  const errorId = useId();
   const [busy, setBusy] = useState(false);
   useEffect(() => setText(String(value)), [value]);
   async function save() {
     const next = Number(text);
     if (!text.trim() || !Number.isFinite(next) || next < 0 || next > max) {
+      setInvalid(true);
       setError("Enter a number from 0 to " + max + ".");
       return;
     }
+    setInvalid(false);
     if (next === value) {
       setError("");
       return;
@@ -466,6 +470,8 @@ function NumberField({
         {unit === "$" && <b>$</b>}
         <input
           aria-label={label}
+          aria-invalid={invalid || undefined}
+          aria-describedby={error ? errorId : undefined}
           type="number"
           min="0"
           max={max}
@@ -479,13 +485,14 @@ function NumberField({
             if (e.key === "Escape") {
               setText(String(value));
               setError("");
+              setInvalid(false);
             }
           }}
         />
         {unit && unit !== "$" && <b>{unit}</b>}
       </div>
       {error && (
-        <small role="alert">
+        <small id={errorId} role="alert">
           {error}{" "}
           <button type="button" onClick={() => void save()}>
             Retry
@@ -636,6 +643,8 @@ function SharedPeriodControls({
 }
 
 function MetricTargetBar({
+  metricLabel,
+  unit,
   value,
   goal,
   benchmark,
@@ -644,6 +653,8 @@ function MetricTargetBar({
   max,
   valueLabel = "Recorded",
 }: {
+  metricLabel: string;
+  unit?: "currency" | "percent" | "number";
   value: number | null | undefined;
   goal?: number | null;
   benchmark?: number | null;
@@ -658,10 +669,13 @@ function MetricTargetBar({
   const scale = Math.max(max ?? 0, ...finiteValues, 1) * 1.08;
   const pct = (item: number | null | undefined) =>
     item === null || item === undefined || !Number.isFinite(item) ? null : Math.max(0, Math.min(100, (item / scale) * 100));
+  const describe = (item: number | null | undefined) =>
+    item === null || item === undefined || !Number.isFinite(item) ? "not available" : fmt(item, unit);
   return (
     <div
       className={`pw-target-bar ${lowerIsBetter ? "pw-lower-better" : ""}`}
-      aria-label={`${valueLabel}, goal, benchmark, and capacity comparison`}
+      role="img"
+      aria-label={`${metricLabel}: ${valueLabel} ${describe(value)}; Goal ${describe(goal)}; Practice benchmark ${describe(benchmark)}; Real capacity limit ${describe(limit)}${lowerIsBetter ? "; lower is better" : ""}.`}
     >
       <div className="pw-target-track">
         {pct(value) !== null && (
@@ -4444,6 +4458,8 @@ export default function PracticeWorkspace() {
                           </span>
                         </div>
                         <MetricTargetBar
+                          metricLabel="Consultation close rate"
+                          unit="percent"
                           value={contributorConsult?.conversionRate}
                           benchmark={
                             selectedContributorName === "Whole Practice"
@@ -4698,17 +4714,15 @@ export default function PracticeWorkspace() {
                       or as a marketing service cost, not both.
                     </p>
                   )}
-                  <div
+                  <nav
                     className="pw-segmented"
-                    role="tablist"
-                    aria-label="Marketing view"
+                    aria-label="Growth views"
                     data-unsaved-navigation
                   >
                     {["campaigns"].map((t) => (
                       <button
                         key={t}
-                        role="tab"
-                        aria-selected={marketingTab === t}
+                        aria-current={marketingTab === t ? "page" : undefined}
                         onClick={() => setMarketingTab(t)}
                       >
                         {t === "campaigns"
@@ -4717,13 +4731,11 @@ export default function PracticeWorkspace() {
                       </button>
                     ))}
                     <button
-                      role="tab"
-                      aria-selected={false}
                       onClick={() => setSection("rooms")}
                     >
                       Rooms
                     </button>
-                  </div>
+                  </nav>
                   {(
                     <div className="pw-edit-list">
                       {active(workingWorkspace.campaigns).map((c) => (
@@ -5151,6 +5163,7 @@ export default function PracticeWorkspace() {
                       </div>
                     </div>
                     <MetricTargetBar
+                      metricLabel="Room demand, sessions per week"
                       value={roomDemandWeekly}
                       limit={roomCapacitySlots || null}
                     />
@@ -6042,6 +6055,8 @@ export default function PracticeWorkspace() {
                       <p className="pw-note">Costs use this projection's period and modeled revenue basis. The adjustment reconciles projected revenue and disclosed costs to the engine's operating profit; it is not assigned to an unverified cost category. Taxes, reserves and distributions are allocations after operating profit.</p>
                     </details>
                     <MetricTargetBar
+                      metricLabel="Selected-period operating profit"
+                      unit="currency"
                       value={moneyValues.profit}
                       valueLabel="Selected period"
                       goal={null}
@@ -6093,6 +6108,8 @@ export default function PracticeWorkspace() {
                       )}
                     </div>
                     <MetricTargetBar
+                      metricLabel="Average monthly overhead"
+                      unit="currency"
                       value={recordedOverheadAverage}
                       goal={workingWorkspace.settings.overheadFloorMonthly}
                       benchmark={recordedOverheadValues[0] ?? null}
@@ -7958,6 +7975,8 @@ export default function PracticeWorkspace() {
                               <strong>{fmt(target, unit)}</strong>
                             </div>
                             <MetricTargetBar
+                              metricLabel={row.name}
+                              unit={unit}
                               value={expected ?? null}
                               valueLabel="Estimated"
                               goal={target || null}
@@ -8061,6 +8080,8 @@ export default function PracticeWorkspace() {
                                 {balance.state === "assumed-zero" ? " · no balance entered" : balance.state === "entered-undated" ? " · date not recorded" : ` as of ${balance.date}`}
                               </small>
                               <MetricTargetBar
+                                metricLabel={name + " balance"}
+                                unit="currency"
                                 value={goal?.currentBalance ?? 0}
                                 goal={goal?.amount ?? 0}
                                 valueLabel={balance.state === "assumed-zero" ? "Assumed" : balance.state === "entered-undated" ? "Entered (undated)" : "Recorded"}
@@ -8201,6 +8222,8 @@ export default function PracticeWorkspace() {
                         ))}
                       </ul>
                       <MetricTargetBar
+                        metricLabel={option.goal.name + " monthly operating profit"}
+                        unit="currency"
                         value={option.projected?.values.profit ?? null}
                         goal={workingWorkspace.settings.targetProfitMonthly}
                         benchmark={endpoint?.values.profit ?? null}

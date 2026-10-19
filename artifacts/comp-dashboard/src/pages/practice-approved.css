@@ -66,6 +66,7 @@
 .pw-app .pw-segmented button,
 .pw-app .pw-contributor-tabs button { background: #19232b; border: 1px solid #46535f; border-radius: 24px; color: #a8b3be; min-height: 36px; padding: 7px 16px; }
 .pw-app .pw-segmented button[aria-selected="true"],
+.pw-app .pw-segmented button[aria-current="page"],
 .pw-app .pw-contributor-tabs button[aria-pressed="true"] { background: #344d4b; color: #f2f4f5; border-color: #9fd8c2; }
 .pw-app .pw-session-tracker { position: relative; background: linear-gradient(145deg, #182028, #10161c 65%); border: 1px solid #303842; border-radius: 12px; padding: 23px; }
 .pw-app .pw-session-panel-header { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: start; margin: 0 0 18px; gap: 12px; }
