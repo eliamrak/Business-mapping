@@ -54,7 +54,13 @@ export async function nativeTestPort() {
 export function createNativePostgresFixture({
   directory,
   binDirectory = process.env.PRACTICE_NATIVE_POSTGRES_BIN,
+  signal,
+  commandTimeoutMs = 60000,
+  cleanupTimeoutMs = 45000,
 } = {}) {
+  for (const timeout of [commandTimeoutMs, cleanupTimeoutMs])
+    if (!Number.isSafeInteger(timeout) || timeout <= 0)
+      throw new Error("Native command timeouts must be positive safe integers.");
   if (!directory || !path.isAbsolute(directory))
     throw new Error("A fresh absolute temporary directory is required.");
   if (!binDirectory || !path.isAbsolute(binDirectory))
@@ -80,6 +86,8 @@ export function createNativePostgresFixture({
     dataDirectory,
     socketDirectory,
     binDirectory,
+    commandTimeoutMs,
+    cleanupTimeoutMs,
     syntheticOnly: true,
     events: [],
   };
@@ -87,20 +95,39 @@ export function createNativePostgresFixture({
   const connectionString = () =>
     port ? `postgresql://postgres@127.0.0.1:${port}/postgres` : undefined;
 
-  async function command(name, args) {
+  async function command(name, args, { cleanup = false } = {}) {
+    const commandSignal = cleanup ? undefined : signal;
+    const timeout = cleanup ? cleanupTimeoutMs : commandTimeoutMs;
     try {
-      const result = await execute(path.join(binDirectory, name), args, {
+      commandSignal?.throwIfAborted();
+      const execution = execute(path.join(binDirectory, name), args, {
         env,
         cwd: directory,
         encoding: "utf8",
         maxBuffer: 20 * 1024 * 1024,
+        timeout,
+        // Bound commands even when a stalled executable ignores SIGTERM.
+        killSignal: "SIGKILL",
       });
+      // execFile's signal path can use SIGTERM independently of killSignal.
+      // Signal the exact child ourselves and await its exit before cleanup.
+      const cancel = () => execution.child.kill("SIGKILL");
+      commandSignal?.addEventListener("abort", cancel, { once: true });
+      if (commandSignal?.aborted) cancel();
+      let result;
+      try { result = await execution; }
+      finally { commandSignal?.removeEventListener("abort", cancel); }
       await fs.appendFile(
         path.join(directory, `${name}.log`),
         result.stdout + result.stderr,
       );
+      evidence.events.push({ command: name, code: 0, signal: null });
       return result.stdout.trim();
     } catch (error) {
+      if (commandSignal?.aborted && error.signal === "SIGKILL") {
+        error.cause = commandSignal.reason;
+        error.message = `${commandSignal.reason?.message ?? "Native command aborted"}\n${error.message}`;
+      }
       // Preserve PostgreSQL's exact diagnostics, including resource exhaustion.
       await fs.appendFile(
         path.join(directory, `${name}.log`),
@@ -112,6 +139,9 @@ export function createNativePostgresFixture({
         signal: error.signal,
         stdout: error.stdout,
         stderr: error.stderr,
+        timeoutMs: timeout,
+        killed: error.killed,
+        aborted: commandSignal?.aborted ?? false,
       });
       throw error;
     }
@@ -323,7 +353,11 @@ export function createNativePostgresFixture({
         at: new Date().toISOString(),
       });
     },
-    async stop() {
+    async stop(mode = "fast", { cleanup = false } = {}) {
+      if (!["fast", "immediate"].includes(mode))
+        throw new Error("Unsupported stop mode; only fast or immediate is allowed.");
+      if (mode === "immediate" && (!claimed || !identity))
+        throw new Error("Fixture has not claimed this directory; refusing immediate stop.");
       if (!claimed || !identity) return;
       await assertOwned();
       if (!(await postmaster())) return;
@@ -336,14 +370,14 @@ export function createNativePostgresFixture({
         "-D",
         dataDirectory,
         "-m",
-        "fast",
+        mode,
         "-w",
         "-t",
         "30",
         "stop",
-      ]);
+      ], { cleanup });
+      evidence.events.push({ action: "stop", mode, postmaster: ownedPostmaster, at: new Date().toISOString() });
       ownedPostmaster = undefined;
-      evidence.events.push({ action: "stop", at: new Date().toISOString() });
     },
   };
 }
