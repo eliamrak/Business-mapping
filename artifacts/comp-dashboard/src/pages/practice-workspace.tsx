@@ -160,6 +160,7 @@ import {
 import MoneyFlowToday from "@/components/practice/money-flow-today";
 import MoneyRangeSummary from "@/components/practice/money-range-summary";
 import ProfitFirstPlanning from "@/components/practice/profit-first-planning";
+import { moneyPlanningForecast } from "@/lib/money-planning-forecast";
 import { practiceFinancialRange, financialRangeBridge } from "@/lib/practice-financial-range";
 import { practiceFinancialEstimateRange, type HistoricalPayBasis } from "@/lib/practice-financial-estimate";
 import { financialEstimateDisplay, financialEstimateBridge } from "@/lib/financial-estimate-display";
@@ -1099,8 +1100,11 @@ export default function PracticeWorkspace() {
     };
   }, [workspace, workingWorkspace, moneyFlowWorkspace, modelContext, localRetentionState.snapshots, importEvidenceDeclarations,
     today, periodRange.start, periodRange.end, summaryMonth?.date, importedSessionOverlay?.attendanceCoverage]);
-  const planningForecastMonths = useMemo(() => moneyFlowWorkspace && modelContext
-    ? forecast(moneyFlowWorkspace, modelContext) : [], [moneyFlowWorkspace, modelContext]);
+  const currentMoneyPlanning = useMemo(() => moneyFlowWorkspace && modelContext && !sandbox
+    ? moneyPlanningForecast(moneyFlowWorkspace, modelContext, today, importedSessionOverlay?.attendanceCoverage)
+    : null, [moneyFlowWorkspace, modelContext, sandbox, today, importedSessionOverlay?.attendanceCoverage]);
+  const planningForecastMonths = useMemo(() => sandbox && moneyFlowWorkspace && modelContext
+    ? forecast(moneyFlowWorkspace, modelContext) : currentMoneyPlanning?.months ?? [], [sandbox, moneyFlowWorkspace, modelContext, currentMoneyPlanning]);
   const financialEstimates = useMemo(() => {
     if (!financialRangeReports || !context || !storedWorkspace || !workspace) return null;
     // A compensation target inherited for planning is not an extra salary expense.
@@ -5956,10 +5960,14 @@ export default function PracticeWorkspace() {
                     context={modelContext ?? context}
                     asOf={planningMonth?.date ?? today}
                     estimatedMonthlyValues={planningMonthlyValues}
-                    estimateSourcePeriod={`${planningMonth?.date ?? today} to ${monthEnd(planningMonth?.date ?? today)} · configured monthly forecast estimate; not recorded expenses or bank cash`}
+                    estimateSourcePeriod={currentMoneyPlanning?.basis ?? "Current-month planning baseline unavailable; no desired-session substitution"}
                     legacyGoal={resolved?.goal}
                     onPlanningChange={stageMoneyPlanning}
                   />
+                  {currentMoneyPlanning && <details><summary>Observed planning basis and limitations</summary>
+                    {currentMoneyPlanning.clinicianPace.map(person => <p key={person.id}>{person.name}: {fmt(person.usedWeekly)} sessions / week · {person.basis}</p>)}
+                    {currentMoneyPlanning.warnings.map(warning => <p key={warning}>{warning}</p>)}
+                  </details>}
                   <details className="pw-money-source-reference"><summary>Reported activity, recorded actuals and dated source settings</summary>
                   {historicalBillingReport && <HistoricalBillingSummary report={historicalBillingReport} />}
                   {financialEstimates && <section className="pw-money-bridge-panel" aria-label="Billed-charge financial estimate">
