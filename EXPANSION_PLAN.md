@@ -1,5 +1,7 @@
 # EMCounseling Business Hub Expansion Plan
 
+For the current repair/release queue, use [Practice Repair and Update Register](verification/PRACTICE-REPAIR-UPDATE-REGISTER.md). This is the broader historical expansion roadmap, not a list of current defects. Later recovered call decisions 1-11 and the estimate-only financial scope supersede earlier cash-tracking/accounting prerequisites; completed work is not reopened by old roadmap wording. SEO, Google Ads, insights and further expansion remain deferred until the current phase is complete.
+
 ## Product Goal
 
 Implementation checkpoint: see BUILD_STATUS.md for verified scope and remaining
