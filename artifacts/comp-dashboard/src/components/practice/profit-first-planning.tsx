@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useId, useState } from "react";
 import { moneyPlanningSchema, type MoneyPlanningSettings } from "@workspace/practice/hub";
 import { useUnsaved } from "@/components/hub/use-unsaved";
 import { profitFirstPlanning, type PlanningBucket, type PlanningFundingGoal, type ProfitFirstPlanningInput } from "@/lib/profit-first-planning";
@@ -11,23 +11,50 @@ export type ProfitFirstPlanningProps = ProfitFirstPlanningInput & {
 const dollars = (n: number | null) => n === null ? "Unknown" : (Math.abs(n) < 0.5 ? 0 : n).toLocaleString("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 });
 const dollarInput = (n: number | null) => n === null ? "" : (Math.abs(n) < 0.005 ? 0 : n).toFixed(2);
 const percent = (n: number | null) => n === null ? "Unknown" : `${n.toLocaleString("en-US", { maximumFractionDigits: 1 })}%`;
-const parse = (value: string) => value.trim() && Number.isFinite(Number(value)) && Number(value) >= 0 ? Number(value) : null;
+type NumericInputTarget = { value: string; validity?: { badInput: boolean } };
+const parse = (value: string, maximum: number, badInput = false) => badInput ? undefined : !value.trim() ? null
+  : Number.isFinite(Number(value)) && Number(value) >= 0 && Number(value) <= maximum ? Number(value) : undefined;
 
 export default function ProfitFirstPlanning(props: ProfitFirstPlanningProps) {
   const [planning, setPlanning] = useState<MoneyPlanningSettings>(props.workspace.moneyPlanning ?? {});
   const [drafts, setDrafts] = useState<Record<string, string>>({});
-  const [error, setError] = useState<string | null>(null);
+  const [errors, setErrors] = useState<Record<string, string>>({});
+  const inputId = useId();
   useEffect(() => { setPlanning(props.workspace.moneyPlanning ?? {}); }, [props.workspace.moneyPlanning]);
   const report = profitFirstPlanning({ ...props, workspace: { ...props.workspace, moneyPlanning: planning } });
-  const commit = (next: MoneyPlanningSettings) => {
+  const setFieldError = (key: string, message?: string) => setErrors(current => {
+    const next = { ...current };
+    if (message) next[key] = message; else delete next[key];
+    return next;
+  });
+  const validate = (key: string, target: NumericInputTarget, maximum = 1e10) => {
+    const value = parse(target.value, maximum, target.validity?.badInput);
+    setFieldError(key, value === undefined ? maximum === Infinity
+      ? "Enter a finite, nonnegative percentage, or leave blank for Unknown."
+      : "Enter a finite, nonnegative amount up to 10,000,000,000, or leave blank for Unknown." : undefined);
+    return value;
+  };
+  const commit = (next: MoneyPlanningSettings, key: string) => {
+    if (Object.keys(errors).length) return false;
     const result = moneyPlanningSchema.safeParse(next);
-    if (!result.success) { setError("Enter finite, nonnegative planning amounts within the supported range."); return false; }
-    setError(null);
+    if (!result.success) { setFieldError(key, "Enter finite, nonnegative planning amounts within the supported range."); return false; }
     if (JSON.stringify(next) === JSON.stringify(props.workspace.moneyPlanning ?? {})) return true;
     props.onPlanningChange?.(result.data);
     return true;
   };
-  const setEstimate = (key: string, value: string) => setPlanning(current => ({ ...current, estimatedMonthlyValues: { ...current.estimatedMonthlyValues, [key]: parse(value) } }));
+  const clearDraft = (key: string) => setDrafts(current => { const copy = { ...current }; delete copy[key]; return copy; });
+  const editNumber = (key: string, target: NumericInputTarget, update?: (current: MoneyPlanningSettings, value: number | null) => MoneyPlanningSettings, maximum = 1e10) => {
+    const text = target.value;
+    setDrafts(current => ({ ...current, [key]: text }));
+    const value = validate(key, target, maximum);
+    if (value !== undefined && update) setPlanning(current => update(current, value));
+  };
+  const stageNumber = (key: string, target: NumericInputTarget, maximum = 1e10) => {
+    // A controlled rerender can clear native badInput; only a new valid edit clears its error.
+    if (!errors[key] && validate(key, target, maximum) !== undefined && commit(planning, key)) clearDraft(key);
+  };
+  const errorProps = (key: string) => ({ "aria-invalid": !!errors[key], "aria-describedby": errors[key] ? `${inputId}-${key}` : undefined });
+  const fieldError = (key: string) => errors[key] && <span id={`${inputId}-${key}`} role="alert" className="pf-deficit">{errors[key]}</span>;
   const presets = [
     { key: "building", name: "Building fund monthly contribution", bucket: "business-profit" as const, mode: "additional" as const },
     { key: "marketing", name: "Marketing monthly funding", bucket: "operating-expenses" as const, mode: "marketing-total" as const },
@@ -35,25 +62,24 @@ export default function ProfitFirstPlanning(props: ProfitFirstPlanningProps) {
   const activeGoals = (planning.goals ?? []).filter(g => !g.archived);
   const presetGoals = presets.map(preset => ({ ...preset, goal: activeGoals.find(g => g.name === preset.name && g.mode === preset.mode && g.bucket === preset.bucket) }));
   const otherGoals = activeGoals.filter(g => !presetGoals.some(p => p.goal?.id === g.id));
-  const goalAmount = (key: string) => presetGoals.find(g => g.key === key)?.goal?.monthlyAmount ?? activeGoals.find(g => g.id === key)?.monthlyAmount ?? null;
-  const rawGoalDirty = Object.entries(drafts).some(([key, text]) => text !== (goalAmount(key) === null ? "" : String(goalAmount(key))));
-  useUnsaved(rawGoalDirty || JSON.stringify(planning) !== JSON.stringify(props.workspace.moneyPlanning ?? {}));
-  const stageGoal = (key: string, previous: PlanningFundingGoal | undefined, name: string, bucket: PlanningBucket, mode: PlanningFundingGoal["mode"], text: string) => {
-    if (!previous && !text.trim()) return;
-    const amount = parse(text);
-    if (amount === null && text.trim()) { setError("Enter a nonnegative monthly funding amount."); return; }
+  useUnsaved(Object.keys(drafts).length > 0 || JSON.stringify(planning) !== JSON.stringify(props.workspace.moneyPlanning ?? {}));
+  const stageGoal = (key: string, previous: PlanningFundingGoal | undefined, name: string, bucket: PlanningBucket, mode: PlanningFundingGoal["mode"], target: NumericInputTarget) => {
+    if (errors[key]) return;
+    const amount = validate(key, target);
+    if (amount === undefined) return;
+    if (!previous && amount === null) { clearDraft(key); return; }
     const goal: PlanningFundingGoal = { ...previous, id: previous?.id ?? crypto.randomUUID(), name, bucket, mode, monthlyAmount: amount };
     const next = { ...planning, goals: [...(planning.goals ?? []).filter(g => g.id !== goal.id), goal] };
-    if (commit(next)) {
+    if (commit(next, key)) {
       setPlanning(next);
-      setDrafts(current => { const copy = { ...current }; delete copy[key]; return copy; });
+      clearDraft(key);
     }
   };
-  const estimateInput = (key: string, value: number | null) => <input type="number" min="0" max="10000000000" step="any"
+  const estimateInput = (key: string, value: number | null, label: string) => <><input aria-label={label} type="number" min="0" max="10000000000" step="any" {...errorProps(`estimate:${key}`)}
     value={drafts[`estimate:${key}`] ?? dollarInput(Object.hasOwn(planning.estimatedMonthlyValues ?? {}, key) ? planning.estimatedMonthlyValues![key] : value)}
-    onChange={event => { const text = event.target.value; setDrafts(current => ({ ...current, [`estimate:${key}`]: text })); setEstimate(key, text); }}
-    onBlur={() => { if (commit(planning)) setDrafts(current => { const copy = { ...current }; delete copy[`estimate:${key}`]; return copy; }); }}
-    onKeyDown={event => { if (event.key === "Enter") event.currentTarget.blur(); }} />;
+    onChange={event => editNumber(`estimate:${key}`, event.target, (current, amount) => ({ ...current, estimatedMonthlyValues: { ...current.estimatedMonthlyValues, [key]: amount } }))}
+    onBlur={event => stageNumber(`estimate:${key}`, event.target)}
+    onKeyDown={event => { if (event.key === "Enter") event.currentTarget.blur(); }} />{fieldError(`estimate:${key}`)}</>;
   return <section className="pf-planning" aria-label="Money planning estimates">
     <header><h2>Money planning estimates</h2><p>{report.sourcePeriod}</p></header>
     <div className="pf-summary">
@@ -70,36 +96,35 @@ export default function ProfitFirstPlanning(props: ProfitFirstPlanningProps) {
       <tbody>{report.rows.map(row => <tr key={row.key}>
         <th scope="row">{row.label}</th><td>{percent(row.currentPercent)}</td><td>{dollars(row.currentMonthly)}</td>
         <td className={row.requiredPercent !== null && row.requiredPercent > 100 ? "pf-deficit" : undefined}>{percent(row.requiredPercent)}</td><td>{dollars(row.requiredMonthly)}</td>
-        <td><input aria-label={`${row.label} scenario percentage floor`} type="number" min="0" step="0.1" value={row.scenarioPercent ?? ""}
-          onChange={event => setPlanning(current => ({ ...current, scenarioPercents: { ...current.scenarioPercents, [row.key]: parse(event.target.value) } }))}
-          onBlur={() => commit(planning)} onKeyDown={event => { if (event.key === "Enter") event.currentTarget.blur(); }} /></td>
+        <td><input aria-label={`${row.label} scenario percentage floor`} type="number" min="0" step="0.1" {...errorProps(`floor:${row.key}`)} value={drafts[`floor:${row.key}`] ?? row.scenarioPercent ?? ""}
+          onChange={event => editNumber(`floor:${row.key}`, event.target, (current, amount) => ({ ...current, scenarioPercents: { ...current.scenarioPercents, [row.key]: amount } }), Infinity)}
+          onBlur={event => stageNumber(`floor:${row.key}`, event.target, Infinity)} onKeyDown={event => { if (event.key === "Enter") event.currentTarget.blur(); }} />{fieldError(`floor:${row.key}`)}</td>
       </tr>)}</tbody>
     </table></div>
     <p>Protected configured Erin / co-owner salary estimate: <strong>{dollars(report.protectedErinMonthly)}</strong> per month, included once in Owner payroll before optional goals.</p>
     <fieldset className="pf-goals"><legend>Monthly funding goals</legend>
-      {presetGoals.map(preset => <label key={preset.key}>{preset.name}<input type="number" min="0" max="10000000000" step="100" placeholder="Not configured" disabled={!props.onPlanningChange}
+      {presetGoals.map(preset => <label key={preset.key}>{preset.name}<input aria-label={preset.name} type="number" min="0" max="10000000000" step="100" placeholder="Not configured" disabled={!props.onPlanningChange} {...errorProps(preset.key)}
         value={drafts[preset.key] ?? preset.goal?.monthlyAmount ?? ""}
-        onChange={event => setDrafts(current => ({ ...current, [preset.key]: event.target.value }))}
-        onBlur={event => stageGoal(preset.key, preset.goal, preset.name, preset.bucket, preset.mode, event.target.value)}
-        onKeyDown={event => { if (event.key === "Enter") event.currentTarget.blur(); }} /></label>)}
-      {otherGoals.map(goal => <label key={goal.id}>{goal.name}<input type="number" min="0" max="10000000000" step="100" disabled={!props.onPlanningChange}
+        onChange={event => editNumber(preset.key, event.target)}
+        onBlur={event => stageGoal(preset.key, preset.goal, preset.name, preset.bucket, preset.mode, event.target)}
+        onKeyDown={event => { if (event.key === "Enter") event.currentTarget.blur(); }} />{fieldError(preset.key)}</label>)}
+      {otherGoals.map(goal => <label key={goal.id}>{goal.name}<input aria-label={goal.name} type="number" min="0" max="10000000000" step="100" disabled={!props.onPlanningChange} {...errorProps(goal.id)}
         value={drafts[goal.id] ?? goal.monthlyAmount ?? ""}
-        onChange={event => setDrafts(current => ({ ...current, [goal.id]: event.target.value }))}
-        onBlur={event => stageGoal(goal.id, goal, goal.name, goal.bucket, goal.mode, event.target.value)}
-        onKeyDown={event => { if (event.key === "Enter") event.currentTarget.blur(); }} /></label>)}
+        onChange={event => editNumber(goal.id, event.target)}
+        onBlur={event => stageGoal(goal.id, goal, goal.name, goal.bucket, goal.mode, event.target)}
+        onKeyDown={event => { if (event.key === "Enter") event.currentTarget.blur(); }} />{fieldError(goal.id)}</label>)}
     </fieldset>
     <details open={report.status === "incomplete"}><summary>Cost estimates and source periods</summary>
       <div className="pf-estimates">
-        <label>Monthly billed revenue estimate{estimateInput("revenue", report.revenue)}</label>
+        <label>Monthly billed revenue estimate{estimateInput("revenue", report.revenue, "Monthly billed revenue estimate")}</label>
         {report.costs.map(cost => <label key={cost.key}>{cost.label}
-          {cost.key === "therapistPay" ? <strong>{dollars(cost.monthly)}</strong> : estimateInput(cost.key, cost.monthly)}
+          {cost.key === "therapistPay" ? <strong>{dollars(cost.monthly)}</strong> : estimateInput(cost.key, cost.monthly, cost.label)}
           <small>{cost.source}</small>
         </label>)}
-        <label>Total monthly clinician payroll estimate{estimateInput("clinicianPay", props.estimatedMonthlyValues?.clinicianPay ?? null)}</label>
-        <label>Other monthly income estimate{estimateInput("otherIncome", report.otherIncome)}</label>
+        <label>Total monthly clinician payroll estimate{estimateInput("clinicianPay", props.estimatedMonthlyValues?.clinicianPay ?? null, "Total monthly clinician payroll estimate")}</label>
+        <label>Other monthly income estimate{estimateInput("otherIncome", report.otherIncome, "Other monthly income estimate")}</label>
       </div>
     </details>
-    {error && <p role="alert" className="pf-deficit">{error}</p>}
     {report.reasons.length > 0 && <ul className="pf-limitations">{report.reasons.map(reason => <li key={reason}>{reason}</li>)}</ul>}
     <details><summary>Planning estimate assumptions</summary><ul>{report.assumptions.map(note => <li key={note}>{note}</li>)}</ul></details>
   </section>;
