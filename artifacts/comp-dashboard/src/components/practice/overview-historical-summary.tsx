@@ -5,6 +5,14 @@ import { overviewHistoricalAttrition, type OverviewHistoricalCapacityPeriod } fr
 const number = (value: number | null | undefined) => value == null ? "--" : new Intl.NumberFormat("en-US", { maximumFractionDigits: 1 }).format(value);
 const rate = (value: number | null | undefined) => value == null ? "--" : `${number(value)}%`;
 const periods = ["3mo", "year"] as const;
+const attritionReason = (reason: string) => ({
+  "immature-follow-up": "The full window has not reached 90 days of follow-up.",
+  "incomplete-window-or-follow-up-coverage": "Attendance coverage is incomplete for the full window and its follow-up.",
+  "left-censored-establishment": "Earlier treatment history may change which clients were established.",
+  "incomplete-prior-establishment-coverage": "Earlier coverage does not establish every eligible client's treatment history.",
+  "uncertain-follow-up-evidence": "Unresolved later evidence could change an ending.",
+  "zero-eligible-denominator": "No observed established clients provide a percentage denominator.",
+} as Record<string, string>)[reason] ?? reason;
 const desiredBasisLabel = (basis: OverviewHistoricalCapacityPeriod["desiredBasis"]) => basis === "unknown"
   ? "Desired caseload unknown" : basis === "current-card-assumptions" ? "Current desired-caseload assumption" : "Dated desired-caseload assumptions";
 
@@ -69,9 +77,9 @@ export function OverviewHistoricalSummary({ reports, capacity: providedCapacity,
         const activity = attrition[period];
         return [period, { range: report.window.attrition,
           value: <><strong>{number(activity.total)} clients</strong><span>{rate(activity.attritionPct)}</span></>,
-          detail: <><span>{number(monthlyAttrition(period))} / mature month</span><details><summary>Counts and definition</summary><p>{number(activity.coveredMatureMonths)} covered mature months; 90-day follow-up through {report.window.asOf}. The unique eligible-client denominator for a whole-window percentage is not established; percentage remains unknown rather than borrowing a latest-month or client-month denominator.</p></details></> }];
+          detail: <><span>{number(monthlyAttrition(period))} / mature month</span><details><summary>Counts and definition</summary><p>{number(activity.total)} ended / {number(activity.eligibleClients)} unique observed established clients in the full labeled window. Established means three distinct attended treatment dates and active during the window. Count and percentage require covered follow-up through 90 days after that window; earlier unobserved clients are not certified.</p><p>Monthly average separately uses {number(activity.coveredMatureMonths)} covered mature months, with observations through {report.window.asOf}.</p>{activity.reasons.map(reason => <p key={reason}>{attritionReason(reason)}</p>)}{activity.observedMaturePortion && <p>Separate mature observed portion: {activity.observedMaturePortion.requestedWindow.start} to {activity.observedMaturePortion.requestedWindow.end}: {number(activity.observedMaturePortion.totalEnded)} ended / {number(activity.observedMaturePortion.totalEligible)} eligible, {rate(activity.observedMaturePortion.percentage)}. This is not the full trailing window.</p>}</details></> }];
       })) as Parameters<typeof HistoricalPeriodValues>[0]["values"]} />
-      <HistoricalDifference recent={monthlyAttrition("3mo")} baseline={monthlyAttrition("year")} unit="clients / mature month" />
+      <HistoricalDifference recent={attrition["3mo"].attritionPct} baseline={attrition.year.attritionPct} unit="percentage points" />
     </section>
     <button type="button" className="pw-text-button" onClick={onSessions}>Sessions</button>
   </div>;

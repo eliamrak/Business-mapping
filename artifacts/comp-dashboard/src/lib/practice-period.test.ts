@@ -1,6 +1,14 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { practicePeriodRange } from "./practice-period.ts";
+import { activityPeriodCaption, practicePeriodRange } from "./practice-period.ts";
+
+test("activity captions hide the Overall sentinel without changing date filters", () => {
+  const overall = practicePeriodRange("overall", "2026-10-20", { start: "", end: "" });
+  assert.equal(overall.start, "0000-01-01");
+  assert.equal(activityPeriodCaption("overall", overall), "Overall recorded activity through 2026-10-20");
+  const custom = { start: "2026-09-02", end: "2026-09-21" };
+  assert.equal(activityPeriodCaption("custom", custom), "Selected activity dates: 2026-09-02 to 2026-09-21");
+});
 test("four completed periods end at the last payroll service end, not today", () => {
   assert.deepEqual(practicePeriodRange("4pay", "2026-10-14", { start: "", end: "" }), { start: "2026-08-13", end: "2026-10-07" });
 });

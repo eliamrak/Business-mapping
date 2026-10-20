@@ -1,4 +1,5 @@
 import { resolveImportedProvider, type ImportEvidenceDeclarations } from "@workspace/practice/hub";
+import { periodClientAttrition } from "./period-client-attrition.ts";
 import {
   buildLocalRetentionMetrics,
   estimateLocalClientActivity,
@@ -65,6 +66,7 @@ export function historicalPerformance({ snapshots, consultSnapshots = snapshots,
     window: { ...window, endingObservationCutoff: retention?.endingObservationCutoff ?? window.endingObservationCutoff },
     activity: retention,
     clinicians: clinicians(window.cohort),
+    periodAttrition: periodClientAttrition({ snapshots, requestedWindow: window.attrition, asOf: window.asOf, overrides, ...options }),
     // Aggregate eligible/evaluated journeys once: never average monthly percentages.
     consults: summarizeConsultConversions(consultSnapshots, overrides, window.cohort.start, window.cohort.end, window.asOf, attributions, { ...options, cohortClinicianNames }),
   };

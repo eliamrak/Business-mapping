@@ -127,7 +127,7 @@ import { moneyBridgeSummary } from "@/lib/money-bridge";
 import { summarizeReportedBilling, billingMonthSelectionLabel } from "@/lib/reported-billing";
 import { historicalBillingLedger, historicalBillingOverallStart } from "@/lib/historical-billing-ledger";
 import { HistoricalBillingSummary } from "@/components/practice/historical-billing-summary";
-import { practicePeriodRange } from "@/lib/practice-period";
+import { activityPeriodCaption, practicePeriodRange } from "@/lib/practice-period";
 import { currentPracticeClinicians, configuredRoomsAtDate, snapshotsForClinicians } from "@/lib/practice-scope";
 import { linkedGoalFor, linkedFundGoalFor, type LinkedPracticeGoal, type LinkedFundGoal } from "@/lib/legacy-practice-goals";
 import { completedFundGoalStatus } from "@/lib/completed-fund-goals";
@@ -4636,7 +4636,7 @@ export default function PracticeWorkspace() {
                           <div>
                             <h3>Close rate</h3>
                             <p>
-                              {selectedContributorName} · Selected activity dates: {periodRange.start} to {periodRange.end}
+                              {selectedContributorName} · {activityPeriodCaption(sharedPeriod, periodRange)}
                             </p>
                           </div>
                         </div>

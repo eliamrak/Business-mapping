@@ -6,8 +6,9 @@ import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import ts from "typescript";
 import { historicalPerformancePeriods } from "./historical-performance-periods.ts";
-import type { OverviewHistoricalCapacityPeriod } from "./overview-historical-capacity.ts";
-import type { ClinicianClientActivityMetric } from "./retention-local.ts";
+import { overviewHistoricalAttrition, type OverviewHistoricalCapacityPeriod } from "./overview-historical-capacity.ts";
+import { periodClientAttrition } from "./period-client-attrition.ts";
+import type { ClinicianClientActivityMetric, LocalSnapshot } from "./retention-local.ts";
 import type { OverviewHistoricalSummary as Summary } from "../components/practice/overview-historical-summary.tsx";
 
 const componentUrl = new URL("../components/practice/overview-historical-summary.tsx", import.meta.url);
@@ -95,6 +96,22 @@ const card = (html: string, label: string) => {
   return html.slice(sections[index].index, sections[index + 1]?.index ?? html.indexOf('<button type="button"'));
 };
 const prominent = (html: string) => html.replace(/<details\b[\s\S]*?<\/details>/g, "");
+const julyFixture = (returned = false, asOf = "2026-11-30"): Props => {
+  const props = fixture();
+  const requestedWindow = { start: "2026-07-01", end: "2026-07-31" };
+  const dates = ["2026-07-02", "2026-07-09", "2026-07-16", ...(returned ? ["2026-11-01"] : [])];
+  const snapshots: LocalSnapshot[] = [{
+    id: "july", kind: "attendance", sourceHash: "july", importedAt: "2026-11-30T12:00:00Z",
+    coverageStart: dates[0], coverageEnd: dates.at(-1)!, coverageClinicians: ["Lane"],
+    reportCoverage: { start: "2026-06-01", end: "2026-11-30", complete: true },
+    rows: dates.map(serviceDate => ({ clientId: "client", clinician: "Lane", serviceDate, status: "show", billingCode: "90837", location: null, sourceRowHash: serviceDate })),
+  }];
+  props.reports = historicalPerformancePeriods({ snapshots, today: asOf });
+  // Explicit-window engine output exercises July without altering trailing-calendar anchors.
+  props.reports["3mo"].window.attrition = requestedWindow;
+  props.reports["3mo"].periodAttrition = periodClientAttrition({ snapshots, requestedWindow, asOf });
+  return props;
+};
 
 test("all four cards show both histories simultaneously with exact dates and no period toggles or removed cards", () => {
   const html = render();
@@ -124,9 +141,13 @@ test("values use percent full and percentage-point rate differences, with separa
   assert.match(card(html, labels[1]), /\+20 percentage points vs 12-month baseline/);
   assert.match(card(html, labels[2]), /\+50 percentage points vs 12-month baseline/);
   const attrition = card(html, labels[3]);
-  assert.match(attrition, /<strong>9 clients<\/strong><span>--<\/span>/);
-  assert.match(attrition, /<strong>6 clients<\/strong><span>--<\/span>/);
-  assert.match(attrition, /\+2\.5 clients \/ mature month vs 12-month baseline/);
+  assert.equal([...attrition.matchAll(/<strong>-- clients<\/strong><span>--<\/span>/g)].length, 2);
+  assert.match(attrition, /The full window has not reached 90 days of follow-up\./, "September's 90-day follow-up is incomplete in October, regardless of monthly subtotal controls");
+  assert.doesNotMatch(attrition, /<strong>(?:9|6) clients<\/strong>/);
+  assert.match(attrition, /4\.5 \/ mature month/);
+  assert.match(attrition, /2 \/ mature month/);
+  assert.match(attrition, /Comparison unavailable/);
+  assert.doesNotMatch(attrition, /clients \/ mature month vs 12-month baseline/);
   assert.doesNotMatch(attrition, /99%|percentage points/);
 });
 
@@ -135,6 +156,9 @@ test("known zero rates and counts remain visible; missing evidence is unavailabl
   const recent = props.reports["3mo"];
   assert.ok(recent.activity);
   Object.assign(recent.activity, { initialRetentionRate: 0, retainedClientPairs: 0, endingFullMonthClientEnds: 0, endingFullMonthDenominator: 1, averageClientEndingsPerFullMonth: 0 });
+  const coveredZero = julyFixture(true).reports["3mo"];
+  recent.window.attrition = coveredZero.window.attrition;
+  recent.periodAttrition = coveredZero.periodAttrition;
   Object.assign(recent.consults.practice, { conversionRate: 0, converted: 0 });
   Object.assign(props.capacity["3mo"], { weekly: 0, utilizationPct: 0 });
   props.reports.year.activity = null;
@@ -147,7 +171,8 @@ test("known zero rates and counts remain visible; missing evidence is unavailabl
     assert.match(card(html, label), /<strong>0%<\/strong>/);
     assert.match(card(html, label), /<strong>--<\/strong>/);
   }
-  assert.match(card(html, labels[3]), /<strong>0 clients<\/strong>/);
+  assert.match(card(html, labels[3]), /<strong>0 clients<\/strong><span>0%<\/span>/);
+  assert.match(card(html, labels[3]), /0 ended \/ 1 unique observed established clients/);
   assert.match(card(html, labels[3]), /<strong>-- clients<\/strong>/);
   for (const label of labels) assert.match(card(html, label), /Comparison unavailable/);
 });
@@ -166,9 +191,123 @@ test("selected clinician uses normalized clinician-only counts, close attributio
   assert.match(consult, /5 consultations \u2192 2 confirmed closes/);
   assert.doesNotMatch(prominent(consult), /started treatment|75%|99%/);
   assert.match(card(html, labels[0]), /5 actual \/ 10 desired sessions per week/);
-  assert.match(card(html, labels[3]), /<strong>2 clients<\/strong>/);
-  assert.match(card(html, labels[3]), /<strong>4 clients<\/strong>/);
-  assert.doesNotMatch(card(html, labels[3]), /<strong>9 clients/);
+  assert.equal([...card(html, labels[3]).matchAll(/<strong>-- clients<\/strong><span>--<\/span>/g)].length, 2);
+  assert.doesNotMatch(card(html, labels[3]), /<strong>(?:2|4|9) clients/);
+  assert.match(card(html, labels[3]), /The full window has not reached 90 days of follow-up\./, "October cannot mature the selected clinician's full September window");
+  assert.match(card(html, labels[3]), /Comparison unavailable/);
+  assert.doesNotMatch(card(html, labels[3]), /-1 clients \/ mature month/);
+});
+
+test("mature July evidence renders matching helper count, unique observed denominator and 100%", () => {
+  const props = julyFixture();
+  const result = overviewHistoricalAttrition(props.reports)["3mo"];
+  assert.equal(result.total, 1);
+  assert.equal(result.eligibleClients, 1);
+  assert.equal(result.attritionPct, 100);
+  assert.equal(result.coverageComplete, true);
+  assert.equal(result.cohortQualifier, "observed-established-clients");
+  const attrition = card(render(props), labels[3]);
+  assert.match(attrition, /dateTime="2026-07-01"/);
+  assert.match(attrition, /dateTime="2026-07-31"/);
+  assert.match(prominent(attrition), /<strong>1 clients<\/strong><span>100%<\/span>/);
+  assert.match(attrition, /1 ended \/ 1 unique observed established clients in the full labeled window/);
+  assert.match(attrition, /earlier unobserved clients are not certified/);
+  assert.doesNotMatch(attrition.slice(0, attrition.indexOf('data-period="year"')), /Separate mature observed portion:/, "the fully mature July result has no partial substitute; the independently immature year may have one");
+  props.contributor = "  lAnE  ";
+  assert.match(card(render(props), labels[3]), /<strong>1 clients<\/strong><span>100%<\/span>/);
+});
+
+test("mature July with a later return renders a covered zero ending and positive eligible 0%", () => {
+  const props = julyFixture(true);
+  const result = overviewHistoricalAttrition(props.reports)["3mo"];
+  assert.equal(result.total, 0);
+  assert.equal(result.eligibleClients, 1);
+  assert.equal(result.attritionPct, 0);
+  const attrition = card(render(props), labels[3]);
+  assert.match(prominent(attrition), /<strong>0 clients<\/strong><span>0%<\/span>/);
+  assert.match(attrition, /0 ended \/ 1 unique observed established clients/);
+});
+
+test("explicit period cohort fixtures render the selected clinician percentage rather than practice percentage", () => {
+  const props = julyFixture();
+  const period = props.reports["3mo"].periodAttrition;
+  period.practice = { ...period.practice, totalEligible: 4, eligibleClientIds: ["client", "two", "three", "four"], percentage: 25 };
+  const whole = card(render(props), labels[3]);
+  assert.match(prominent(whole), /<strong>1 clients<\/strong><span>25%<\/span>/);
+  assert.match(whole, /1 ended \/ 4 unique observed established clients/);
+  props.contributor = " lAnE ";
+  const selected = card(render(props), labels[3]);
+  assert.match(prominent(selected), /<strong>1 clients<\/strong><span>100%<\/span>/);
+  assert.match(selected, /1 ended \/ 1 unique observed established clients/);
+  assert.doesNotMatch(prominent(selected), /25%/);
+  props.contributorIdentityVerified = false;
+  assert.doesNotMatch(prominent(card(render(props), labels[3])), /100%|25%|<strong>1 clients/);
+});
+
+test("immature July renders unknown full totals and a separately dated mature observed portion", () => {
+  const props = julyFixture(false, "2026-10-20");
+  assert.ok(props.reports["3mo"].activity);
+  Object.assign(props.reports["3mo"].activity, { endingFullMonthClientEnds: 9, endingFullMonthDenominator: 2, averageClientEndingsPerFullMonth: 4.5, endingAttritionPct: 99 });
+  const attrition = card(render(props), labels[3]);
+  assert.match(prominent(attrition), /<strong>-- clients<\/strong><span>--<\/span>/);
+  assert.doesNotMatch(prominent(attrition), /<strong>(?:1|9) clients<\/strong>|100%|99%/);
+  assert.match(attrition, /-- ended \/ -- unique observed established clients in the full labeled window/);
+  assert.match(attrition, /The full window has not reached 90 days of follow-up\./);
+  assert.match(attrition, /4\.5 \/ mature month/);
+  assert.match(attrition, /Separate mature observed portion: 2026-07-01 to 2026-07-22: 1 ended \/ 1 eligible, 100%\. This is not the full trailing window\./);
+  assert.doesNotMatch(prominent(attrition), /Separate mature observed portion/);
+});
+
+test("attrition differences use full-window clinician percentages while monthly averages remain separate", () => {
+  const props = fixture();
+  const mature = julyFixture().reports["3mo"].periodAttrition.practice;
+  for (const period of ["3mo", "year"] as const) {
+    const report = props.reports[period];
+    const cohort = (eligible: number) => ({
+      ...mature, requestedWindow: { ...report.window.attrition }, effectiveWindow: { ...report.window.attrition },
+      totalEligible: eligible, totalEnded: 1, percentage: 100 / eligible,
+      eligibleClientIds: Array.from({ length: eligible }, (_, index) => `client-${index}`), endingClientIds: ["client-0"],
+    });
+    // Explicit mature output fixtures: practice 50%/50%, Lane 20%/10%.
+    report.window.asOf = "2027-02-01";
+    report.periodAttrition = {
+      practice: cohort(2), byClinician: [{ clinician: "Lane", ...cohort(period === "3mo" ? 5 : 10) }],
+    };
+  }
+  const practice = card(render(props), labels[3]);
+  assert.match(practice, /0 percentage points vs 12-month baseline/);
+  assert.doesNotMatch(practice, /\+2\.5 clients \/ mature month/);
+  props.contributor = " lAnE ";
+  const selected = card(render(props), labels[3]);
+  assert.match(selected, /<strong>1 clients<\/strong><span>20%<\/span>/);
+  assert.match(selected, /<strong>1 clients<\/strong><span>10%<\/span>/);
+  assert.match(selected, /\+10 percentage points vs 12-month baseline/);
+  assert.match(selected, /1 \/ mature month/);
+  assert.match(selected, /2 \/ mature month/);
+  assert.doesNotMatch(selected, /clients \/ mature month vs 12-month baseline|99%|50%/);
+});
+
+test("attrition coverage reasons render as plain-language explanations", () => {
+  const props = fixture();
+  const reasons = ["immature-follow-up", "incomplete-window-or-follow-up-coverage", "left-censored-establishment", "incomplete-prior-establishment-coverage", "uncertain-follow-up-evidence", "zero-eligible-denominator"];
+  props.reports["3mo"].periodAttrition.practice.reasons = reasons;
+  const attrition = card(render(props), labels[3]);
+  assert.match(attrition, /The full window has not reached 90 days of follow-up\./);
+  assert.match(attrition, /Attendance coverage is incomplete for the full window and its follow-up\./);
+  assert.match(attrition, /Earlier treatment history may change which clients were established\./);
+  assert.match(attrition, /Earlier coverage does not establish every eligible client&#x27;s treatment history\./);
+  assert.match(attrition, /Unresolved later evidence could change an ending\./);
+  assert.match(attrition, /No observed established clients provide a percentage denominator\./);
+  for (const reason of reasons) assert.ok(!attrition.includes(reason), `Internal reason leaked: ${reason}`);
+});
+
+test("legacy report without periodAttrition renders unknown safely despite monthly controls", () => {
+  const props = fixture();
+  for (const report of Object.values(props.reports)) Reflect.deleteProperty(report, "periodAttrition");
+  const attrition = card(render(props), labels[3]);
+  assert.equal([...attrition.matchAll(/<strong>-- clients<\/strong><span>--<\/span>/g)].length, 2);
+  assert.match(attrition, /Whole-window client evidence is unavailable\./);
+  assert.doesNotMatch(attrition, /<strong>(?:9|6) clients/);
 });
 
 test("unverified clinician identity withholds all four metrics even if populated rows and capacity were passed", () => {

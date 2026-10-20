@@ -111,8 +111,8 @@ export function overviewHistoricalCapacity(input: OverviewHistoricalCapacityInpu
   return { "3mo": summarize("3mo"), year: summarize("year") };
 }
 
-/** Endings and mature months share one source row. No existing unique eligible-
- * client denominator establishes a whole-window percentage; keep it unknown.
+/** Whole-window count and percentage share one unique observed-client cohort.
+ * Monthly averages retain their separate mature-month basis.
  */
 export function overviewHistoricalAttrition(reports: HistoricalPerformancePeriods, clinicianName?: string) {
   const summarize = (period: "3mo" | "year") => {
@@ -121,12 +121,16 @@ export function overviewHistoricalAttrition(reports: HistoricalPerformancePeriod
       row.clinician.trim().replace(/\s+/g, " ").toLowerCase() === clinicianName.trim().replace(/\s+/g, " ").toLowerCase());
     const source = clinicianName === undefined ? report.activity : matches.length === 1 ? matches[0] : null;
     const months = source?.endingFullMonthDenominator;
-    const count = source?.endingFullMonthClientEnds;
-    const known = months != null && Number.isInteger(months) && months > 0 && count != null && Number.isInteger(count) && count >= 0;
+    const periodMatches = clinicianName === undefined ? [] : (report.periodAttrition?.byClinician ?? []).filter(row =>
+      row.clinician.trim().replace(/\s+/g, " ").toLowerCase() === clinicianName.trim().replace(/\s+/g, " ").toLowerCase());
+    const periodSource = clinicianName === undefined ? report.periodAttrition?.practice : periodMatches.length === 1 ? periodMatches[0] : undefined;
     return {
-      range: { ...report.window.attrition }, total: known ? count : null,
-      coveredMatureMonths: known ? months : null, eligibleClients: null, attritionPct: null,
-      reasons: ["A matching unique eligible-client denominator for the entire period is unavailable; latest-month attrition and client-month sums cannot establish a period percentage."],
+      range: { ...report.window.attrition }, total: periodSource?.totalEnded ?? null,
+      coveredMatureMonths: months ?? null, eligibleClients: periodSource?.totalEligible ?? null, attritionPct: periodSource?.percentage ?? null,
+      coverageComplete: periodSource?.coverageComplete ?? false,
+      cohortQualifier: periodSource?.cohortQualifier ?? "observed-established-clients",
+      observedMaturePortion: periodSource?.observedMaturePortion ?? null,
+      reasons: periodSource?.reasons ?? ["Whole-window client evidence is unavailable."],
     };
   };
   return { "3mo": summarize("3mo"), year: summarize("year") };

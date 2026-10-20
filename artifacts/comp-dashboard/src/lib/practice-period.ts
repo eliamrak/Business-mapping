@@ -1,6 +1,9 @@
 import { lastCompleted1099ServicePeriod } from "./session-overview.ts";
 export type PracticePeriod = "30d" | "60d" | "90d" | "6m" | "year" | "overall" | "4pay" | "4weeks" | "custom";
 const shift = (date: string, days: number) => new Date(Date.parse(date + "T12:00:00Z") + days * 86400000).toISOString().slice(0, 10);
+export function activityPeriodCaption(period: PracticePeriod, range: { start: string; end: string }) {
+  return period === "overall" ? `Overall recorded activity through ${range.end}` : `Selected activity dates: ${range.start} to ${range.end}`;
+}
 export function practicePeriodRange(period: PracticePeriod, today: string, custom: { start: string; end: string }) {
   if (period === "custom") return custom;
   if (period === "overall") return { start: "0000-01-01", end: today };

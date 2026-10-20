@@ -1819,6 +1819,33 @@ function absenceCoverageWithoutPartialFollowUp(intervals: DateInterval[], exclud
   }), intervals);
 }
 
+/** Read-only evidence for period client sets; existing monthly calculations stay unchanged. */
+export function periodClientAttritionEvidence(
+  snapshots: LocalSnapshot[],
+  asOf: string,
+  window: { start: string; end: string },
+  overrides: SameDayVisitOverrides = {},
+  options: ClientActivityOptions = {},
+  clinician?: string,
+) {
+  const name = clinician === undefined ? undefined : normalizeClinician(clinician);
+  const scoped = name === undefined ? snapshots : snapshots.map((snapshot) => ({
+    ...snapshot,
+    rows: snapshot.rows.filter((row) => normalizeClinician(row.clinician) === name),
+    coverageClinicians: snapshot.coverageClinicians?.filter((value) => normalizeClinician(value) === name),
+  } as LocalSnapshot));
+  const classification = options.classificationSnapshots ?? snapshots;
+  const shows = derivedShowVisits(scoped, overrides, classification).filter((row) => row.serviceDate <= asOf);
+  const excluded = unresolvedActivityFollowUp(shows, options, asOf);
+  const intervals = absenceCoverageWithoutPartialFollowUp(verifiedAttendanceIntervals(scoped, asOf, clinician, classification), excluded);
+  const datesByClient = new Map<string, string[]>();
+  for (const row of shows) datesByClient.set(row.clientId, [...(datesByClient.get(row.clientId) ?? []), row.serviceDate]);
+  for (const [id, dates] of datesByClient) datesByClient.set(id, [...new Set(dates)].sort());
+  const start = intervals[0]?.start ?? window.start;
+  const endings = estimateObservedClientEndings(datesByClient, intervals, start, asOf, 90, window.start, window.end, excluded);
+  return { datesByClient, intervals, excluded, endingEvents: endings.endingEvents };
+}
+
 export function estimateLocalClientActivity(
   snapshots: LocalSnapshot[],
   sameDayVisitOverrides: SameDayVisitOverrides = {},

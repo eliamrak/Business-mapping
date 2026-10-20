@@ -173,7 +173,8 @@ function consultation() { return page.locator('section.pw-metric-panel').filter(
 async function assertConsultScope(name) {
   const panel = consultation();
   assert.equal(await panel.count(), 1, 'one consultation panel');
-  assert.match(await panel.innerText(), new RegExp(name + '.*Selected activity dates:'));
+  assert.match(await panel.innerText(), new RegExp(name + '.*(?:Selected activity dates:|Overall recorded activity through)'));
+  assert.doesNotMatch(await panel.innerText(), /0000-01-01|9999-12-31/, 'primary consultation caption never exposes open-bound sentinels');
   assert.equal(await page.getByRole('group', { name: 'Consult contributor', exact: true }).count(), 0, 'no independent Consult contributor group');
   assert.equal(await panel.getByRole('button', { name: /Whole Practice|Compare|Elia|Erin/ }).count(), 0, 'no duplicate contributor or Compare buttons below scroll');
   assert.equal(await panel.locator('.pw-metric-hero').count(), 0, 'consultation has no oversized hero');
@@ -329,7 +330,14 @@ try {
     }
     const ending = page.getByLabel('Overview average monthly attrition', { exact: true });
     assert.match(await ending.innerText(), /clients/);
-    for (const period of Object.keys(expectedRanges)) assert.match((await ending.locator('[data-period="' + period + '"] .pw-historical-period-main > span').innerText()).trim(), /^(?:--%?|Unknown)$/, 'unestablished whole-window eligible denominator must stay unknown');
+    for (const period of Object.keys(expectedRanges)) {
+      const column = ending.locator('[data-period="' + period + '"]');
+      assert.match((await column.locator('.pw-historical-period-main > span').innerText()).trim(), /^(?:--%?|Unknown)$/, 'immature whole-window fixture must stay unknown');
+      assert.match(await column.locator('.pw-historical-period-main > strong').innerText(), /-- clients/, 'mature-month subset must not masquerade as the whole-window count');
+      await column.locator('summary').click();
+      assert.match(await column.innerText(), /unique observed established clients|full window has not reached 90 days/);
+      await column.locator('summary').click();
+    }
     const capacity = page.getByLabel('Overview desired session utilization', { exact: true });
     await pairedHistory(capacity, 'Overview desired caseload');
     for (const period of Object.keys(expectedRanges)) {
@@ -384,9 +392,9 @@ try {
   const allowedAuthErrors = browserErrors.filter(error => error.includes('Clerk: Failed to load Clerk JS') && error.includes('clerk.127.0.0.1'));
   assert.deepEqual(browserErrors.filter(error => !allowedAuthErrors.includes(error)), [], 'no application exceptions');
   evidence = { syntheticOnly: true, productionAccess: false, requirements, expectedRanges, requests, blockedExternal, attemptedWrites, browserErrors, allowedAuthErrors, screenshots, checks, helpChecks, teamBounds, sourceFactsUnchanged: true,
-    verifiedDisplayOnly: ['Whole-window attrition percentage safely stays unknown; this does not establish a completed percentage calculation capability'],
+    verifiedDisplayOnly: ['Recent whole-window attrition is unknown in this immature fixture; separate numerical and SSR fixtures cover mature unique-client count/percentage capability'],
     pendingAcceptance: [
-      'Whole-window attrition percentage remains unknown: a matching unique eligible-client denominator is not established',
+      'Actual whole-window attrition needs matching observation coverage and the explicit observed-established cohort; recent immature windows remain unknown',
       'Actual protected-payroll recipient and mapping require a read-only production investigation',
       'Installed and running macOS application acceptance remains unverified; isolated browser checks do not establish native acceptance',
       'Actual repeated-4 / 43 records require a source trace; synthetic fixtures do not explain those production numbers',

@@ -5,6 +5,8 @@ import { clinicianSettingSchema, emptyWorkspace, eventSchema, roomSchema, termSc
 import { historicalPerformancePeriods } from "./historical-performance-periods.ts";
 import { historicalPerformanceWindow } from "./historical-performance.ts";
 import { overviewHistoricalAttrition, overviewHistoricalCapacity, type OverviewHistoricalCapacityInput } from "./overview-historical-capacity.ts";
+import { periodClientAttrition } from "./period-client-attrition.ts";
+import type { LocalSnapshot } from "./retention-local.ts";
 
 const close = (actual: number | null, expected: number) => assert.ok(actual !== null && Math.abs(actual - expected) < 1e-9, `${actual} != ${expected}`);
 const person = (id = 1, sessionsPerWeek = 23): Context["clinicians"][number] => ({
@@ -280,26 +282,106 @@ test("deeply frozen inputs, including source reports, are unchanged and output r
   assert.deepEqual(input, before);
 });
 
-test("attrition retains matching source counts/months and leaves the unique-client period percent unknown", () => {
+test("monthly ending controls cannot certify an unverified whole-window count or percent", () => {
   const reports = historicalPerformancePeriods({ snapshots: [], today: "2026-10-19" });
   // Controls intentionally make the latest-month rate disagree with period totals.
   reports["3mo"].activity = { ...reports["3mo"].activity!, endingFullMonthClientEnds: 9, endingFullMonthDenominator: 2, endingAttritionPct: 99 };
   reports.year.activity = { ...reports["3mo"].activity, endingFullMonthClientEnds: 13, endingFullMonthDenominator: 7 };
   const result = overviewHistoricalAttrition(freeze(reports));
-  assert.equal(result["3mo"].total, 9);
+  assert.equal(result["3mo"].total, null);
   assert.equal(result["3mo"].coveredMatureMonths, 2);
-  assert.equal(result.year.total, 13);
+  assert.equal(result.year.total, null);
   assert.equal(result.year.coveredMatureMonths, 7);
   assert.equal(result["3mo"].eligibleClients, null);
   assert.equal(result["3mo"].attritionPct, null);
+  assert.equal(result["3mo"].coverageComplete, false);
+  assert.ok(result["3mo"].reasons.includes("immature-follow-up"), "October cannot certify September endings through their 90-day follow-up");
   assert.equal(overviewHistoricalAttrition(reports, "Missing")["3mo"].total, null);
 });
 
-test("attrition with no mature months stays unknown, and a covered zero is preserved", () => {
+test("monthly covered zero alone cannot certify a whole-window zero", () => {
   const reports = historicalPerformancePeriods({ snapshots: [], today: "2026-10-19" });
   reports["3mo"].activity = { ...reports["3mo"].activity!, endingFullMonthClientEnds: 0, endingFullMonthDenominator: 0 };
   assert.equal(overviewHistoricalAttrition(reports)["3mo"].total, null);
   reports["3mo"].activity.endingFullMonthDenominator = 1;
-  assert.equal(overviewHistoricalAttrition(reports)["3mo"].total, 0);
+  assert.equal(overviewHistoricalAttrition(reports)["3mo"].total, null);
   assert.equal(overviewHistoricalAttrition(reports)["3mo"].attritionPct, null);
+});
+
+const julyAttritionReports = (returned = false, asOf = "2026-11-30") => {
+  const requestedWindow = { start: "2026-07-01", end: "2026-07-31" };
+  const dates = ["2026-07-02", "2026-07-09", "2026-07-16", ...(returned ? ["2026-11-01"] : [])];
+  const snapshots: LocalSnapshot[] = [{
+    id: "july", kind: "attendance", sourceHash: "july", importedAt: "2026-11-30T12:00:00Z",
+    coverageStart: dates[0], coverageEnd: dates.at(-1)!, coverageClinicians: ["Lane"],
+    reportCoverage: { start: "2026-06-01", end: "2026-11-30", complete: true },
+    rows: dates.map(serviceDate => ({ clientId: "client", clinician: "Lane", serviceDate, status: "show", billingCode: "90837", location: null, sourceRowHash: serviceDate })),
+  }];
+  const reports = historicalPerformancePeriods({ snapshots, today: asOf });
+  // Exercise an explicit July event window without changing trailing-calendar anchor rules.
+  reports["3mo"].window.attrition = requestedWindow;
+  reports["3mo"].periodAttrition = periodClientAttrition({ snapshots, requestedWindow, asOf });
+  return reports;
+};
+
+test("mature July engine evidence reaches Overview as 1 ended / 1 observed eligible / 100%", () => {
+  const reports = julyAttritionReports();
+  const before = structuredClone(reports);
+  const result = overviewHistoricalAttrition(freeze(reports))["3mo"];
+  assert.deepEqual(result.range, { start: "2026-07-01", end: "2026-07-31" });
+  assert.equal(result.total, 1);
+  assert.equal(result.eligibleClients, 1);
+  assert.equal(result.attritionPct, 100);
+  assert.equal(result.coverageComplete, true);
+  assert.equal(result.cohortQualifier, "observed-established-clients");
+  assert.equal(result.observedMaturePortion, null);
+  assert.deepEqual(overviewHistoricalAttrition(reports, " lAnE ")["3mo"], result);
+  assert.deepEqual(reports, before);
+});
+
+test("covered positive eligible cohort with a later return preserves whole-window zero and 0%", () => {
+  const result = overviewHistoricalAttrition(julyAttritionReports(true))["3mo"];
+  assert.equal(result.total, 0);
+  assert.equal(result.eligibleClients, 1);
+  assert.equal(result.attritionPct, 0);
+  assert.equal(result.coverageComplete, true);
+});
+
+test("immature July totals stay unknown while a separate mature portion keeps exact dates and counts", () => {
+  const reports = julyAttritionReports(false, "2026-10-20");
+  assert.ok(reports["3mo"].activity);
+  Object.assign(reports["3mo"].activity, { endingFullMonthClientEnds: 9, endingFullMonthDenominator: 2, endingAttritionPct: 99 });
+  const result = overviewHistoricalAttrition(reports)["3mo"];
+  assert.equal(result.total, null);
+  assert.equal(result.eligibleClients, null);
+  assert.equal(result.attritionPct, null);
+  assert.equal(result.coverageComplete, false);
+  assert.ok(result.reasons.includes("immature-follow-up"));
+  assert.deepEqual(result.observedMaturePortion?.requestedWindow, { start: "2026-07-01", end: "2026-07-22" });
+  assert.equal(result.observedMaturePortion?.totalEnded, 1);
+  assert.equal(result.observedMaturePortion?.totalEligible, 1);
+  assert.equal(result.observedMaturePortion?.percentage, 100);
+});
+
+test("explicit practice and normalized clinician period cohorts take precedence over monthly subtotals", () => {
+  const reports = julyAttritionReports();
+  const evidence = reports["3mo"].periodAttrition;
+  evidence.practice = { ...evidence.practice, totalEligible: 4, eligibleClientIds: ["client", "two", "three", "four"], percentage: 25 };
+  assert.equal(overviewHistoricalAttrition(reports)["3mo"].attritionPct, 25);
+  assert.equal(overviewHistoricalAttrition(reports)["3mo"].eligibleClients, 4);
+  assert.equal(overviewHistoricalAttrition(reports, " LANE ")["3mo"].attritionPct, 100);
+  evidence.byClinician.push({ ...evidence.byClinician[0], clinician: " lane " });
+  assert.equal(overviewHistoricalAttrition(reports, "Lane")["3mo"].total, null, "ambiguous clinician outputs cannot fall back to practice counts");
+});
+
+test("legacy reports missing periodAttrition safely preserve unknown rather than use monthly counts", () => {
+  const reports = julyAttritionReports();
+  // Simulate an older runtime producer, bypassing the new required TypeScript field only here.
+  Reflect.deleteProperty(reports["3mo"], "periodAttrition");
+  const result = overviewHistoricalAttrition(reports)["3mo"];
+  assert.equal(result.total, null);
+  assert.equal(result.eligibleClients, null);
+  assert.equal(result.attritionPct, null);
+  assert.equal(result.coverageComplete, false);
+  assert.deepEqual(result.reasons, ["Whole-window client evidence is unavailable."]);
 });

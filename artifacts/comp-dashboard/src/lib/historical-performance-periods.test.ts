@@ -156,7 +156,7 @@ test("Team and Sessions integrate both histories while activity-date consults re
   assert.match(historyStack, /aria-label="Retention card"/);
   assert.match(historyStack, /aria-label="Attrition card"/);
   assert.doesNotMatch(historyStack, /aria-label="Session trends card"/);
-  assert.match(sessions, /Selected activity dates: \{periodRange.start\} to \{periodRange.end\}/);
+  assert.match(sessions, /activityPeriodCaption\(sharedPeriod, periodRange\)/);
   assert.match(sessions, /rows=\{consultComparisonRows(?:\.map|\})/);
   assert.match(sessions, /contributorConsult\?\.conversionRate/);
   assert.match(source, /clinicalComparisonRowsFor\(kind, period\)/);

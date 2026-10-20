@@ -10,6 +10,41 @@ Original-note source messages include `Sentinel_0fad7bd98c408191bced82aae9a13830
 
 ## Acceptance Matrix
 
+### Original Note Provenance
+
+The following exact message IDs and UTC times came from the parent's three filtered October 19 room-note batches, forwarded in this task. These are contemporaneous assistant-written live notes, not verbatim audio. The acceptance matrix transcribes their requirements; the original room messages remain authoritative. No new owner recollection is needed.
+
+| Item | Original Message ID | October 19 UTC |
+| --- | --- | --- |
+| 1 | `Sentinel_9565405d1f94819185aa8ec609268983` | 13:46:21 |
+| 2 | `Sentinel_c97cf848f24c81918c3f598ee940b57c` | 13:47:16 |
+| 3 | `Sentinel_7e06ca1e023c819198f3ce11fa3c5790` | 13:47:35 |
+| 4 | `Sentinel_f19efb67610c81919d14101440f957ba` | 13:48:43 |
+| 5 | `Sentinel_e53cdd066a3081918c188e8dcb2f3359` | 13:50:13 |
+| 6 | `Sentinel_0fad7bd98c408191bced82aae9a13830` | 13:51:18 |
+| 7 | `Sentinel_5d229f1a13e4819187d07a908429e037` | 13:52:04 |
+| 8 | `Sentinel_5a860fd4f5b48191a8fed5aa2fd8bc5a` | 13:53:04 |
+| 9 | `Sentinel_7a6d6dcc3bf48191bf0e9f53687cd82b` | 13:53:59 |
+| 10 | `Sentinel_afa74cac92048191b0befbb2446f1dd3` | 13:55:30 |
+| 11 | `Sentinel_00bcf1ab09e88191ba30127ca3edb88b` | 13:56:11 |
+| 11 clarification | `Sentinel_782c1d484d148191878bbd9451f15b67` | 13:56:41 |
+| 12 | `Sentinel_0c7d7271d014819186f1a74f3a7ee2c5` | 13:58:06 |
+| 13 | `Sentinel_807e997fb3b881919818938718cef499` | 13:59:07 |
+| 14 | `Sentinel_3dbb59b6c6188191ae5923018cec1133` | 13:59:49 |
+| 14 reporting-period deferral | `Sentinel_f323f7c2a6e081919532a8e82ee8b7c5` | 14:00:11 |
+| 15 | `Sentinel_02e9fc1c4fd881918fb0eb2ef670c0b2` | 14:00:46 |
+| 16 | `Sentinel_d5094cd26be481919a71554f1130eea6` | 14:02:17 |
+| 17 | `Sentinel_84c467e220a08191bd9d5bd7a7e34f50` | 14:02:52 |
+| 18 | `Sentinel_34c391a880848191b8a318d280c23792` | 14:03:31 |
+| 19 | `Sentinel_ad88367e7148819198200d210b386502` | 14:05:07 |
+| 20 | `Sentinel_71e090ac9d9881919379055b80166df3` | 14:06:22 |
+| 21 | `Sentinel_0693852f733c81919a504f8af74c29d6` | 14:07:38 |
+| Direction clarification | `Sentinel_264acf2bea5c8191be8338c0c182055e` | 14:08:15 |
+| All-items implementation note | `Sentinel_114d6e7e95dc8191b547a459680c5e13` | 14:08:56 |
+| User implementation instruction | `Sentinel_f19859d32ac88191a3c891dd2ad069c2` | 14:09:03 |
+
+The user's implementation instruction was: "ok, build a full lost of repairs and updates for the practice app, then start building". It covers all preceding 21 items and clarifications, not only the earlier 1-11 register.
+
 Statuses below describe the pre-repair source, not certification of business numbers.
 
 | Original note | Requirement | Initial finding / Follow-through |
