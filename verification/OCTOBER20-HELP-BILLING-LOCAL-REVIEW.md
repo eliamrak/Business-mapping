@@ -176,3 +176,31 @@ Acceptance below is for the added changes at these exact bytes, with the separat
 | `/tmp/oct20-expanded-help-tests.tap` | `f0b163f94b9e52a9ae0adcceb26ec6003f9cd21c52812877a57a9055d9381cb2` |
 
 `HelpBubble` still matches `3fde6c8e51ddd1eb2dea231489184848b8db80cff553fec22e087aa184d976e5`. This run uses the same final utility CSS hash `70de7535ab2d2f4a1f78a65e28f2fbd784ac50b9cb0b49c8c3ac5fed7ef56a43`. No reviewer commit, push, deploy or real-data interaction occurred.
+
+## Final Staff Help Closure on c3a9b42c
+
+**Accepted bounded runtime checkpoint: `c3a9b42c9f9d7ac83dfb3c3333610d70b545de7b`. The two remaining concrete staff-help findings above are closed at source and isolated hydrated-dialog interaction level. No blocking finding remains in the help changes reviewed in this report.** Prior dispositions and fingerprints remain historical; the final TeamBuilder hash below supersedes its earlier `5117f1e4...` checkpoint. This does not claim every unrelated form label, all possible legacy states, real payroll identity, real4/43 explanations, actual billing-code distributions, native release or deployment acceptance.
+
+The author replaces both direct staff title-only labels with proper label/input associations (`staff-employer-fica`, `staff-other-burden`) and named HelpBubble buttons. The input values and original onChange expressions are unchanged. All six reviewed files still pass the harness's original-event-handler comparison and JSX parse checks against accepted runtime `8aa7c934`.
+
+Fresh command:
+
+```sh
+node verification/help-added-paths-render.mjs --staff-only
+```
+
+**PASS: both controls at1280/390/320, six control/width cases.** Results: `/tmp/practice-help-added-k17N4L/results.json`. The fixture extracts and hydrates the complete actual `StaffMemberDialog` function with the real Radix Dialog, Select, Input, Label, Button, HelpBubble and actual staff-cost calculation; only the initial staff record and parent save/close callbacks are synthetic. This is stronger than a replacement mini-dialog containing copied field markup and does not access a real staff record.
+
+Each control's associated accessible input label resolves to its exact new id. Hover and keyboard focus show the exact definition; Enter opens the help popover; Escape closes it and restores trigger focus; touch tap opens/closes; Shift+Tab from the following input reaches the help button. The outer staff editor remains open and callbacks record zero saves and zero premature closes. FICA remains7.65 and Other Burden remains0. Help text is fully opaque after animation, fits the viewport and is not horizontally clipped. Actual Close dismisses the editor for cleanup. All three screenshots are hashed in results; the reviewer inspected320 for the field/button layout. The screenshot after the final keyboard-order check may capture the tooltip opening animation; full post-animation text visibility comes from the separate DOM/geometry assertions, not an invented static-image result.
+
+No browser errors or network requests occurred. Runtime/dependency, harness and stylesheet hashes stayed stable. The reviewer additionally checked all **57** recorded source fingerprints against exact committed Git blobs at `c3a9b42c9f9d7ac83dfb3c3333610d70b545de7b`; all match. No reviewer runtime edit, commit, push or deploy occurred. The amended companion harness and this receipt may be committed separately without changing that accepted runtime identity.
+
+Retained initial staff-run failure: `/tmp/practice-help-added-zQxbki/failure.json`. It stopped because the global tooltip locator matched two valid definitions: focus remained on the first help button while the pointer hovered the second. This is not evidence that either dialog control is inaccessible. The harness now focuses the new associated input before probing and scopes each tooltip by its exact expected definition. It preserves every required gesture and additionally checks actual keyboard order, values and callback isolation. The bounded rerun uses `--staff-only`; prior21 helper/rate and12 disclosure results remain attributed to `Fd1ark` rather than falsely counted as rerun in the final staff-only result.
+
+| Final file / evidence | SHA-256 |
+| --- | --- |
+| `artifacts/comp-dashboard/src/components/tabs/team-builder-tab.tsx` | `7b7ff79b0ccb582acad3acb91f637d2110e29b52e40e2978e7ab281c467e5e6f` |
+| `verification/help-added-paths-render.mjs` | `2fd7355ba81ceddc961aec5f11e57903955de6d91f78792943208f1f9674ebde` |
+| `/tmp/practice-help-added-k17N4L/results.json` | `d658a7028a3fa970f15421a65ab9385809e37897cf4003c961d67f448fe021d7` |
+
+The author subsequently reports the full main harness passed on exact `c3a9b42c`:14 states,28 screenshots,18 help checks. That is separate author-run evidence, not independently recreated or rehashed by this staff-only follow-up. The independent local help closures and item12 arithmetic/handler evidence above remain separate from the real-person/4/43/read-only billing-data and installed-native gates. No new internal fee-schedule editor is inferred or required by this review.

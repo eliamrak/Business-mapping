@@ -10,6 +10,7 @@ const root = fileURLToPath(new URL("../", import.meta.url));
 const dash = path.join(root, "artifacts/comp-dashboard");
 const require = createRequire(path.join(root, "artifacts/api-server/package.json"));
 const ts = createRequire(path.join(root, "package.json"))("typescript");
+const staffOnly = process.argv.includes("--staff-only");
 const sha = content => createHash("sha256").update(content).digest("hex");
 const out = process.env.PRACTICE_ADDED_HELP_OUTPUT ?? await fs.mkdtemp("/tmp/practice-help-added-");
 await fs.mkdir(out, { recursive: true });
@@ -124,7 +125,7 @@ assert.ok(cssName);
 const cssPath = path.join(dash, "dist/public/assets", cssName), css = await fs.readFile(cssPath, "utf8"), cssHash = sha(css);
 const { chromium } = createRequire(process.env.PRACTICE_PLAYWRIGHT_PACKAGE ?? "/tmp/practice-oct20-render-deps/package.json")("playwright");
 const browser = await chromium.launch({ headless: true, executablePath: process.env.PRACTICE_CHROMIUM_PATH ?? "/Users/eliam/Library/Caches/ms-playwright/chromium-1234/chrome-mac-arm64/Google Chrome for Testing.app/Contents/MacOS/Google Chrome for Testing" });
-const evidence = { head: execFileSync("git", ["rev-parse", "HEAD"], { cwd: root, encoding: "utf8" }).trim(), checks: [], requests: [], errors: [], harnessSha256: ownHash, css: { path: cssPath, hash: cssHash }, sourceHandlersUnchanged: files };
+const evidence = { head: execFileSync("git", ["rev-parse", "HEAD"], { cwd: root, encoding: "utf8" }).trim(), scope: staffOnly ? "staff-dialog-only" : "all-added-paths", checks: [], requests: [], errors: [], harnessSha256: ownHash, css: { path: cssPath, hash: cssHash }, sourceHandlersUnchanged: files };
 try {
  for (const width of [1280, 390, 320]) {
   const page = await browser.newPage({ viewport: { width, height: 900 }, hasTouch: true }); page.setDefaultTimeout(10000);
@@ -143,7 +144,7 @@ try {
   }
   async function checkHelp(button, expected) {
     await button.scrollIntoViewIfNeeded();
-    const name = await button.getAttribute("aria-label"), tip = page.getByRole("tooltip"), pop = page.getByRole("dialog", { name, exact: true });
+    const name = await button.getAttribute("aria-label"), tip = page.getByRole("tooltip", { name: expected, exact: true }), pop = page.getByRole("dialog", { name, exact: true });
     await button.hover(); await tip.waitFor({ state: "visible" }); await assertContent(tip.locator("xpath=.."), expected);
     await button.focus(); await page.keyboard.press("Escape"); await tip.waitFor({ state: "hidden" });
     await button.evaluate(node => node.blur()); await button.focus(); await tip.waitFor({ state: "visible" }); await assertContent(tip.locator("xpath=.."), expected);
@@ -152,6 +153,7 @@ try {
     await button.evaluate(node => { if (document.activeElement !== node) throw Error("help focus not restored"); });
     await button.tap(); await assertContent(pop, expected); await button.tap(); await pop.waitFor({ state: "hidden" });
   }
+  if (!staffOnly) {
   for (let i = 0; i < 3; i++) {
     const input = page.getByLabel("Synthetic field " + i, { exact: true }); assert.equal(await input.getAttribute("id"), "field-" + i);
     await checkHelp(page.getByRole("button", { name: "About Synthetic field " + i, exact: true }), "Definition for field " + i);
@@ -167,6 +169,7 @@ try {
   assert.equal(await page.evaluate(() => window.fixtureUnchanged()), true);
   await page.screenshot({ path: path.join(out, `lead-field-help-${width}.png`), fullPage: true });
   evidence.checks.push({ width, hydratedFieldHelpers: 3, hydratedRateDefinitions: 4, sourceHeaderTotalsClinicianDefinitions: 12, rates: [60, 83, 50, 25], sourceFactsUnchanged: true });
+  }
   await page.locator("#staff-editor").click();
   const staff = page.getByRole("dialog", { name: "Synthetic staff editor", exact: true });
   await staff.waitFor();
@@ -176,6 +179,7 @@ try {
   ]) {
     const input = staff.getByLabel(label, { exact: true }), button = staff.getByRole("button", { name: help, exact: true });
     assert.equal(await input.getAttribute("id"), id); assert.equal(await input.inputValue(), value);
+    await input.focus();
     await checkHelp(button, definition);
     await input.focus(); await page.keyboard.press("Shift+Tab");
     await button.evaluate(node => { if (document.activeElement !== node) throw Error("staff help unreachable by keyboard"); });
@@ -185,6 +189,7 @@ try {
   await page.screenshot({ path: path.join(out, `staff-dialog-${width}.png`) });
   await staff.getByRole("button", { name: "Close", exact: true }).click(); await staff.waitFor({ state: "hidden" });
   evidence.checks.push({ width, actualHydratedStaffMemberDialog: true, helpControls: ["staff-employer-fica", "staff-other-burden"], labelAssociation: true, hoverFocusEnterEscapeTouch: true, keyboardOrder: true, valuesUnchanged: true, noSaveOrPrematureClose: true });
+  if (staffOnly) { await page.close(); continue; }
   await page.setContent('<!doctype html><meta name="viewport" content="width=device-width,initial-scale=1"><style>' + css + '</style>' + html);
   const titles = ["How visit frequency is calculated", "How client endings are calculated", "Import format and storage", "Coverage and billing definitions"];
   for (const title of titles) {
