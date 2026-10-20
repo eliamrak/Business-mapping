@@ -1,5 +1,7 @@
 # October 20 Local Candidate Receipt
 
+> Historical receipt for `834eed0`. Current independently accepted source and rendered runtime is `8aa7c934b052b820e06094bfee4df9ca6cd44557`, including the period-attrition capability and caption repair. Use `OCTOBER20-FOLLOWUP-CANDIDATE-RECEIPT.md` for the latest 981-test result, full 21-item matrix and remaining live gates.
+
 ## Exact Source
 
 - Repository: `/Users/eliam/Documents/Codex/2026-10-14/task-2/practice-app-durable-history`

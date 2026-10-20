@@ -1,5 +1,7 @@
 # October 19 Repair Evidence
 
+> Historical implementation snapshot. The previously missing period-attrition capability and sentinel caption are repaired in the independently accepted `8aa7c934` follow-up. Latest evidence and all21 statuses: `OCTOBER20-FOLLOWUP-CANDIDATE-RECEIPT.md`. Earlier limitations below are retained as history, not current source-gap claims.
+
 This is local candidate evidence, not owner acceptance or a production release receipt. Governing original-note IDs and pre-repair findings are in `OCTOBER19-REQUIREMENTS-RECONCILIATION.md`. All 21 requirements were already requested October 19.
 
 ## Requirement-Led Source Changes

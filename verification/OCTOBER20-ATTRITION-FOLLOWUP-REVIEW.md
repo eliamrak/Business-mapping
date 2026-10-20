@@ -88,3 +88,42 @@ SHA-256 at the reviewed dirty-source checkpoint. `src/` means `artifacts/comp-da
 ## Remaining Acceptance Gates
 
 The [read-only source trace](OCTOBER20-READONLY-SOURCE-TRACE.md) documents a route for the parent's authorized reader; it does not establish that the reads happened. Actual recipient identity and configured amounts, real 4/43 source reconstruction, the billing-code workflow question, broader help/accessibility evidence, current browser rendering, live preservation/backout, publication and running native asset remain separate gates. No actual-data or full-21-item acceptance is granted by this addendum.
+
+## Committed Checkpoint and Spacing Follow-Up
+
+This appended disposition preserves the original review, its dirty-source manifest, evidence qualifications and matrix above.
+
+**Accepted bounded source checkpoint: `8aa7c934b052b820e06094bfee4df9ca6cd44557`.** No new blocking finding was established in the final spacing change. This is source acceptance for the parent's prepublication checkpoint, not publication authorization, final browser acceptance, actual business-data verification or owner/native acceptance.
+
+The reviewer independently checked every one of the 12 `src/` runtime/test entries in the original manifest against exact Git blobs at `6ce0e77566dbe738b332671832fcb129d29ab294`; all match. That commit therefore records the previously accepted attrition/caption source checkpoint. The changed read-only trace document was checked against its original recorded SHA-256: removing only the inserted item12 billing-code-workflow paragraph restores `b72ed8b9a579e6a4f0a919cf694fd511bfd45bbc93393c52ecf210250eaf9536` exactly. The paragraph describes an aggregate-only read-only workflow and explicitly does not claim an existing billing-code fee editor or an executed real-data investigation. No functional source change is hidden in that document update.
+
+Exact diff `6ce0e77566dbe738b332671832fcb129d29ab294..8aa7c934b052b820e06094bfee4df9ca6cd44557` contains only three files, nine inserted lines and one replaced line:
+
+- `artifacts/comp-dashboard/src/pages/practice-workspace.tsx:4634`: adds `pw-consult-summary` to the existing consultation metric panel. Removing that class addition restores the complete baseline file byte-for-byte. No child values, date filters, calculations, state or event handlers change.
+- `artifacts/comp-dashboard/src/components/practice/historical-period-values.css:48`: adds only scoped paragraph margin/line-height and direct-details top margin for that panel. Removing those two rules restores the complete baseline CSS byte-for-byte. This addresses the parent's manually observed focus-outline proximity; this reviewer did not independently inspect a new browser image.
+- `verification/october19-requirements-render.mjs:185`: adds a geometric check of the direct disclosure summary against the preceding visible paragraphs and asserts `disclosureGap >= 4`. Removing that six-line addition restores the complete baseline harness byte-for-byte, proving prior assertions were retained rather than weakened. `node --check verification/october19-requirements-render.mjs` passed.
+
+The working page, CSS, harness and trace document matched the final commit blobs during review. HEAD was the final commit and was not changed. This reviewer performed no source edits, browser interactions or real-data reads; the only write was this append to the existing review addendum.
+
+### Browser Evidence Disposition
+
+Parent-supplied evidence for exact `6ce0e77566dbe738b332671832fcb129d29ab294`: **14 states, 28 captures, 18 help interactions, no errors and no attempted writes**. This is attributed parent-run evidence, not a browser run independently repeated by this reviewer. The parent subsequently found the focus-outline proximity in manual image review, prompting the narrowly reviewed final spacing change and additive gap assertion.
+
+At this appended review's completion, the exact `8aa7c934b052b820e06094bfee4df9ca6cd44557` browser run was reported **running**. No final result is presumed. Parent must attach the completed exact-final-commit result, including the new gap assertion, before treating the earlier browser evidence as final-version render acceptance. The source checkpoint itself is accepted without inventing that pending result.
+
+### Current Matrix Disposition
+
+The local tally remains **14 implemented, 7 partial, 0 wholly missing**. No item is promoted solely by the spacing fix or the new billing-code trace paragraph. Item15's observed-cohort source capability and item11's sentinel-caption source fix remain accepted. The final spacing fix adds source support for item11 readability and item13 layout; broader help/accessibility and the exact-final browser gate remain qualified. All other carried-forward statuses and actual-data limits remain as stated in the matrix above.
+
+The now-committed source IDs for all21 notes remain documented in the reconciliation register. Those references do not turn the pending actual payroll-recipient or 4/43 investigations into completed reads. Preservation/backout, public release and installed-wrapper loaded-asset gates remain separate.
+
+### Final Checkpoint Fingerprints
+
+SHA-256 of the exact final-commit files; all other accepted runtime/test hashes remain as recorded for `6ce0e77566dbe738b332671832fcb129d29ab294` above.
+
+| File | SHA-256 |
+| --- | --- |
+| `artifacts/comp-dashboard/src/pages/practice-workspace.tsx` | `aa73bf9ebbc8c42cc6bd39257a2cb6a73120a52cddda6bb6a936f586d32b86b6` |
+| `artifacts/comp-dashboard/src/components/practice/historical-period-values.css` | `d2e93e6cfedb9646fe04563eff6f0bee3a9fcb92923aa76c438eea894a9002c7` |
+| `verification/october19-requirements-render.mjs` | `b220ddec2e08d7bd869e9cc04d4c964d8c09effc873420f13babd227a2b61662` |
+| `verification/OCTOBER20-READONLY-SOURCE-TRACE.md` | `7511eda8b5e0f27c8e06109e623479bd5898551a26b8cb75572db2c432172336` |
