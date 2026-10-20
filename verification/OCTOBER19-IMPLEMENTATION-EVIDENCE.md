@@ -23,16 +23,16 @@ This is local candidate evidence, not owner acceptance or a production release r
 ## Independent Findings and Repairs
 
 - Euclid reproduced order-dependent earnings from overlapping salary profiles. The helper now withholds ambiguous effective profiles and competing same-day compensation terms in the selected window and required prior-cap replay. Independent inverse-order reproduction now returns unavailable with null compensation/average and unchanged inputs. Default engine behavior remains unchanged.
-- Darwin found ambiguous owner bindings were rejected in the editor/solver but not the Money planner. That diagnostic propagation is a publication gate until its fix and independent recheck pass.
+- Darwin found ambiguous owner bindings were rejected in the editor/solver but not the Money planner. The author fixed diagnostic propagation; independent recheck against `53d79d4` passed the original duplicate/unknown-metric reproductions and 96 planner/handler tests. Later commits change only presentation CSS and the render harness.
 - Darwin identified a legacy target caption still calling Elia's distribution target an owner target. It now explicitly shows both Elia distribution and Erin salary targets; underlying fields and amounts are unchanged.
 
 ## Validation Record
 
-Intermediate tests are not the final immutable-candidate receipt. Latest author combined snapshot at writing: 945 root/handler tests passed; dashboard TypeScript passed. A dashboard production build passed with existing sourcemap/chunk-size warnings. Rerun after final changes and record the exact candidate separately.
+Final runtime candidate: `834eed0932d50709f08914853d777e1cc14bc4ad`. Its exact-candidate desktop/mobile run passed with stable runtime hashes. Combined root/handler suite: 947 passed, zero failed. Dashboard TypeScript passed; presentation-only later commits do not change TypeScript sources. Dashboard production builds passed with existing sourcemap/chunk-size warnings. See `OCTOBER20-CANDIDATE-RECEIPT.md` for the final evidence and remaining gates.
 
 Money fixture: `/tmp/profit-first-allocation-render-kKM0xP/results.json`, desktop 1280 and phone 390, no page overflow/console errors, quarterly conversion and editor/unknown/zero/invalid-input behavior checked. Synthetic fixture state only, no external navigation or production records.
 
-Full-workspace exploratory captures exist under `/tmp/october19-requirements-*`. Runs whose captured runtime source changed are intentionally failures, not accepted screenshots for a later candidate. Final runtime manifest and desktop/mobile acceptance must come from a source-stable rerun.
+Full-workspace exploratory captures exist under `/tmp/october19-requirements-*`. Runs whose captured runtime source changed or whose ring-containment checks failed are intentionally failures, not accepted evidence for a later candidate. Final source-stable run: `/tmp/october19-requirements-bOZOba/results.json`, with runtime manifest, 14 desktop/mobile states, 28 screenshots, 18 help checks, no browser errors or attempted writes. Team's percentage containment checks pass at 1280/390 without weakening assertions; author inspected both crops.
 
 ## Delivery and Remaining Gates
 
