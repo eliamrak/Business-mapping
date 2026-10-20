@@ -26,8 +26,8 @@
 .pw-app .pw-overview-primary-grid > section > button { grid-column: 2; grid-row: 1 / span 3; }
 .pw-app .pw-overview-primary-grid details { grid-column: 1 / -1; border: 0; margin: 0; padding: 0; }
 .pw-app .pw-overview-primary-grid .pw-metric-hero > strong { font-size: 30px; }
-.pw-app .pw-historical-period-value .pw-percentage-kpi-ring { width: 76px; height: 76px; }
-.pw-app .pw-historical-period-value .pw-percentage-kpi-value { font-size: 19px; }
+.pw-app .pw-historical-period-value .pw-percentage-kpi-ring { width: 96px; height: 96px; }
+.pw-app .pw-historical-period-value .pw-percentage-kpi-value { font-size: 19px; max-width: calc(100% - 24px); }
 .pw-app .pw-person-kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px 24px; }
 .pw-app .pw-person-kpis .pw-historical-period-value strong { font-size: 23px; }
 .pw-app .pw-person-kpis .pw-percentage-kpi-legend strong { font-size: 12px; }

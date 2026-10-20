@@ -97,7 +97,7 @@ await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
 const fixtureUrl = `http://127.0.0.1:${server.address().port}/workspace`;
 
 const requirements = String.raw`
-const requests = [], blockedExternal = [], attemptedWrites = [], screenshots = [], requirements = [], helpChecks = [];
+const requests = [], blockedExternal = [], attemptedWrites = [], screenshots = [], requirements = [], helpChecks = [], teamBounds = [];
 const requireCheck = (requirement, evidence) => requirements.push({ requirement, evidence });
 page.setDefaultTimeout(15000);
 await page.route('**/*', async (route) => {
@@ -281,7 +281,29 @@ try {
       }
     }
     await noHistorySelector(page.locator('.pw-main'));
+    const bounds = await page.locator('article.pw-person .pw-percentage-kpi').evaluateAll(figures => figures.map(figure => {
+      const rectangle = node => { const box = node.getBoundingClientRect(); return { left: box.left, right: box.right, top: box.top, bottom: box.bottom, width: box.width, height: box.height }; };
+      const region = figure.closest('.pw-historical-period-value');
+      const ring = figure.querySelector('.pw-percentage-kpi-ring');
+      const label = figure.querySelector('.pw-percentage-kpi-label');
+      const value = figure.querySelector('.pw-percentage-kpi-value');
+      const range = document.createRange(); range.selectNodeContents(value);
+      const text = range.getBoundingClientRect();
+      const legend = figure.querySelector('.pw-percentage-kpi-legend strong');
+      return { clinician: figure.closest('article').querySelector('h3').textContent, period: region.dataset.period,
+        label: label.textContent, region: rectangle(region), ring: rectangle(ring), caption: rectangle(label),
+        valueText: { left: text.left, right: text.right, top: text.top, bottom: text.bottom, width: text.width },
+        legendFontSize: legend ? Number.parseFloat(getComputedStyle(legend).fontSize) : null };
+    }));
+    await fs.writeFile(path.join(outDir, 'team-bounds-' + width + '.json'), JSON.stringify(bounds, null, 2));
     await captureRequirements('team-histories', width);
+    for (const bound of bounds) {
+      assert.ok(bound.ring.left >= bound.region.left - 1 && bound.ring.right <= bound.region.right + 1, 'Team circle fits its own period region');
+      assert.ok(bound.caption.bottom <= bound.ring.top + 1, 'Team caption does not overlap its circle');
+      assert.ok(bound.valueText.left >= bound.ring.left - 1 && bound.valueText.right <= bound.ring.right + 1 && bound.valueText.top >= bound.ring.top - 1 && bound.valueText.bottom <= bound.ring.bottom + 1, 'Team percentage text fits within its circle');
+      assert.ok(bound.legendFontSize === null || bound.legendFontSize <= 12, 'Team benchmark legend retains compact font size');
+    }
+    teamBounds.push({ width, figures: bounds });
   }
   requireCheck('14: each Team historical metric has its own simultaneous 3-month/year values', { clinicians: ['Elia', 'Erin'], metrics: ['Retention', 'Average monthly attrition', 'Confirmed close'], expectedRanges });
 
@@ -361,7 +383,7 @@ try {
   for (const width of [1280, 390]) assert.ok(helpChecks.some(check => check.width === width && check.label.startsWith('About ')), 'generic heading descriptions have tested keyboard and pointer help at each size');
   const allowedAuthErrors = browserErrors.filter(error => error.includes('Clerk: Failed to load Clerk JS') && error.includes('clerk.127.0.0.1'));
   assert.deepEqual(browserErrors.filter(error => !allowedAuthErrors.includes(error)), [], 'no application exceptions');
-  evidence = { syntheticOnly: true, productionAccess: false, requirements, expectedRanges, requests, blockedExternal, attemptedWrites, browserErrors, allowedAuthErrors, screenshots, checks, helpChecks, sourceFactsUnchanged: true,
+  evidence = { syntheticOnly: true, productionAccess: false, requirements, expectedRanges, requests, blockedExternal, attemptedWrites, browserErrors, allowedAuthErrors, screenshots, checks, helpChecks, teamBounds, sourceFactsUnchanged: true,
     verifiedDisplayOnly: ['Whole-window attrition percentage safely stays unknown; this does not establish a completed percentage calculation capability'],
     pendingAcceptance: [
       'Whole-window attrition percentage remains unknown: a matching unique eligible-client denominator is not established',
