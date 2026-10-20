@@ -182,6 +182,12 @@ async function assertConsultScope(name) {
   assert.match(await panel.locator(':scope > p.pw-note').first().innerText(), /pending/);
   const help = panel.locator('details').filter({ has: page.locator('summary', { hasText: /^How these numbers are calculated$/ }) });
   assert.equal(await help.getAttribute('open'), null, 'methodology starts collapsed');
+  const disclosureGap = await panel.evaluate(node => {
+    const paragraphs = [...node.querySelectorAll(':scope > p')].filter(p => p.getClientRects().length);
+    const previousBottom = Math.max(...paragraphs.map(p => p.getBoundingClientRect().bottom));
+    return node.querySelector(':scope > details > summary').getBoundingClientRect().top - previousBottom;
+  });
+  assert.ok(disclosureGap >= 4, 'consultation disclosure focus outline stays clear of preceding summary text');
   return panel;
 }
 async function clickWithoutJump(button) {

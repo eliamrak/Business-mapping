@@ -4631,7 +4631,7 @@ export default function PracticeWorkspace() {
                       </section>
                     </div>
                   </div>
-                      <section className="pw-metric-panel">
+                      <section className="pw-metric-panel pw-consult-summary">
                         <div className="pw-section-heading">
                           <div>
                             <h3>Close rate</h3>

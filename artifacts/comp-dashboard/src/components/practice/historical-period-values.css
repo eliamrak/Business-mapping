@@ -45,6 +45,8 @@
 .pw-app .pw-goal-fund { min-width: 0; padding: 10px 0; border: 0; background: transparent; }
 .pw-app .pw-observed-earnings { display: grid; align-content: start; gap: 6px; min-width: 0; font-size: 12px; }
 .pw-app .pw-money-goal-controls > summary { padding: 12px 0; cursor: pointer; }
+.pw-app .pw-consult-summary > p { margin: 6px 0; line-height: 1.5; }
+.pw-app .pw-consult-summary > details { margin-top: 12px; }
 .pw-app .pw-heading-help { font-size: 13px; margin: 4px 0; }
 .pw-app .pw-heading-help > summary { display: inline-grid; place-items: center; width: 32px; height: 32px; border: 1px solid #64717d; border-radius: 50%; cursor: pointer; list-style: none; }
 .pw-app .pw-heading-help > summary::-webkit-details-marker { display: none; }
