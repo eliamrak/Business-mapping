@@ -22,10 +22,11 @@ import { Separator } from "@/components/ui/separator";
 import {
   Plus, Trash, Save, ChevronDown, ChevronRight,
   BookMarked, X, Check, AlertCircle, TrendingUp,
-  Loader2, Settings2, User, Users, FolderOpen, CheckCircle2, Download, Info,
+  Loader2, Settings2, User, Users, FolderOpen, CheckCircle2, Download,
   Monitor, Link2, CheckCheck,
 } from "lucide-react";
-import { Tooltip, TooltipTrigger, TooltipContent, TooltipProvider } from "@/components/ui/tooltip";
+import { TooltipProvider } from "@/components/ui/tooltip";
+import { HelpBubble } from "@/components/practice/help-bubble";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { ClinicianPresenterCard } from "@/components/clinician-presenter-card";
 import { calculateClinicianMetrics, calculateBusinessGoalOutputs, calculateTotalStaffCost, calculateStaffMemberCost } from "@/lib/calculations";
@@ -351,21 +352,7 @@ function SplitInput({ clinicianSplit, onClinicianChange }: {
 // ─── InfoTip ─────────────────────────────────────────────────────────────────
 
 function InfoTip({ text }: { text: string }) {
-  return (
-    <Tooltip>
-      <TooltipTrigger asChild>
-        <span
-          className="cursor-help shrink-0 inline-flex items-center"
-          onClick={e => e.stopPropagation()}
-        >
-          <Info className="h-3 w-3 text-muted-foreground/50" />
-        </span>
-      </TooltipTrigger>
-      <TooltipContent side="top" className="max-w-[220px] text-center leading-snug whitespace-normal">
-        {text}
-      </TooltipContent>
-    </Tooltip>
-  );
+  return <HelpBubble text={text} />;
 }
 
 // ─── CardMetric ──────────────────────────────────────────────────────────────

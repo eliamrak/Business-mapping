@@ -5,6 +5,17 @@ import type { Context, Workspace } from "@workspace/practice/hub";
 import BulkLeadEntry from "./bulk-lead-entry";
 import type { LeadBulkChange } from "@/lib/bulk-lead-flow";
 import { leadFlowRates } from "@/lib/lead-flow-rates";
+import { HelpBubble } from "./help-bubble";
+
+const rateDefinitions = {
+  "Schedule rate": "Scheduled consults divided by leads",
+  "Show rate": "Attended consults divided by scheduled consults",
+  "Consult close rate": "Clients booked divided by attended consults",
+  "Overall close rate": "Clients booked divided by leads",
+} as const;
+function RateLabel({ name }: { name: keyof typeof rateDefinitions }) {
+  return <span className="inline-flex items-center gap-1">{name}<HelpBubble label={`About ${name}`} text={rateDefinitions[name]} /></span>;
+}
 
 type Funnel = Workspace["funnels"][number];
 type CountKey = "leads" | "scheduled" | "attended" | "clients";
@@ -266,10 +277,10 @@ export default function LeadFlow({
             </label>)}
           </div>
           <div className="pw-lead-flow-result">
-            <span title="Scheduled consults divided by leads">Schedule rate <strong>{practiceRates?.scheduledConsult}</strong></span>
-            <span title="Attended consults divided by scheduled consults">Show rate <strong>{practiceRates?.show}</strong></span>
-            <span title="Clients booked divided by attended consults">Consult close rate <strong>{practiceRates?.consultClose}</strong></span>
-            <span title="Clients booked divided by leads">Overall close rate <strong>{practiceRates?.overallClose}</strong></span>
+            <span><RateLabel name="Schedule rate" /> <strong>{practiceRates?.scheduledConsult}</strong></span>
+            <span><RateLabel name="Show rate" /> <strong>{practiceRates?.show}</strong></span>
+            <span><RateLabel name="Consult close rate" /> <strong>{practiceRates?.consultClose}</strong></span>
+            <span><RateLabel name="Overall close rate" /> <strong>{practiceRates?.overallClose}</strong></span>
             {!readOnly && <button className="pw-icon" type="button" title="More result details" aria-label="More result details"
               disabled={pending} onClick={() => onEditDetails(practiceRow)}><MoreHorizontal /></button>}
           </div>
@@ -289,10 +300,10 @@ export default function LeadFlow({
         {rowConflict && <p className="pw-error" role="alert">These rows overlap. Give each source and clinician one row, or remove the unassigned total.</p>}
         {!!visibleRows.length && <div className="pw-table-scroll"><table className="pw-table pw-lead-flow-table">
           <thead><tr><th>Source</th><th>Clinician</th><th>Leads</th><th>Scheduled</th><th>Attended</th><th>Booked</th>
-            <th title="Scheduled consults divided by leads">Schedule rate</th>
-            <th title="Attended consults divided by scheduled consults">Show rate</th>
-            <th title="Clients booked divided by attended consults">Consult close rate</th>
-            <th title="Clients booked divided by leads">Overall close rate</th>
+            <th><RateLabel name="Schedule rate" /></th>
+            <th><RateLabel name="Show rate" /></th>
+            <th><RateLabel name="Consult close rate" /></th>
+            <th><RateLabel name="Overall close rate" /></th>
             <th aria-label="Actions" /></tr></thead>
           <tbody>{visibleRows.map((row) => {
             const locked = readOnly || selected?.status === "finalized";
@@ -378,19 +389,19 @@ export default function LeadFlow({
         <div><span>Scheduled consults</span><strong>{shown(totals.scheduled)}</strong></div>
         <div><span>Attended consults</span><strong>{shown(totals.attended)}</strong></div>
         <div><span>Booked</span><strong>{shown(totals.clients)}</strong></div>
-        <div><span title="Scheduled consults divided by leads">Schedule rate</span><strong>{totalRates.scheduledConsult}</strong></div>
-        <div><span title="Attended consults divided by scheduled consults">Show rate</span><strong>{totalRates.show}</strong></div>
-        <div><span title="Clients booked divided by attended consults">Consult close rate</span><strong>{totalRates.consultClose}</strong></div>
-        <div><span title="Clients booked divided by leads">Overall close rate</span><strong>{totalRates.overallClose}</strong></div>
+        <div><RateLabel name="Schedule rate" /><strong>{totalRates.scheduledConsult}</strong></div>
+        <div><RateLabel name="Show rate" /><strong>{totalRates.show}</strong></div>
+        <div><RateLabel name="Consult close rate" /><strong>{totalRates.consultClose}</strong></div>
+        <div><RateLabel name="Overall close rate" /><strong>{totalRates.overallClose}</strong></div>
       </div>}
       {attributed.length > 0 && <div className="pw-lead-flow-people">
         <h4>Consult performance by clinician</h4>
         <div className="pw-table-scroll"><table className="pw-table">
           <thead><tr><th>Clinician</th><th>Leads</th><th>Scheduled</th><th>Attended</th><th>Booked</th>
-            <th title="Scheduled consults divided by leads">Schedule rate</th>
-            <th title="Attended consults divided by scheduled consults">Show rate</th>
-            <th title="Clients booked divided by attended consults">Consult close rate</th>
-            <th title="Clients booked divided by leads">Overall close rate</th></tr></thead>
+            <th><RateLabel name="Schedule rate" /></th>
+            <th><RateLabel name="Show rate" /></th>
+            <th><RateLabel name="Consult close rate" /></th>
+            <th><RateLabel name="Overall close rate" /></th></tr></thead>
           <tbody>{attributed.map(({ id, name, counts }) => {
             const rates = leadFlowRates(counts);
             return <tr key={id}>

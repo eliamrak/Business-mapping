@@ -5,6 +5,7 @@ import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { HelpBubble } from "@/components/practice/help-bubble";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
@@ -61,7 +62,7 @@ function NumField({ label, name, value, onChange, tooltip }: {
 }) {
   return (
     <div className="space-y-1">
-      <Label htmlFor={name} title={tooltip}>{label}</Label>
+      <div className="flex items-center gap-1"><Label htmlFor={name}>{label}</Label>{tooltip && <HelpBubble text={tooltip} label={`About ${label}`} />}</div>
       <Input id={name} type="number" min={0} value={value}
         onChange={e => onChange(name, Number(e.target.value))} />
     </div>

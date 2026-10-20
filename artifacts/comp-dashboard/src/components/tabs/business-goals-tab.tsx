@@ -9,6 +9,7 @@ import { Card, CardHeader, CardTitle, CardContent, CardFooter } from "@/componen
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { HelpBubble } from "@/components/practice/help-bubble";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
@@ -72,7 +73,7 @@ function NumInput({ label, name, value, onChange, tooltip }: {
 }) {
   return (
     <div className="space-y-1">
-      <Label htmlFor={name} title={tooltip}>{label}</Label>
+      <div className="flex items-center gap-1"><Label htmlFor={name}>{label}</Label>{tooltip && <HelpBubble text={tooltip} label={`About ${label}`} />}</div>
       <Input
         id={name}
         type="number"

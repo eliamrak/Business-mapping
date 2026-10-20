@@ -604,12 +604,12 @@ export default function LocalRetentionWorkspace({
         <div>
           <p className="pw-eyebrow">Saved import history</p>
           <h2>Imported clinical history</h2>
-          <p>
+          <details><summary>Import format and storage</summary><p>
             Import the converter package prepared with permanent random client
             IDs and no direct client names. Converted attendance and billing
             facts are saved to authenticated practice storage so biweekly
             imports accumulate across reloads and sign-ins.
-          </p>
+          </p></details>
         </div>
         <ShieldCheck aria-hidden="true" />
       </div>
@@ -617,12 +617,16 @@ export default function LocalRetentionWorkspace({
       <section className="pw-import-provenance" aria-label="Verified complete report coverage">
         <h3>Data covers through {dateLabel(verifiedCoverage.dataThrough)}</h3>
         <p>Attendance: {dateLabel(verifiedCoverage.attendanceThrough)} · Billing: {dateLabel(verifiedCoverage.billingThrough)}</p>
-        <p>{verifiedCoverage.excludedRowsCount} raw rows excluded from eligible actual totals and historical averages. Raw rows remain available for reconciliation and review; they are not certified actual totals.</p>
-        {(rawBillingEvidence.conflictingHashCount > 0 || rawBillingEvidence.ambiguousEncounterCount > 0) && <p>Billing source review: {rawBillingEvidence.conflictingHashCount} fee conflicts; {rawBillingEvidence.ambiguousEncounterCount} ambiguous fee encounters. Original exports are retained. Conflicting amounts are not added together or automatically applied as corrections; actual totals still require independently admitted complete-period evidence.</p>}
-        {rawBillingEvidence.resolvedCaseCount > 0 && <p>{rawBillingEvidence.resolvedCaseCount} exact two-charge cases accepted by owner approval. Original source signals remain: {rawBillingEvidence.originalConflictingCaseCount} fee conflicts and {rawBillingEvidence.originalAmbiguousCaseCount} ambiguous encounters. Attendance counts are unchanged; billed fees are not cash.</p>}
+        <p>{verifiedCoverage.excludedRowsCount} raw rows excluded from eligible metrics.</p>
+        {(rawBillingEvidence.conflictingHashCount > 0 || rawBillingEvidence.ambiguousEncounterCount > 0) && <p>Billing source review: {rawBillingEvidence.conflictingHashCount} fee conflicts; {rawBillingEvidence.ambiguousEncounterCount} ambiguous fee encounters. Review the source evidence below.</p>}
+        {rawBillingEvidence.resolvedCaseCount > 0 && <p>{rawBillingEvidence.resolvedCaseCount} exact two-charge cases accepted by owner approval.</p>}
         {rawBillingEvidence.staleResolutionCount > 0 && <p role="alert">{rawBillingEvidence.staleResolutionCount} approved cases have changed or missing evidence. Their charges remain unknown pending review.</p>}
         {verifiedCoverage.attendanceStatusConflictCount > 0 && <p>{verifiedCoverage.attendanceStatusConflictCount} conflicting attendance status groups. Affected complete provider periods are withheld, not zero; review matching diagnostics below.</p>}
-        <p>Imported coverage proof does not certify separate manual-source session history.</p>
+        <details><summary>Coverage and billing definitions</summary>
+          <p>Raw rows remain available for reconciliation and review; they are not certified actual totals. Imported coverage proof does not certify separate manual-source session history.</p>
+          <p>Original exports are retained. Conflicting amounts are not added together or automatically applied as corrections; actual totals still require independently admitted complete-period evidence.</p>
+          {rawBillingEvidence.resolvedCaseCount > 0 && <p>Original source signals remain: {rawBillingEvidence.originalConflictingCaseCount} fee conflicts and {rawBillingEvidence.originalAmbiguousCaseCount} ambiguous encounters. Attendance counts are unchanged; billed fees are not cash.</p>}
+        </details>
         {phoneChargeAnomalies(snapshots).length > 0 && <p role="alert">PHONE charge review: {phoneChargeAnomalies(snapshots).length} raw source rows violate the zero-fee policy. Original amounts are preserved; PHONE is excluded from treatment counts and affected revenue remains unknown.</p>}
         {!coverageSummary && <p>Provider roster scope is unavailable. Actual metrics remain withheld until mapped complete-report coverage is supplied.</p>}
         {recentCoverageGaps.length > 0 && <ul aria-label="Most recent incomplete report periods">

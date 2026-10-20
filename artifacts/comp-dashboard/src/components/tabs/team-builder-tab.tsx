@@ -12,6 +12,7 @@ import { Card, CardHeader, CardTitle, CardContent, CardFooter } from "@/componen
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { HelpBubble } from "@/components/practice/help-bubble";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Switch } from "@/components/ui/switch";
@@ -95,7 +96,7 @@ function NumField({ label, name, value, onChange, step, tooltip }: {
 }) {
   return (
     <div className="space-y-1">
-      <Label htmlFor={name} title={tooltip}>{label}</Label>
+      <div className="flex items-center gap-1"><Label htmlFor={name}>{label}</Label>{tooltip && <HelpBubble text={tooltip} label={`About ${label}`} />}</div>
       <Input id={name} type="number" min={0} step={step ?? 1} value={value}
         onChange={e => onChange(name, Number(e.target.value))} />
     </div>
@@ -276,8 +277,11 @@ function StaffMemberDialog({
               <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3">W2 Employer Burden</p>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div className="space-y-1">
-                  <Label title="Employer's share of Social Security & Medicare (7.65%)">Employer FICA (%)</Label>
-                  <Input type="number" min={0} step={0.01} value={form.w2EmployerFicaPct} onChange={e => setField("w2EmployerFicaPct", Number(e.target.value))} />
+                  <div className="flex items-center gap-1">
+                    <Label htmlFor="staff-employer-fica">Employer FICA (%)</Label>
+                    <HelpBubble label="Employer FICA help" text="Employer's share of Social Security & Medicare (7.65%)" />
+                  </div>
+                  <Input id="staff-employer-fica" type="number" min={0} step={0.01} value={form.w2EmployerFicaPct} onChange={e => setField("w2EmployerFicaPct", Number(e.target.value))} />
                 </div>
                 <div className="space-y-1">
                   <Label>FUTA/SUTA (%)</Label>
@@ -288,8 +292,11 @@ function StaffMemberDialog({
                   <Input type="number" min={0} step={0.01} value={form.workersCompPct} onChange={e => setField("workersCompPct", Number(e.target.value))} />
                 </div>
                 <div className="space-y-1">
-                  <Label title="Health insurance, retirement match, or other benefits">Other Burden (%)</Label>
-                  <Input type="number" min={0} step={0.01} value={form.otherEmployerBurdenPct} onChange={e => setField("otherEmployerBurdenPct", Number(e.target.value))} />
+                  <div className="flex items-center gap-1">
+                    <Label htmlFor="staff-other-burden">Other Burden (%)</Label>
+                    <HelpBubble label="Other Burden help" text="Health insurance, retirement match, or other benefits" />
+                  </div>
+                  <Input id="staff-other-burden" type="number" min={0} step={0.01} value={form.otherEmployerBurdenPct} onChange={e => setField("otherEmployerBurdenPct", Number(e.target.value))} />
                 </div>
               </div>
             </div>

@@ -250,6 +250,7 @@ export default function WorkspaceCalculations({
           {rounded(settings.sessionsPerClientMonth * settings.retentionMonths)}{" "}
           attended visits over the forecast lifespan.
         </p>
+        <details><summary>How visit frequency is calculated</summary>
         {clientActivityEstimate && hasReturnFrequencyEstimate ? (
           <p>
             Visit-frequency estimate: practice clients who reached a
@@ -276,6 +277,7 @@ export default function WorkspaceCalculations({
             clinician to calculate return-based estimates.
           </p>
         )}
+        </details>
       </div>
       <div className="pw-calculation-group">
         <h3>Existing clients</h3>
@@ -329,7 +331,7 @@ export default function WorkspaceCalculations({
           </p>
         )}
         {clientActivityEstimate && hasObservedEndingEstimate && (
-          <p>
+          <details><summary>How client endings are calculated</summary><p>
             An established client is counted in their final attended treatment
             month only after{" "}
             {clientActivityEstimate.endingGapDays.toLocaleString()} complete
@@ -394,7 +396,7 @@ export default function WorkspaceCalculations({
               ? ""
               : "s"}{" "}
             later returned after that gap.
-          </p>
+          </p></details>
         )}
       </div>
     </section>
