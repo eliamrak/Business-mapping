@@ -28,7 +28,10 @@
 .pw-app .pw-overview-primary-grid .pw-metric-hero > strong { font-size: 30px; }
 .pw-app .pw-historical-period-value .pw-percentage-kpi-ring { width: 76px; height: 76px; }
 .pw-app .pw-historical-period-value .pw-percentage-kpi-value { font-size: 19px; }
-.pw-app .pw-person-kpis { gap: 14px; }
+.pw-app .pw-person-kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px 24px; }
+.pw-app .pw-person-kpis .pw-historical-period-value strong { font-size: 23px; }
+.pw-app .pw-person-kpis .pw-percentage-kpi-legend strong { font-size: 12px; }
+.pw-app .pw-person-kpis .pw-historical-period-value .pw-percentage-kpi-context { font-size: 11px; }
 .pw-app .pw-number input { max-width: 10rem; }
 .pw-app .pw-goal-editor { display: grid; grid-template-columns: minmax(0, 1fr); gap: 0; }
 .pw-app .pw-goal-editor > .pw-edit-item { padding: 14px 0; border: 0; border-bottom: 1px solid #34414b; border-radius: 0; background: transparent; min-width: 0; }
@@ -73,6 +76,7 @@
   .pw-app .pw-overview-historical-summary { grid-template-columns: minmax(0, 1fr); }
 }
 @media (max-width: 650px) {
+  .pw-app .pw-person-kpis { grid-template-columns: minmax(0, 1fr); }
   .pw-app .pw-goal-editor .pw-edit-grid { grid-template-columns: minmax(0, 1fr); }
   .pw-app .pw-goal-editor .pw-progress-comparison { grid-template-columns: minmax(0, 1fr); }
 }

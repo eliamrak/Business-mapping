@@ -59,9 +59,11 @@ const javascript = bundle.outputFiles.find((file) => file.path.endsWith(".js"))?
 assert.ok(javascript?.length, "candidate JavaScript was built");
 // Preserve scaffold utility styles, then overlay current component/page CSS from this build.
 const assetDir = path.join(root, "artifacts/comp-dashboard/dist/public/assets");
-const baseCssName = (await fs.readdir(assetDir)).filter((name) => /^index-.*\.css$/.test(name)).sort();
-assert.equal(baseCssName.length, 1, "one scaffold utility CSS asset is required");
-const baseCssPath = path.join(assetDir, baseCssName[0]);
+const builtIndexPath = path.join(root, "artifacts/comp-dashboard/dist/public/index.html");
+const builtIndex = await fs.readFile(builtIndexPath, "utf8");
+const baseCssReferences = [...builtIndex.matchAll(/href=["'](?:[^"']*\/)?assets\/(index-[^"'/]+\.css)["']/g)].map((match) => match[1]);
+assert.equal(baseCssReferences.length, 1, "built index must reference exactly one scaffold utility stylesheet");
+const baseCssPath = path.join(assetDir, baseCssReferences[0]);
 const baseCss = await fs.readFile(baseCssPath);
 const currentCss = bundle.outputFiles.filter((file) => file.path.endsWith(".css")).map((file) => Buffer.from(file.contents));
 const css = Buffer.concat([baseCss, Buffer.from("\n/* Current candidate component styles */\n"), ...currentCss]);
@@ -77,6 +79,7 @@ const provenance = {
   browserPath: process.env.PRACTICE_CHROMIUM_PATH, playwrightPackage: process.env.PRACTICE_PLAYWRIGHT_PACKAGE,
   javascriptSha256: sha256(javascript), servedCssSha256: sha256(css),
   scaffoldUtilityCss: { path: path.relative(root, baseCssPath), sha256: sha256(baseCss) },
+  scaffoldBuiltIndexSha256: sha256(builtIndex),
   currentComponentCss: true, runtimeSources: Object.fromEntries([...runtimeSources].sort()),
   sourceRequirements: sourceRequirements.map(({ requirement }) => ({ requirement, passed: true })),
   acceptanceBasis: "Captured working-tree sources and served bundle; HEAD alone is not candidate certification",
@@ -358,7 +361,14 @@ try {
   for (const width of [1280, 390]) assert.ok(helpChecks.some(check => check.width === width && check.label.startsWith('About ')), 'generic heading descriptions have tested keyboard and pointer help at each size');
   const allowedAuthErrors = browserErrors.filter(error => error.includes('Clerk: Failed to load Clerk JS') && error.includes('clerk.127.0.0.1'));
   assert.deepEqual(browserErrors.filter(error => !allowedAuthErrors.includes(error)), [], 'no application exceptions');
-  evidence = { syntheticOnly: true, productionAccess: false, requirements, expectedRanges, requests, blockedExternal, attemptedWrites, browserErrors, allowedAuthErrors, screenshots, checks, helpChecks, sourceFactsUnchanged: true, pendingAcceptance: ['Real repeated-4 / 43 source explanations require separate read-only source investigation'] };
+  evidence = { syntheticOnly: true, productionAccess: false, requirements, expectedRanges, requests, blockedExternal, attemptedWrites, browserErrors, allowedAuthErrors, screenshots, checks, helpChecks, sourceFactsUnchanged: true,
+    verifiedDisplayOnly: ['Whole-window attrition percentage safely stays unknown; this does not establish a completed percentage calculation capability'],
+    pendingAcceptance: [
+      'Whole-window attrition percentage remains unknown: a matching unique eligible-client denominator is not established',
+      'Actual protected-payroll recipient and mapping require a read-only production investigation',
+      'Installed and running macOS application acceptance remains unverified; isolated browser checks do not establish native acceptance',
+      'Actual repeated-4 / 43 records require a source trace; synthetic fixtures do not explain those production numbers',
+    ] };
 } finally { await browser.close(); }
 `;
 
@@ -373,6 +383,7 @@ try {
   assert.equal(git("rev-parse", "HEAD").trim(), commit, "HEAD changed during verification; rerun the author's final candidate");
   assert.equal(sha256(await fs.readFile(setupFile)), provenance.fixtureSetupSha256, "fixture scaffold changed during verification");
   assert.equal(sha256(await fs.readFile(baseCssPath)), provenance.scaffoldUtilityCss.sha256, "scaffold utility CSS changed during verification");
+  assert.equal(sha256(await fs.readFile(builtIndexPath)), provenance.scaffoldBuiltIndexSha256, "scaffold built index changed during verification");
   assert.equal(sha256(await fs.readFile(fileURLToPath(import.meta.url))), provenance.harnessSha256, "verification harness changed during execution");
   assert.equal(git("diff", "--binary", "HEAD", "--", "artifacts", "lib"), diff, "runtime diff changed during verification");
   const screenshotHashes = Object.fromEntries(await Promise.all((await fs.readdir(outDir)).filter((file) => file.endsWith(".png")).sort().map(async (file) => [file, sha256(await fs.readFile(path.join(outDir, file)))])));
