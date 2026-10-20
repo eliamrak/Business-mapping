@@ -8,7 +8,7 @@ import {
   type Values,
   type Workspace,
 } from "@workspace/practice/hub";
-import { linkedGoalFor, linkedFundGoalFor } from "./legacy-practice-goals.ts";
+import { linkedGoalForMetric, linkedFundGoalFor } from "./legacy-practice-goals.ts";
 import type { CompensationGoal } from "./workspace-defaults.ts";
 import { staffCostCoverageReasons } from "./staff-cost-coverage.ts";
 import { currentPracticeClinicians } from "./practice-scope.ts";
@@ -224,15 +224,16 @@ export function financialSessionGoal(
   const targets: FinancialGoalTarget[] = workspace.goals
     .filter((g) => !g.archived)
     .map((g) => ({ ...g, source: `workspace goal ${g.id}` }));
-  for (const name of [
-    "Owner Pay",
-    "Co-Owner Pay",
-    "Business Profit",
-    "Desired Clinicians",
-  ]) {
-    const binding = linkedGoalFor(name, workspace, input.legacyGoal);
+  for (const metric of [
+    "coOwnerSalaryPretax",
+    "ownerDistributionsPretax",
+    "profit",
+    "activeClinicalHeadcount",
+  ] as const) {
+    const binding = linkedGoalForMetric(metric, workspace, input.legacyGoal);
+    if (binding.diagnostic) reasons.push(binding.diagnostic);
     if (binding.origin === "legacy" && binding.goal)
-      targets.push({ ...binding.goal, source: `linked legacy ${name}` });
+      targets.push({ ...binding.goal, source: `linked legacy ${metric}` });
   }
   // The settings field has no unset marker: zero is not evidence of an explicit target.
   if (

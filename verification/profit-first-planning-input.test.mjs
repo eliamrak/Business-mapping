@@ -10,11 +10,13 @@ import * as planner from "../artifacts/comp-dashboard/src/lib/profit-first-plann
 
 const componentUrl = new URL("../artifacts/comp-dashboard/src/components/practice/profit-first-planning.tsx", import.meta.url);
 const dashboardRequire = createRequire(new URL("../artifacts/comp-dashboard/package.json", import.meta.url));
+const { renderToStaticMarkup } = dashboardRequire("react-dom/server");
 const code = ts.transpileModule(readFileSync(componentUrl, "utf8"), {
   compilerOptions: { module: ts.ModuleKind.CommonJS, jsx: ts.JsxEmit.ReactJSX, target: ts.ScriptTarget.ES2022 },
 }).outputText;
 const fields = [
   { name: "revenue", label: "Monthly billed revenue estimate", previous: 10000, read: p => p.estimatedMonthlyValues.revenue },
+  { name: "quarterly tax", label: "Quarterly tax planning estimate", previous: 1200, divisor: 3, maximum: 3e10, read: p => p.estimatedMonthlyValues.taxObligations },
   { name: "floor", label: "Business profit scenario percentage floor", previous: 150, read: p => p.scenarioPercents["business-profit"] },
   { name: "preset goal", label: "Building fund monthly contribution", previous: 250, read: p => p.goals.find(g => g.name === "Building fund monthly contribution").monthlyAmount },
   { name: "custom goal", label: "Custom reserve contribution", previous: 75, read: p => p.goals.find(g => g.name === "Custom reserve contribution").monthlyAmount },
@@ -26,19 +28,30 @@ function nodes(tree) {
   if (!tree || typeof tree !== "object") return [];
   return [tree, ...nodes(tree.props?.children)];
 }
+function textContent(tree) {
+  if (Array.isArray(tree)) return tree.map(textContent).join("");
+  if (tree === null || tree === undefined || typeof tree === "boolean") return "";
+  return typeof tree === "object" ? textContent(tree.props?.children) : String(tree);
+}
+function rowCells(f, label) {
+  const row = nodes(f.tree).find(n => n.type === "tr" && nodes(n).some(child => child.type === "th" && child.props.scope === "row" && textContent(child) === label));
+  assert.ok(row, `Bucket row: ${label}`);
+  return nodes(row).filter(n => n.type === "th" || n.type === "td").map(textContent);
+}
 
 // Run the actual TSX handlers and JSX runtime with deterministic hook state.
 // This intentionally provides no DOM, native input sanitization, or React scheduler.
-function fixture() {
+function fixture(configure = () => {}) {
   const workspace = hub.emptyWorkspace("2026-01-01");
   workspace.moneyPlanning = {
-    estimatedMonthlyValues: { revenue: 10000, overhead: 1200, otherIncome: 0 },
+    estimatedMonthlyValues: { revenue: 10000, overhead: 1200, otherIncome: 0, taxObligations: 1200 },
     scenarioPercents: { "business-profit": 150 },
     goals: [
       { id: randomUUID(), name: "Building fund monthly contribution", bucket: "business-profit", mode: "additional", monthlyAmount: 250 },
       { id: randomUUID(), name: "Custom reserve contribution", bucket: "business-profit", mode: "additional", monthlyAmount: 75 },
     ],
   };
+  configure(workspace);
   const original = structuredClone(workspace);
   const hooks = [], callbacks = [];
   let cursor = 0, changed = false, tree, dirty, report, localPlanning;
@@ -103,6 +116,7 @@ function fixture() {
     get planning() { return localPlanning; },
     get report() { return report; },
     get dirty() { return dirty; },
+    get tree() { return tree; },
     change(label, text, badInput = false) { input(label).onChange(event(text, badInput)); render(); },
     blur(label, text, badInput = false) { input(label).onBlur(event(text, badInput)); render(); },
     enter(label, text) {
@@ -129,7 +143,7 @@ function fixture() {
 }
 
 for (const field of fields) {
-  for (const raw of ["-1", "1e309", "NaN", "Infinity", ...(field.name === "floor" ? [] : ["10000000001"])]) {
+  for (const raw of ["-1", "1e309", "NaN", "Infinity", ...(field.name === "floor" ? [] : [String((field.maximum ?? 1e10) + 1)])]) {
     test(`${field.name}: rejects ${raw}, retaining prior value, raw draft, and associated error`, () => {
       const f = fixture();
       f.change(field.label, raw);
@@ -169,7 +183,7 @@ for (const field of fields) {
       assert.equal(f.callbacks.length, 0, "Changes remain local until blur/Enter");
       f.enter(field.label, raw);
       assert.equal(f.callbacks.length, 1);
-      assert.equal(field.read(f.assertSaved()), expected);
+      assert.equal(field.read(f.assertSaved()), expected === null ? null : expected / (field.divisor ?? 1));
       assert.equal(f.input(field.label)["aria-invalid"], false);
       assert.equal(f.input(field.label)["aria-describedby"], undefined);
       assert.equal(f.dirty, false);
@@ -222,11 +236,12 @@ test("multiple field errors block grouped estimate, floor, and goal commits with
 });
 
 test("percentage floors above 100 and above the dollar maximum remain saveable and infeasible", () => {
+  const floor = fields.find(field => field.name === "floor");
   for (const raw of ["175", "10000000001"]) {
     const f = fixture();
-    f.change(fields[1].label, raw);
-    f.blur(fields[1].label, raw);
-    assert.equal(fields[1].read(f.assertSaved()), Number(raw));
+    f.change(floor.label, raw);
+    f.blur(floor.label, raw);
+    assert.equal(floor.read(f.assertSaved()), Number(raw));
     assert.equal(f.report.status, "infeasible");
     assert.equal(f.report.noFiniteRevenueSolution, true);
   }
@@ -245,4 +260,70 @@ test("an unset funding goal stays absent on a deliberate blank and can then be c
   f.change("Marketing monthly funding", "0");
   f.blur("Marketing monthly funding", "0");
   assert.equal(f.assertSaved().goals.find(g => g.name === "Marketing monthly funding").monthlyAmount, 0);
+});
+
+test("rendered table keeps baseline percent, current dollars and needed dollars adjacent with a signed gap", () => {
+  const f = fixture();
+  assert.deepEqual(nodes(f.tree).filter(n => n.type === "th" && n.props.scope === "col").map(textContent), [
+    "Bucket", "Current %", "Current allocation ($/month)", "Budget needed ($/month)", "Gap ($/month)", "Required %", "Scenario floor %",
+  ]);
+  assert.deepEqual(rowCells(f, "Taxes").slice(0, 6), ["Taxes", "3%", "$300", "$1,200", "$900", "12%"]);
+  assert.deepEqual(rowCells(f, "Operating expenses").slice(0, 6), ["Operating expenses", "28%", "$2,800", "$1,200", "-$1,600", "12%"]);
+  const html = renderToStaticMarkup(f.tree);
+  assert.match(html, /<caption>Monthly allocation planning<\/caption>/);
+  assert.doesNotMatch(html, /Current estimate|Required estimate/);
+  const assumptions = nodes(f.tree).find(n => n.type === "details" && textContent(n).startsWith("Planning estimate assumptions"));
+  assert.equal(assumptions.props.open, undefined, "Calculation help starts collapsed");
+  assert.match(textContent(assumptions), /Gap is budget needed minus current allocation/);
+  assert.equal(f.callbacks.length, 0);
+});
+
+test("income preview recalculates current dollars, gaps and required percentages without staging or changing baseline", () => {
+  const f = fixture();
+  f.change(otherLabel, "2000");
+  assert.deepEqual(rowCells(f, "Taxes").slice(0, 6), ["Taxes", "3%", "$360", "$1,200", "$840", "10%"]);
+  f.change("Monthly billed revenue estimate", "18000");
+  assert.deepEqual(rowCells(f, "Taxes").slice(0, 6), ["Taxes", "3%", "$600", "$1,200", "$600", "6%"]);
+  assert.equal(f.callbacks.length, 0);
+  f.assertSourceUnchanged();
+});
+
+test("quarterly tax editor previews /3, stages only on Enter, and round-trips the existing monthly field", () => {
+  const f = fixture();
+  const label = "Quarterly tax planning estimate";
+  assert.equal(f.input(label).value, "3600.00");
+  f.change(label, "9000");
+  assert.deepEqual(rowCells(f, "Taxes").slice(0, 6), ["Taxes", "3%", "$300", "$3,000", "$2,700", "30%"]);
+  assert.equal(f.callbacks.length, 0);
+  f.enter(label, "9000");
+  const saved = f.assertSaved();
+  assert.equal(saved.estimatedMonthlyValues.taxObligations, 3000);
+  assert.equal(f.input(label).value, "9000.00");
+  assert.ok(!Object.hasOwn(saved.estimatedMonthlyValues, "quarterlyTax"), "Only monthly normalized data is persisted");
+  f.change(label, "30000000000");
+  f.enter(label, "30000000000");
+  assert.equal(f.assertSaved().estimatedMonthlyValues.taxObligations, 1e10);
+  f.assertSourceUnchanged();
+});
+
+test("unknown and zero income render honest current dollars and gap values", () => {
+  const f = fixture();
+  f.change("Monthly billed revenue estimate", "");
+  assert.deepEqual(rowCells(f, "Taxes").slice(0, 6), ["Taxes", "3%", "Unknown", "$1,200", "Unknown", "Unknown"]);
+  f.change("Monthly billed revenue estimate", "0");
+  assert.deepEqual(rowCells(f, "Taxes").slice(0, 6), ["Taxes", "3%", "$0", "$1,200", "$1,200", "Unknown"]);
+});
+
+test("resolving missing quarterly tax keeps the cost editor open until explicitly closed", () => {
+  const f = fixture(workspace => { delete workspace.moneyPlanning.estimatedMonthlyValues.taxObligations; });
+  const details = () => nodes(f.tree).find(n => n.type === "details" && textContent(n).startsWith("Cost estimates and source periods"));
+  assert.equal(details().props.open, true);
+  assert.equal(f.input("Quarterly tax planning estimate").value, "");
+  f.change("Quarterly tax planning estimate", "0");
+  assert.equal(f.report.status, "infeasible");
+  assert.equal(details().props.open, true);
+  details().props.onToggle({ currentTarget: { open: false } });
+  f.blur("Quarterly tax planning estimate", "0");
+  assert.equal(details().props.open, false);
+  assert.equal(f.assertSaved().estimatedMonthlyValues.taxObligations, 0);
 });

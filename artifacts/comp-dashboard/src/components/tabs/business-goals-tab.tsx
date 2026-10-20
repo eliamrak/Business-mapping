@@ -207,7 +207,7 @@ export default function BusinessGoalsTab() {
                       <span className="font-semibold block">{goal.desiredCliniciansCount}</span>
                     </div>
                     <div>
-                      <span className="text-muted-foreground block text-xs">Owner Pay Goal</span>
+                      <span className="text-muted-foreground block text-xs">Elia Distribution Goal</span>
                       <span className="font-semibold block">{formatCurrency(goal.ownerPayGoal)}</span>
                     </div>
                   </div>
@@ -249,8 +249,8 @@ export default function BusinessGoalsTab() {
             <div>
               <h4 className="text-sm font-semibold mb-3 text-muted-foreground uppercase tracking-wider">Owner Compensation</h4>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <NumInput label="Owner Pay Goal ($)" name="ownerPayGoal" value={form.ownerPayGoal} onChange={setField} tooltip="Annual compensation goal for primary owner" />
-                <NumInput label="Second Owner Pay Goal ($)" name="secondOwnerPayGoal" value={form.secondOwnerPayGoal} onChange={setField} tooltip="Annual compensation goal for second owner (0 if single owner)" />
+                <NumInput label="Co-owner Distribution Goal: Elia ($)" name="ownerPayGoal" value={form.ownerPayGoal} onChange={setField} tooltip="Annual pre-tax distribution target for Elia; the legacy ownerPayGoal field is retained" />
+                <NumInput label="Owner Salary Goal: Erin ($)" name="secondOwnerPayGoal" value={form.secondOwnerPayGoal} onChange={setField} tooltip="Annual pre-tax salary target for Erin; the legacy secondOwnerPayGoal field is retained" />
                 <NumInput label="Desired Owner Clinical Caseload" name="desiredOwnerClinicalCaseload" value={form.desiredOwnerClinicalCaseload} onChange={setField} tooltip="How many clinical sessions per week the owner plans to see" />
               </div>
             </div>

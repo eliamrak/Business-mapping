@@ -408,7 +408,8 @@ test("legacy zero wins, archived linked targets do not reappear, no guessed mult
     businessProfitGoal: 0,
   };
   const goal = financialSessionGoal(input);
-  assert.ok(!goal.details.targets.some((t) => t.name === "Owner Pay"));
+  assert.ok(!goal.details.targets.some((t) => t.metric === "ownerDistributionsPretax"));
+  assert.equal(goal.details.targets.find((t) => t.metric === "coOwnerSalaryPretax")?.target, 0);
   assert.equal(
     goal.details.targets.find((t) => t.name === "Business Profit")?.target,
     0,
@@ -418,6 +419,28 @@ test("legacy zero wins, archived linked targets do not reappear, no guessed mult
     financialSessionGoal(input).unavailableReasons.join(" "),
     /mix is unavailable/,
   );
+});
+
+test("archived salary and distribution targets suppress only their own legacy metric", () => {
+  for (const metric of ["coOwnerSalaryPretax", "ownerDistributionsPretax"] as const) {
+    const input = setup();
+    input.workspace.goals = [goalSchema.parse({ id: randomUUID(), name: "Historic unrelated label", metric, amount: 123, archived: true })];
+    input.legacyGoal = { id: 1, name: "Practice", ownerPayGoal: 12000, secondOwnerPayGoal: 24000, annualOverheadGoal: 0, businessProfitGoal: 0 };
+    const before = structuredClone(input.workspace);
+    const result = financialSessionGoal(input);
+    assert.ok(!result.details.targets.some(target => target.metric === metric));
+    const other = metric === "coOwnerSalaryPretax" ? "ownerDistributionsPretax" : "coOwnerSalaryPretax";
+    assert.ok(result.details.targets.some(target => target.metric === other && target.target > 0));
+    assert.deepEqual(input.workspace, before);
+  }
+});
+
+test("ambiguous owner bindings make financial goal solving unavailable with a diagnostic", () => {
+  const input = setup();
+  input.workspace.goals = ["Salary A", "Salary B"].map(name => goalSchema.parse({ id: randomUUID(), name, metric: "coOwnerSalaryPretax", amount: 1000 }));
+  const result = financialSessionGoal(input);
+  assert.equal(result.status, "unavailable");
+  assert.match(result.unavailableReasons.join(" "), /multiple saved/);
 });
 
 test("invalid or overlapping selected periods cannot double-count financial goals", () => {

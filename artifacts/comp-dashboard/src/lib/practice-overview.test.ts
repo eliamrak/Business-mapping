@@ -5,11 +5,14 @@ import { overviewFundingSummary, overviewClientFlow } from "./practice-overview.
 
 test("combined funding target subtracts matching salary once and excludes headcount and fund balance totals", () => {
   const workspace = emptyWorkspace();
-  workspace.goals = [goalSchema.parse({ id: "00000000-0000-4000-8000-000000000001", name: "Owner pay", metric: "familyTakeHome", amount: 12000 }), goalSchema.parse({ id: "00000000-0000-4000-8000-000000000002", name: "Co-owner pay", metric: "familyTakeHome", amount: 24000 }), goalSchema.parse({ id: "00000000-0000-4000-8000-000000000003", name: "Business Profit", metric: "profit", amount: 36000 })];
+  workspace.goals = [goalSchema.parse({ id: "00000000-0000-4000-8000-000000000001", name: "Owner pay", metric: "ownerDistributionsPretax", amount: 12000 }), goalSchema.parse({ id: "00000000-0000-4000-8000-000000000002", name: "Co-owner pay", metric: "coOwnerSalaryPretax", amount: 24000 }), goalSchema.parse({ id: "00000000-0000-4000-8000-000000000003", name: "Business Profit", metric: "profit", amount: 36000 })];
   const months = Array.from({ length: 12 }, (_, index) => ({ date: `2026-${String(index + 1).padStart(2, "0")}-01`, values: { revenue: 10000, clinicianPay: 3000, profit: 5000, coOwnerSalaryPretax: 2000 } })) as any;
   workspace.goals = workspace.goals.map((goal) => ({ ...goal, basis: "annual" }));
   const result = overviewFundingSummary(workspace, months);
   assert.equal(result.target, 48000);
+  assert.equal(result.ownerAnnual, 12000);
+  assert.equal(result.includedSalaryAnnual, 24000);
+  assert.deepEqual(result.diagnostics, []);
   assert.equal(result.salaryGap, 0);
   assert.equal(result.profit, 60000);
   assert.equal(overviewFundingSummary({ ...workspace, goals: workspace.goals.slice(0, 2) }, months).target, null);
@@ -25,6 +28,37 @@ test("combined funding target subtracts matching salary once and excludes headco
   workspace.allocations[0].start = "2026-10-01";
   assert.equal(overviewFundingSummary(workspace, months).fundsAnnual, 300);
   assert.equal(overviewFundingSummary(workspace, months).target, 48300);
+});
+
+test("funding summary uses typed identity despite canonical or historic names and preserves salary gaps", () => {
+  const workspace = emptyWorkspace();
+  workspace.goals = [
+    goalSchema.parse({ id: crypto.randomUUID(), name: "Owner pay", metric: "coOwnerSalaryPretax", amount: 36000, basis: "annual" }),
+    goalSchema.parse({ id: crypto.randomUUID(), name: "Co-owner pay", metric: "ownerDistributionsPretax", amount: 12000, basis: "annual" }),
+    goalSchema.parse({ id: crypto.randomUUID(), name: "Business Profit", metric: "profit", amount: 36000, basis: "annual" }),
+  ];
+  const months = Array.from({ length: 12 }, (_, index) => ({ date: `2026-${String(index + 1).padStart(2, "0")}-01`, values: { coOwnerSalaryPretax: 2000 } })) as any;
+  const before = structuredClone(workspace);
+  const result = overviewFundingSummary(workspace, months);
+  assert.equal(result.salaryGap, 12000);
+  assert.equal(result.ownerAnnual, 12000);
+  assert.equal(result.target, 60000);
+  assert.deepEqual(workspace, before);
+  workspace.goals[0].name = "Historic salary name";
+  workspace.goals[1].name = "Historic distribution name";
+  assert.equal(overviewFundingSummary(workspace, months).target, 60000);
+});
+
+test("unknown or duplicate owner mappings withhold funding totals rather than reinterpret amounts", () => {
+  const workspace = emptyWorkspace();
+  workspace.goals.push(goalSchema.parse({ id: crypto.randomUUID(), name: "Owner pay", metric: "familyTakeHome", amount: 12000 }));
+  const unknown = overviewFundingSummary(workspace, []);
+  assert.equal(unknown.target, null);
+  assert.ok(unknown.diagnostics.some(message => /unrecognized funding metric/.test(message)));
+  workspace.goals = ["A", "B"].map(name => goalSchema.parse({ id: crypto.randomUUID(), name, metric: "coOwnerSalaryPretax", amount: 12000 }));
+  const duplicate = overviewFundingSummary(workspace, []);
+  assert.equal(duplicate.target, null);
+  assert.ok(duplicate.diagnostics.some(message => /multiple saved/.test(message)));
 });
 
 test("client flow requires real history and preserves unknown departure maturity", () => {

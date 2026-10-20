@@ -35,7 +35,7 @@ export default function ProfitFirstPlanning(props: ProfitFirstPlanningProps) {
     const value = parse(target.value, maximum, target.validity?.badInput);
     setFieldError(key, value === undefined ? maximum === Infinity
       ? "Enter a finite, nonnegative percentage, or leave blank for Unknown."
-      : "Enter a finite, nonnegative amount up to 10,000,000,000, or leave blank for Unknown." : undefined);
+      : `Enter a finite, nonnegative amount up to ${maximum.toLocaleString("en-US")}, or leave blank for Unknown.` : undefined);
     return value;
   };
   const commit = (next: MoneyPlanningSettings, key: string) => {
@@ -79,33 +79,40 @@ export default function ProfitFirstPlanning(props: ProfitFirstPlanningProps) {
       clearDraft(key);
     }
   };
-  const estimateInput = (key: string, value: number | null, label: string) => <><input aria-label={label} type="number" min="0" max="10000000000" step="any" {...errorProps(`estimate:${key}`)}
-    value={drafts[`estimate:${key}`] ?? dollarInput(Object.hasOwn(planning.estimatedMonthlyValues ?? {}, key) ? planning.estimatedMonthlyValues![key] : value)}
-    onChange={event => editNumber(`estimate:${key}`, event.target, (current, amount) => ({ ...current, estimatedMonthlyValues: { ...current.estimatedMonthlyValues, [key]: amount } }))}
-    onBlur={event => stageNumber(`estimate:${key}`, event.target)}
+  const estimateInput = (key: string, value: number | null, label: string, months = 1) => {
+    const monthly = Object.hasOwn(planning.estimatedMonthlyValues ?? {}, key) ? planning.estimatedMonthlyValues![key] : value;
+    const maximum = 1e10 * months;
+    return <><input aria-label={label} type="number" min="0" max={maximum} step="any" {...errorProps(`estimate:${key}`)}
+    value={drafts[`estimate:${key}`] ?? dollarInput(monthly === null ? null : monthly * months)}
+    onChange={event => editNumber(`estimate:${key}`, event.target, (current, amount) => ({ ...current, estimatedMonthlyValues: { ...current.estimatedMonthlyValues, [key]: amount === null ? null : amount / months } }), maximum)}
+    onBlur={event => stageNumber(`estimate:${key}`, event.target, maximum)}
     onKeyDown={event => { if (event.key === "Enter") event.currentTarget.blur(); }} />{fieldError(`estimate:${key}`)}</>;
+  };
   return <section className="pf-planning" aria-label="Money planning estimates">
     <header><h2>Money planning estimates</h2><p>{report.sourcePeriod}</p></header>
     <div className="pf-summary">
       <div><span>Estimated monthly billed income</span><strong>{dollars(report.income)}</strong></div>
-      <div><span>Monthly costs and goals estimate</span><strong>{dollars(report.totalMonthly)}</strong></div>
-      <div><span>Required share of estimated income</span><strong>{percent(report.totalPercent)}</strong></div>
+      <div><span>Monthly budget needed</span><strong>{dollars(report.totalMonthly)}</strong></div>
+      <div><span>Required %</span><strong>{percent(report.totalPercent)}</strong></div>
     </div>
     {report.exceedsIncome && <p className="pf-deficit" role="status"><strong>Planned costs and goals exceed estimated income</strong><br />Estimated monthly shortfall: {dollars(report.shortfall)}{report.status === "incomplete" ? " or more; some assumptions are missing." : "."}</p>}
     <p>Estimated monthly revenue needed: <strong>{dollars(report.neededRevenue)}</strong>. Additional estimated revenue needed: <strong>{dollars(report.additionalRevenueNeeded)}</strong>.</p>
     {report.noFiniteRevenueSolution && <p className="pf-deficit">The percentage floors leave no room for fixed costs or additional goals. Higher revenue alone cannot fund this scenario.</p>}
     <div className="pf-table-scroll"><table>
-      <caption>Monthly funding estimates; confirmed current allocation totals 100%</caption>
-      <thead><tr><th scope="col">Bucket</th><th scope="col">Current %</th><th scope="col">Current estimate</th><th scope="col">Required %</th><th scope="col">Required estimate</th><th scope="col">Scenario floor %</th></tr></thead>
-      <tbody>{report.rows.map(row => <tr key={row.key}>
+      <caption>Monthly allocation planning</caption>
+      <thead><tr><th scope="col">Bucket</th><th scope="col">Current %</th><th scope="col">Current allocation ($/month)</th><th scope="col">Budget needed ($/month)</th><th scope="col">Gap ($/month)</th><th scope="col">Required %</th><th scope="col">Scenario floor %</th></tr></thead>
+      <tbody>{report.rows.map(row => {
+        const gap = row.requiredMonthly === null || row.currentMonthly === null ? null : row.requiredMonthly - row.currentMonthly;
+        return <tr key={row.key}>
         <th scope="row">{row.label}</th><td>{percent(row.currentPercent)}</td><td>{dollars(row.currentMonthly)}</td>
-        <td className={row.requiredPercent !== null && row.requiredPercent > 100 ? "pf-deficit" : undefined}>{percent(row.requiredPercent)}</td><td>{dollars(row.requiredMonthly)}</td>
+        <td>{dollars(row.requiredMonthly)}</td><td className={gap !== null && gap > 0 ? "pf-deficit" : undefined}>{dollars(gap)}</td>
+        <td className={row.requiredPercent !== null && row.requiredPercent > 100 ? "pf-deficit" : undefined}>{percent(row.requiredPercent)}</td>
         <td><input aria-label={`${row.label} scenario percentage floor`} type="number" min="0" step="0.1" {...errorProps(`floor:${row.key}`)} value={drafts[`floor:${row.key}`] ?? row.scenarioPercent ?? ""}
           onChange={event => editNumber(`floor:${row.key}`, event.target, (current, amount) => ({ ...current, scenarioPercents: { ...current.scenarioPercents, [row.key]: amount } }), Infinity)}
           onBlur={event => stageNumber(`floor:${row.key}`, event.target, Infinity)} onKeyDown={event => { if (event.key === "Enter") event.currentTarget.blur(); }} />{fieldError(`floor:${row.key}`)}</td>
-      </tr>)}</tbody>
+      </tr>; })}</tbody>
     </table></div>
-    <p>Protected configured Erin / co-owner salary estimate: <strong>{dollars(report.protectedErinMonthly)}</strong> per month, included once in Owner payroll before optional goals.</p>
+    <p>Owner payroll: <strong>{dollars(report.protectedErinMonthly)}</strong>/month (protected)<small>Configured recipient: {props.context.clinicians.find(person => person.id === props.workspace.settings.familyW2ClinicianId)?.label ?? "not selected"}. Owner salary belongs to Erin; co-owner distributions belong to Elia.</small></p>
     <fieldset className="pf-goals"><legend>Monthly funding goals</legend>
       {presetGoals.map(preset => <label key={preset.key}>{preset.name}<input aria-label={preset.name} type="number" min="0" max="10000000000" step="100" placeholder="Not configured" disabled={!props.onPlanningChange} {...errorProps(preset.key)}
         value={drafts[preset.key] ?? preset.goal?.monthlyAmount ?? ""}
@@ -121,8 +128,9 @@ export default function ProfitFirstPlanning(props: ProfitFirstPlanningProps) {
     <details open={costDetailsOpen} onToggle={event => setCostDetailsOpen(event.currentTarget.open)}><summary>Cost estimates and source periods</summary>
       <div className="pf-estimates">
         <label>Monthly billed revenue estimate{estimateInput("revenue", report.revenue, "Monthly billed revenue estimate")}</label>
-        {report.costs.map(cost => <label key={cost.key}>{cost.label}
-          {cost.key === "therapistPay" ? <strong>{dollars(cost.monthly)}</strong> : estimateInput(cost.key, cost.monthly, cost.label)}
+        {report.costs.map(cost => <label key={cost.key}>{cost.key === "taxObligations" ? "Quarterly tax planning estimate" : cost.label}
+          {cost.key === "therapistPay" ? <strong>{dollars(cost.monthly)}</strong> : estimateInput(cost.key, cost.monthly, cost.key === "taxObligations" ? "Quarterly tax planning estimate" : cost.label, cost.key === "taxObligations" ? 3 : 1)}
+          {cost.key === "taxObligations" && <small>Quarterly estimate divided by 3: {dollars(cost.monthly)}/month. Planning only; not a calculated tax liability.</small>}
           <small>{cost.source}</small>
         </label>)}
         <label>Total monthly clinician payroll estimate{estimateInput("clinicianPay", props.estimatedMonthlyValues?.clinicianPay ?? null, "Total monthly clinician payroll estimate")}</label>
@@ -130,6 +138,11 @@ export default function ProfitFirstPlanning(props: ProfitFirstPlanningProps) {
       </div>
     </details>
     {report.reasons.length > 0 && <ul className="pf-limitations">{report.reasons.map(reason => <li key={reason}>{reason}</li>)}</ul>}
-    <details><summary>Planning estimate assumptions</summary><ul>{report.assumptions.map(note => <li key={note}>{note}</li>)}</ul></details>
+    <details><summary>Planning estimate assumptions</summary><ul>
+      <li>Current allocation is Current % times the displayed estimated monthly billed income. Confirmed current percentages total 100%.</li>
+      <li>Budget needed includes configured costs, funding goals and scenario floors. Gap is budget needed minus current allocation; a positive gap needs more funding. Required % is budget needed divided by estimated income.</li>
+      <li>Configured Erin salary is included once in Owner payroll before optional goals. Elia distributions are separate funding goals.</li>
+      <li>The quarterly tax editor saves one third as the existing monthly tax planning estimate. An absent estimate and absent tax budget remain Unknown; current 3% is an allocation, not a tax liability.</li>
+      {report.assumptions.map(note => <li key={note}>{note}</li>)}</ul></details>
   </section>;
 }

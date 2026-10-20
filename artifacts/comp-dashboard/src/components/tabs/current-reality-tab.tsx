@@ -174,8 +174,8 @@ export default function CurrentRealityTab() {
                 <div><span className="text-muted-foreground block text-xs">Avg Session Rate</span><span className="font-semibold">{formatCurrency(currentReality.currentAvgSessionRate)}</span></div>
                 <div><span className="text-muted-foreground block text-xs">Sessions / Week</span><span className="font-semibold">{currentReality.currentAvgSessionsPerWeek}</span></div>
                 <div><span className="text-muted-foreground block text-xs">Weeks / Year</span><span className="font-semibold">{currentReality.currentAvgWeeksWorkedPerYear}</span></div>
-                <div><span className="text-muted-foreground block text-xs">Owner Pay (Current)</span><span className="font-semibold">{formatCurrency(currentReality.currentOwnerPay)}</span></div>
-                <div><span className="text-muted-foreground block text-xs">2nd Owner Pay</span><span className="font-semibold">{formatCurrency(currentReality.currentSecondOwnerPay)}</span></div>
+                <div><span className="text-muted-foreground block text-xs">Elia Distributions (Manual)</span><span className="font-semibold">{formatCurrency(currentReality.currentOwnerPay)}</span></div>
+                <div><span className="text-muted-foreground block text-xs">Erin Salary (Manual)</span><span className="font-semibold">{formatCurrency(currentReality.currentSecondOwnerPay)}</span></div>
                 <div><span className="text-muted-foreground block text-xs">Annual Overhead</span><span className="font-semibold">{formatCurrency(currentReality.currentAnnualOverhead)}</span></div>
                 <div><span className="text-muted-foreground block text-xs">Business Profit</span><span className="font-semibold">{formatCurrency(currentReality.currentBusinessProfit)}</span></div>
                 <div><span className="text-muted-foreground block text-xs">Cash Reserve</span><span className="font-semibold">{formatCurrency(currentReality.currentCashReserve)}</span></div>
@@ -268,8 +268,8 @@ export default function CurrentRealityTab() {
             <div>
               <h4 className="text-sm font-semibold mb-3 text-muted-foreground uppercase tracking-wider">Financial Actuals</h4>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <NumField label="Owner Pay ($)" name="currentOwnerPay" value={form.currentOwnerPay} onChange={setField} />
-                <NumField label="2nd Owner Pay ($)" name="currentSecondOwnerPay" value={form.currentSecondOwnerPay} onChange={setField} />
+                <NumField label="Elia Distributions ($, manual)" name="currentOwnerPay" value={form.currentOwnerPay} onChange={setField} />
+                <NumField label="Erin Salary ($, manual)" name="currentSecondOwnerPay" value={form.currentSecondOwnerPay} onChange={setField} />
                 <NumField label="Annual Overhead ($)" name="currentAnnualOverhead" value={form.currentAnnualOverhead} onChange={setField} />
                 <NumField label="Business Profit ($)" name="currentBusinessProfit" value={form.currentBusinessProfit} onChange={setField} />
                 <NumField label="Cash Reserve ($)" name="currentCashReserve" value={form.currentCashReserve} onChange={setField} />

@@ -49,15 +49,17 @@ export function practiceFinancialEstimateRange(
   workspace: Workspace, context: Context, snapshots: readonly LocalSnapshot[],
   asOf: string, requested: Range, declarations?: ImportEvidenceDeclarations | null,
   sameDayVisitOverrides: SameDayVisitOverrides = {},
-  options: { payBasis?: HistoricalPayBasis } = {},
+  options: { payBasis?: HistoricalPayBasis; clinicianId?: number } = {},
 ): PracticeFinancialEstimate {
   const reasons = new Set<string>();
   const assumptions = [
-    "Estimate scope is the selected team's clinician roster; explicitly declared historical billing-only providers are excluded from current-team revenue and compensation.",
+    options.clinicianId === undefined
+      ? "Estimate scope is the selected team's clinician roster; explicitly declared historical billing-only providers are excluded from current-team revenue and compensation."
+      : "Estimate scope is one clinician in the selected team; the full identity roster and original source evidence remain available for reconciliation.",
     "Raw workspace settings are expense assumptions, not goal-injected defaults or accounting actuals; explicit zero is supported.",
     "Where no operating profile was configured, existing split calculations use clinician-card compensation assumptions; those cards do not verify historical pay. Later profile dates are respected unless the current-pay scenario is explicitly selected.",
     "Revenue includes accepted discounted billed service charges, including separately billed consultation and documentation; percentage treatment compensation excludes those non-treatment services, matching the existing compensation model. No clinician-card fee or cash substitution is used.",
-    "Salary accrues on active calendar dates; owner clinical pay and co-owner salary are subsets of clinician compensation.",
+    "Salary accrues on active calendar dates; owner clinical pay and owner salary are subsets of clinician compensation.",
     "Processing is modeled billed revenue times collectionPct times processingPct, plus attended visits times collectionPct times transaction factor times fixed fee; no payment timing or successful payment is established.",
     "Allocations use each selected month's positive estimated billed surplus, weighted by effective dates; distributions are estimates, not bank transfers.",
     "Budget accruals and configured processing/separate owner payroll are distinct expense assumptions; overlapping payroll or processing budget lines require review.",
@@ -71,7 +73,7 @@ export function practiceFinancialEstimateRange(
       source: "historical-estimate", range,
       status: modelComplete ? "available" : keys.some(key => values[key] !== null) && range ? "partial" : "unavailable",
       billingCoverageComplete, modelComplete, values,
-      components: [...keys, "surplusBeforeUnconfiguredMarketing"].map(key => ({ key, label: ({ surplusBeforeUnconfiguredMarketing: "Estimated surplus before unconfigured marketing", sessions: "Completed treatment sessions", reportedBilledGross: "Accepted billed gross", revenue: "Billed revenue estimate", clinicianPay: "Estimated earned clinician compensation", coOwnerSalaryPretax: "Co-owner salary (included in clinician compensation)", ownerClinicalPay: "Owner clinical pay (included in clinician compensation)", ownerDistributionsPretax: "Estimated household distribution (not a transfer)", profit: "Estimated operating profit", fees: "Estimated processing fees" } as Record<string, string>)[key] ?? key,
+      components: [...keys, "surplusBeforeUnconfiguredMarketing"].map(key => ({ key, label: ({ surplusBeforeUnconfiguredMarketing: "Estimated surplus before unconfigured marketing", sessions: "Completed treatment sessions", reportedBilledGross: "Accepted billed gross", revenue: "Billed revenue estimate", clinicianPay: "Estimated earned clinician compensation", coOwnerSalaryPretax: "Owner salary (included in clinician compensation)", ownerClinicalPay: "Owner clinical pay (included in clinician compensation)", ownerDistributionsPretax: "Estimated household distribution (not a transfer)", profit: "Estimated operating profit", fees: "Estimated processing fees" } as Record<string, string>)[key] ?? key,
         value: values[key] ?? null, unit: key === "sessions" ? "number" as const : "currency" as const,
         basis: key === "surplusBeforeUnconfiguredMarketing" ? "Selected pay basis and configured dated costs, including known marketing; excludes unconfigured campaign/hiring effects; not profit, cash or an allocation basis" : key === "sessions" ? "Complete source-period attended treatment visits" : key === "reportedBilledGross" || key === "revenue" ? "Accepted billed charges by service date" : options.payBasis === "current-assumptions" ? "Dated terms where available; disclosed current-pay assumptions for earlier configuration gaps; not paid/accounting actual" : "Dated model assumption; not paid/accounting actual" })),
       assumptions, unavailableReasons: [...reasons],
@@ -83,7 +85,17 @@ export function practiceFinancialEstimateRange(
     return finish(null, false);
   }
   const range = { start: requested.start, end: requested.end < asOf ? requested.end : asOf };
-  const people = context.clinicians.filter(person => (person.goalId ?? null) === workspace.settings.teamId);
+  if (options.clinicianId !== undefined) {
+    const matches = context.clinicians.filter(person => person.id === options.clinicianId);
+    if (!Number.isInteger(options.clinicianId) || options.clinicianId <= 0 || matches.length !== 1
+      || (matches[0].goalId ?? null) !== workspace.settings.teamId) {
+      keys.forEach(key => values[key] = null);
+      reasons.add("Choose one uniquely identified clinician in the selected team for a scoped estimate.");
+      return finish(range, false);
+    }
+  }
+  const people = context.clinicians.filter(person => (person.goalId ?? null) === workspace.settings.teamId
+    && (options.clinicianId === undefined || person.id === options.clinicianId));
   const ids = new Set(people.map(person => person.id));
   const proof = completeReportCoverage(snapshots, people, asOf, context.clinicians, { declarations, teamId: workspace.settings.teamId });
   const eligible = new Set(proof.eligibleBillingRows);

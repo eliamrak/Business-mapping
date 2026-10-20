@@ -1,5 +1,7 @@
 # Recovered Live Decisions 1-11
 
+> October 20 correction: this historical checklist captures the earlier October 18 decisions supplied during October 19. It is NOT the complete October 19 review scope. The October 19 review had 21 items plus clarifications, including explicit simultaneous 3/12-month displays. The selector acceptance in rows 8-9 below was superseded before release. Preserve this record as evidence of the scope omission; use `OCTOBER19-REQUIREMENTS-RECONCILIATION.md` for current acceptance. Passing this older checklist never established completion of the later review.
+
 ## Scope and Authority
 
 The recovered call notes supplied October 19 are the intended next Practice scope. They supersede earlier assumptions about what remained after technical acceptance. Decision7 supersedes decision6's reporting-window behavior **only for retention and attrition**. The explicit release instruction covers these changes in the existing app after tests and independent review. No financial transfers, production record rewrites, bank/cash tracking, new spending or access grants are authorized by this implementation.

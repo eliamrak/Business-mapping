@@ -22,6 +22,8 @@ const close = (actual: number | null | undefined, expected: number) => assert.ok
 
 test("six observed clinicians replace stale stored month and contaminated general forecast with a full current-month planning scenario", () => {
   const { workspace, context, coverage } = fixture();
+  // Synthetic explicit quarterly tax plan of $9,000, stored as its monthly /3 estimate.
+  workspace.moneyPlanning = { estimatedMonthlyValues: { taxObligations: 9000 / 3 } };
   const original = structuredClone({ workspace, context, coverage });
   assert.equal(forecast(workspace, context)[0].values.revenue, null);
   const report = moneyPlanningForecast(workspace, context, "2026-10-18", coverage);
@@ -38,10 +40,23 @@ test("six observed clinicians replace stale stored month and contaminated genera
   const planning = profitFirstPlanning({ workspace, context, asOf: month.date, estimatedMonthlyValues: values, estimateSourcePeriod: report.basis });
   assert.notEqual(planning.income, null);
   assert.notEqual(planning.totalMonthly, null);
+  close(planning.costs.find(cost => cost.key === "taxObligations")!.monthly, 3000);
   close(planning.protectedErinMonthly, 7500);
   assert.deepEqual(planning.reasons, []);
   assert.match(report.basis, /current-month planning scenario.*observed sessions through 2026-10-07/);
   assert.deepEqual({ workspace, context, coverage }, original);
+});
+
+test("supported current-month income and payroll do not supply a missing tax planning estimate", () => {
+  const { workspace, context, coverage } = fixture();
+  const report = moneyPlanningForecast(workspace, context, "2026-10-18", coverage);
+  const { overhead, ...values } = report.months[0].values;
+  const planning = profitFirstPlanning({ workspace, context, asOf: report.months[0].date, estimatedMonthlyValues: values, estimateSourcePeriod: report.basis });
+  assert.notEqual(planning.income, null);
+  close(planning.protectedErinMonthly, 7500);
+  assert.equal(planning.costs.find(cost => cost.key === "taxObligations")!.monthly, null);
+  assert.equal(planning.totalMonthly, null);
+  assert.equal(planning.status, "incomplete");
 });
 
 test("missing provider coverage stays unknown despite desired cards; no ledger or imported fee can establish attendance", () => {

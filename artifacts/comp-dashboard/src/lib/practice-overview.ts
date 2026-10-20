@@ -2,7 +2,7 @@ import type { ForecastMonth, Workspace } from "@workspace/practice/hub";
 import { derivedShowVisits, estimateLocalClientActivity, type ClientActivityOptions, type LocalSnapshot, type SameDayVisitOverrides } from "./retention-local.ts";
 import { fundProjectionSummary } from "./practice-money-visuals.ts";
 import { moneyBridgeSummary } from "./money-bridge.ts";
-import { linkedGoalFor } from "./legacy-practice-goals.ts";
+import { linkedGoalForMetric } from "./legacy-practice-goals.ts";
 import type { CompensationGoal } from "./workspace-defaults.ts";
 
 export function overviewClientFlow(snapshots: LocalSnapshot[], overrides: SameDayVisitOverrides, start: string, end: string, asOf: string, options: ClientActivityOptions = {}) {
@@ -26,13 +26,16 @@ export function overviewClientFlow(snapshots: LocalSnapshot[], overrides: SameDa
 export function overviewFundingSummary(workspace: Workspace, annualMonths: ForecastMonth[], legacyGoal?: CompensationGoal | null) {
   const sum = (metric: string) => annualMonths.length === 12 && annualMonths.every((row) => row.values[metric] != null)
     ? annualMonths.reduce((total, row) => total + row.values[metric]!, 0) : null;
-  const monthly = (name: string) => {
-    const goal = linkedGoalFor(name, workspace, legacyGoal).goal;
+  const diagnostics: string[] = [];
+  const monthly = (metric: Parameters<typeof linkedGoalForMetric>[0]) => {
+    const binding = linkedGoalForMetric(metric, workspace, legacyGoal);
+    if (binding.diagnostic) diagnostics.push(binding.diagnostic);
+    const goal = binding.goal;
     return goal ? goal.amount / (goal.basis === "annual" ? 12 : 1) : null;
   };
-  const owner = monthly("Owner pay");
-  const salary = monthly("Co-owner pay");
-  const retained = monthly("Business Profit");
+  const owner = monthly("ownerDistributionsPretax");
+  const salary = monthly("coOwnerSalaryPretax");
+  const retained = monthly("profit");
   const includedSalaryAnnual = sum("coOwnerSalaryPretax");
   const salaryGap = salary === 0 ? 0 : salary === null || includedSalaryAnnual === null ? null : Math.max(0, salary * 12 - includedSalaryAnnual);
   const fundAmounts = workspace.fundGoals.filter((goal) => !goal.archived && goal.amount > 0).map((goal) => {
@@ -53,7 +56,7 @@ export function overviewFundingSummary(workspace: Workspace, annualMonths: Forec
   return {
     income: bridge.revenue, clinicianPay: bridge.clinicianPay, profit: bridge.profit, otherCosts: bridge.otherCosts,
     adjustments: bridge.adjustments, costComponents: bridge.components,
-    target, knownSubtotal: parts.reduce<number>((total, part) => total + (part ?? 0), 0),
+    target, diagnostics, knownSubtotal: parts.reduce<number>((total, part) => total + (part ?? 0), 0),
     missingAmounts: parts.filter((part) => part === null).length,
     includedSalaryAnnual, ownerAnnual: owner === null ? null : owner * 12,
     salaryGap, retainedAnnual: retained === null ? null : retained * 12,

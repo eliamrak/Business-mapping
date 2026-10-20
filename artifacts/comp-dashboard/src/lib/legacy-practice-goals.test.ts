@@ -1,5 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import ts from "typescript";
 import type { BusinessGoal } from "@workspace/api-client-react";
 import {
   emptyWorkspace,
@@ -27,7 +29,105 @@ const legacy: BusinessGoal = {
   updatedAt: "2026-10-14T00:00:00Z",
 };
 
-test("selected original legacy goals show 90000 annual owner pay and 6 clinicians without writes", () => {
+test("canonical headings bind inverse historic names by saved metric and retain identity", () => {
+  const workspace = emptyWorkspace("2026-10-14");
+  const distribution = goalSchema.parse({ id: crypto.randomUUID(), name: "Owner pay", metric: "ownerDistributionsPretax", amount: 91000, basis: "annual", date: "2027-06-01" });
+  const salary = goalSchema.parse({ id: crypto.randomUUID(), name: "Co-owner pay", metric: "coOwnerSalaryPretax", amount: 3123, basis: "monthly", date: "2027-07-01" });
+  workspace.goals.push(distribution, salary);
+  const before = structuredClone(workspace);
+  const owner = linkedGoalFor("Owner pay", workspace, legacy);
+  const coowner = linkedGoalFor("Co-owner pay", workspace, legacy);
+  assert.deepEqual(owner.goal, salary);
+  assert.deepEqual(coowner.goal, distribution);
+  assert.equal(owner.diagnostic, null);
+  assert.match(owner.provenance!, /Co-owner pay/);
+  assert.deepEqual(owner.initialDraftDefaults, { amount: 3123, basis: "monthly", date: "2027-07-01" });
+  assert.deepEqual(workspace, before);
+});
+
+test("actual workspace goal handler edits the bound ID and blocks ambiguous mappings", () => {
+  const source = readFileSync(new URL("../pages/practice-workspace.tsx", import.meta.url), "utf8");
+  const start = source.indexOf("  function stageNamedGoal(");
+  const end = source.indexOf("  function stageFundGoalPatch(", start);
+  assert.ok(start >= 0 && end > start);
+  const handler = ts.transpileModule(source.slice(start, end), { compilerOptions: { target: ts.ScriptTarget.ES2022 } }).outputText;
+  const workspace = emptyWorkspace("2026-10-14");
+  const salary = goalSchema.parse({ id: crypto.randomUUID(), name: "Co-owner pay", metric: "coOwnerSalaryPretax", amount: 1234, basis: "monthly" });
+  const distribution = goalSchema.parse({ id: crypto.randomUUID(), name: "Owner pay", metric: "ownerDistributionsPretax", amount: 91000, basis: "annual" });
+  workspace.goals.push(distribution, salary);
+  const before = structuredClone(workspace);
+  const patches: { id: string; patch: Partial<typeof salary> }[] = [];
+  const errors: string[] = [];
+  const stage = new Function("workspace", "stagedWorkspace", "resolved", "linkedGoalFor", "stageGoalPatch", "setError", "goalSchema", "setStagedWorkspace", "setStagedLabels", "setReviewStaged", handler + "\nreturn stageNamedGoal;")(
+    workspace, null, { goal: legacy }, linkedGoalFor,
+    (id: string, patch: Partial<typeof salary>) => patches.push({ id, patch }),
+    (error: string) => errors.push(error), goalSchema,
+    () => assert.fail("Existing goals must not be recreated"), () => {}, () => {},
+  );
+  stage("Owner pay", "coOwnerSalaryPretax", { date: "2027-08-01" });
+  assert.equal(patches[0].id, salary.id);
+  assert.equal(patches[0].patch.name, salary.name);
+  assert.equal(patches[0].patch.metric, salary.metric);
+  assert.equal(patches[0].patch.amount, undefined);
+  stage("Co-owner pay", "ownerDistributionsPretax", { basis: "monthly" });
+  assert.equal(patches[1].id, distribution.id);
+  assert.equal(patches[1].patch.name, distribution.name);
+  assert.equal(patches[1].patch.metric, distribution.metric);
+  assert.deepEqual(workspace, before);
+  workspace.goals.push({ ...salary, id: crypto.randomUUID(), name: "Duplicate salary" });
+  stage("Owner pay", "coOwnerSalaryPretax", { amount: 9999 });
+  assert.equal(patches.length, 2);
+  assert.match(errors[0], /multiple saved/);
+});
+
+test("custom named typed goals bind by metric; explicit zero never inherits", () => {
+  const workspace = emptyWorkspace("2026-10-14");
+  const salary = goalSchema.parse({ id: crypto.randomUUID(), name: "Erin fixed funding", metric: "coOwnerSalaryPretax", amount: 0, basis: "annual" });
+  workspace.goals.push(salary);
+  assert.deepEqual(linkedGoalFor("Owner pay", workspace, legacy).goal, salary);
+  assert.equal(linkedGoalFor("Co-owner pay", workspace, legacy).goal?.amount, 90000);
+});
+
+test("duplicate salary metrics block binding instead of choosing a name or first ID", () => {
+  const workspace = emptyWorkspace("2026-10-14");
+  workspace.goals.push(...["Owner pay", "Another salary"].map(name => goalSchema.parse({ id: crypto.randomUUID(), name, metric: "coOwnerSalaryPretax", amount: 123 })));
+  const before = structuredClone(workspace);
+  const binding = linkedGoalFor("Owner pay", workspace, legacy);
+  assert.equal(binding.goal, null);
+  assert.equal(binding.origin, "workspace");
+  assert.match(binding.diagnostic!, /multiple saved/);
+  assert.deepEqual(workspace, before);
+});
+
+test("unknown funding metric under an owner name blocks both canonical rows", () => {
+  const workspace = emptyWorkspace("2026-10-14");
+  workspace.goals.push(goalSchema.parse({ id: crypto.randomUUID(), name: "Owner pay", metric: "familyTakeHome", amount: 321 }));
+  for (const name of ["Owner pay", "Co-owner pay"]) {
+    const binding = linkedGoalFor(name, workspace, legacy);
+    assert.equal(binding.goal, null);
+    assert.match(binding.diagnostic!, /unrecognized funding metric/);
+  }
+});
+
+test("archived semantic salary suppresses fallback regardless of its historic name", () => {
+  const workspace = emptyWorkspace("2026-10-14");
+  workspace.goals.push(goalSchema.parse({ id: crypto.randomUUID(), name: "Co-owner pay", metric: "coOwnerSalaryPretax", amount: 10, archived: true }));
+  const binding = linkedGoalFor("Owner pay", workspace, legacy);
+  assert.equal(binding.goal, null);
+  assert.equal(binding.origin, "workspace");
+  assert.equal(binding.diagnostic, null);
+});
+
+test("archived unrecognized owner mapping cannot silently resurrect an inherited target", () => {
+  const workspace = emptyWorkspace("2026-10-14");
+  workspace.goals.push(goalSchema.parse({ id: crypto.randomUUID(), name: "Owner pay", metric: "familyTakeHome", amount: 321, archived: true }));
+  const binding = linkedGoalFor("Owner pay", workspace, legacy);
+  assert.equal(binding.origin, "workspace");
+  assert.equal(binding.goal, null);
+  assert.match(binding.diagnostic!, /unrecognized funding metric/);
+});
+
+test("canonical Owner retains the second legacy salary amount without writes", () => {
   const stored = emptyWorkspace("2026-10-14");
   const before = structuredClone({ stored, legacy });
   const resolved = resolveWorkspaceDefaults(
@@ -37,8 +137,9 @@ test("selected original legacy goals show 90000 annual owner pay and 6 clinician
   );
   const owner = linkedGoalFor("Owner pay", resolved.workspace, resolved.goal);
   assert.equal(owner.origin, "legacy");
-  assert.equal(owner.goal?.amount, 90_000);
-  assert.equal(owner.goal?.metric, "ownerDistributionsPretax");
+  assert.equal(owner.goal?.amount, 30_000);
+  assert.equal(owner.goal?.metric, "coOwnerSalaryPretax");
+  assert.match(owner.provenance!, /secondOwnerPayGoal.*Erin salary/);
   assert.equal(owner.goal?.basis, "annual");
   assert.equal(owner.goal?.date, null);
   assert.equal(owner.goal?.id, undefined);
@@ -58,7 +159,7 @@ test("active named workspace zero and edits override legacy values", () => {
   const zero = goalSchema.parse({
     id: crypto.randomUUID(),
     name: "OWNER PAY",
-    metric: "ownerDistributionsPretax",
+    metric: "coOwnerSalaryPretax",
     amount: 0,
     basis: "monthly",
     date: "2027-03-01",
@@ -95,17 +196,17 @@ test("basis or date as the first edit preserves the inherited amount in a valid 
       ...binding.initialDraftDefaults,
       ...patch,
     });
-    assert.equal(draft.amount, "amount" in patch ? 0 : 90_000);
+    assert.equal(draft.amount, "amount" in patch ? 0 : 30_000);
   }
   assert.equal(workspace.goals.length, 0);
 });
 
-test("co-owner salary and business profit use the correct annual measures", () => {
+test("canonical Co-owner retains the original legacy distribution amount", () => {
   const workspace = emptyWorkspace("2026-10-14");
   assert.deepEqual(linkedGoalFor("Co-owner pay", workspace, legacy).goal, {
     name: "Co-owner pay",
-    metric: "coOwnerSalaryPretax",
-    amount: 30_000,
+    metric: "ownerDistributionsPretax",
+    amount: 90_000,
     basis: "annual",
     date: null,
   });
@@ -134,7 +235,7 @@ test("only the selected legacy goal supplies fallback, and archived named goals 
     goalSchema.parse({
       id: crypto.randomUUID(),
       name: "Owner pay",
-      metric: "ownerDistributionsPretax",
+      metric: "coOwnerSalaryPretax",
       amount: 1,
       archived: true,
     }),
@@ -152,14 +253,14 @@ test("an active goal wins even when an archived goal with the same name comes fi
     goalSchema.parse({
       id: crypto.randomUUID(),
       name: "Owner pay",
-      metric: "ownerDistributionsPretax",
+      metric: "coOwnerSalaryPretax",
       amount: 90_000,
       archived: true,
     }),
     goalSchema.parse({
       id: crypto.randomUUID(),
       name: "Owner pay",
-      metric: "ownerDistributionsPretax",
+      metric: "coOwnerSalaryPretax",
       amount: 0,
     }),
   );
@@ -263,7 +364,7 @@ test("missing or invalid legacy fields remain absent while legacy zero is valid"
   const workspace = emptyWorkspace("2026-10-14");
   for (const amount of [NaN, Infinity, -1]) {
     assert.equal(
-      linkedGoalFor("Owner pay", workspace, { ...legacy, ownerPayGoal: amount })
+      linkedGoalFor("Owner pay", workspace, { ...legacy, secondOwnerPayGoal: amount })
         .origin,
       "none",
     );
@@ -274,7 +375,7 @@ test("missing or invalid legacy fields remain absent while legacy zero is valid"
     null,
   );
   assert.equal(
-    linkedGoalFor("Owner pay", workspace, { ...legacy, ownerPayGoal: 0 }).goal
+    linkedGoalFor("Owner pay", workspace, { ...legacy, secondOwnerPayGoal: 0 }).goal
       ?.amount,
     0,
   );

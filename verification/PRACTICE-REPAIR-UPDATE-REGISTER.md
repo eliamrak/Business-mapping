@@ -1,5 +1,7 @@
 # Practice Repair and Update Register
 
+> October 20 scope correction: the October 19 live-review items 1-21 and clarifications were omitted from this register. Its earlier technical-pass/release entries do not certify that scope. Current requirements and source/web/macOS reconciliation are tracked in `OCTOBER19-REQUIREMENTS-RECONCILIATION.md` and `OCTOBER20-MACOS-RECONCILIATION.md`. Simultaneous historical values were explicitly requested October 19, not first requested October 20. Source repairs are currently local and unpublished; running macOS acceptance remains unverified.
+
 Maintained current-phase list, opened October 19, 2026 after the user's request to list repairs/updates and start building. This register supersedes stale task status in earlier reports, not their historical evidence. A passing synthetic test, published release, scoped live observation and owner acceptance are distinct states.
 
 ## Authority and Scope

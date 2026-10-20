@@ -10,14 +10,16 @@ export type LinkedPracticeGoal = Pick<
 export type LinkedGoalBinding = {
   goal: LinkedPracticeGoal | null;
   origin: "workspace" | "legacy" | "none";
+  diagnostic: string | null;
+  provenance: string | null;
   initialDraftDefaults: Pick<Goal, "amount" | "basis" | "date">;
 };
 
 const legacyMeasures = {
-  "owner pay": { field: "ownerPayGoal", metric: "ownerDistributionsPretax" },
+  "owner pay": { field: "secondOwnerPayGoal", metric: "coOwnerSalaryPretax" },
   "co-owner pay": {
-    field: "secondOwnerPayGoal",
-    metric: "coOwnerSalaryPretax",
+    field: "ownerPayGoal",
+    metric: "ownerDistributionsPretax",
   },
   "business profit": { field: "businessProfitGoal", metric: "profit" },
   "desired clinicians": {
@@ -25,6 +27,20 @@ const legacyMeasures = {
     metric: "activeClinicalHeadcount",
   },
 } as const;
+
+export function linkedGoalForMetric(
+  metric: typeof legacyMeasures[keyof typeof legacyMeasures]["metric"],
+  workspace: Pick<Workspace, "goals">,
+  legacyGoal: CompensationGoal | null | undefined,
+): LinkedGoalBinding {
+  const name = {
+    coOwnerSalaryPretax: "Owner pay",
+    ownerDistributionsPretax: "Co-owner pay",
+    profit: "Business Profit",
+    activeClinicalHeadcount: "Desired Clinicians",
+  }[metric];
+  return linkedGoalFor(name, workspace, legacyGoal);
+}
 
 // Inherited targets have no persisted identity. Materialize only the edited goal,
 // spreading initialDraftDefaults before the user's patch so explicit zero wins.
@@ -34,19 +50,29 @@ export function linkedGoalFor(
   legacyGoal: CompensationGoal | null | undefined,
 ): LinkedGoalBinding {
   const key = name.trim().toLowerCase();
-  const existing = workspace.goals.find(
+  const measure = Object.hasOwn(legacyMeasures, key)
+    ? legacyMeasures[key as keyof typeof legacyMeasures]
+    : undefined;
+  const ownerBinding = key === "owner pay" || key === "co-owner pay";
+  const ownerMetrics = ["coOwnerSalaryPretax", "ownerDistributionsPretax"];
+  const semanticGoals = ownerBinding ? workspace.goals.filter(goal => goal.metric === measure!.metric) : [];
+  const activeMatches = semanticGoals.filter(goal => !goal.archived);
+  const unknownNamed = ownerBinding && workspace.goals.some(goal =>
+    ["owner pay", "co-owner pay"].includes(goal.name.trim().toLowerCase())
+    && !ownerMetrics.includes(goal.metric));
+  const diagnostic = activeMatches.length > 1
+    ? `${name}: multiple saved ${measure!.metric} goals; review their IDs before editing.`
+    : unknownNamed ? `${name}: a saved owner goal has an unrecognized funding metric; review its mapping before editing.` : null;
+  const existing = ownerBinding ? diagnostic ? undefined : activeMatches[0] : workspace.goals.find(
     (goal) => !goal.archived && goal.name.trim().toLowerCase() === key,
   );
-  const hasStoredName = workspace.goals.some(
+  const hasStoredName = ownerBinding ? semanticGoals.length > 0 || !!diagnostic : workspace.goals.some(
     (goal) => goal.name.trim().toLowerCase() === key,
   );
   let goal: LinkedPracticeGoal | null = existing ? { ...existing } : null;
   let origin: LinkedGoalBinding["origin"] = hasStoredName
     ? "workspace"
     : "none";
-  const measure = Object.hasOwn(legacyMeasures, key)
-    ? legacyMeasures[key as keyof typeof legacyMeasures]
-    : undefined;
   if (!hasStoredName && legacyGoal && measure) {
     const amount = legacyGoal[measure.field];
     if (typeof amount === "number" && Number.isFinite(amount) && amount >= 0) {
@@ -63,6 +89,10 @@ export function linkedGoalFor(
   return {
     goal,
     origin,
+    diagnostic,
+    provenance: existing
+      ? `Saved goal "${existing.name}" (${existing.id}); ${existing.metric}. Name and amount retained.`
+      : origin === "legacy" ? `Inherited ${measure!.field}; annual amount retained for ${key === "owner pay" ? "Erin salary" : key === "co-owner pay" ? "Elia distributions" : name}.` : null,
     initialDraftDefaults: {
       amount: goal?.amount ?? 0,
       basis: goal?.basis ?? "annual",

@@ -555,7 +555,7 @@ export default function MoneyFlowToday({
           {people.map((person) => (
             <SourceRow key={person.id} label={person.label}>
               <InlineNumber
-                label={`${person.label} average earned per completed session`}
+                label={`${person.label} future revenue estimate per completed session`}
                 value={
                   profileFor(person)?.expectedSessionRevenue ??
                   listedRateFor(person)

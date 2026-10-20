@@ -11,9 +11,9 @@ function setup(): ProfitFirstPlanningInput {
   workspace.settings.overheadFloorMonthly = 1000;
   workspace.settings.overheadFloorOverride = true;
   const context: Context = { clinicians: [], staff: [], sessions: [] };
-  return { workspace, context, asOf: "2026-01-15", estimatedMonthlyValues: {
+  return { workspace, context, asOf: "2026-01-15", scenarioPercents: { taxes: 3 }, estimatedMonthlyValues: {
     revenue: 10000, otherIncome: 0, clinicianPay: 3000, ownerClinicalPay: 0,
-    coOwnerSalaryPretax: 0, employerBurden: 0, staffCost: 400,
+    coOwnerSalaryPretax: 0, employerBurden: 0, staffCost: 400, taxObligations: 0,
   }, estimateSourcePeriod: "2026-01 monthly billed estimate" };
 }
 function addGoal(input: ProfitFirstPlanningInput, amount: number, tag: PlanningGoalPurpose, basis: "monthly" | "annual" = "monthly") {
@@ -26,6 +26,32 @@ function addBudget(input: ProfitFirstPlanningInput, amount: number, cadence: "an
   input.workspace.categories.push(category);
   input.workspace.budgets.push(budgetSchema.parse({ id: randomUUID(), name: "Synthetic cost", categoryId: category.id, amount, cadence, start: "2025-01-01" }));
 }
+
+test("ambiguous owner funding metrics never choose a target by amount or row order", () => {
+  for (const metric of ["coOwnerSalaryPretax", "ownerDistributionsPretax"] as const) {
+    const input = setup();
+    input.workspace.goals = [100, 200].map(amount => goalSchema.parse({ id: randomUUID(), name: "Saved owner target", metric, amount, basis: "monthly" }));
+    const before = structuredClone(input);
+    for (const goals of [input.workspace.goals, [...input.workspace.goals].reverse()]) {
+      const result = profitFirstPlanning({ ...input, workspace: { ...input.workspace, goals } });
+      assert.equal(result.status, "incomplete");
+      assert.equal(result.rows.find(row => row.key === (metric === "coOwnerSalaryPretax" ? "owner-payroll" : "distributions"))?.requiredMonthly, null);
+      assert.match(result.reasons.join(" "), /multiple saved/);
+    }
+    assert.deepEqual(input, before);
+  }
+});
+
+test("an unrecognized named owner goal cannot certify zero owner funding", () => {
+  const input = setup();
+  input.workspace.goals.push(goalSchema.parse({ id: randomUUID(), name: "Owner pay", metric: "revenue", amount: 500, basis: "monthly" }));
+  const before = structuredClone(input);
+  const result = profitFirstPlanning(input);
+  assert.equal(result.status, "incomplete");
+  for (const key of ["owner-payroll", "distributions"]) assert.equal(result.rows.find(row => row.key === key)?.requiredMonthly, null);
+  assert.match(result.reasons.join(" "), /unrecognized funding metric/);
+  assert.deepEqual(input, before);
+});
 
 test("confirmed current percentages and read-only input remain intact; estimates need no finalized period", () => {
   const input = setup(), before = structuredClone(input);
@@ -205,7 +231,8 @@ test("exactly 100% floors permit a finite minimum when every cost fits its share
 
 test("unconfigured family clinician plus null forecast salary is known absent", () => {
   const input = setup();
-  const { overhead, ...values } = forecast(input.workspace, input.context)[0].values;
+  const { overhead, ...forecastValues } = forecast(input.workspace, input.context)[0].values;
+  const values = { ...forecastValues, taxObligations: 0 };
   assert.equal(values.coOwnerSalaryPretax, null);
   const result = profitFirstPlanning({ ...input, estimatedMonthlyValues: values });
   close(result.protectedErinMonthly, 0);
@@ -218,6 +245,7 @@ test("unconfigured family clinician plus null forecast salary is known absent", 
 
 test("tax, reserve and owner obligations map once by bucket; explicit overrides remain resolvable", () => {
   const input = setup();
+  delete input.estimatedMonthlyValues!.taxObligations;
   addBudget(input, 1000, "monthly", "tax");
   addBudget(input, 500, "monthly", "reserve");
   addBudget(input, 700, "monthly", "owner");
@@ -313,4 +341,114 @@ test("funding persistence cannot change existing financial-session targets or me
   assert.deepEqual(financialSessionGoal(request), before);
   assert.equal(conditionResult(condition, series, 0, input.workspace), true);
   assert.deepEqual(input.workspace.goals, metricGoals);
+});
+
+test("missing tax planning stays unknown even with income and a confirmed current 3% allocation", () => {
+  const input = setup();
+  delete input.estimatedMonthlyValues!.taxObligations;
+  delete input.scenarioPercents;
+  const before = structuredClone(input);
+  const report = profitFirstPlanning(input);
+  const tax = report.rows.find(r => r.key === "taxes")!;
+  close(tax.currentPercent, 3);
+  close(tax.currentMonthly, 300);
+  assert.equal(tax.requiredMonthly, null);
+  assert.equal(tax.requiredPercent, null);
+  assert.equal(report.status, "incomplete");
+  assert.deepEqual(input, before);
+});
+
+test("explicit monthly tax estimate (quarterly /3) wins over budgets, ignores current 3%, and retains null and zero", () => {
+  const input = setup();
+  delete input.scenarioPercents;
+  input.estimatedMonthlyValues!.revenue = 100000;
+  addBudget(input, 1200, "monthly", "tax");
+  input.workspace.moneyPlanning = { estimatedMonthlyValues: { taxObligations: 900 / 3 } };
+  const stored = workspaceSchema.parse(JSON.parse(JSON.stringify(input.workspace)));
+  input.workspace = stored;
+  const tax = () => profitFirstPlanning(input).rows.find(r => r.key === "taxes")!;
+  close(tax().currentMonthly, 3000);
+  close(tax().requiredMonthly, 300);
+  close(tax().requiredPercent, 0.3);
+  stored.moneyPlanning!.estimatedMonthlyValues!.taxObligations = 0;
+  close(tax().requiredMonthly, 0);
+  stored.moneyPlanning!.estimatedMonthlyValues!.taxObligations = null;
+  assert.equal(tax().requiredMonthly, null);
+  stored.moneyPlanning!.estimatedMonthlyValues!.taxObligations = 300;
+  stored.moneyPlanning!.scenarioPercents = { taxes: 4 };
+  close(tax().requiredMonthly, 4000);
+});
+
+test("dated tax budgets retain calendar accrual while absent or out-of-period tax plans remain unknown", () => {
+  const input = setup();
+  delete input.scenarioPercents;
+  delete input.estimatedMonthlyValues!.taxObligations;
+  addBudget(input, 12000, "annual", "tax");
+  const tax = () => profitFirstPlanning(input).costs.find(c => c.key === "taxObligations")!.monthly;
+  close(tax(), 12000 * 31 / 365);
+  input.workspace.budgets[0].end = "2025-12-31";
+  assert.equal(tax(), null);
+  input.workspace.budgets[0].end = null;
+  input.workspace.budgets[0].amount = 0;
+  close(tax(), 0);
+  input.workspace.budgets[0].cadence = "percent_revenue";
+  input.workspace.budgets[0].amount = 3;
+  assert.equal(tax(), null, "A percentage budget cannot establish the tax planning estimate");
+});
+
+test("admin configured hours/pay update independently of protected owner and therapist subsets", () => {
+  const input = setup();
+  delete input.estimatedMonthlyValues!.staffCost;
+  input.context.staff.push({ id: 1, label: "Synthetic hourly admin", annualSalary: 0, hourlyRate: 20, hoursPerWeek: 10, weeksPerYear: 48, classification: "1099", w2EmployerFicaPct: 0, futaSutaPct: 0, workersCompPct: 0, otherEmployerBurdenPct: 0 });
+  const row = (key: string) => profitFirstPlanning(input).rows.find(r => r.key === key)!;
+  close(row("admin-payroll").requiredMonthly, 800);
+  input.context.staff[0].hoursPerWeek = 20;
+  close(row("admin-payroll").requiredMonthly, 1600);
+  input.estimatedMonthlyValues!.ownerClinicalPay = 1000;
+  close(row("therapist-payroll").requiredMonthly, 2000);
+  close(row("owner-payroll").requiredMonthly, 1000);
+  close(row("admin-payroll").requiredMonthly, 1600);
+});
+
+test("canonical legacy owner captions fund salary and distributions by metric with distinct unchanged annual amounts", () => {
+  const input = setup();
+  input.legacyGoal = { id: 1, name: "Synthetic distinct owner targets", ownerPayGoal: 1200, secondOwnerPayGoal: 2400, annualOverheadGoal: 0, businessProfitGoal: 0 };
+  const before = structuredClone(input);
+  const report = profitFirstPlanning(input);
+  close(report.rows.find(r => r.key === "owner-payroll")!.requiredMonthly, 200);
+  close(report.rows.find(r => r.key === "distributions")!.requiredMonthly, 100);
+  const salary = report.goals.find(g => g.id === "legacy:Owner Pay")!;
+  const distributions = report.goals.find(g => g.id === "legacy:Co-Owner Pay")!;
+  assert.equal(salary.tag.bucket, "owner-payroll");
+  close(salary.monthly, 200);
+  assert.equal(distributions.tag.bucket, "distributions");
+  close(distributions.monthly, 100);
+  assert.deepEqual(input, before);
+});
+
+test("legacy and saved salary targets use max with configured Erin salary, while named metric edits affect funding without mutation", () => {
+  const input = setup();
+  input.workspace.settings.familyW2ClinicianId = 2;
+  input.context.clinicians.push({ id: 2, label: "Synthetic Erin", classification: "w2", goalId: null } as Context["clinicians"][number]);
+  input.workspace.clinicians.push(clinicianSettingSchema.parse({ id: randomUUID(), clinicianId: 2, start: "2025-01-01", desiredWeeklySessions: 10, payMode: "salary", payAmount: 2400 }));
+  input.legacyGoal = { id: 1, name: "Synthetic targets", ownerPayGoal: 1200, secondOwnerPayGoal: 2400, annualOverheadGoal: 0, businessProfitGoal: 0 };
+  const owner = () => profitFirstPlanning(input).rows.find(r => r.key === "owner-payroll")!;
+  close(owner().requiredMonthly, 200);
+  input.legacyGoal.secondOwnerPayGoal = 4800;
+  close(owner().requiredMonthly, 400);
+  input.legacyGoal.secondOwnerPayGoal = 1200;
+  close(owner().requiredMonthly, 200);
+  const salary = goalSchema.parse({ id: randomUUID(), name: "Co-owner pay", metric: "coOwnerSalaryPretax", amount: 300, basis: "monthly" });
+  const distributions = goalSchema.parse({ id: randomUUID(), name: "Owner pay", metric: "ownerDistributionsPretax", amount: 150, basis: "monthly" });
+  input.workspace.goals.push(salary, distributions);
+  const before = structuredClone(input);
+  const report = profitFirstPlanning(input);
+  close(report.protectedErinMonthly, 200);
+  close(report.rows.find(r => r.key === "owner-payroll")!.requiredMonthly, 300);
+  close(report.rows.find(r => r.key === "distributions")!.requiredMonthly, 150);
+  assert.equal(report.goals.filter(g => g.tag.bucket === "owner-payroll").length, 1);
+  assert.equal(report.goals.filter(g => g.tag.bucket === "distributions").length, 1);
+  assert.deepEqual(input, before);
+  salary.amount = 450;
+  close(owner().requiredMonthly, 450);
 });

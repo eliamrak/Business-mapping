@@ -71,7 +71,7 @@ export function profitFirstPlanning(input: ProfitFirstPlanningInput) {
   const assumptions = [
     "Planning estimates use billed income, not collections or bank balances. No spending record is required to plan configured costs.",
     "Current percentages are the user-confirmed baseline. Required percentages fund configured costs and goals; they are not normalized to 100%.",
-    "Owner clinical pay and configured co-owner salary are subsets of clinician pay and are moved to Owner payroll once. Aggregate clinician employer burden remains in Therapist payroll unless supplied separately in a future model.",
+    "Owner clinical pay and configured Erin salary are subsets of clinician pay and are moved to Owner payroll once. Aggregate clinician employer burden remains in Therapist payroll unless supplied separately in a future model.",
     "Revenue needed holds monthly costs and contribution goals constant, retaining percentage floors. It is a funding estimate, not a volume forecast; rerun payroll and variable costs for a changed income or staffing scenario.",
   ];
   const planning = w.moneyPlanning ?? {};
@@ -95,7 +95,11 @@ export function profitFirstPlanning(input: ProfitFirstPlanningInput) {
     }));
   }
   const linesFor = (kinds: string[]) => w.budgets.filter(b => !b.archived && !b.planningOnly && w.categories.some(c => c.id === b.categoryId && !c.archived && kinds.includes(c.kind)));
-  const taxObligations = read("taxObligations", () => budgetSum(linesFor(["tax"]), periodStart, periodEnd));
+  const taxObligations = read("taxObligations", () => {
+    const lines = linesFor(["tax"]).filter(b => b.start <= periodEnd && (!b.end || b.end >= periodStart));
+    // Revenue shares are allocation choices, not evidence of a tax liability.
+    return lines.length && !lines.some(b => b.cadence === "percent_revenue") ? budgetSum(lines, periodStart, periodEnd) : null;
+  });
   const reserveObligations = read("reserveObligations", () => budgetSum(linesFor(["reserve"]), periodStart, periodEnd));
   const payrollLines = linesFor(["payroll"]).filter(b => b.start <= periodEnd && (!b.end || b.end >= periodStart));
   const payrollNeedsCombinedEstimate = payrollLines.length > 0 && !Object.hasOwn(planning.estimatedMonthlyValues ?? {}, "payrollObligations");
@@ -172,7 +176,7 @@ export function profitFirstPlanning(input: ProfitFirstPlanningInput) {
   const erinSalary = w.settings.familyW2ClinicianId === null && values.coOwnerSalaryPretax == null ? 0 : configuredErinSalary === null || suppliedErinSalary === null ? null : Math.max(configuredErinSalary, suppliedErinSalary);
   let therapistPay = sum([clinicianPay, ownerClinical, erinSalary]) === null ? null : clinicianPay! - ownerClinical! - erinSalary!;
   if (therapistPay !== null && therapistPay < -0.000001) {
-    reasons.push("Owner clinical pay plus co-owner salary exceeds the supplied clinician-pay total; reconcile monthly estimate subsets.");
+      reasons.push("Owner clinical pay plus Erin salary exceeds the supplied clinician-pay total; reconcile monthly estimate subsets.");
     therapistPay = null;
   }
   // Calendar-day accrual can leave a sub-microdollar residue when removing salary.
@@ -195,10 +199,10 @@ export function profitFirstPlanning(input: ProfitFirstPlanningInput) {
     { key: "marketing", label: "Existing marketing estimate", monthly: marketing, source: sourcePeriod },
     { key: "fees", label: "Processing cost estimate", monthly: fees, source: sourcePeriod },
     { key: "ownerClinicalPay", label: "Owner clinical payroll estimate", monthly: ownerClinical, source: sourcePeriod },
-    { key: "coOwnerSalaryPretax", label: "Protected Erin / configured co-owner salary estimate", monthly: erinSalary, source: `${sourcePeriod}; configured family clinician, included in clinician pay` },
+    { key: "coOwnerSalaryPretax", label: "Protected Erin salary / owner payroll estimate", monthly: erinSalary, source: `${sourcePeriod}; configured family clinician, included in clinician pay` },
     { key: "ownerPayroll", label: "Separate owner payroll estimate", monthly: ownerSeparate, source: sourcePeriod },
     { key: "ownerPayrollBurden", label: "Separate owner employer cost estimate", monthly: ownerBurden, source: sourcePeriod },
-    { key: "therapistPay", label: "Other therapist payroll estimate", monthly: therapistPay, source: `${sourcePeriod}; clinician pay less owner clinical pay and co-owner salary` },
+    { key: "therapistPay", label: "Other therapist payroll estimate", monthly: therapistPay, source: `${sourcePeriod}; clinician pay less owner clinical pay and Erin salary` },
     { key: "employerBurden", label: "Clinician employer cost estimate", monthly: burden, source: sourcePeriod },
     { key: "staffCost", label: "Admin payroll estimate", monthly: staffCost, source: `${sourcePeriod}; supplied monthly total or dated staff compensation with employer burden` },
     { key: "taxObligations", label: "Configured tax obligations estimate", monthly: taxObligations, source: `${periodStart} to ${periodEnd}; dated tax budgets or explicit monthly override` },
@@ -213,6 +217,13 @@ export function profitFirstPlanning(input: ProfitFirstPlanningInput) {
   };
   const additions = Object.fromEntries(CURRENT_PLANNING_ALLOCATIONS.map(r => [r.key, 0])) as Record<PlanningBucket, number>;
   const goals: { id: string; label: string; monthly: number | null; tag: PlanningGoalPurpose; source: string }[] = [];
+  for (const name of ["Owner pay", "Co-owner pay"]) {
+    const binding = linkedGoalFor(name, w, input.legacyGoal);
+    if (binding.diagnostic) {
+      reasons.push(binding.diagnostic);
+      base[name === "Owner pay" ? "owner-payroll" : "distributions"] = null;
+    }
+  }
   for (const goal of (planning.goals ?? []).filter(g => !g.archived)) {
     if (!CURRENT_PLANNING_ALLOCATIONS.some(r => r.key === goal.bucket) || !["additional", "bucket-total", "marketing-total"].includes(goal.mode) || goal.mode === "marketing-total" && goal.bucket !== "operating-expenses") {
       reasons.push(`${goal.name}: invalid funding goal purpose.`);
@@ -227,7 +238,7 @@ export function profitFirstPlanning(input: ProfitFirstPlanningInput) {
   }
   for (const name of ["Business Profit", "Owner Pay", "Co-Owner Pay"]) {
     const linked = linkedGoalFor(name, w, input.legacyGoal);
-    if (linked.origin === "legacy" && linked.goal && !w.goals.some(g => g.metric === linked.goal!.metric)) goals.push({ id: `legacy:${name}`, label: name, monthly: monthly(linked.goal.amount, linked.goal.basis), tag: { bucket: name === "Business Profit" ? "business-profit" : name === "Owner Pay" ? "distributions" : "owner-payroll", mode: "bucket-total" }, source: "Legacy annual goal / 12" });
+    if (linked.origin === "legacy" && linked.goal && !w.goals.some(g => g.metric === linked.goal!.metric)) goals.push({ id: `legacy:${name}`, label: name, monthly: monthly(linked.goal.amount, linked.goal.basis), tag: { bucket: linked.goal.metric === "profit" ? "business-profit" : linked.goal.metric === "ownerDistributionsPretax" ? "distributions" : "owner-payroll", mode: "bucket-total" }, source: "Legacy annual goal / 12" });
   }
   let marketingTarget = marketing;
   for (const goal of goals) {
@@ -245,7 +256,7 @@ export function profitFirstPlanning(input: ProfitFirstPlanningInput) {
   const floors = CURRENT_PLANNING_ALLOCATIONS.map(row => {
     const scenarioPercents = { ...input.scenarioPercents, ...planning.scenarioPercents };
     const supplied = Object.hasOwn(scenarioPercents, row.key);
-    const value = supplied ? scenarioPercents[row.key] : ["business-profit", "taxes", "distributions"].includes(row.key) ? row.percent : 0;
+    const value = supplied ? scenarioPercents[row.key] : ["business-profit", "distributions"].includes(row.key) ? row.percent : 0;
     if (!known(value)) reasons.push(`${row.label}: enter a nonnegative scenario percentage.`);
     return known(value) ? value / 100 : null;
   });
