@@ -14,6 +14,7 @@ const result = await build({
     import React, {useState} from 'react';
     import {createRoot} from 'react-dom/client';
     import ProfitFirstPlanning from '@/components/practice/profit-first-planning';
+    import '@/pages/practice.css';
     import {emptyWorkspace, workspaceSchema} from '@workspace/practice/hub';
     const seed = emptyWorkspace('2026-01-01');
     seed.moneyPlanning = {estimatedMonthlyValues: {revenue: 10000, overhead: 1200, otherIncome: 0, taxObligations: 100}};
@@ -22,7 +23,7 @@ const result = await build({
       const [workspace, setWorkspace] = useState(seed);
       const [epoch, setEpoch] = useState(0);
       window.fixture.reset = () => {window.fixture.saved = []; setWorkspace(structuredClone(seed)); setEpoch(n => n + 1);};
-      return <main style={{maxWidth: 1100, margin: '0 auto', padding: 16}}>
+      return <main className="practice-theme" style={{maxWidth: 1100, margin: '0 auto', padding: 16}}>
         <ProfitFirstPlanning key={epoch} workspace={workspace} context={{clinicians: [], staff: [], sessions: []}}
           asOf="2026-01-15" estimateSourcePeriod="Synthetic January planning"
           estimatedMonthlyValues={{clinicianPay: 0, employerBurden: 0, staffCost: 0, fees: 0, marketing: 0}}
@@ -69,12 +70,18 @@ try {
   page.on("pageerror", error => errors.push(error.message));
   page.on("console", message => {if (message.type() === "error") errors.push(message.text());});
   page.setDefaultTimeout(5000);
-  for (const width of [1280, 390]) {
+  for (const width of [1280, 390, 320]) {
     await page.setViewportSize({width, height: 900});
     await page.goto(base);
     const taxRow = page.getByRole("row").filter({has: page.getByRole("rowheader", {name: "Taxes", exact: true})});
     await taxRow.waitFor();
-    assert.deepEqual(await taxRow.locator("td").allTextContents(), ["3%", "$300", "$100", "-$200", "1%", ""]);
+    assert.equal(await page.getByRole("spinbutton", {name: "Taxes current allocation percentage", exact: true}).inputValue(), "3");
+    assert.deepEqual((await taxRow.locator("td").allTextContents()).slice(1, 5), ["$300", "$100", "-$200", "1%"]);
+    assert.equal(await page.getByRole("table").count(), 1);
+    assert.equal(await page.getByRole("row").count(), 8);
+    assert.equal(await page.getByRole("rowheader").count(), 7);
+    assert.equal(await page.getByRole("cell").count(), 42);
+    assert.equal(await page.getByText("Monthly funding goals", {exact: true}).count(), 0, "Money does not contain Goals editors");
     const headers = await page.getByRole("columnheader").allTextContents();
     assert.equal(headers[2], "Current allocation ($/month)");
     assert.equal(headers[3], "Budget needed ($/month)");
@@ -84,9 +91,32 @@ try {
       return {width: innerWidth, scrollWidth: document.documentElement.scrollWidth, padding: style.paddingTop, border: style.borderLeftWidth, radius: style.borderRadius};
     });
     assert.ok(geometry.scrollWidth <= width, "Only the table may scroll horizontally");
-    assert.equal(geometry.padding, "6px");
-    assert.equal(geometry.border, "1px");
+    assert.equal(geometry.padding, width <= 600 ? "0px" : "15px");
+    assert.equal(geometry.border, width <= 600 ? "0px" : "1px");
     assert.equal(geometry.radius, "0px");
+    if (width <= 600) {
+      const mobile = await page.evaluate(() => {
+        const table = document.querySelector(".pf-table-scroll");
+        return {
+          scrollWidth: table.scrollWidth, width: table.clientWidth,
+          rowDisplay: getComputedStyle(document.querySelector("tbody tr")).display,
+          cells: [...document.querySelectorAll("tbody td")].map(cell => {
+            const rect = cell.getBoundingClientRect();
+            return {label: cell.dataset.label, before: getComputedStyle(cell, "::before").content, left: rect.left, right: rect.right};
+          }),
+          inputs: [...document.querySelectorAll("tbody input")].map(input => {
+            const rect = input.getBoundingClientRect();
+            return {label: input.getAttribute("aria-label"), left: rect.left, right: rect.right, width: rect.width};
+          }),
+        };
+      });
+      assert.equal(mobile.rowDisplay, "grid");
+      assert.ok(mobile.scrollWidth <= mobile.width, "Mobile allocation rows fit without horizontal scrolling");
+      assert.ok(mobile.cells.every(cell => cell.before === JSON.stringify(cell.label)), "Each mobile value has a visible label");
+      assert.ok(mobile.cells.every(cell => cell.left >= 0 && cell.right <= width), "Every derived cell and its label stays within the viewport");
+      assert.ok(mobile.inputs.every(input => input.left >= 0 && input.right <= width && input.width >= 100), "Every allocation input stays reachable within the viewport");
+      geometry.mobile = mobile;
+    }
     await page.screenshot({path: path.join(out, `${width}-allocation.png`), fullPage: true});
     await page.getByText("Cost estimates and source periods", {exact: true}).click();
     const tax = page.getByRole("spinbutton", {name: "Quarterly tax planning estimate", exact: true});
@@ -109,6 +139,23 @@ try {
     assert.ok(await tax.evaluate(node => node === document.activeElement));
     await tax.press("Enter");
     assert.equal(await page.evaluate(() => window.fixture.saved.at(-1).estimatedMonthlyValues.taxObligations), 0);
+    const profitRow = page.getByRole("row").filter({has: page.getByRole("rowheader", {name: "Business profit", exact: true})});
+    const current = page.getByRole("spinbutton", {name: "Business profit current allocation percentage", exact: true});
+    const required = await profitRow.locator("td").nth(2).textContent();
+    await current.fill("8");
+    assert.equal(await profitRow.locator("td").nth(1).textContent(), "$800");
+    assert.equal(await profitRow.locator("td").nth(2).textContent(), required);
+    await page.getByText("Current allocations total 106%. This exceeds 100%; each entered percentage is retained.", {exact: true}).waitFor();
+    await current.press("Enter");
+    assert.equal(await page.evaluate(() => window.fixture.saved.at(-1).currentPercents["business-profit"]), 8);
+    const savedCount = await page.evaluate(() => window.fixture.saved.length);
+    await current.fill("");
+    await current.blur();
+    assert.equal(await current.getAttribute("aria-invalid"), "true");
+    assert.equal(await page.evaluate(() => window.fixture.saved.length), savedCount);
+    await current.fill("0");
+    await current.press("Enter");
+    assert.equal(await page.evaluate(() => window.fixture.saved.at(-1).currentPercents["business-profit"]), 0);
     await page.screenshot({path: path.join(out, `${width}-tax-editor.png`), fullPage: true});
     cases.push({width, geometry, status: "pass"});
   }
@@ -117,7 +164,7 @@ try {
 } finally {
   await browser?.close();
   if (server?.listening) await new Promise(resolve => server.close(resolve));
-  const status = cases.length === 2 && !errors.length ? "pass" : "incomplete";
+  const status = cases.length === 3 && !errors.length ? "pass" : "incomplete";
   await fs.writeFile(path.join(out, "results.json"), JSON.stringify({status, cases, errors, requests, syntheticOnly: true}, null, 2));
   console.log(JSON.stringify({status, out, cases, errors}));
 }

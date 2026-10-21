@@ -935,8 +935,39 @@
 }
 .pw-goal-editor {
   display: grid;
-  gap: 18px;
+  gap: 0;
 }
+.pw-goal-editor > .pw-edit-item { border: 0; border-bottom: 1px solid #303842; border-radius: 0; padding: 16px 0; background: transparent; }
+.pw-goal-editor .pw-edit-item-heading { margin-bottom: 10px; }
+.pw-goal-editor .pw-progress-comparison { margin-top: 10px; }
+.pw-goal-editor .pw-edit-grid { gap: 12px; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.pw-goal-editor input[type="number"] { width: 12ch; max-width: 100%; }
+.pw-goal-editor input[type="radio"] { width: 16px; height: 16px; margin: 0; }
+.pw-goal-editor fieldset > label { display: inline-flex; align-items: center; gap: 6px; margin: 6px 10px 6px 0; }
+.pw-goal-editor fieldset { grid-column: 1 / -1; padding: 0; border: 0; }
+.pw-goal-editor .pw-goal-deadline { grid-column: 1 / -1; }
+.pw-goal-editor input[type="date"] { min-width: 0; max-width: 100%; }
+.pw-goal-editor .pw-edit-grid > .pw-edit-grid { grid-column: 1 / -1; }
+.pw-label-help { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; min-width: 0; }
+.pw-label-help > h3 { margin: 0; }
+.pw-label-help > h2 { margin: 0; }
+.pw-period-field { display: grid; gap: 5px; }
+.pw-period-field .pw-label-help { flex-wrap: nowrap; }
+.pw-period-field .pw-heading-help > summary { width: 24px; height: 24px; }
+.pw-period-field .pw-heading-help[open] { max-width: 24ch; }
+.pw-consult-summary > dl > div:has(.pw-percentage-kpi) { order: -1; }
+.pw-label-help > .pw-heading-help { margin: 0; flex: 0 0 auto; }
+.pw-label-help .pw-heading-help summary { display: inline-flex; align-items: center; justify-content: center; }
+.pw-period-caption { color: #a8b3be; font-size: 12px; }
+.pw-money-month-control { display: flex; gap: 12px; align-items: end; flex-wrap: wrap; margin-bottom: 16px; }
+.pw-money-month-control .pw-draft-field { width: auto; }
+.pw-historical-help { margin-bottom: 8px; }
+.pw-overview-report-controls { margin: 8px 0 12px; font-size: 12px; }
+.pw-overview-report-controls > summary { cursor: pointer; color: #a8b3be; }
+.pw-import-attention { padding: 10px 0; }
+.pw-overview-primary-grid [aria-label="Overview monthly surplus"] { padding-block: 12px; }
+.pw-overview-primary-grid .pw-metric-hero { margin-block: 8px; }
+.pw-visually-hidden { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
 .pw-import-attention {
   display: flex;
   justify-content: space-between;

@@ -2,8 +2,8 @@
 .pf-planning h2 { font-size: 20px; margin: 0; letter-spacing: 0; }
 .pf-planning header p, .pf-planning small, .pf-planning caption { color: var(--pw-muted, hsl(var(--muted-foreground, 215 16% 47%))); }
 .pf-planning p { margin: 12px 0; }
-.pf-summary { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; padding: 16px 0; border-block: 1px solid var(--pw-edge, hsl(var(--border, 214 32% 91%))); }
-.pf-summary span, .pf-summary strong { display: block; overflow-wrap: anywhere; }
+.pf-summary { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 16px; padding: 12px 0; border-block: 1px solid var(--pw-edge, hsl(var(--border, 214 32% 91%))); }
+.pf-summary > div > span, .pf-summary strong { display: block; overflow-wrap: anywhere; }
 .pf-summary strong { font-size: 20px; font-variant-numeric: tabular-nums; }
 .pf-table-scroll { max-width: 100%; overflow-x: auto; }
 .pf-planning table { border-collapse: collapse; border-radius: 0; width: 100%; font-variant-numeric: tabular-nums; }
@@ -14,13 +14,42 @@
 .pf-planning input { box-sizing: border-box; width: 100%; min-width: 0; border: 1px solid var(--pw-edge, hsl(var(--input, 214 32% 91%))); border-radius: 4px; background: var(--pw-panel, hsl(var(--card, 0 0% 100%))); color: var(--pw-ink, hsl(var(--foreground, 222 47% 11%))); font: inherit; padding: 6px 8px; }
 .pf-planning input:focus { outline: 2px solid var(--pw-accent, hsl(var(--ring, 175 75% 35%))); outline-offset: 2px; }
 .pf-planning td input { width: 76px; padding: 4px 6px; border-radius: 0; text-align: right; }
+.pf-planning .pf-current-percent { display: grid; grid-template-columns: minmax(0, 76px) auto; gap: 4px; justify-content: end; align-items: center; }
+.pf-current-percent > .pf-deficit { grid-column: 1 / -1; }
+.pf-planning td.pf-inline-inputs { width: 250px; min-width: 250px; text-align: left; background: var(--pw-panel, hsl(var(--card, 0 0% 100%))); }
+.pf-inline-inputs label { grid-template-columns: minmax(0, 1fr) 100px; align-items: center; gap: 4px 8px; margin: 3px 0; font-size: 12px; }
+.pf-inline-inputs label input { width: 100%; }
+.pf-inline-inputs label > small, .pf-inline-inputs label > .pf-deficit { grid-column: 1 / -1; }
+.pf-planning details.pf-help { display: inline; padding: 0; border: 0; font-weight: 400; color: var(--pw-muted, hsl(var(--muted-foreground, 215 16% 47%))); }
+.pf-planning .pf-help > summary { display: inline-flex; align-items: center; justify-content: center; width: 20px; height: 20px; border: 1px solid currentColor; border-radius: 50%; font-size: 12px; line-height: 1; font-weight: 400; vertical-align: middle; list-style: none; }
+.pf-help > summary::-webkit-details-marker { display: none; }
+.pf-help > summary:focus-visible { outline: 2px solid var(--pw-accent, hsl(var(--ring, 175 75% 35%))); outline-offset: 2px; }
+.pf-help[open] > span { display: block; margin-block: 4px; font-size: 12px; line-height: 1.4; text-align: left; overflow-wrap: anywhere; }
 .pf-planning .pf-deficit, .pw-app .pf-planning p.pf-deficit { color: var(--pw-limit, #b42318); }
-.pf-goals { border: 0; border-block: 1px solid var(--pw-edge, hsl(var(--border, 214 32% 91%))); margin: 16px 0; padding: 12px 0 16px; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px 20px; }
 .pf-planning legend { font-weight: 600; padding: 0; }
 .pf-planning label { display: grid; align-content: start; gap: 5px; overflow-wrap: anywhere; }
 .pf-planning small { font-size: 12px; }
 .pf-planning details { padding: 12px 0; border-bottom: 1px solid var(--pw-edge, hsl(var(--border, 214 32% 91%))); }
 .pf-planning summary { cursor: pointer; font-weight: 600; }
 .pf-estimates { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px 20px; padding-top: 16px; }
-.pf-limitations { color: var(--pw-muted, hsl(var(--muted-foreground, 215 16% 47%))); padding-left: 20px; }
-@media (max-width: 600px) { .pf-summary, .pf-goals, .pf-estimates { grid-template-columns: minmax(0, 1fr); } .pf-summary { gap: 10px; } }
+.pf-goals { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px 20px; padding-top: 12px; }
+.pf-limitations { color: var(--pw-muted, hsl(var(--muted-foreground, 215 16% 47%))); }
+@media (max-width: 600px) { .pf-summary { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; } .pf-estimates, .pf-goals { grid-template-columns: minmax(0, 1fr); } }
+@media (max-width: 600px) {
+  .pf-planning .pf-table-scroll { overflow: visible; width: 100%; min-width: 0; }
+  .pf-planning table, .pf-planning tbody, .pf-planning tbody tr { box-sizing: border-box; width: 100%; min-width: 0; max-width: 100%; }
+  .pf-planning table, .pf-planning tbody { display: block; }
+  .pf-planning .pf-table-scroll table { min-width: 0; white-space: normal; }
+  .pf-planning caption { display: block; }
+  .pf-planning thead { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+  .pf-planning tbody tr { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); border-top: 1px solid var(--pw-edge, hsl(var(--border, 214 32% 91%))); padding: 10px 0; gap: 8px 12px; }
+  .pf-planning tbody th, .pf-planning tbody td { border: 0; padding: 0; min-width: 0; width: auto; overflow-wrap: anywhere; }
+  .pf-planning tbody th { grid-column: 1 / -1; text-align: left; }
+  .pf-planning tbody td { text-align: left; }
+  .pf-planning tbody td::before { content: attr(data-label); display: block; color: var(--pw-muted, hsl(var(--muted-foreground, 215 16% 47%))); font-size: 12px; font-weight: 400; }
+  .pf-planning td.pf-inline-inputs { grid-column: 1 / -1; min-width: 0; width: auto; padding-top: 4px; background: transparent; }
+  .pf-planning .pf-inline-inputs label { min-width: 0; max-width: 100%; grid-template-columns: minmax(0, 1fr) minmax(100px, 42%); gap: 6px 10px; }
+  .pf-planning .pf-inline-inputs input { box-sizing: border-box; width: 100%; min-width: 0; max-width: 100%; min-height: 36px; font-size: 16px; }
+  .pf-planning .pf-current-percent { grid-template-columns: minmax(0, 1fr) auto; }
+  .pf-planning .pf-current-percent input { width: 100%; min-width: 0; max-width: 100%; min-height: 36px; font-size: 16px; }
+}

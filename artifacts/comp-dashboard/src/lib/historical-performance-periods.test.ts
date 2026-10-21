@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { historicalPerformance } from "./historical-performance.ts";
-import { historicalPerformancePeriods, historicalPeriodDifference, type HistoricalPerformanceInput } from "./historical-performance-periods.ts";
+import { clinicianAvailableHistoryRange, clinicianHistoricalPerformancePeriods, historicalPerformancePeriods, historicalPeriodDifference, type HistoricalPerformanceInput } from "./historical-performance-periods.ts";
 import { sameDayVisitKey, summarizeConsultConversions, type AttendanceRow, type LocalSnapshot } from "./retention-local.ts";
 
 const visit = (clientId: string, serviceDate: string, consult = false): AttendanceRow => ({
@@ -26,6 +26,69 @@ const fixture = (): HistoricalPerformanceInput => ({
     { clientId: "recent-miss", outcome: "missed_owner", clinicianName: "Lane" },
   ],
   today: "2026-10-14",
+});
+
+test("available history uses admitted quiet bounds, preserves gaps and never infers first visits", () => {
+  const requested = { start: "2025-10-01", end: "2026-09-30" };
+  const proof = [{ clinicianId: 1, start: "2026-06-01", end: "2026-08-31" },
+    { clinicianId: 1, start: "2026-09-01", end: "2026-10-07" }];
+  const before = structuredClone(proof);
+  assert.deepEqual(clinicianAvailableHistoryRange(requested, 1, proof), {
+    requestedRange: requested, effectiveRange: { start: "2026-06-01", end: "2026-09-30" }, coverageComplete: true, clipped: true,
+  });
+  proof[1].start = "2026-09-02";
+  const gap = clinicianAvailableHistoryRange(requested, 1, proof);
+  assert.equal(gap.coverageComplete, false);
+  assert.deepEqual(gap.effectiveRange, { start: "2026-06-01", end: "2026-09-30" });
+  assert.equal(clinicianAvailableHistoryRange(requested, 2, proof).effectiveRange, null);
+  assert.deepEqual(clinicianAvailableHistoryRange(requested, 1, before).requestedRange, requested);
+  for (const invalid of ["bad", "2026-02-30"]) {
+    assert.equal(clinicianAvailableHistoryRange({ ...requested, start: invalid }, 1, before).effectiveRange, null);
+  }
+});
+
+test("paired reports keep practice dates and all classification and follow-up evidence", () => {
+  const input = fixture();
+  const practiceReports = historicalPerformancePeriods(input);
+  const attendanceCoverage = [{ clinicianId: 1, start: "2026-06-01", end: "2026-10-14" }];
+  const before = structuredClone(input);
+  deepFreeze(input);
+  const result = clinicianHistoricalPerformancePeriods({ ...input, clinicianId: 1, attendanceCoverage, practiceReports });
+  assert.equal(result.practice, practiceReports);
+  assert.deepEqual(result.practice.year.window.cohort, { start: "2025-10-01", end: "2026-09-30" });
+  assert.deepEqual(result.clinician.year?.window.cohort, { start: "2026-06-01", end: "2026-09-30" });
+  assert.equal(result.clinician.year?.consults.practice.pending, 1);
+  assert.equal(result.clinician.year?.consults.practice.evaluated, 1);
+  assert.equal(result.clinician.year?.consults.practice.conversionRate, 0);
+  assert.equal(result.clinician["3mo"]?.activity?.averageClientEndingsPerFullMonth, null);
+  assert.deepEqual(result.clinician["3mo"], practiceReports["3mo"]);
+  assert.equal(result.clinician["3mo"], practiceReports["3mo"], "unclipped covered history reuses the base report");
+  assert.deepEqual(input, before);
+  const gap = clinicianHistoricalPerformancePeriods({ ...input, clinicianId: 1, practiceReports,
+    attendanceCoverage: [{ clinicianId: 1, start: "2026-06-01", end: "2026-07-31" },
+      { clinicianId: 1, start: "2026-08-02", end: "2026-10-14" }] });
+  assert.equal(gap.clinician.year, null);
+  assert.equal(gap.ranges.year.coverageComplete, false);
+  assert.equal(clinicianHistoricalPerformancePeriods({ ...input, clinicianId: 1, attendanceCoverage: [] }).clinician.year, null);
+});
+
+test("complete unclipped reports reuse frozen base objects without reading metric evidence", () => {
+  const practiceReports = deepFreeze(historicalPerformancePeriods(fixture()));
+  const input: HistoricalPerformanceInput = {
+    today: "2026-10-14",
+    get snapshots() { throw new Error("unclipped history must not recalculate metrics"); },
+  };
+  const result = clinicianHistoricalPerformancePeriods({
+    today: input.today,
+    get snapshots() { return input.snapshots; },
+    clinicianId: 1, practiceReports,
+    attendanceCoverage: [{ clinicianId: 1, start: "2025-01-01", end: "2026-10-14" }],
+  });
+  assert.equal(result.practice, practiceReports);
+  assert.equal(result.clinician["3mo"], practiceReports["3mo"]);
+  assert.equal(result.clinician.year, practiceReports.year);
+  assert.equal(result.ranges.year.clipped, false);
+  assert.equal(result.ranges.year.coverageComplete, true);
 });
 
 function deepFreeze<T>(value: T): T {
@@ -149,7 +212,9 @@ test("Team and Sessions integrate both histories while activity-date consults re
   }
   assert.doesNotMatch(sessions, /\{historicalControls\}/);
   assert.match(sessions, /className="pw-clinical-metric-grid pw-sessions-clinical-grid"/);
-  const historyStack = sessions.match(/<div className="pw-clinical-history-stack">([\s\S]*?)<\/div>/)?.[1];
+  const stackStart = sessions.indexOf('<div className="pw-clinical-history-stack">');
+  const stackEnd = sessions.indexOf('<section className="pw-metric-panel pw-consult-summary">', stackStart);
+  const historyStack = stackStart >= 0 && stackEnd > stackStart ? sessions.slice(stackStart, stackEnd) : null;
   assert.ok(historyStack, "historical close rate, retention and attrition share one unframed stack");
   assert.equal([...historyStack.matchAll(/<section\b/g)].length, 3);
   assert.match(historyStack, /aria-label="Historical close rate card"/);

@@ -15,3 +15,9 @@ test("four completed periods end at the last payroll service end, not today", ()
 test("four completed weeks use Monday-Sunday boundaries", () => {
   assert.deepEqual(practicePeriodRange("4weeks", "2026-10-14", { start: "", end: "" }), { start: "2026-09-14", end: "2026-10-11" });
 });
+test("activity caption follows the selected relative period without redundant dates", () => {
+  const range = { start: "2026-09-22", end: "2026-10-21" };
+  assert.equal(activityPeriodCaption("30d", range), "Last 30 days");
+  assert.equal(activityPeriodCaption("60d", range), "Last 60 days");
+  assert.equal(activityPeriodCaption("year", range), "Year to date");
+});

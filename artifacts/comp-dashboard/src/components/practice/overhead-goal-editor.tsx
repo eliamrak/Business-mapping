@@ -177,16 +177,9 @@ export default function OverheadGoalEditor({
               : `${equivalent.percent.toFixed(1)}% of revenue`}
         </strong>
       </div>
-      <div className="pw-readout">
-        <span>Saved target</span>
-        <strong>{targetLabel(savedSettings)}</strong>
-      </div>
-      {stagedSettings && (
-        <div className="pw-readout">
-          <span>Staged target</span>
-          <strong>{targetLabel(stagedSettings)}</strong>
-        </div>
-      )}
+      <details><summary>Saved basis</summary><p>{targetLabel(savedSettings)}</p>
+        {stagedSettings && targetLabel(stagedSettings) !== targetLabel(savedSettings) && <p>Pending: {targetLabel(stagedSettings)}</p>}
+      </details>
       {error && (
         <p id={`${id}-error`} role="alert">
           {error}

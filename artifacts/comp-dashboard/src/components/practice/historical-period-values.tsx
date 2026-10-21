@@ -14,9 +14,10 @@ export type HistoricalPeriodValuesProps = {
   values: Record<HistoricalPerformancePeriod, HistoricalPeriodValue>;
   difference?: ReactNode;
   className?: string;
+  dates?: "visible" | "help";
 };
 
-export function HistoricalPeriodValues({ values, difference, className = "" }: HistoricalPeriodValuesProps) {
+export function HistoricalPeriodValues({ values, difference, className = "", dates = "visible" }: HistoricalPeriodValuesProps) {
   const id = useId();
   return <div className={`pw-historical-period-values ${className}`}>
     {(["3mo", "year"] as const).map((period) => {
@@ -24,9 +25,14 @@ export function HistoricalPeriodValues({ values, difference, className = "" }: H
       return <section key={period} className="pw-historical-period-value" data-period={period}
         aria-labelledby={`${id}-${period}-label`}>
         <h4 id={`${id}-${period}-label`}>{period === "3mo" ? "Trailing 3 months" : "Trailing year"}</h4>
-        <p className="pw-historical-period-dates">
+        {dates === "help" ? <details className="pw-historical-period-date-help">
+          <summary>Period dates</summary>
+          <p className="pw-historical-period-dates">
+            <time dateTime={range.start}>{range.start}</time>{" to "}<time dateTime={range.end}>{range.end}</time>
+          </p>
+        </details> : <p className="pw-historical-period-dates">
           <time dateTime={range.start}>{range.start}</time>{" to "}<time dateTime={range.end}>{range.end}</time>
-        </p>
+        </p>}
         <div className="pw-historical-period-main">{value}</div>
         <div className="pw-historical-period-detail">{detail}</div>
         {children != null && <div className="pw-historical-period-children">{children}</div>}

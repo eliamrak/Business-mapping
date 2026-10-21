@@ -46,6 +46,76 @@ const freeze = <T>(value: T): T => {
   return value;
 };
 
+test("six months of admitted clinician history compares with three months without claiming full-year tenure", () => {
+  const input = fixture();
+  input.historyBasis = "available-history";
+  input.context.sessions = [record("2026-04-01", "2026-06-30", 7), record("2026-07-01", "2026-09-30", 14, 1, 2)];
+  input.attendanceCoverage = [{ clinicianId: 1, start: "2026-04-01", end: "2026-09-30" }];
+  input.workspace.clinicians = [profile("2026-04-01", 20)];
+  const result = overviewHistoricalCapacity(freeze(input));
+  assert.deepEqual(result.year.range, { start: "2026-04-01", end: "2026-09-30" });
+  assert.deepEqual(result["3mo"].range, { start: "2026-07-01", end: "2026-09-30" });
+  close(result.year.weekly, 275 * 7 / 183);
+  close(result["3mo"].weekly, 14);
+  close(result.year.utilizationPct, (275 * 7 / 183) / 20 * 100);
+  close(result["3mo"].utilizationPct, 70);
+});
+
+test("available clinician history clips only admitted outer bounds and uses identical actual and desired days", () => {
+  const input = fixture();
+  input.historyBasis = "available-history";
+  input.context.sessions = [record("2026-06-01", "2026-06-30", 14), record("2026-07-01", "2026-09-30", 14)];
+  input.attendanceCoverage = [{ clinicianId: 1, start: "2026-06-01", end: "2026-09-30" }];
+  input.workspace.clinicians = [profile("2026-06-01", 20)];
+  const before = structuredClone(input);
+  const year = overviewHistoricalCapacity(freeze(input)).year;
+  assert.deepEqual(year.requestedRange, { start: "2025-10-01", end: "2026-09-30" });
+  assert.deepEqual(year.effectiveRange, { start: "2026-06-01", end: "2026-09-30" });
+  assert.deepEqual(year.range, year.effectiveRange);
+  close(year.weekly, 14);
+  assert.equal(year.desiredWeekly, 20);
+  assert.equal(year.unknownDesiredDays, 0);
+  close(year.utilizationPct, 70);
+  assert.match(year.reasons.join(" "), /do not establish employment tenure/);
+  assert.deepEqual(input, before);
+  assert.equal(overviewHistoricalCapacity({ ...input, historyBasis: "calendar" }).year.weekly, null);
+});
+
+test("available history keeps gaps unknown, quiet proof zero, and sparse visits without proof unknown", () => {
+  const input = fixture();
+  input.historyBasis = "available-history";
+  input.context.sessions = [];
+  input.attendanceCoverage = [{ clinicianId: 1, start: "2026-06-01", end: "2026-07-31" },
+    { clinicianId: 1, start: "2026-08-02", end: "2026-09-30" }];
+  assert.equal(overviewHistoricalCapacity(input).year.weekly, null);
+  input.context.sessions = [record("2026-08-01", "2026-08-01", 7)];
+  assert.equal(overviewHistoricalCapacity(input).year.weekly, null, "manual rows cannot fill an admitted evidence gap");
+  input.context.sessions = [];
+  input.attendanceCoverage[1].start = "2026-08-01";
+  assert.equal(overviewHistoricalCapacity(input).year.weekly, 0);
+  input.attendanceCoverage = [];
+  input.context.sessions = [record("2026-08-03", "2026-08-03", 7, 1, -1)];
+  const missing = overviewHistoricalCapacity(input).year;
+  assert.equal(missing.effectiveRange, null);
+  assert.equal(missing.weekly, null);
+  assert.equal(missing.desiredWeekly, null);
+});
+
+test("available clipping preserves crossing aggregate guards and cannot change multi-clinician practice semantics", () => {
+  const input = fixture();
+  input.historyBasis = "available-history";
+  input.attendanceCoverage = [{ clinicianId: 1, start: "2026-06-15", end: "2026-09-29" }];
+  input.context.sessions = [record("2026-06-01", "2026-06-30", 14)];
+  const year = overviewHistoricalCapacity(input).year;
+  assert.equal(year.weekly, null);
+  assert.equal(year.observedCompleted, null);
+  assert.deepEqual(year.range, { start: "2026-06-15", end: "2026-09-29" });
+  input.selectedClinicianIds = [1, 2];
+  input.context.clinicians.push(person(2));
+  assert.equal(overviewHistoricalCapacity(input).year.weekly, null);
+  assert.match(overviewHistoricalCapacity(input).year.reasons.join(" "), /practice totals use complete calendar/);
+});
+
 test("Oct 19: 17 / 23 is 73.913% and both calendar histories normalize their own totals to weeks", () => {
   const input = fixture();
   // A 91-day calendar window permits exactly 17/week using whole session counts.

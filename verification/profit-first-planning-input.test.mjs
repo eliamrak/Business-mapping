@@ -16,6 +16,8 @@ const code = ts.transpileModule(readFileSync(componentUrl, "utf8"), {
 }).outputText;
 const fields = [
   { name: "revenue", label: "Monthly billed revenue estimate", previous: 10000, read: p => p.estimatedMonthlyValues.revenue },
+  { name: "overhead", label: "Overhead set-aside estimate", previous: 1200, read: p => p.estimatedMonthlyValues.overhead },
+  { name: "processing", label: "Processing cost estimate", previous: 100, read: p => p.estimatedMonthlyValues.fees },
   { name: "quarterly tax", label: "Quarterly tax planning estimate", previous: 1200, divisor: 3, maximum: 3e10, read: p => p.estimatedMonthlyValues.taxObligations },
   { name: "floor", label: "Business profit scenario percentage floor", previous: 150, read: p => p.scenarioPercents["business-profit"] },
   { name: "preset goal", label: "Building fund monthly contribution", previous: 250, read: p => p.goals.find(g => g.name === "Building fund monthly contribution").monthlyAmount },
@@ -29,6 +31,7 @@ function nodes(tree) {
   return [tree, ...nodes(tree.props?.children)];
 }
 function textContent(tree) {
+  if (tree?.type === "input" && tree.props["aria-label"]?.endsWith("current allocation percentage")) return String(tree.props.value);
   if (Array.isArray(tree)) return tree.map(textContent).join("");
   if (tree === null || tree === undefined || typeof tree === "boolean") return "";
   return typeof tree === "object" ? textContent(tree.props?.children) : String(tree);
@@ -44,7 +47,7 @@ function rowCells(f, label) {
 function fixture(configure = () => {}) {
   const workspace = hub.emptyWorkspace("2026-01-01");
   workspace.moneyPlanning = {
-    estimatedMonthlyValues: { revenue: 10000, overhead: 1200, otherIncome: 0, taxObligations: 1200 },
+    estimatedMonthlyValues: { revenue: 10000, overhead: 1200, fees: 100, otherIncome: 0, taxObligations: 1200 },
     scenarioPercents: { "business-profit": 150 },
     goals: [
       { id: randomUUID(), name: "Building fund monthly contribution", bucket: "business-profit", mode: "additional", monthlyAmount: 250 },
@@ -92,6 +95,7 @@ function fixture(configure = () => {}) {
     },
   }, { filename: componentUrl.pathname });
   const props = {
+    renderMode: "all",
     workspace, context: { clinicians: [], staff: [], sessions: [] }, asOf: "2026-01-15",
     estimatedMonthlyValues: { clinicianPay: 0, employerBurden: 0, staffCost: 0, fees: 0, marketing: 0 },
     onPlanningChange(next) { callbacks.push(structuredClone(next)); },
@@ -264,11 +268,15 @@ test("an unset funding goal stays absent on a deliberate blank and can then be c
 
 test("rendered table keeps baseline percent, current dollars and needed dollars adjacent with a signed gap", () => {
   const f = fixture();
-  assert.deepEqual(nodes(f.tree).filter(n => n.type === "th" && n.props.scope === "col").map(textContent), [
-    "Bucket", "Current %", "Current allocation ($/month)", "Budget needed ($/month)", "Gap ($/month)", "Required %", "Scenario floor %",
+  const headers = nodes(f.tree).filter(n => n.type === "th" && n.props.scope === "col");
+  assert.deepEqual(headers.slice(0, 6).map(textContent), [
+    "Bucket", "Current %", "Current allocation ($/month)", "Budget needed ($/month)", "Gap ($/month)", "Required %",
   ]);
+  assert.equal(headers.length, 7);
+  assert.match(textContent(headers[6]), /^Planning inputs/);
+  assert.ok(nodes(headers[6]).some(node => node.type === "summary" && node.props["aria-label"].startsWith("Help:")));
   assert.deepEqual(rowCells(f, "Taxes").slice(0, 6), ["Taxes", "3%", "$300", "$1,200", "$900", "12%"]);
-  assert.deepEqual(rowCells(f, "Operating expenses").slice(0, 6), ["Operating expenses", "28%", "$2,800", "$1,200", "-$1,600", "12%"]);
+  assert.deepEqual(rowCells(f, "Operating expenses").slice(0, 6), ["Operating expenses", "28%", "$2,800", "$1,300", "-$1,500", "13%"]);
   const html = renderToStaticMarkup(f.tree);
   assert.match(html, /<caption>Monthly allocation planning<\/caption>/);
   assert.doesNotMatch(html, /Current estimate|Required estimate/);
@@ -314,14 +322,22 @@ test("unknown and zero income render honest current dollars and gap values", () 
   assert.deepEqual(rowCells(f, "Taxes").slice(0, 6), ["Taxes", "3%", "$0", "$1,200", "$1,200", "Unknown"]);
 });
 
-test("resolving missing quarterly tax keeps the cost editor open until explicitly closed", () => {
+test("missing quarterly tax stays inline and cost sources stay collapsed until explicitly opened", () => {
   const f = fixture(workspace => { delete workspace.moneyPlanning.estimatedMonthlyValues.taxObligations; });
   const details = () => nodes(f.tree).find(n => n.type === "details" && textContent(n).startsWith("Cost estimates and source periods"));
-  assert.equal(details().props.open, true);
+  assert.equal(details().props.open, false);
+  const taxRow = nodes(f.tree).find(node => node.type === "tr" && nodes(node).some(child => child.type === "th" && textContent(child) === "Taxes"));
+  assert.ok(nodes(taxRow).some(node => node.type === "input" && node.props["aria-label"] === "Quarterly tax planning estimate"));
+  assert.match(textContent(taxRow), /Quarterly tax planning estimate is missing\./);
+  assert.equal(rowCells(f, "Taxes")[3], "Unknown");
   assert.equal(f.input("Quarterly tax planning estimate").value, "");
   f.change("Quarterly tax planning estimate", "0");
   assert.equal(f.report.status, "infeasible");
+  assert.equal(details().props.open, false);
+  details().props.onToggle({ currentTarget: { open: true } });
+  f.change("Quarterly tax planning estimate", "300");
   assert.equal(details().props.open, true);
+  f.change("Quarterly tax planning estimate", "0");
   details().props.onToggle({ currentTarget: { open: false } });
   f.blur("Quarterly tax planning estimate", "0");
   assert.equal(details().props.open, false);

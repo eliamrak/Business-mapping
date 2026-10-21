@@ -67,6 +67,18 @@ test("missing capacity keeps both dates and every value and difference unknown",
   assert.doesNotMatch(html, /0 actual|0 desired|0% full/);
 });
 
+test("clipped session history displays effective dates and discloses the requested calendar without a tenure claim", () => {
+  const props = fixture();
+  const year = props.capacity!.year;
+  year.requestedRange = { ...year.range };
+  year.effectiveRange = { start: "2026-06-01", end: "2026-09-29" };
+  year.range = { ...year.effectiveRange };
+  const html = renderToStaticMarkup(createElement(HistoricalSessionCapacity, props));
+  assert.match(html, /Available history: 2026-06-01 to 2026-09-29/);
+  assert.match(html, /Requested: 2025-10-01 to 2026-09-30/);
+  assert.match(html, /Employment tenure is unverified/);
+});
+
 test("capacity percentages above 100 stay visible while a missing weekly observation never becomes zero", () => {
   const props = fixture();
   props.capacity!["3mo"].utilizationPct = 150;

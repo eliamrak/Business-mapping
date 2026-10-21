@@ -633,6 +633,11 @@ export const settingsSchema = z.object({
   baselineMode: z.enum(["manual", "historical"]).default("historical"),
   baselineWeeklySessions: money.nullable().default(null),
   baselineRetentionPct: percent.default(95),
+  performanceTargets: z.object({
+    retentionPct: percent.nullable().optional(),
+    closeRatePct: percent.nullable().optional(),
+    attritionPct: percent.nullable().optional(),
+  }).optional(),
   historicalStart: dateSchema,
   historicalEnd: dateSchema,
   attendancePct: percent.default(90),
@@ -693,6 +698,7 @@ export const moneyPlanningBucketSchema = z.enum([
 ]);
 export const moneyPlanningSchema = z.object({
   estimatedMonthlyValues: z.record(z.string(), money.nullable()).optional(),
+  currentPercents: z.partialRecord(moneyPlanningBucketSchema, z.number().finite().min(0).max(100)).optional(),
   // Deliberately no 100% ceiling: infeasible plans must remain editable and saveable.
   scenarioPercents: z.partialRecord(moneyPlanningBucketSchema, z.number().finite().min(0).nullable()).optional(),
   goals: z.array(z.object({

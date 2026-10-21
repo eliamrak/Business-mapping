@@ -574,8 +574,8 @@ export default function WorkspaceSessions({
 
       <div className="pw-session-overview-heading">
         <div>
-          <p className="pw-session-date-context">{shortDate(chartBounds.start)} - {shortDate(chartBounds.end)}; {display(selectedSummary.observedCompleted ?? null)} observed sessions</p>
-          <small className="pw-session-coverage-context">{selectedSummary.coverageComplete ? `${selectedSummary.observedCoverageDays} covered days` : "Coverage unknown; verified weekly pace unknown"}{sourceSpan ? `; source observed ${shortDate(sourceSpan.start)} - ${shortDate(sourceSpan.end)}` : ""}</small>
+          {!compact && <p className="pw-session-date-context">{shortDate(chartBounds.start)} - {shortDate(chartBounds.end)}; {display(selectedSummary.observedCompleted ?? null)} observed sessions</p>}
+          <small className="pw-session-coverage-context">{selectedSummary.coverageComplete ? `${selectedSummary.observedCoverageDays} covered days` : "Incomplete records: verified weekly pace unavailable"}{sourceSpan ? `; available ${shortDate(sourceSpan.start)} - ${shortDate(sourceSpan.end)}` : ""}</small>
           {!selectedSummary.coverageComplete && selectedSummary.calendarWindowWeeklyEstimate != null && <small className="pw-session-coverage-context">Calendar-window estimate: {display(selectedSummary.calendarWindowWeeklyEstimate)} sessions / week</small>}
         </div>
         {!selectedPeriod && <div className="pw-session-range">
@@ -604,7 +604,7 @@ export default function WorkspaceSessions({
       </div>
       <div className="pw-session-headline" aria-label="Selected period session pace">
         <div className="pw-session-headline-actual">
-          <span>{selectedSummary.completedWeekly === null ? "Needs complete report" : "Complete-period sessions / week"}</span>
+          <span>{selectedSummary.completedWeekly === null ? "Observed estimate / week" : "Average sessions / week"}</span>
           <strong className="pw-session-headline-actual-value" style={{ color: "#9fd8c2", fontSize: 54 }}>{(selectedSummary.completedWeekly ?? selectedSummary.calendarWindowWeeklyEstimate)?.toLocaleString("en-US", { minimumFractionDigits: 1, maximumFractionDigits: 1 }) ?? "-"}</strong>
         </div>
         <div className="pw-session-headline-capacity">

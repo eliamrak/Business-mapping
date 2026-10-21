@@ -71,7 +71,7 @@ export function profitFirstPlanning(input: ProfitFirstPlanningInput) {
   const assumptions = [
     "Planning estimates use billed income, not collections or bank balances. No spending record is required to plan configured costs.",
     "Current percentages are the user-confirmed baseline. Required percentages fund configured costs and goals; they are not normalized to 100%.",
-    "Owner clinical pay and configured Erin salary are subsets of clinician pay and are moved to Owner payroll once. Aggregate clinician employer burden remains in Therapist payroll unless supplied separately in a future model.",
+    "Clinical pay and configured salary allocated to Owner payroll are removed from clinician pay once. Aggregate clinician employer burden remains in Therapist payroll.",
     "Revenue needed holds monthly costs and contribution goals constant, retaining percentage floors. It is a funding estimate, not a volume forecast; rerun payroll and variable costs for a changed income or staffing scenario.",
   ];
   const planning = w.moneyPlanning ?? {};
@@ -166,6 +166,11 @@ export function profitFirstPlanning(input: ProfitFirstPlanningInput) {
   const ownerClinical = read("ownerClinicalPay", () => people.some(p => p.classification === "owner") ? null : 0);
   const erin = people.find(p => p.id === w.settings.familyW2ClinicianId);
   const configuredErinSalary = (() => {
+    // Forecast salary already accrues dated terms over the whole planning month.
+    if (Object.hasOwn(input.estimatedMonthlyValues ?? {}, "coOwnerSalaryPretax")) {
+      const salary = input.estimatedMonthlyValues!.coOwnerSalaryPretax;
+      return known(salary) ? salary : null;
+    }
     if (!erin) return w.settings.familyW2ClinicianId === null ? 0 : null;
     const profile = clinicianModelAt(w, erin.id, date), term = clinicianTermsAt(w, erin.id, date);
     const mode = term.payMode ?? profile?.payMode;
@@ -176,7 +181,7 @@ export function profitFirstPlanning(input: ProfitFirstPlanningInput) {
   const erinSalary = w.settings.familyW2ClinicianId === null && values.coOwnerSalaryPretax == null ? 0 : configuredErinSalary === null || suppliedErinSalary === null ? null : Math.max(configuredErinSalary, suppliedErinSalary);
   let therapistPay = sum([clinicianPay, ownerClinical, erinSalary]) === null ? null : clinicianPay! - ownerClinical! - erinSalary!;
   if (therapistPay !== null && therapistPay < -0.000001) {
-      reasons.push("Owner clinical pay plus Erin salary exceeds the supplied clinician-pay total; reconcile monthly estimate subsets.");
+      reasons.push("Owner clinical pay plus configured salary exceeds the supplied clinician-pay total; reconcile monthly estimate subsets.");
     therapistPay = null;
   }
   // Calendar-day accrual can leave a sub-microdollar residue when removing salary.
@@ -199,10 +204,10 @@ export function profitFirstPlanning(input: ProfitFirstPlanningInput) {
     { key: "marketing", label: "Existing marketing estimate", monthly: marketing, source: sourcePeriod },
     { key: "fees", label: "Processing cost estimate", monthly: fees, source: sourcePeriod },
     { key: "ownerClinicalPay", label: "Owner clinical payroll estimate", monthly: ownerClinical, source: sourcePeriod },
-    { key: "coOwnerSalaryPretax", label: "Protected Erin salary / owner payroll estimate", monthly: erinSalary, source: `${sourcePeriod}; configured family clinician, included in clinician pay` },
+    { key: "coOwnerSalaryPretax", label: "Configured salary allocated to owner payroll", monthly: erinSalary, source: `${sourcePeriod}; configured salary recipient, included in clinician pay` },
     { key: "ownerPayroll", label: "Separate owner payroll estimate", monthly: ownerSeparate, source: sourcePeriod },
     { key: "ownerPayrollBurden", label: "Separate owner employer cost estimate", monthly: ownerBurden, source: sourcePeriod },
-    { key: "therapistPay", label: "Other therapist payroll estimate", monthly: therapistPay, source: `${sourcePeriod}; clinician pay less owner clinical pay and Erin salary` },
+    { key: "therapistPay", label: "Other therapist payroll estimate", monthly: therapistPay, source: `${sourcePeriod}; clinician pay less clinical pay and configured salary allocated to Owner payroll` },
     { key: "employerBurden", label: "Clinician employer cost estimate", monthly: burden, source: sourcePeriod },
     { key: "staffCost", label: "Admin payroll estimate", monthly: staffCost, source: `${sourcePeriod}; supplied monthly total or dated staff compensation with employer burden` },
     { key: "taxObligations", label: "Configured tax obligations estimate", monthly: taxObligations, source: `${periodStart} to ${periodEnd}; dated tax budgets or explicit monthly override` },
@@ -265,14 +270,16 @@ export function profitFirstPlanning(input: ProfitFirstPlanningInput) {
   }
   const amounts = requirements(income ?? 0);
   const rows: PlanningRow[] = CURRENT_PLANNING_ALLOCATIONS.map((row, i) => ({
-    key: row.key, label: row.label, currentPercent: row.percent,
-    currentMonthly: income === null ? null : income * row.percent / 100,
+    key: row.key, label: row.label, currentPercent: planning.currentPercents?.[row.key] ?? row.percent,
+    currentMonthly: income === null ? null : income * (planning.currentPercents?.[row.key] ?? row.percent) / 100,
     costMonthly: base[row.key] === null ? null : base[row.key]! + additions[row.key],
     requiredMonthly: income === null && floors[i] !== 0 ? null : amounts[i],
     requiredPercent: income !== null && income > 0 && amounts[i] !== null ? amounts[i]! / income * 100 : null,
     scenarioPercent: floors[i] === null ? null : floors[i]! * 100,
   }));
-  for (const cost of costs) if (cost.monthly === null) reasons.push(`${cost.label}: monthly model assumption is missing; absence of spending records is not a zero cost.`);
+  for (const cost of costs) if (cost.monthly === null) reasons.push(cost.key === "taxObligations"
+    ? "Quarterly tax planning estimate is missing."
+    : `${cost.label}: monthly model assumption is missing; absence of spending records is not a zero cost.`);
   if (revenue === null) reasons.push("Monthly billed revenue estimate is missing.");
   if (otherIncome === null) reasons.push("Other monthly income assumption is missing.");
   if (!input.estimateSourcePeriod && Object.keys(values).length) assumptions.push("Supplied values are treated as monthly estimates for the displayed planning month; the caller did not provide a separate source-period label.");
@@ -299,6 +306,7 @@ export function profitFirstPlanning(input: ProfitFirstPlanningInput) {
     neededRevenue = high;
   } else if (complete && floorSum !== null && floorSum > 1 && knownMonthly === 0) neededRevenue = 0;
   return {
+    currentPercentTotal: rows.reduce((total, row) => total + row.currentPercent, 0),
     sourcePeriod, overheadSource, income, revenue, otherIncome, rows, costs, goals,
     totalMonthly, knownMonthly, totalPercent: income !== null && income > 0 && totalMonthly !== null ? totalMonthly / income * 100 : null,
     exceedsIncome, shortfall, neededRevenue,

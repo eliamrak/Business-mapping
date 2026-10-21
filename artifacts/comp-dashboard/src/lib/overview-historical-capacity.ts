@@ -1,6 +1,6 @@
 import { daysInclusive } from "@workspace/practice";
 import type { Context, Workspace } from "@workspace/practice/hub";
-import type { HistoricalPerformancePeriods } from "./historical-performance-periods.ts";
+import { clinicianAvailableHistoryRange, type HistoricalPerformancePeriods } from "./historical-performance-periods.ts";
 import { selectedPeriodSessionSummary, type SessionAttendanceCoverage, type SessionPeriod } from "./session-trend.ts";
 
 export type OverviewHistoricalCapacityInput = {
@@ -10,10 +10,14 @@ export type OverviewHistoricalCapacityInput = {
   historicalReports: Record<"3mo" | "year", { window: { cohort: SessionPeriod } }>;
   selectedClinicianIds: number[];
   today: string;
+  /** Opt in only for an individual; practice totals retain their calendar basis. */
+  historyBasis?: "calendar" | "available-history";
 };
 
 export type OverviewHistoricalCapacityPeriod = {
   range: SessionPeriod;
+  requestedRange?: SessionPeriod;
+  effectiveRange?: SessionPeriod | null;
   weekly: number | null;
   observedCompleted: number | null;
   desiredWeekly: number | null;
@@ -41,9 +45,11 @@ export function overviewHistoricalCapacity(input: OverviewHistoricalCapacityInpu
   const ids = [...new Set(input.selectedClinicianIds)];
   const summarize = (period: "3mo" | "year"): OverviewHistoricalCapacityPeriod => {
     const range = { ...historicalReports[period].window.cohort };
+    const requestedRange = { ...range };
+    let admittedRangeComplete = true;
     const reasons = new Set<string>();
     const result: OverviewHistoricalCapacityPeriod = {
-      range, weekly: null, observedCompleted: null, desiredWeekly: null, utilizationPct: null,
+      range, requestedRange, effectiveRange: { ...range }, weekly: null, observedCompleted: null, desiredWeekly: null, utilizationPct: null,
       desiredBasis: "unknown", historicalDesiredWeekly: null, currentDesiredWeekly: null,
       coverageComplete: false, desiredCoverageComplete: false, unknownDesiredDays: 0, reasons: [],
     };
@@ -64,13 +70,29 @@ export function overviewHistoricalCapacity(input: OverviewHistoricalCapacityInpu
       reasons.add("Select unique, known clinician IDs belonging to the workspace team.");
       return finish();
     }
+    if (input.historyBasis === "available-history") {
+      if (ids.length !== 1) {
+        result.effectiveRange = null;
+        reasons.add("Available history requires one unique clinician; practice totals use complete calendar windows.");
+        return finish();
+      }
+      const resolved = clinicianAvailableHistoryRange(requestedRange, ids[0], attendanceCoverage);
+      admittedRangeComplete = resolved.coverageComplete;
+      result.effectiveRange = resolved.effectiveRange;
+      if (!resolved.effectiveRange) {
+        reasons.add("No admitted attendance history is available in the requested window.");
+        return finish();
+      }
+      Object.assign(range, resolved.effectiveRange);
+      reasons.add(`Available attendance history: ${range.start} to ${range.end}; requested ${requestedRange.start} to ${requestedRange.end}. These dates do not establish employment tenure.`);
+    }
     // Crossing aggregates cannot establish the selected calendar total, even if
     // separate coverage proves every date. Never prorate or silently drop them.
     const crossing = context.sessions.some(row => ids.includes(row.clinicianId)
       && row.start <= range.end && row.end >= range.start && (row.start < range.start || row.end > range.end));
     const summary = selectedPeriodSessionSummary(context.sessions, ids, range, attendanceCoverage);
     result.observedCompleted = crossing ? null : summary.observedCompleted ?? null;
-    result.coverageComplete = summary.coverageComplete === true && !crossing;
+    result.coverageComplete = summary.coverageComplete === true && !crossing && admittedRangeComplete;
     result.weekly = result.coverageComplete ? summary.completedWeekly : null;
     if (crossing) reasons.add("A session aggregate crosses the calendar boundary; its count cannot be prorated or silently omitted.");
     if (!result.coverageComplete) reasons.add("Actual weekly sessions require nonoverlapping attendance evidence covering every selected clinician and every calendar day; missing days are unknown, not zero.");

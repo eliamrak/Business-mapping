@@ -63,6 +63,26 @@ test("confirmed current percentages and read-only input remain intact; estimates
   assert.deepEqual(input, before);
 });
 
+test("current allocation overrides retain defaults, zero and overallocated totals without changing requirements", () => {
+  const input = setup();
+  const baseline = profitFirstPlanning(input);
+  input.workspace.moneyPlanning = { currentPercents: { "business-profit": 8 } };
+  const original = structuredClone(input);
+  const report = profitFirstPlanning(input);
+  close(report.currentPercentTotal, 106);
+  close(report.rows[0].currentMonthly, 800);
+  assert.deepEqual(report.rows.map(row => row.requiredMonthly), baseline.rows.map(row => row.requiredMonthly));
+  assert.equal(report.status, baseline.status);
+  assert.deepEqual(report.rows.slice(1).map(row => row.currentPercent), [3, 28, 27, 36, 4, 0]);
+  assert.deepEqual(workspaceSchema.parse(JSON.parse(JSON.stringify(input.workspace))).moneyPlanning, input.workspace.moneyPlanning);
+  assert.deepEqual(input, original);
+  input.workspace.moneyPlanning.currentPercents!["business-profit"] = 0;
+  close(profitFirstPlanning(input).rows[0].currentMonthly, 0);
+  for (const value of [null, -1, 101, Infinity, NaN, ""]) {
+    assert.equal(workspaceSchema.safeParse({ ...input.workspace, moneyPlanning: { currentPercents: { "business-profit": value } } }).success, false);
+  }
+});
+
 test("annual total / 12, already monthly average unchanged, labeled period retained", () => {
   const input = setup();
   input.overhead = { amount: 24000, basis: "annual-total", sourcePeriod: "2025 annual overhead estimate" };
@@ -97,11 +117,13 @@ test("monthly overhead input never divided again; unknown volume budgets stay un
   assert.equal(profitFirstPlanning(input).costs[0].monthly, null);
 });
 
-test("configured Erin salary protected even against a smaller supplied value; not counted twice in clinician pay", () => {
+test("dated monthly salary is protected against a smaller planning override and not counted twice in clinician pay", () => {
   const input = setup();
   input.workspace.settings.familyW2ClinicianId = 2;
   input.context.clinicians.push({ id: 2, label: "Synthetic Erin", classification: "w2", goalId: null } as Context["clinicians"][number]);
   input.workspace.clinicians.push(clinicianSettingSchema.parse({ id: randomUUID(), clinicianId: 2, start: "2025-01-01", desiredWeeklySessions: 10, payMode: "salary", payAmount: 24000 }));
+  input.estimatedMonthlyValues!.coOwnerSalaryPretax = 2000;
+  input.workspace.moneyPlanning = { estimatedMonthlyValues: { coOwnerSalaryPretax: 0 } };
   const result = profitFirstPlanning(input);
   close(result.protectedErinMonthly, 2000);
   close(result.rows.find(r => r.key === "owner-payroll")!.requiredMonthly, 2000);
@@ -428,6 +450,7 @@ test("canonical legacy owner captions fund salary and distributions by metric wi
 
 test("legacy and saved salary targets use max with configured Erin salary, while named metric edits affect funding without mutation", () => {
   const input = setup();
+  delete input.estimatedMonthlyValues!.coOwnerSalaryPretax;
   input.workspace.settings.familyW2ClinicianId = 2;
   input.context.clinicians.push({ id: 2, label: "Synthetic Erin", classification: "w2", goalId: null } as Context["clinicians"][number]);
   input.workspace.clinicians.push(clinicianSettingSchema.parse({ id: randomUUID(), clinicianId: 2, start: "2025-01-01", desiredWeeklySessions: 10, payMode: "salary", payAmount: 2400 }));

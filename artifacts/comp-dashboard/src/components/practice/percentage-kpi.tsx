@@ -10,11 +10,12 @@ export type PercentageKpiProps = PercentageKpiInput & {
   pending?: ReactNode;
   children?: ReactNode;
   className?: string;
+  showPeriod?: boolean;
 };
 
 export default function PercentageKpi({
   label, benchmarkLabel = "Practice average", observed, provenance, pending, children,
-  className = "", ...input
+  className = "", showPeriod = true, ...input
 }: PercentageKpiProps) {
   const id = useId();
   const model = buildPercentageKpi(input);
@@ -52,7 +53,7 @@ export default function PercentageKpi({
       </span>)}
     </div>}
     {hasContext && <div id={`${id}-context`} className="pw-percentage-kpi-context">
-      {input.period && <span>{input.period.start} - {input.period.end}</span>}
+      {input.period && showPeriod && <span>{input.period.start} - {input.period.end}</span>}
       {observed != null && <span>{observed}</span>}
       {provenance != null && <span>{provenance}</span>}
       {pending != null && <span>{pending}</span>}

@@ -21,6 +21,8 @@ export function HistoricalSessionCapacity({ capacity, reports }: HistoricalSessi
       value: <><strong>{number(row?.weekly)} actual / week</strong><span>{number(row?.desiredWeekly)} desired / week</span>
         <span>{row?.utilizationPct == null ? "Unknown" : `${number(row.utilizationPct)}%`} full</span></>,
       detail: <details><summary>Coverage and assumptions</summary>
+        {row?.requestedRange && row.effectiveRange && (row.requestedRange.start !== row.effectiveRange.start || row.requestedRange.end !== row.effectiveRange.end)
+          && <p>Available history: {row.effectiveRange.start} to {row.effectiveRange.end}. Requested: {row.requestedRange.start} to {row.requestedRange.end}. Employment tenure is unverified.</p>}
         <p>{number(row?.observedCompleted)} observed sessions; attendance coverage {row?.coverageComplete ? "verified" : "unverified"}.</p>
         <p>{row?.desiredBasis === "dated-profile-assumptions" ? "Dated desired-session profile assumptions"
           : row?.desiredBasis === "current-card-assumptions" ? "Current clinician-card desired-session assumptions; historical desired capacity unverified"
