@@ -32,8 +32,7 @@ export type PeriodClientAttritionInput = ClientActivityOptions & {
 const addDays = (date: string, days: number) => new Date(Date.parse(date + "T12:00:00Z") + days * 86400000).toISOString().slice(0, 10);
 const normalize = (value: string) => value.trim().replace(/\s+/g, " ").toLowerCase();
 
-function calculate(input: PeriodClientAttritionInput, window: AttritionWindow, clinician?: string): PeriodAttritionResult {
-  const evidence = periodClientAttritionEvidence(input.snapshots, input.asOf, window, input.overrides, input, clinician);
+function calculate(input: PeriodClientAttritionInput, window: AttritionWindow, evidence: ReturnType<typeof periodClientAttritionEvidence>): PeriodAttritionResult {
   const covers = (start: string, end: string) => evidence.intervals.some((range) => range.start <= start && range.end >= end);
   const reasons = new Set<string>();
   const eligible = new Set<string>();
@@ -75,14 +74,14 @@ export function periodClientAttrition(input: PeriodClientAttritionInput) {
   }
   if (input.requestedWindow.start > input.requestedWindow.end) throw new Error("Attrition window is reversed");
   const result = (clinician?: string) => {
-    const full = calculate(input, input.requestedWindow, clinician);
     const evidence = periodClientAttritionEvidence(input.snapshots, input.asOf, input.requestedWindow, input.overrides, input, clinician);
+    const full = calculate(input, input.requestedWindow, evidence);
     // Preserve actual contiguous dates when admitted coverage ends before the as-of date.
     const portions = full.coverageComplete ? [] : evidence.intervals.map((range) => ({
       start: range.start > input.requestedWindow.start ? range.start : input.requestedWindow.start,
       end: [input.requestedWindow.end, addDays(range.end, -90), addDays(input.asOf, -90)].sort()[0],
     })).filter((range) => range.start <= range.end)
-      .map((range) => calculate(input, range, clinician)).filter((portion) => portion.coverageComplete);
+      .map((range) => calculate(input, range, periodClientAttritionEvidence(input.snapshots, input.asOf, range, input.overrides, input, clinician))).filter((portion) => portion.coverageComplete);
     return { ...full, observedMaturePortion: portions.at(-1) ?? null };
   };
   const clinicians = new Map<string, string>();

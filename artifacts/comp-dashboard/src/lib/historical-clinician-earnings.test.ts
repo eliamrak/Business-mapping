@@ -4,7 +4,7 @@ import {
   clinicianSettingSchema, emptyWorkspace, eventSchema, prepareBillingChargeResolution, termSchema,
   type Context, type ImportEvidenceDeclarations,
 } from "@workspace/practice/hub";
-import { historicalClinicianEarningsPerSession } from "./historical-clinician-earnings.ts";
+import { createHistoricalClinicianEarningsReader, historicalClinicianEarningsPerSession } from "./historical-clinician-earnings.ts";
 import { practiceFinancialEstimateRange } from "./practice-financial-estimate.ts";
 import { sameDayVisitKey, type BillingRow, type LocalSnapshot, type SameDayVisitOverrides } from "./retention-local.ts";
 
@@ -34,6 +34,42 @@ const unknown = (f: ReturnType<typeof fixture>, pattern: RegExp) => {
   assert.match(result.unavailableReasons.join(" "), pattern);
   return result;
 };
+
+test("Team earnings reader defers work, caches requested clinicians and isolates updated inputs", () => {
+  const f = fixture();
+  const original = structuredClone(f);
+  const expected = historicalClinicianEarningsPerSession(f);
+  let snapshotReads = 0;
+  const input = { ...f, get snapshots() { snapshotReads++; return f.snapshots; } };
+  const reader = createHistoricalClinicianEarningsReader(input);
+  assert.equal(snapshotReads, 0);
+  assert.equal(reader.get(99), undefined);
+  assert.equal(snapshotReads, 0);
+  const first = reader.get(1);
+  assert.deepEqual(first, expected);
+  const readsAfterFirst = snapshotReads;
+  assert.ok(readsAfterFirst > 0);
+  assert.equal(reader.get(1), first);
+  assert.equal(snapshotReads, readsAfterFirst);
+  const changed = structuredClone(f);
+  changed.billing.rows[0].totalFeeCharged = 100;
+  const next = createHistoricalClinicianEarningsReader(changed);
+  assert.deepEqual(next.get(1), historicalClinicianEarningsPerSession(changed));
+  assert.notDeepEqual(next.get(1), first);
+  assert.equal(reader.get(1), first);
+  assert.deepEqual(f, original);
+});
+
+test("lazy earnings retains selected-team and ambiguous-ID behavior", () => {
+  const f = fixture();
+  f.context.clinicians.push({ ...f.context.clinicians[0], id: 2, goalId: 9 });
+  const reader = createHistoricalClinicianEarningsReader(f);
+  assert.equal(reader.get(2), undefined);
+  f.context.clinicians.push({ ...f.context.clinicians[0], label: "Duplicate synthetic ID" });
+  const ambiguous = createHistoricalClinicianEarningsReader(f);
+  assert.deepEqual(ambiguous.get(1), historicalClinicianEarningsPerSession(f));
+  assert.equal(ambiguous.get(1)?.status, "unavailable");
+});
 
 test("optional clinician scope preserves default whole-team totals and omitted/empty/undefined options", () => {
   const f = fixture();

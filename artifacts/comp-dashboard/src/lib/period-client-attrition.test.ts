@@ -17,6 +17,15 @@ const snapshot = (rows = three(), start = "2026-06-01", end = "2026-11-30", prov
 });
 const run = (snapshots = [snapshot()], extras: Partial<PeriodClientAttritionInput> = {}) => periodClientAttrition({ snapshots, requestedWindow: july, asOf: "2026-11-30", ...extras });
 
+test("complete windows prepare evidence once per practice/clinician scope", () => {
+  const sources = [snapshot()];
+  const expected = run(sources);
+  let sourceReads = 0;
+  const result = periodClientAttrition({ get snapshots() { sourceReads++; return sources; }, requestedWindow: july, asOf: "2026-11-30" });
+  assert.deepEqual(result, expected);
+  assert.equal(sourceReads, 3, "one clinician enumeration plus one preparation for each of two scopes");
+});
+
 test("review July 2/9/16 counterexample: newly established unique client yields 1/1/100", () => {
   const snapshots = [snapshot()];
   const result = run(snapshots);

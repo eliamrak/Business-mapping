@@ -32,6 +32,19 @@ export type HistoricalClinicianEarnings = {
 };
 const nextDay = (date: string) => new Date(Date.parse(date + "T12:00:00Z") + 86400000).toISOString().slice(0, 10);
 
+/** Keep Team-only estimates lazy, with a cache scoped to these immutable report inputs. */
+export function createHistoricalClinicianEarningsReader(input: Omit<HistoricalClinicianEarningsInput, "clinicianId">) {
+  const selectedIds = new Set(input.context.clinicians.filter(person => (person.goalId ?? null) === input.workspace.settings.teamId).map(person => person.id));
+  const cache = new Map<number, HistoricalClinicianEarnings>();
+  return {
+    get(clinicianId: number) {
+      if (!selectedIds.has(clinicianId)) return undefined;
+      if (!cache.has(clinicianId)) cache.set(clinicianId, historicalClinicianEarningsPerSession({ ...input, clinicianId }));
+      return cache.get(clinicianId);
+    },
+  };
+}
+
 /** Read-only accrual estimate, never observed payroll or a planning-rate override. */
 export function historicalClinicianEarningsPerSession(input: HistoricalClinicianEarningsInput): HistoricalClinicianEarnings {
   const { workspace, context, snapshots, declarations, asOf, range, clinicianId, sameDayVisitOverrides = {} } = input;

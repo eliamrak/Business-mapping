@@ -122,7 +122,7 @@ import { planRevisionSignature, planFocusHighlights } from "@/lib/plan-focus";
 import { OverviewHistoricalSummary } from "@/components/practice/overview-historical-summary";
 import { overviewHistoricalCapacity } from "@/lib/overview-historical-capacity";
 import { HistoricalSessionCapacity } from "@/components/practice/historical-session-capacity";
-import { historicalClinicianEarningsPerSession } from "@/lib/historical-clinician-earnings";
+import { createHistoricalClinicianEarningsReader, type HistoricalClinicianEarnings } from "@/lib/historical-clinician-earnings";
 import { moneyBridgeSummary } from "@/lib/money-bridge";
 import { summarizeReportedBilling, billingMonthSelectionLabel } from "@/lib/reported-billing";
 import { historicalBillingLedger, historicalBillingOverallStart } from "@/lib/historical-billing-ledger";
@@ -1028,13 +1028,13 @@ export default function PracticeWorkspace() {
     })]));
   }, [workingWorkspace, context, modelContext, importedSessionOverlay?.attendanceCoverage, historicalReports, today]);
   const historicalEarningsById = useMemo(() => {
-    if (!workingWorkspace || !context) return new Map<number, ReturnType<typeof historicalClinicianEarningsPerSession>>();
-    return new Map(context.clinicians.filter(person => (person.goalId ?? null) === workingWorkspace.settings.teamId).map(person => [person.id, historicalClinicianEarningsPerSession({
+    if (!workingWorkspace || !context) return new Map<number, HistoricalClinicianEarnings>();
+    return createHistoricalClinicianEarningsReader({
       workspace: workingWorkspace, context, snapshots: localRetentionState.snapshots,
       declarations: importEvidenceDeclarations ?? undefined,
       sameDayVisitOverrides: localRetentionState.sameDayVisitOverrides,
-      asOf: today, range: historicalReports["3mo"].window.cohort, clinicianId: person.id,
-    })]));
+      asOf: today, range: historicalReports["3mo"].window.cohort,
+    });
   }, [workingWorkspace, context, localRetentionState.snapshots, localRetentionState.sameDayVisitOverrides, importEvidenceDeclarations, today, historicalReports]);
   const planProjection = useMemo(
     () =>
