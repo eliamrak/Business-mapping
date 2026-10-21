@@ -78,7 +78,7 @@ function fixture(): Props {
     report.attritionActivity = structuredClone(report.activity);
     report.attritionClinicians = structuredClone(report.clinicians);
     Object.assign(report.consults, {
-      bookingEvidenceAvailable: true, measurement: "scheduled_treatment", bookingLimitation: null,
+      bookingEvidenceAvailable: true, measurement: "consult_to_scheduled_session", bookingLimitation: null,
     });
     Object.assign(report.consults.practice, {
       consultations: recent ? 8 : 12, converted: recent ? 6 : 3,
@@ -152,6 +152,27 @@ test("all four cards show both histories simultaneously with dates in accessible
   assert.doesNotMatch(html, /<h[1-6][^>]*>[^<]*(?:hiring|rooms|owner pay|profit|revenue|projection|forecast|onboarding)/i);
 });
 
+test("selected clinician consult dates follow the full consultation counts despite a clipped clinical window", () => {
+  const props = fixture();
+  props.contributor = "Lane";
+  const year = props.reports.year;
+  year.window.cohort = { start: "2026-01-01", end: "2026-06-30" };
+  year.consults.periodStart = "2025-10-01";
+  year.consults.periodEnd = "2026-09-30";
+  const before = structuredClone(props.reports);
+  const html = render(props);
+  const consult = periodRegion(card(html, labels[2]), "year");
+  assert.match(consult, /dateTime="2025-10-01"/);
+  assert.match(consult, /dateTime="2026-09-30"/);
+  assert.doesNotMatch(consult, /dateTime="2026-01-01"|dateTime="2026-06-30"/);
+  assert.match(consult, /5 consultations \u2192 1 same-clinician closes/);
+  assert.match(consult, /role="meter"[^>]*aria-valuenow="10"/);
+  const retention = periodRegion(card(html, labels[1]), "year");
+  assert.match(retention, /dateTime="2026-01-01"/);
+  assert.match(retention, /dateTime="2026-06-30"/);
+  assert.deepEqual(props.reports, before);
+});
+
 test("summary widgets default to medium, honor saved order and sizes, and keep Sessions outside the layout", () => {
   const props = fixture();
   const defaults = render(props);
@@ -215,7 +236,7 @@ test("known zero rates and counts remain visible; missing evidence is unavailabl
   for (const label of labels) assert.match(card(html, label), /Comparison unavailable/);
 });
 
-test("selected clinician uses normalized clinician-only counts, verified booking closes and caller-scoped capacity", () => {
+test("selected clinician uses normalized clinician-only counts, same-clinician closes and caller-scoped capacity", () => {
   const props = fixture();
   props.contributor = "  lAnE  ";
   for (const period of ["3mo", "year"] as const) Object.assign(props.capacity[period], { weekly: 5, desiredWeekly: 10, utilizationPct: 50 });
@@ -226,7 +247,7 @@ test("selected clinician uses normalized clinician-only counts, verified booking
   assert.doesNotMatch(retention, /class="pw-percentage-kpi-value" aria-hidden="true">(?:80|90)%/);
   const consult = card(html, labels[2]);
   assert.match(consult, /class="pw-percentage-kpi-value" aria-hidden="true">20%<\/span>/);
-  assert.match(consult, /5 consultations \u2192 2 verified booking closes/);
+  assert.match(consult, /5 consultations \u2192 2 same-clinician closes/);
   assert.doesNotMatch(prominent(consult), /started treatment|75%|99%/);
   assert.match(card(html, labels[0]), /5 actual \/ 10 desired sessions per week/);
   assert.equal([...card(html, labels[3]).matchAll(/data-state="unknown"[\s\S]*?<span>-- clients ended<\/span>/g)].length, 2);
@@ -411,20 +432,21 @@ test("unverified clinician identity withholds all four metrics even if populated
   assert.match(card(html, labels[3]), /<span>-- clients ended<\/span>/);
 });
 
-test("funnel shows verified booking closes and keeps booking definitions in details", () => {
+test("funnel shows same-clinician closes and keeps recorded sequence definitions in details", () => {
   const html = render();
   const funnel = card(html, labels[2]);
   const visible = prominent(funnel);
-  assert.match(visible, /8 consultations \u2192 6 verified booking closes/);
+  assert.match(visible, /8 consultations \u2192 6 same-clinician closes/);
   assert.match(visible, /2 pending/);
   assert.doesNotMatch(visible, /onboarding|evaluated journeys|attribution rules|coverage verified/i);
-  assert.match(funnel, /<details><summary>Definition<\/summary><p>8 evaluated journeys\. A close occurs when the first qualifying treatment appointment is booked; credit belongs to its scheduled clinician\./);
-  assert.match(funnel, /Booking time, not the attendance date, determines the one-calendar-month window\./);
+  assert.match(funnel, /<details><summary>Definition<\/summary><p>8 evaluated journeys\. A consultation followed by a qualifying full-session appointment under the same clinician counts as a close; attendance is not required\./);
+  assert.match(funnel, /The recorded appointment sequence and one-calendar-month follow-up window are used, not a fabricated booking-created timestamp\./);
+  assert.match(funnel, /Cross-clinician referrals are not same-clinician closes or failures\./);
   assert.doesNotMatch(prominent(card(html, labels[1])), /28 days|PHONE|evaluated starts/);
   assert.doesNotMatch(prominent(card(html, labels[3])), /unique eligible-client|90-day follow-up/);
 });
 
-test("missing booking evidence renders unknown rates separately from observed treatment starts", () => {
+test("recorded same-clinician pairs render known closes without booking metadata", () => {
   const props = fixture();
   const snapshots: LocalSnapshot[] = [{
     id: "attendance-only", kind: "attendance", sourceHash: "attendance-only", importedAt: "2026-10-19T00:00:00Z",
@@ -445,20 +467,71 @@ test("missing booking evidence renders unknown rates separately from observed tr
     const funnel = card(render(props), labels[2]);
     for (const period of ["3mo", "year"] as const) {
       const region = periodRegion(funnel, period);
-      assert.match(region, /data-state="unknown"/);
-      assert.doesNotMatch(region, /role="meter"|aria-valuenow=/);
-      assert.match(prominent(region), /2 consultations \u2192 -- verified booking closes/);
-      assert.match(prominent(region), /2 pending/);
-      assert.doesNotMatch(prominent(region), /1 verified booking closes|started treatment|confirmed closes|50%/);
-      assert.match(region, /0 evaluated journeys/);
-      assert.match(region, /1 observed treatment starts do not establish booking time or original scheduled clinician\./);
-      assert.match(region, /Complete booking history unavailable; missing evidence is not a failed close\./);
+      assert.match(region, /role="meter"[^>]*aria-valuenow="50"/);
+      assert.match(prominent(region), /2 consultations \u2192 1 same-clinician closes/);
+      assert.match(prominent(region), /0 pending · 0 referrals excluded/);
+      assert.match(region, /2 evaluated journeys/);
+      assert.match(region, /1 completed treatment starts are separate from scheduled appointments\./);
+      assert.doesNotMatch(region, /Booking time, not the attendance date|Complete booking history unavailable/);
     }
-    assert.match(funnel, /Comparison unavailable/);
+    assert.match(funnel, /0 percentage points vs 12-month baseline/);
   }
 });
 
-test("global booking evidence cannot turn an unresolved clinician count into zero closes", () => {
+test("real referral and partial-source evidence render known counts while unresolved rates stay unknown", () => {
+  for (const scenario of ["referral", "partial", "no-show"] as const) {
+    const props = fixture();
+    const source: LocalSnapshot = {
+      id: scenario, kind: "attendance", sourceHash: scenario, importedAt: "2026-07-10T00:00:00Z",
+      coverageStart: "2025-01-01", coverageEnd: "2026-10-19", coverageClinicians: ["Lane", "Moss"],
+      reportCoverage: { start: "2025-01-01", end: "2026-10-19", complete: scenario !== "partial" },
+      rows: [
+        { clientId: "pair", clinician: "Lane", serviceDate: "2026-07-01", billingCode: "PHONE", visitKind: "consultation" as const, status: "show" },
+        { clientId: "pair", clinician: scenario === "referral" ? "Moss" : "Lane", serviceDate: "2026-07-08", billingCode: "90837", status: scenario === "no-show" ? "no-show" : "show" },
+        ...(scenario === "partial" ? [{ clientId: "unknown", clinician: "Lane", serviceDate: "2026-07-02", billingCode: "PHONE", visitKind: "consultation" as const, status: "show" }] : []),
+      ].map(row => ({ ...row, location: null, sourceRowHash: `${row.clientId}:${row.serviceDate}` })),
+    };
+    props.reports = historicalPerformancePeriods({ today: "2026-10-19", snapshots: [source] });
+    for (const contributor of ["Whole Practice", "Lane"]) {
+      props.contributor = contributor;
+      const funnel = card(render(props), labels[2]);
+      for (const period of ["3mo", "year"] as const) {
+        const metric = contributor === "Whole Practice" ? props.reports[period].consults.practice
+          : props.reports[period].consults.byClinician.find(row => row.clinician === "Lane")!;
+        assert.equal(metric.missed, 0);
+        const region = periodRegion(funnel, period);
+        if (scenario === "referral") {
+          assert.equal(metric.converted, 0);
+          assert.equal(metric.internalReferralsProtected, 1);
+          assert.equal(metric.evaluated, 0);
+          assert.equal(metric.conversionRate, null);
+          assert.match(prominent(region), /1 consultations \u2192 0 same-clinician closes/);
+          assert.match(prominent(region), /0 pending · 1 referrals excluded/);
+        } else {
+          assert.equal(metric.converted, 1);
+          assert.equal(metric.evaluated, 1);
+          assert.match(prominent(region), /consultations \u2192 1 same-clinician closes/);
+          if (scenario === "partial") {
+            assert.equal(metric.pending, 1);
+            assert.equal(metric.conversionRate, null);
+            assert.match(prominent(region), /1 pending · 0 referrals excluded/);
+          } else {
+            assert.equal(metric.conversionRate, 100);
+            assert.equal(metric.observedTreatmentStarts, 0);
+            assert.match(region, /role="meter"[^>]*aria-valuenow="100"/);
+          }
+        }
+        if (scenario !== "no-show") {
+          assert.match(region, /data-state="unknown"/);
+          assert.doesNotMatch(region, /role="meter"|aria-valuenow=/);
+          assert.doesNotMatch(prominent(region), /-- same-clinician closes|>0%</);
+        }
+      }
+    }
+  }
+});
+
+test("global appointment evidence cannot turn an unresolved clinician count into zero closes", () => {
   const props = fixture();
   for (const report of Object.values(props.reports)) {
     assert.equal(report.consults.bookingEvidenceAvailable, true);
@@ -467,17 +540,17 @@ test("global booking evidence cannot turn an unresolved clinician count into zer
     Object.assign(lane, { converted: 0, evaluated: 0, pending: 5, conversionRate: null });
   }
   const practice = card(render(props), labels[2]);
-  assert.match(periodRegion(practice, "3mo"), /8 consultations \u2192 6 verified booking closes/);
-  assert.match(periodRegion(practice, "year"), /12 consultations \u2192 3 verified booking closes/);
+  assert.match(periodRegion(practice, "3mo"), /8 consultations \u2192 6 same-clinician closes/);
+  assert.match(periodRegion(practice, "year"), /12 consultations \u2192 3 same-clinician closes/);
   props.contributor = "Lane";
   const funnel = card(render(props), labels[2]);
   for (const period of ["3mo", "year"] as const) {
     const region = periodRegion(funnel, period);
     assert.match(region, /data-state="unknown"/);
     assert.doesNotMatch(region, /role="meter"|aria-valuenow=/);
-    assert.match(prominent(region), /5 consultations \u2192 -- verified booking closes/);
+    assert.match(prominent(region), /5 consultations \u2192 -- same-clinician closes/);
     assert.match(prominent(region), /5 pending/);
-    assert.doesNotMatch(prominent(region), /0 verified booking closes|>0%</);
+    assert.doesNotMatch(prominent(region), /0 same-clinician closes|>0%</);
     assert.match(region, /0 evaluated journeys/);
   }
   assert.match(funnel, /Comparison unavailable/);
@@ -617,7 +690,7 @@ test("a cleared clinician period remains unknown without falling back to populat
     assert.doesNotMatch(region, /aria-valuenow=|role="meter"|pw-percentage-kpi-marker-goal/);
   }
   assert.doesNotMatch(periodRegion(card(html, labels[1]), "3mo"), /80%|8 retained/);
-  assert.doesNotMatch(periodRegion(card(html, labels[2]), "3mo"), /75%|8 consultations|6 verified booking closes/);
+  assert.doesNotMatch(periodRegion(card(html, labels[2]), "3mo"), /75%|8 consultations|6 same-clinician closes/);
   assert.doesNotMatch(periodRegion(card(html, labels[3]), "3mo"), /100%|<span>1 clients ended/);
   assert.match(periodRegion(card(html, labels[3]), "3mo"), /-- clients ended/);
   assert.match(periodRegion(card(html, labels[1]), "year"), /aria-valuenow="20"/);

@@ -100,7 +100,7 @@ test("mature dates alone cannot certify missing coverage or left-censored establ
   assert.equal(missing.periodAttrition.practice.percentage, null);
 });
 
-test("historical booking rates stay unknown without booking evidence despite attendance and legacy attribution", () => {
+test("historical closes use recorded same-clinician appointments without booking metadata", () => {
   const rows = [visit("july-close", "2026-07-02", true), visit("july-close", "2026-07-09")];
   const attributions: ConsultAttributionOverrideInput[] = [{ clientId: "july-close", outcome: "confirmed_closer", clinicianName: "Lane" }];
   for (let index = 0; index < 9; index++) {
@@ -111,19 +111,22 @@ test("historical booking rates stay unknown without booking evidence despite att
   const snapshots = [snapshot(rows)];
   const input = { snapshots, attributions, today: "2026-10-14", cohortClinicianNames: ["Lane", "Moss"] };
   const result = historicalPerformance(input);
-  assert.equal(result.consults.measurement, "scheduled_treatment");
-  assert.equal(result.consults.bookingEvidenceAvailable, false);
+  assert.equal(result.consults.measurement, "consult_to_scheduled_session");
+  assert.equal(result.consults.bookingEvidenceAvailable, true);
   assert.ok(result.consults.bookingLimitation);
-  assert.equal(result.consults.practice.conversionRate, null);
-  assert.equal(result.consults.practice.evaluated, 0);
+  assert.equal(result.consults.practice.conversionRate, 10);
+  assert.equal(result.consults.practice.converted, 1);
+  assert.equal(result.consults.practice.missed, 9);
+  assert.equal(result.consults.practice.evaluated, 10);
   assert.equal(result.consults.practice.consultations, 11);
-  assert.equal(result.consults.practice.pending, 11);
+  assert.equal(result.consults.practice.pending, 1);
   assert.equal(result.consults.practice.observedTreatmentStarts, 1);
   const lane = result.consults.byClinician.find((row) => row.clinician === "Lane");
   assert.ok(lane);
-  assert.equal(lane.conversionRate, null);
-  assert.equal(lane.evaluated, 0);
-  assert.equal(lane.pending, 10);
+  assert.equal(lane.conversionRate, 10);
+  assert.equal(lane.evaluated, 10);
+  assert.equal(lane.pending, 0);
+  assert.equal(lane.rateBasis, "observable_scheduled_sessions");
   for (const range of [{ start: "2026-07-01", end: "2026-07-31" }, { start: "2026-08-01", end: "2026-08-31" }]) {
     summarizeConsultConversions(snapshots, {}, range.start, range.end, input.today, attributions);
     assert.deepEqual(historicalPerformance(input), result);
@@ -131,6 +134,66 @@ test("historical booking rates stay unknown without booking evidence despite att
   const year = historicalPerformance({ ...input, period: "year" });
   assert.equal(year.consults.periodStart, "2025-10-01");
   assert.equal(year.consults.periodEnd, "2026-09-30");
+});
+
+test("different-provider sessions are referrals without same-clinician close or failure credit", () => {
+  const result = historicalPerformance({ snapshots: [snapshot([
+    visit("referral", "2026-07-02", true), visit("referral", "2026-07-09", false, "Moss"),
+  ])], today: "2026-10-14" });
+  const lane = result.consults.byClinician.find(row => row.clinician === "Lane");
+  assert.ok(lane);
+  for (const metric of [result.consults.practice, lane]) {
+    assert.equal(metric.converted, 0);
+    assert.equal(metric.missed, 0);
+    assert.equal(metric.evaluated, 0);
+    assert.equal(metric.pending, 0);
+    assert.equal(metric.internalReferralsProtected, 1);
+    assert.equal(metric.conversionRate, null);
+  }
+  assert.ok(result.consults.byClinician.every(row => row.converted === 0));
+});
+
+test("partial sources preserve positive same-clinician closes without treating unknown absence as zero", () => {
+  const source = snapshot([
+    visit("known-close", "2026-07-02", true), visit("known-close", "2026-07-09"),
+    visit("unknown-absence", "2026-07-03", true),
+  ]);
+  source.reportCoverage!.complete = false;
+  const result = historicalPerformance({ snapshots: [source], calendarSnapshots: [snapshot([])], today: "2026-10-14" });
+  const lane = result.consults.byClinician.find(row => row.clinician === "Lane");
+  assert.ok(lane);
+  for (const metric of [result.consults.practice, lane]) {
+    assert.equal(metric.converted, 1);
+    assert.equal(metric.evaluated, 1);
+    assert.equal(metric.pending, 1);
+    assert.equal(metric.missed, 0);
+    assert.equal(metric.conversionRate, null);
+  }
+  assert.equal(result.consults.coverageVerified, false);
+});
+
+test("separate positive appointment sources establish closes without supplying clinical activity", () => {
+  const consults = snapshot([visit("positive", "2026-07-01", true)]);
+  const appointments = snapshot([visit("positive", "2026-07-08")]);
+  appointments.reportCoverage!.complete = false;
+  const input = { snapshots: [], consultSnapshots: [consults], calendarSnapshots: [consults], today: "2026-10-14" };
+  const baseline = historicalPerformance(input);
+  const result = historicalPerformance({ ...input, appointmentSnapshots: [appointments],
+    appointmentClassificationSnapshots: [consults, appointments], consultExcludedFollowUpEvidence: [] });
+  assert.equal(result.consults.practice.converted, 1);
+  assert.equal(result.consults.practice.missed, 0);
+  assert.equal(result.consults.practice.conversionRate, 100);
+  assert.equal(result.consults.byClinician.find(row => row.clinician === "Lane")?.converted, 1);
+  assert.deepEqual(result.activity, baseline.activity);
+  assert.deepEqual(result.clinicians, baseline.clinicians);
+  assert.deepEqual(result.attritionActivity, baseline.attritionActivity);
+  assert.deepEqual(result.attritionClinicians, baseline.attritionClinicians);
+  assert.deepEqual(result.periodAttrition, baseline.periodAttrition);
+  const unresolved = historicalPerformance({ ...input, appointmentSnapshots: [appointments],
+    unresolvedAppointmentEvidence: [{ clientId: "positive", serviceDate: "2026-07-07" }] });
+  assert.equal(unresolved.consults.practice.converted, 0);
+  assert.equal(unresolved.consults.practice.missed, 0);
+  assert.equal(unresolved.consults.practice.conversionRate, null);
 });
 
 test("available report end anchors historical labels and never uses later pay dates", () => {
@@ -159,7 +222,7 @@ test("consultations route to Sessions, Rooms remains in Growth, and clinical ide
   assert.match(sessions, /pw-consult-resolution/);
   assert.match(sessions, /Confirm closer/);
   assert.match(sessions, /Total sessions/);
-  assert.match(sessions, /Verified booking closes/);
+  assert.match(sessions, /Same-clinician closes/);
   assert.doesNotMatch(growth, /pw-consult-resolution/);
   assert.match(growth, /setSection\("rooms"\)/);
   assert.match(source, /const contributorActivity =[\s\S]*?hasUniqueClinicianIdentity/);
@@ -168,6 +231,10 @@ test("consultations route to Sessions, Rooms remains in Growth, and clinical ide
   const historicalHook = source.slice(source.indexOf("  const historicalReports ="), source.indexOf("  const clinicianActivityByName ="));
   assert.doesNotMatch(historicalHook, /periodRange|sharedPeriod|customPeriod/);
   assert.match(historicalHook, /calendarScope: \{ clinicians: context\?\.clinicians \?\? \[\], teamId: workspace\?\.settings.teamId \?\? null, declarations: importEvidenceDeclarations \}/);
+  assert.match(historicalHook, /appointmentSnapshots: appointmentSources\.snapshots/);
+  assert.match(historicalHook, /appointmentClassificationSnapshots: appointmentSources\.classificationSnapshots/);
+  assert.match(historicalHook, /unresolvedAppointmentEvidence: appointmentSources\.excludedFollowUpEvidence/);
+  assert.match(historicalHook, /consultExcludedFollowUpEvidence: excludedFollowUpEvidence/);
 });
 
 test("canonical admission cannot move a September 30 report calendar back to June-August", () => {

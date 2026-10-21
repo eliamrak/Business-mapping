@@ -188,4 +188,6 @@
   .pw-app .pw-overview-historical-summary.pw-overview-kpi-grid .sw-content > section { padding: 12px; }
   .pw-app .pw-overview-historical-summary.pw-overview-kpi-grid .pw-percentage-kpi-value { font-size: 18px; }
   .pw-app .pw-overview-historical-summary.pw-overview-kpi-grid .pw-overview-percentage-actual { font-size: 17px; }
+  .pw-app .pw-overview-historical-summary.pw-overview-kpi-grid .pw-historical-period-detail > details,
+  .pw-app .pw-overview-historical-summary.pw-overview-kpi-grid .pw-historical-period-date-help { grid-column: 1 / -1; }
 }

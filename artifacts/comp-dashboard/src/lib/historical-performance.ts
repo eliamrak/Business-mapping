@@ -7,6 +7,7 @@ import {
   type ConsultAttributionOverrideInput,
   type LocalSnapshot,
   type SameDayVisitOverrides,
+  type UnresolvedAppointmentEvidence,
 } from "./retention-local.ts";
 import { summarizeBookingConversions as summarizeConsultConversions } from "./consult-booking-conversions.ts";
 
@@ -35,9 +36,14 @@ export function historicalPerformanceWindow(asOf: string, period: HistoricalPerf
   return { asOf, calendarThrough: anchor, cohort, attrition: monthsThrough(matureThrough), endingObservationCutoff };
 }
 
-export function historicalPerformance({ snapshots, consultSnapshots = snapshots, calendarSnapshots = snapshots, calendarScope, classificationSnapshots = snapshots, overrides = {}, attributions = [], cohortClinicianNames, excludedFollowUpEvidence = [], today, period = "3mo" }: {
+export function historicalPerformance({ snapshots, consultSnapshots = snapshots, appointmentSnapshots, appointmentClassificationSnapshots, consultExcludedFollowUpEvidence, unresolvedAppointmentEvidence, calendarSnapshots = snapshots, calendarScope, classificationSnapshots = snapshots, overrides = {}, attributions = [], cohortClinicianNames, excludedFollowUpEvidence = [], today, period = "3mo" }: {
   snapshots: LocalSnapshot[];
   consultSnapshots?: LocalSnapshot[];
+  /** Mapped positive appointment observations, separate from complete-period absence proof. */
+  appointmentSnapshots?: LocalSnapshot[];
+  appointmentClassificationSnapshots?: LocalSnapshot[];
+  consultExcludedFollowUpEvidence?: ClientActivityOptions["excludedFollowUpEvidence"];
+  unresolvedAppointmentEvidence?: UnresolvedAppointmentEvidence[];
   /** Original source reports, before canonical admission; dates only, never metric evidence. */
   calendarSnapshots?: LocalSnapshot[];
   /** Resolve original report ownership using the same full-roster/crosswalk rules as admission. */
@@ -72,6 +78,7 @@ export function historicalPerformance({ snapshots, consultSnapshots = snapshots,
     attritionClinicians: clinicians(window.attrition),
     periodAttrition: periodClientAttrition({ snapshots, requestedWindow: window.attrition, asOf: window.asOf, overrides, ...options }),
     // Aggregate eligible/evaluated journeys once: never average monthly percentages.
-    consults: summarizeConsultConversions(consultSnapshots, overrides, window.cohort.start, window.cohort.end, window.asOf, attributions, { ...options, cohortClinicianNames }),
+    consults: summarizeConsultConversions(consultSnapshots, overrides, window.cohort.start, window.cohort.end, window.asOf, attributions, { ...options, classificationSnapshots: appointmentClassificationSnapshots ?? classificationSnapshots, cohortClinicianNames, appointmentSnapshots, unresolvedAppointmentEvidence,
+      excludedFollowUpEvidence: consultExcludedFollowUpEvidence ?? excludedFollowUpEvidence }),
   };
 }

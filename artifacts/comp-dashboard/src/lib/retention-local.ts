@@ -29,6 +29,13 @@ export type AttendanceRow = {
   sourceRowHash: string;
 };
 
+export type UnresolvedAppointmentEvidence = {
+  clientId: string;
+  serviceDate: string;
+  observedAt?: string;
+  status?: AttendanceStatus;
+};
+
 export type BillingRow = {
   clientId: string;
   clinician: string;
@@ -266,6 +273,7 @@ export type ConsultJourney = {
   attributionIssue: string | null;
   attributionSource:
     | "booking_event"
+    | "scheduled_session"
     | "manual_confirmed_closer"
     | "manual_missed_owner"
     | "manual_needs_review"
@@ -275,11 +283,12 @@ export type ConsultJourney = {
   /** Verified scheduling event time; never inferred from appointment attendance. */
   bookingDate?: string | null;
   scheduledAppointmentDate?: string | null;
+  scheduledClinician?: string | null;
 };
 
 export type ConsultConversionMetric = {
   clinician: string | null;
-  rateBasis: "observed_treatment_starts" | "confirmed_closer_credit" | "scheduled_treatment_bookings";
+  rateBasis: "observed_treatment_starts" | "confirmed_closer_credit" | "scheduled_treatment_bookings" | "observable_scheduled_sessions";
   observedTreatmentStarts?: number;
   consultations: number;
   converted: number;
@@ -294,7 +303,7 @@ export type ConsultConversionMetric = {
 };
 
 export type ConsultConversionSummary = {
-  measurement?: "scheduled_treatment";
+  measurement?: "scheduled_treatment" | "consult_to_scheduled_session";
   bookingEvidenceAvailable?: boolean;
   bookingLimitation?: string | null;
   coverageVerified: boolean;
@@ -568,6 +577,29 @@ export function treatmentAttendanceRows(
         )
       : [],
   );
+}
+
+/** Appointment existence is independent of attendance outcome; observation time is not booking time. */
+export function consultSchedulingEvidence(
+  snapshots: readonly LocalSnapshot[],
+  classificationSnapshots: readonly LocalSnapshot[] = snapshots,
+) {
+  const isConsult = consultAttendanceClassifier(classificationSnapshots);
+  const isDocumentation = documentationAttendanceClassifier(classificationSnapshots);
+  const conflicted = new Set(attendanceStatusConflicts([...snapshots], classificationSnapshots).flatMap(group => group.rows));
+  const consultations: AttendanceRow[] = [];
+  const appointments: { row: AttendanceRow; observedAt: string }[] = [];
+  for (const snapshot of snapshots) {
+    if (snapshot.kind !== "attendance") continue;
+    for (const row of snapshot.rows) {
+      if (isConsult(row)) {
+        if (row.status === "show" && !conflicted.has(row)) consultations.push(row);
+      } else if (!isDocumentation(row)) {
+        appointments.push({ row, observedAt: snapshot.importedAt });
+      }
+    }
+  }
+  return { consultations, appointments };
 }
 
 /** Name/date coordinates cannot establish which contradictory appointment status is authoritative. */

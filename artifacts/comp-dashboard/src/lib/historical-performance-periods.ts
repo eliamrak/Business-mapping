@@ -119,7 +119,8 @@ export function clinicianHistoricalPerformancePeriods(input: HistoricalPerforman
         requestedWindow: base.window.attrition, asOf: base.window.asOf }),
       consults: resolved.clipped ? summarizeConsultConversions(input.consultSnapshots ?? input.snapshots, input.overrides ?? {},
         range.start, range.end, base.window.asOf, input.attributions ?? [],
-        { ...options(), cohortClinicianNames: input.cohortClinicianNames }) : base.consults,
+        { ...options(), classificationSnapshots: input.appointmentClassificationSnapshots ?? input.classificationSnapshots ?? input.snapshots, cohortClinicianNames: input.cohortClinicianNames, appointmentSnapshots: input.appointmentSnapshots, unresolvedAppointmentEvidence: input.unresolvedAppointmentEvidence,
+          excludedFollowUpEvidence: input.consultExcludedFollowUpEvidence ?? input.excludedFollowUpEvidence }) : base.consults,
     };
   }
   return { practice, clinician, ranges, attrition, attritionRanges };

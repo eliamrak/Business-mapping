@@ -1,259 +1,412 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { buildLocalRetentionMetrics, importAttendanceCsv, importBillingCsv, type ConsultAttributionOverrideInput } from "./retention-local.ts";
-import { summarizeBookingConversions, type BookingConversionOptions, type BookingEvent } from "./consult-booking-conversions.ts";
+import {
+  buildLocalRetentionMetrics, importAttendanceCsv, importBillingCsv,
+  type ConsultAttributionOverrideInput, type LocalSnapshot,
+} from "./retention-local.ts";
+import { summarizeBookingConversions, type BookingConversionOptions } from "./consult-booking-conversions.ts";
 
-const event = (changes: Partial<BookingEvent> = {}): BookingEvent => ({
-  id: "appointment-1", clientId: "synthetic", clinician: "Original", bookedAt: "2026-01-12T10:00:00Z",
-  appointmentDate: "2026-03-20", serviceKind: "treatment", ...changes,
-});
-const coverage = (changes = {}) => ({ clientId: "synthetic", start: "2026-01-10", end: "2026-02-10", complete: true, ...changes });
-function summarize(options: BookingConversionOptions = {}, extraRows = "", asOf = "2026-03-01", overrides: ConsultAttributionOverrideInput[] = []) {
-  const attendance = importAttendanceCsv("Client,Clinician,Date of service,Location,Status\n"
-    + "synthetic,Intake,2026-01-10,Phone,show\n" + extraRows).snapshot;
-  for (const row of attendance.rows) if (row.location === "Phone") row.visitKind = "consultation";
-  attendance.reportCoverage = { start: "2026-01-01", end: "2026-03-01", complete: true };
-  return summarizeBookingConversions([attendance], {}, "2026-01-01", "2026-01-31", asOf, overrides, options);
+function attendance(rows: string[], observedAt = "2026-02-01T12:00:00Z", covered = true) {
+  const snapshot = importAttendanceCsv([
+    "Client,Clinician,Date of service,Location,Status", ...rows,
+  ].join("\n")).snapshot;
+  snapshot.importedAt = observedAt;
+  for (const row of snapshot.rows) if (row.location === "Phone") row.visitKind = "consultation";
+  if (covered) snapshot.reportCoverage = { start: "2026-01-01", end: "2026-03-31", complete: true };
+  return snapshot;
 }
-const complete = (events = [event()]): BookingConversionOptions => ({ bookingEvents: events, bookingCoverage: [coverage()] });
+const consult = "synthetic,Intake,2026-01-10,Phone,show";
+const appointment = (provider = "Intake", date = "2026-01-20", status = "show") =>
+  `synthetic,${provider},${date},Room A,${status}`;
+function summarize(snapshots: LocalSnapshot[], asOf = "2026-03-01", options: BookingConversionOptions = {},
+  overrides: ConsultAttributionOverrideInput[] = []) {
+  return summarizeBookingConversions(snapshots, {}, "2026-01-01", "2026-01-31", asOf, overrides, options);
+}
+const clinician = (result: ReturnType<typeof summarize>, name = "Intake") =>
+  result.byClinician.find(row => row.clinician === name)!;
 
-test("attendance and manual legacy credit cannot manufacture booking facts", () => {
-  const result = summarize({}, "synthetic,Observed,2026-01-20,Room A,show", undefined,
-    [{ clientId: "synthetic", outcome: "confirmed_closer", clinicianName: "Manual" }]);
-  assert.equal(result.measurement, "scheduled_treatment");
-  assert.equal(result.bookingEvidenceAvailable, false);
-  assert.equal(result.bookingLimitation, "Booking-time records unavailable; close rate is unknown.");
-  assert.equal(result.practice.pending, 1);
-  assert.equal(result.practice.converted, 0);
-  assert.equal(result.practice.missed, 0);
-  assert.equal(result.practice.conversionRate, null);
-  assert.equal(result.practice.observedTreatmentStarts, 1);
-  const observed = result.byClinician.find((row) => row.clinician === "Observed")!;
-  assert.equal(observed.observedTreatmentStarts, 1);
-  assert.equal(observed.converted, 0);
-  assert.equal(observed.conversionRate, null);
-  assert.ok(result.byClinician.every((row) => row.rateBasis === "scheduled_treatment_bookings"));
-  assert.equal(result.journeys[0].bookingDate, null);
-  assert.equal(result.journeys[0].creditedClinician, null);
-  assert.equal(result.journeys[0].status, "pending");
-});
-
-test("a deadline booking closes even when the scheduled appointment is in the future", () => {
-  const result = summarize(complete([event({ bookedAt: "2026-02-10T23:59:59Z" })]), "", "2026-02-10");
+test("same-clinician consultation then completed full session is one observable close", () => {
+  const result = summarize([attendance([consult, appointment()])]);
+  assert.equal(result.measurement, "consult_to_scheduled_session");
+  assert.equal(result.bookingEvidenceAvailable, true);
   assert.equal(result.practice.converted, 1);
   assert.equal(result.practice.conversionRate, 100);
-  assert.equal(result.practice.observedTreatmentStarts, 0);
-  assert.equal(result.journeys[0].scheduledAppointmentDate, "2026-03-20");
-  assert.equal(result.journeys[0].creditedClinician, "Original");
+  assert.equal(clinician(result).converted, 1);
+  assert.equal(result.practice.observedTreatmentStarts, 1);
+  assert.equal(result.journeys[0].attributionSource, "scheduled_session");
+  assert.equal(result.journeys[0].scheduledClinician, "Intake");
+  assert.equal(result.journeys[0].scheduledAppointmentDate, "2026-01-20");
+  assert.equal(result.journeys[0].bookingDate, null);
+  assert.ok(result.byClinician.every(row => row.rateBasis === "observable_scheduled_sessions"));
 });
 
-test("booked cancellations and no-shows retain credit without attendance", () => {
-  for (const status of ["cancelled", "no-show"]) {
-    const result = summarize(complete([event({ status })]));
+test("cancelled and no-show full appointments close without completed attendance", () => {
+  for (const status of ["cancelled", "no show", "clinician cancelled"]) {
+    const result = summarize([attendance([consult, appointment("Intake", "2026-01-20", status)])]);
     assert.equal(result.practice.converted, 1);
     assert.equal(result.practice.observedTreatmentStarts, 0);
-    assert.equal(result.journeys[0].status, "converted");
+    assert.equal(clinician(result).converted, 1);
   }
 });
 
-test("internal referrals protect intake and transfers retain the original booked clinician", () => {
-  const result = summarize(complete([event(), event({ id: "transfer", clinician: "Later", bookedAt: "2026-01-15T10:00:00Z" })]),
-    "synthetic,Later,2026-01-20,Room A,show", undefined,
-    [{ clientId: "synthetic", outcome: "confirmed_closer", clinicianName: "Manual" }]);
-  assert.equal(result.journeys[0].creditedClinician, "Original");
-  assert.equal(result.journeys[0].treatmentStartClinician, "Later");
-  assert.equal(result.byClinician.find((row) => row.clinician === "Intake")?.internalReferralsProtected, 1);
-  assert.equal(result.byClinician.find((row) => row.clinician === "Intake")?.missed, 0);
-  assert.equal(result.byClinician.find((row) => row.clinician === "Later")?.observedTreatmentStarts, 1);
-  assert.equal(result.byClinician.find((row) => row.clinician === "Later")?.converted, 0);
-});
-
-test("duplicate IDs collapse, including equivalent offsets and changed terminal status", () => {
-  const result = summarize(complete([event(), event({ bookedAt: "2026-01-12T05:00:00-05:00", status: "cancelled" })]));
+test("future full appointment observed now qualifies even beyond the deadline", () => {
+  const result = summarize([attendance([consult, appointment("Intake", "2026-03-20")], "2026-02-10T23:59:59Z")], "2026-02-10");
   assert.equal(result.practice.converted, 1);
-  assert.equal(result.journeys[0].status, "converted");
-  assert.equal(result.journeys[0].bookingDate, "2026-01-12T10:00:00.000Z");
+  assert.equal(result.practice.observedTreatmentStarts, 0);
+  assert.equal(result.journeys[0].scheduledAppointmentDate, "2026-03-20");
+  assert.equal(result.journeys[0].bookingDate, null);
 });
 
-test("conflicting IDs never select an arbitrary original provider", () => {
-  const result = summarize(complete([event(), event({ clinician: "Conflict" })]));
-  assert.equal(result.journeys[0].status, "pending");
+test("appointment service date inside the window establishes sequence without a booking clock", () => {
+  const result = summarize([attendance([consult, appointment("Intake", "2026-02-10", "cancelled")], "2026-02-20T00:00:00Z")]);
+  assert.equal(result.practice.converted, 1);
+});
+
+test("cross-clinician first appointment is protected and cannot become a practice close", () => {
+  const result = summarize([attendance([consult, appointment("Other")])]);
+  for (const metric of [result.practice, clinician(result)]) {
+    assert.equal(metric.converted, 0);
+    assert.equal(metric.missed, 0);
+    assert.equal(metric.pending, 0);
+    assert.equal(metric.internalReferralsProtected, 1);
+    assert.equal(metric.evaluated, 0);
+  }
+  assert.equal(clinician(result, "Other").converted, 0);
+  assert.equal(result.journeys[0].creditedClinician, null);
+  assert.equal(result.journeys[0].scheduledClinician, "Other");
+});
+
+test("a receiving provider gets a close only with their own preceding consultation", () => {
+  const result = summarize([attendance([consult, "synthetic,Other,2026-01-12,Phone,show", appointment("Other")])]);
+  assert.equal(result.practice.converted, 1);
+  assert.equal(clinician(result, "Other").converted, 1);
+  assert.equal(clinician(result).internalReferralsProtected, 1);
+  assert.equal(clinician(result).missed, 0);
+});
+
+test("a consultation after the first appointment cannot claim a later transfer close", () => {
+  const result = summarize([attendance([consult, appointment("Other", "2026-01-15"),
+    "synthetic,Other,2026-01-17,Phone,show", appointment("Other", "2026-01-25")])]);
+  assert.equal(result.practice.converted, 0);
+  assert.equal(result.practice.internalReferralsProtected, 1);
+  assert.equal(clinician(result, "Other").converted, 0);
+});
+
+test("appointment dates define sequence even when a later appointment was observed first", () => {
+  const early = attendance([consult, appointment("Intake", "2026-03-20")], "2026-01-12T00:00:00Z", false);
+  const later = attendance([appointment("Other", "2026-02-20")], "2026-01-15T00:00:00Z", false);
+  const result = summarize([later, early], "2026-01-16");
+  assert.equal(result.practice.converted, 0);
+  assert.equal(result.practice.internalReferralsProtected, 1);
+  assert.equal(result.journeys[0].scheduledClinician, "Other");
+  assert.equal(result.journeys[0].scheduledAppointmentDate, "2026-02-20");
+});
+
+test("a later transfer appointment cannot reassign the first chronological appointment", () => {
+  const result = summarize([attendance([consult, appointment(), appointment("Other", "2026-01-25")])]);
+  assert.equal(result.practice.converted, 1);
+  assert.equal(result.journeys[0].scheduledClinician, "Intake");
+});
+
+test("provider consultation must precede observation of their future appointment", () => {
+  const booked = attendance([consult, appointment("Other", "2026-03-20")], "2026-01-15T12:00:00Z", false);
+  const laterConsult = attendance(["synthetic,Other,2026-01-20,Phone,show"], "2026-01-21T12:00:00Z", false);
+  const result = summarize([booked, laterConsult]);
+  assert.equal(result.practice.converted, 0);
+  assert.equal(result.practice.internalReferralsProtected, 1);
+  assert.equal(clinician(result, "Other").converted, 0);
+});
+
+test("duplicates and contradictory appointment statuses preserve one booking existence", () => {
+  const first = attendance([consult, appointment()], "2026-01-21T00:00:00Z");
+  const second = attendance([appointment("Intake", "2026-01-20", "cancelled")], "2026-01-22T00:00:00Z");
+  const result = summarize([first, structuredClone(first), second]);
+  assert.equal(result.practice.consultations, 1);
+  assert.equal(result.practice.converted, 1);
+  assert.equal(result.journeys[0].creditedClinician, "Intake");
+});
+
+test("tied first providers are unknown with no double credit or invented practice close", () => {
+  const result = summarize([attendance([consult, appointment(), appointment("Other")])]);
+  assert.equal(result.practice.converted, 0);
+  assert.equal(result.practice.missed, 0);
+  assert.equal(result.practice.pending, 1);
   assert.equal(result.practice.conversionRate, null);
-  assert.equal(result.journeys[0].creditedClinician, null);
-});
-
-test("tied first clinicians preserve known practice close while withholding attribution", () => {
-  const result = summarize(complete([event(), event({ id: "tie", clinician: "Other" })]));
-  assert.equal(result.practice.converted, 1);
   assert.equal(result.journeys[0].status, "needs_attribution");
-  assert.equal(result.journeys[0].creditedClinician, null);
-  assert.ok(result.bookingLimitation);
-  assert.ok(result.byClinician.every((row) => row.converted === 0 && row.conversionRate === null));
+  assert.equal(result.journeys[0].scheduledClinician, null);
+  assert.ok(result.byClinician.every(row => row.converted === 0));
 });
 
-test("an incomplete booking prefix proves a close but cannot identify the first clinician", () => {
-  const result = summarize({ bookingEvents: [event()], bookingCoverage: [coverage({ start: "2026-01-12" })] });
+test("mixed appointment statuses cannot change order or resolve tied providers", () => {
+  const earlier = summarize([attendance([consult, appointment("Other", "2026-01-15", "cancelled"), appointment()])]);
+  assert.equal(earlier.practice.internalReferralsProtected, 1);
+  assert.equal(earlier.practice.converted, 0);
+  const tied = summarize([attendance([consult, appointment(), appointment("Other", "2026-01-20", "no show")])]);
+  assert.equal(tied.practice.converted, 0);
+  assert.equal(tied.journeys[0].scheduledClinician, null);
+  assert.equal(tied.journeys[0].status, "needs_attribution");
+});
+
+test("same-day date-only order stays pending even with a later appointment", () => {
+  const result = summarize([attendance([consult, appointment("Intake", "2026-01-10"), appointment()])]);
+  assert.equal(result.practice.pending, 1);
+  assert.equal(result.practice.missed, 0);
+  assert.equal(result.practice.converted, 0);
+  assert.equal(result.practice.conversionRate, null);
+});
+
+test("partial coverage retains a unique observable positive pair", () => {
+  const result = summarize([attendance([consult, appointment()], undefined, false)]);
   assert.equal(result.practice.converted, 1);
   assert.equal(result.practice.conversionRate, 100);
-  assert.equal(result.journeys[0].status, "needs_attribution");
-  assert.equal(result.journeys[0].creditedClinician, null);
-  assert.equal(result.journeys[0].bookingDate, null);
-  assert.equal(result.journeys[0].scheduledAppointmentDate, null);
-  assert.match(result.bookingLimitation!, /unresolved/);
+  assert.equal(result.coverageVerified, false);
+  assert.match(result.bookingLimitation!, /coverage.*unverified/i);
 });
 
-test("complete empty client booking ledger supports a known mature zero", () => {
-  const result = summarize({ bookingCoverage: [coverage()] });
-  assert.equal(result.bookingEvidenceAvailable, true);
+test("complete one-month report absence establishes a mature observable zero", () => {
+  const result = summarize([attendance([consult])]);
   assert.equal(result.practice.missed, 1);
+  assert.equal(clinician(result).missed, 1);
   assert.equal(result.practice.conversionRate, 0);
-  assert.equal(result.journeys[0].creditedClinician, "Intake");
-  assert.equal(result.byClinician[0].missed, 1);
+  assert.equal(result.coverageVerified, true);
+  assert.equal(result.journeys[0].scheduledAppointmentDate, null);
 });
 
-test("partial, wrong-client and attendance coverage cannot establish absence", () => {
-  for (const row of [coverage({ end: "2026-02-09" }), coverage({ start: "2026-01-11" }),
-    coverage({ complete: false }), coverage({ clientId: "someone-else" })]) {
-    const result = summarize({ bookingCoverage: [row] });
-    assert.equal(result.practice.pending, 1);
+test("partial coverage and excluded follow-up evidence block absence", () => {
+  for (const [covered, options] of [
+    [false, {}],
+    [true, { excludedFollowUpEvidence: [{ clientId: " synthetic ", serviceDate: "2026-01-20" }] }],
+  ] as const) {
+    const result = summarize([attendance([consult], undefined, covered)], undefined, options);
     assert.equal(result.practice.missed, 0);
+    assert.equal(result.practice.pending, 1);
     assert.equal(result.practice.conversionRate, null);
   }
 });
 
-test("contiguous client coverage merges, gaps remain unknown, and immature cohorts stay pending", () => {
-  const intervals = [coverage({ end: "2026-01-20" }), coverage({ start: "2026-01-21" })];
-  assert.equal(summarize({ bookingCoverage: intervals }).practice.missed, 1);
-  assert.equal(summarize({ bookingCoverage: [intervals[0], coverage({ start: "2026-01-22" })] }).practice.pending, 1);
-  assert.equal(summarize({ bookingCoverage: intervals }, "", "2026-02-09").practice.pending, 1);
-});
-
-test("multiple consultation owners cannot receive a mature miss via legacy overrides", () => {
-  const result = summarize({ bookingCoverage: [coverage()] }, "synthetic,Backup,2026-01-11,Phone,show", undefined,
-    [{ clientId: "synthetic", outcome: "missed_owner", clinicianName: "Intake" }]);
-  assert.equal(result.practice.missed, 1);
-  assert.equal(result.journeys[0].status, "needs_attribution");
-  assert.equal(result.journeys[0].creditedClinician, null);
-  assert.ok(result.byClinician.every((row) => row.missed === 0 && row.pending === 1));
-});
-
-test("needs_review withholds clinician credit for both known bookings and known absences", () => {
-  for (const options of [complete(), { bookingCoverage: [coverage()] }]) {
-    const result = summarize(options, "", undefined,
-      [{ clientId: "synthetic", outcome: "needs_review", clinicianName: "Original" }]);
-    assert.equal(result.practice.evaluated, 1);
-    assert.equal(result.journeys[0].creditedClinician, null);
-    assert.equal(result.journeys[0].attributionSource, "manual_needs_review");
-    assert.ok(result.bookingLimitation);
-  }
-});
-
-test("same-day date-only consult cannot prove booking order", () => {
-  const result = summarize(complete([event({ bookedAt: "2026-01-10T23:59:59Z" }), event({ id: "later" })]));
-  assert.equal(result.practice.pending, 1);
-  assert.equal(result.practice.conversionRate, null);
-  assert.equal(result.journeys[0].creditedClinician, null);
-});
-
-test("preconsult, late, consultation, and documentation bookings are excluded", () => {
-  for (const changes of [{ bookedAt: "2026-01-09T10:00:00Z" }, { bookedAt: "2026-02-11T00:00:00Z" },
-    { serviceKind: "consultation" as const }, { serviceKind: "documentation" as const }]) {
-    assert.equal(summarize(complete([event(changes)])).practice.converted, 0);
-  }
-});
-
-test("future booking events and future conflicting versions do not leak into as-of results", () => {
-  const future = event({ bookedAt: "2026-01-13T00:00:00Z" });
-  const onlyFuture = summarize({ bookingEvents: [future] }, "", "2026-01-12");
-  assert.equal(onlyFuture.bookingEvidenceAvailable, false);
-  assert.equal(onlyFuture.practice.pending, 1);
-  const result = summarize(complete([event(), future]), "", "2026-01-12");
-  assert.equal(result.journeys[0].status, "converted");
-});
-
-test("UTC instants define deadline, consult-day ambiguity, and end-of-as-of filtering", () => {
-  const deadline = summarize(complete([event({ bookedAt: "2026-02-11T00:30:00+01:00" })]), "", "2026-02-10");
-  assert.equal(deadline.practice.converted, 1);
-  const future = summarize({ bookingEvents: [event({ bookedAt: "2026-01-12T23:30:00-01:00" })] }, "", "2026-01-12");
-  assert.equal(future.bookingEvidenceAvailable, false);
-  const sameDay = summarize(complete([event({ bookedAt: "2026-01-11T00:30:00+01:00" })]));
-  assert.equal(sameDay.practice.pending, 1);
-});
-
-test("input evidence is not mutated", () => {
-  const options = complete([event(), event()]);
-  const before = structuredClone(options);
-  summarize(options);
-  assert.deepEqual(options, before);
-});
-
-test("a mature unknown outcome gates practice and associated clinician rates without inventing a miss", () => {
-  const result = summarize(complete([event({ clinician: "Intake" })]),
-    "unknown,Intake,2026-01-10,Phone,show\nunknown,Backup,2026-01-11,Phone,show");
-  assert.equal(result.practice.converted, 1);
-  assert.equal(result.practice.evaluated, 1);
-  assert.equal(result.practice.pending, 1);
+test("beyond-deadline appointments first observed later have unknown timing, never misses", () => {
+  const result = summarize([attendance([consult, appointment("Intake", "2026-03-20")], "2026-02-11T00:00:00Z")]);
+  assert.equal(result.practice.converted, 0);
   assert.equal(result.practice.missed, 0);
-  assert.equal(result.practice.conversionRate, null);
-  const intake = result.byClinician.find((row) => row.clinician === "Intake")!;
-  assert.equal(intake.converted, 1);
-  assert.equal(intake.evaluated, 1);
-  assert.equal(intake.pending, 1);
-  assert.equal(intake.missed, 0);
-  assert.equal(intake.conversionRate, null);
-  assert.equal(result.byClinician.find((row) => row.clinician === "Backup")?.conversionRate, null);
+  assert.equal(result.practice.pending, 1);
+  assert.match(result.bookingLimitation!, /timing.*unknown/);
 });
 
-test("an immature pending cohort preserves the known evaluated subset rate and explicit pending count", () => {
-  const result = summarize(complete([event({ clinician: "Intake" })]),
-    "unknown,Intake,2026-01-25,Phone,show", "2026-02-10");
-  for (const metric of [result.practice, result.byClinician.find((row) => row.clinician === "Intake")!]) {
-    assert.equal(metric.converted, 1);
-    assert.equal(metric.evaluated, 1);
-    assert.equal(metric.pending, 1);
-    assert.equal(metric.missed, 0);
-    assert.equal(metric.conversionRate, 100);
+test("future source knowledge is excluded, but completed past sessions imported later are usable", () => {
+  const pastConsult = attendance([consult], "2026-01-11T00:00:00Z", false);
+  for (const status of ["show", "cancelled", "no show"]) {
+    const future = attendance([appointment("Intake", "2026-03-20", status)], "2026-02-11T00:00:00Z", false);
+    assert.equal(summarize([pastConsult, future], "2026-02-10").practice.converted, 0);
+  }
+  const lateImport = attendance([appointment()], "2026-04-01T00:00:00Z", false);
+  assert.equal(summarize([pastConsult, lateImport], "2026-02-10").practice.converted, 1);
+  const futureCoverage = attendance([consult], "2026-04-01T00:00:00Z");
+  assert.equal(summarize([futureCoverage], "2026-02-10").practice.missed, 0);
+});
+
+test("client whitespace and clinician whitespace/case normalize without changing input evidence", () => {
+  const source = attendance([consult, " synthetic , intake ,2026-01-20,Room A,show"]);
+  const before = structuredClone(source);
+  const result = summarize([source]);
+  assert.equal(result.practice.consultations, 1);
+  assert.equal(result.practice.converted, 1);
+  assert.equal(result.byClinician.length, 1);
+  assert.deepEqual(source, before);
+});
+
+test("opaque client IDs retain case across appointments, exclusions, and manual reviews", () => {
+  const source = attendance(["ClientA,Intake,2026-01-10,Phone,show", "clienta,Intake,2026-01-20,Room A,show"]);
+  const result = summarize([source], undefined, {
+    excludedFollowUpEvidence: [{ clientId: "clienta", serviceDate: "2026-01-20" }],
+  }, [{ clientId: "clienta", outcome: "needs_review" }]);
+  assert.equal(result.practice.converted, 0);
+  assert.equal(result.practice.missed, 1);
+  assert.equal(result.journeys[0].clientId, "ClientA");
+  assert.equal(result.journeys[0].status, "missed");
+});
+
+test("positive raw sources add current/future appointments without expanding admitted absence coverage", () => {
+  const admitted = attendance([consult]);
+  const raw = attendance([appointment("Intake", "2026-03-20")], "2026-02-01T12:00:00Z");
+  assert.equal(summarize([admitted], "2026-02-01", { appointmentSnapshots: [raw] }).practice.converted, 1);
+  const rawConsult = attendance([consult], "2026-02-01T12:00:00Z");
+  const rawOnly = summarize([], undefined, { appointmentSnapshots: [rawConsult] });
+  assert.equal(rawOnly.practice.consultations, 1);
+  assert.equal(rawOnly.practice.missed, 0);
+  assert.equal(rawOnly.practice.pending, 1);
+  assert.equal(rawOnly.coverageVerified, false);
+  assert.ok(rawConsult.reportCoverage);
+});
+
+test("full raw source supplies a future close before any report is canonically admitted", () => {
+  const raw = attendance([consult, appointment("Intake", "2026-03-20")], "2026-01-15T12:00:00Z");
+  const before = structuredClone(raw);
+  const result = summarize([], "2026-01-15", {
+    appointmentSnapshots: [raw],
+    excludedFollowUpEvidence: [
+      { clientId: "synthetic", serviceDate: "2026-01-10" },
+      { clientId: "synthetic", serviceDate: "2026-03-20" },
+    ],
+  });
+  assert.equal(result.practice.consultations, 1);
+  assert.equal(result.practice.converted, 1);
+  assert.equal(result.practice.observedTreatmentStarts, 0);
+  assert.equal(result.practice.conversionRate, 100);
+  assert.equal(result.coverageVerified, false);
+  assert.equal(result.journeys[0].scheduledAppointmentDate, "2026-03-20");
+  assert.deepEqual(raw, before);
+});
+
+test("unresolved earlier or tied unknown-provider evidence blocks false first appointment credit", () => {
+  for (const date of ["2026-01-12", "2026-03-20"]) {
+    const result = summarize([], undefined, {
+      appointmentSnapshots: [attendance([consult, appointment("Intake", "2026-03-20")])],
+      unresolvedAppointmentEvidence: [{ clientId: " synthetic ", serviceDate: date }],
+    });
+    assert.equal(result.practice.converted, 0);
+    assert.equal(result.practice.missed, 0);
+    assert.equal(result.practice.internalReferralsProtected, 0);
+    assert.equal(result.practice.pending, 1);
+    assert.equal(result.practice.conversionRate, null);
+    assert.equal(result.journeys[0].creditedClinician, null);
+    assert.match(result.bookingLimitation!, /sequence is unresolved/);
   }
 });
 
-test("known practice outcomes keep their rate while ambiguous clinician ownership gates only affected clinicians", () => {
-  const result = summarize({
-    bookingEvents: [event({ clinician: "Intake" }), event({ id: "unknown-client", clientId: "unknown" })],
-    bookingCoverage: [coverage()],
-  }, "unknown,Intake,2026-01-10,Phone,show");
-  assert.equal(result.practice.converted, 2);
-  assert.equal(result.practice.evaluated, 2);
+test("later unresolved evidence and incomplete coverage preserve a known positive first pair", () => {
+  const result = summarize([], undefined, {
+    appointmentSnapshots: [attendance([consult, appointment()])],
+    unresolvedAppointmentEvidence: [{ clientId: "synthetic", serviceDate: "2026-01-25" }],
+  });
+  assert.equal(result.practice.converted, 1);
   assert.equal(result.practice.conversionRate, 100);
-  const intake = result.byClinician.find((row) => row.clinician === "Intake")!;
-  assert.equal(intake.converted, 1);
-  assert.equal(intake.evaluated, 1);
-  assert.equal(intake.pending, 1);
-  assert.equal(intake.conversionRate, null);
+  assert.equal(result.coverageVerified, false);
 });
 
-test("a verified booking does not establish retention: three completed treatment visits are required and PHONE is excluded", () => {
+test("unknown future classification evidence cannot prove a close or absence", () => {
+  const result = summarize([attendance([consult])], undefined, {
+    unresolvedAppointmentEvidence: [{ clientId: "synthetic", serviceDate: "2026-03-20" }],
+  });
+  assert.equal(result.practice.converted, 0);
+  assert.equal(result.practice.missed, 0);
+  assert.equal(result.practice.pending, 1);
+  assert.equal(result.practice.conversionRate, null);
+});
+
+test("only as-of-active unresolved evidence can block a positive pair or prove absence unresolved", () => {
+  const futureSource = "2026-04-01T00:00:00Z";
+  for (const [status, serviceDate, observedAt, active] of [
+    ["show", "2026-03-10", futureSource, false],
+    ["cancelled", "2026-01-12", futureSource, false],
+    ["no show", "2026-01-12", futureSource, false],
+    ["show", "2026-01-12", futureSource, true],
+    ["cancelled", "2026-01-12", "2026-02-01T12:00:00Z", true],
+  ] as const) {
+    const options: BookingConversionOptions = {
+      unresolvedAppointmentEvidence: [{ clientId: " synthetic ", serviceDate, observedAt, status }],
+    };
+    const before = structuredClone(options);
+    const positive = summarize([], undefined, {
+      ...options, appointmentSnapshots: [attendance([consult, appointment("Intake", "2026-03-20")])],
+    });
+    assert.equal(positive.practice.converted, active ? 0 : 1);
+    assert.equal(positive.practice.pending, active ? 1 : 0);
+    const absent = summarize([attendance([consult])], undefined, options);
+    assert.equal(absent.practice.missed, active ? 0 : 1);
+    assert.equal(absent.practice.pending, active ? 1 : 0);
+    assert.deepEqual(options, before);
+  }
+});
+
+test("canonical alias classification identifies billing-only PHONE without creating visit facts", () => {
+  const raw = attendance([appointment("Canonical Name", "2026-01-10"), appointment("Canonical Name", "2026-03-20")],
+    "2026-01-15T12:00:00Z", false);
+  const billing = importBillingCsv("Date of Service,Client,Clinician,Total Fee,Billing Code\n"
+    + "2026-01-10,synthetic, canonical   name ,0,PHONE").snapshot;
+  const result = summarize([], "2026-01-15", {
+    appointmentSnapshots: [raw], classificationSnapshots: [raw, billing],
+  });
+  assert.equal(result.practice.consultations, 1);
+  assert.equal(result.practice.converted, 1);
+  assert.equal(result.practice.observedTreatmentStarts, 0);
+  assert.equal(result.journeys[0].consultDate, "2026-01-10");
+  assert.equal(result.journeys[0].scheduledAppointmentDate, "2026-03-20");
+  assert.equal(result.journeys[0].scheduledClinician, "Canonical Name");
+});
+
+test("raw cohorts can close with raw appointments, but coverage must match their consult date", () => {
+  const admitted = attendance(["synthetic,Intake,2026-01-15,Phone,show"]);
+  const rawConsult = attendance([consult]);
+  const mismatched = summarize([admitted], undefined, { appointmentSnapshots: [rawConsult] });
+  assert.equal(mismatched.journeys[0].consultDate, "2026-01-10");
+  assert.equal(mismatched.practice.missed, 0);
+  const closed = summarize([], undefined, { appointmentSnapshots: [attendance([consult, appointment()])] });
+  assert.equal(closed.practice.converted, 1);
+  assert.equal(closed.coverageVerified, false);
+});
+
+test("classification-only sources never supply consultations, appointments, or absence coverage", () => {
+  const result = summarize([attendance([consult], undefined, false)], undefined, {
+    classificationSnapshots: [attendance([consult, appointment()])],
+  });
+  assert.equal(result.practice.converted, 0);
+  assert.equal(result.practice.missed, 0);
+  assert.equal(result.practice.pending, 1);
+});
+
+test("legacy manual credit cannot reassign observed closes; needs review can withhold", () => {
+  const sources = [attendance([consult, appointment()])];
+  const before = structuredClone(sources);
+  const overrides: ConsultAttributionOverrideInput[] = [
+    { clientId: "synthetic", outcome: "confirmed_closer", clinicianName: "Manual" },
+  ];
+  assert.equal(summarize(sources, undefined, {}, overrides).journeys[0].creditedClinician, "Intake");
+  const review = summarize(sources, undefined, {}, [{ clientId: "synthetic", outcome: "needs_review" }]);
+  assert.equal(review.practice.converted, 0);
+  assert.equal(review.journeys[0].creditedClinician, null);
+  assert.equal(review.journeys[0].scheduledClinician, "Intake");
+  assert.deepEqual(sources, before);
+});
+
+test("multiple consultation owners with known absence get no arbitrary miss attribution", () => {
+  const result = summarize([attendance([consult, "synthetic,Backup,2026-01-11,Phone,show"])]);
+  assert.equal(result.practice.missed, 1);
+  assert.equal(result.journeys[0].creditedClinician, null);
+  assert.ok(result.byClinician.every(row => row.missed === 0 && row.conversionRate === null));
+});
+
+test("mature unknown gates rates while retaining known counts; immature pending is excluded", () => {
+  for (const [date, expectedRate] of [["2026-01-10", null], ["2026-01-25", 100]] as const) {
+    const known = attendance([consult, appointment()], "2026-02-01T00:00:00Z", false);
+    const unknown = attendance([`unknown,Intake,${date},Phone,show`], "2026-02-01T00:00:00Z", false);
+    const result = summarize([known, unknown], "2026-02-10");
+    for (const metric of [result.practice, clinician(result)]) {
+      assert.equal(metric.converted, 1);
+      assert.equal(metric.evaluated, 1);
+      assert.equal(metric.pending, 1);
+      assert.equal(metric.missed, 0);
+      assert.equal(metric.conversionRate, expectedRate);
+    }
+  }
+});
+
+test("PHONE remains excluded and retention still needs three completed full sessions", () => {
   for (const completed of [0, 2, 3]) {
-    const shows = ["2026-01-15", "2026-01-22", "2026-01-29"].slice(0, completed)
-      .map((date) => `synthetic,Original,${date},Room A,show`);
-    const attendance = importAttendanceCsv([
-      "Client,Clinician,Date of service,Location,Status",
-      "synthetic,Original,2026-01-10,Room A,show",
-      ...shows,
-      "synthetic,Original,2026-01-16,Room A,cancelled",
-      "synthetic,Original,2026-01-17,Room A,no show",
-    ].join("\n")).snapshot;
-    attendance.reportCoverage = { start: "2026-01-01", end: "2026-03-01", complete: true };
+    const source = attendance([
+      appointment("Intake", "2026-01-10"),
+      ...["2026-01-15", "2026-01-22", "2026-01-29"].slice(0, completed).map(date => appointment("Intake", date)),
+      appointment("Intake", "2026-01-16", "cancelled"),
+      appointment("Intake", "2026-01-17", "no show"),
+    ]);
     const billing = importBillingCsv("Date of Service,Client,Clinician,Total Fee,Billing Code\n"
-      + "2026-01-10,synthetic,Original,0,PHONE").snapshot;
-    const snapshots = [attendance, billing];
-    const booking = summarizeBookingConversions(snapshots, {}, "2026-01-01", "2026-01-31", "2026-03-01", [], complete());
-    const retention = buildLocalRetentionMetrics(snapshots, {}, {}, 28, "2026-03-01");
+      + "2026-01-10,synthetic,Intake,0,PHONE").snapshot;
+    const sources = [source, billing];
+    const booking = summarize(sources);
+    const retention = buildLocalRetentionMetrics(sources, {}, {}, 28, "2026-03-01");
     assert.equal(booking.practice.converted, 1);
     assert.equal(booking.practice.observedTreatmentStarts, completed > 0 ? 1 : 0);
     assert.equal(retention.excludedConsultationShowRows, 1);
-    assert.equal(retention.rawShowRows, completed + 1);
     assert.equal(retention.derivedShowVisits, completed);
-    assert.equal(retention.attendanceByClinician[0].shows, completed);
     assert.equal(retention.attendanceByClinician[0].retainedClients, completed === 3 ? 1 : 0);
   }
 });

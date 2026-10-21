@@ -1,0 +1,117 @@
+{
+  "syntheticOnly": true,
+  "expected": {
+    "january": {
+      "consultations": 4,
+      "sameClinicianCloses": 2,
+      "missed": 1,
+      "referralsExcluded": 1,
+      "evaluated": 3
+    },
+    "future": {
+      "sameClinicianCloses": 1,
+      "completedTreatmentStarts": 0
+    }
+  },
+  "checks": [
+    {
+      "name": "Overview Whole Practice same-clinician evidence 1280",
+      "pass": true
+    },
+    {
+      "name": "Overview Elia same-clinician evidence 1280",
+      "pass": true
+    },
+    {
+      "name": "Overview Erin same-clinician evidence 1280",
+      "pass": true
+    },
+    {
+      "name": "Sessions Whole Practice same-clinician evidence 1280",
+      "pass": true
+    },
+    {
+      "name": "Sessions Elia same-clinician evidence 1280",
+      "pass": true
+    },
+    {
+      "name": "Sessions Erin same-clinician evidence 1280",
+      "pass": true
+    },
+    {
+      "name": "Team matches observed same-clinician histories 1280",
+      "pass": true
+    },
+    {
+      "name": "Future full appointment counts without attendance or complete service period 1280",
+      "pass": true
+    },
+    {
+      "name": "Overview Whole Practice same-clinician evidence 390",
+      "pass": true
+    },
+    {
+      "name": "Overview Elia same-clinician evidence 390",
+      "pass": true
+    },
+    {
+      "name": "Overview Erin same-clinician evidence 390",
+      "pass": true
+    },
+    {
+      "name": "Sessions Whole Practice same-clinician evidence 390",
+      "pass": true
+    },
+    {
+      "name": "Sessions Elia same-clinician evidence 390",
+      "pass": true
+    },
+    {
+      "name": "Sessions Erin same-clinician evidence 390",
+      "pass": true
+    },
+    {
+      "name": "Team matches observed same-clinician histories 390",
+      "pass": true
+    },
+    {
+      "name": "Future full appointment counts without attendance or complete service period 390",
+      "pass": true
+    },
+    {
+      "name": "Overview Whole Practice same-clinician evidence 320",
+      "pass": true
+    },
+    {
+      "name": "Overview Elia same-clinician evidence 320",
+      "pass": true
+    },
+    {
+      "name": "Overview Erin same-clinician evidence 320",
+      "pass": true
+    },
+    {
+      "name": "Sessions Whole Practice same-clinician evidence 320",
+      "pass": true
+    },
+    {
+      "name": "Sessions Elia same-clinician evidence 320",
+      "pass": true
+    },
+    {
+      "name": "Sessions Erin same-clinician evidence 320",
+      "pass": true
+    },
+    {
+      "name": "Team matches observed same-clinician histories 320",
+      "pass": true
+    },
+    {
+      "name": "Future full appointment counts without attendance or complete service period 320",
+      "pass": true
+    }
+  ],
+  "writes": [],
+  "external": [],
+  "browserErrors": []
+}

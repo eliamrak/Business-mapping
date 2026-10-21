@@ -156,6 +156,7 @@ import {
   mergeImportedLocationRooms,
 } from "@/lib/retention-local";
 import { summarizeBookingConversions as summarizeConsultConversions } from "@/lib/consult-booking-conversions";
+import { scheduledAppointmentSources } from "@/lib/scheduled-appointment-sources";
 import LeadFlow from "@/components/practice/lead-flow";
 import {
   applyBulkLeads,
@@ -872,6 +873,10 @@ export default function PracticeWorkspace() {
     ? localRetentionState.billingResolutions.length ? { ...localRetentionState.declarations.data, billingResolutions: localRetentionState.billingResolutions }
       : localRetentionState.declarations.data : undefined,
   [localRetentionState.declarations, localRetentionState.billingResolutions]);
+  const appointmentSources = useMemo(() => context
+    ? scheduledAppointmentSources(localRetentionState.snapshots, context.clinicians, importEvidenceDeclarations, today)
+    : { snapshots: [], classificationSnapshots: [], excludedFollowUpEvidence: [] },
+  [context, localRetentionState.snapshots, importEvidenceDeclarations, today]);
   const completeClinicalReports = useMemo(() => {
     if (!context || !workspace) return null;
     return completeReportCoverage(localRetentionState.snapshots, context.clinicians.filter((person) => (person.goalId ?? null) === workspace.settings.teamId), today, context.clinicians,
@@ -974,6 +979,10 @@ export default function PracticeWorkspace() {
   );
   const historicalReports = useMemo(() => historicalPerformancePeriods({
     snapshots: historicalClinicalSnapshots,
+    appointmentSnapshots: appointmentSources.snapshots,
+    appointmentClassificationSnapshots: appointmentSources.classificationSnapshots,
+    consultExcludedFollowUpEvidence: excludedFollowUpEvidence,
+    unresolvedAppointmentEvidence: appointmentSources.excludedFollowUpEvidence,
     consultSnapshots: completeClinicalReports?.eligibleSnapshots ?? [],
     calendarSnapshots: localRetentionState.snapshots,
     calendarScope: { clinicians: context?.clinicians ?? [], teamId: workspace?.settings.teamId ?? null, declarations: importEvidenceDeclarations },
@@ -983,7 +992,7 @@ export default function PracticeWorkspace() {
     cohortClinicianNames: currentConsultCohort,
     excludedFollowUpEvidence,
     today,
-  }), [historicalClinicalSnapshots, completeClinicalReports, localRetentionState.snapshots, localRetentionState.sameDayVisitOverrides, clinicalAttributions, workspace?.settings.teamId, context, importEvidenceDeclarations, currentConsultCohort, excludedFollowUpEvidence, today]);
+  }), [historicalClinicalSnapshots, appointmentSources, completeClinicalReports, localRetentionState.snapshots, localRetentionState.sameDayVisitOverrides, clinicalAttributions, workspace?.settings.teamId, context, importEvidenceDeclarations, currentConsultCohort, excludedFollowUpEvidence, today]);
   const historicalMetrics = historicalReports["3mo"];
   const historicalActivity = historicalMetrics.activity;
   const historicalClinicianActivityByName = new Map(historicalMetrics.clinicians.map((row) => [normalizeClinicianName(row.clinician), row]));
@@ -1007,10 +1016,11 @@ export default function PracticeWorkspace() {
         periodRange.end,
         today,
         clinicalAttributions ?? [],
-        { cohortClinicianNames: currentConsultCohort, excludedFollowUpEvidence, classificationSnapshots: localRetentionState.snapshots },
+        { cohortClinicianNames: currentConsultCohort, excludedFollowUpEvidence, classificationSnapshots: appointmentSources.classificationSnapshots, appointmentSnapshots: appointmentSources.snapshots, unresolvedAppointmentEvidence: appointmentSources.excludedFollowUpEvidence },
       ),
     [
       completeClinicalReports,
+      appointmentSources,
       localRetentionState.snapshots,
       context,
       currentConsultCohort,
@@ -1029,6 +1039,10 @@ export default function PracticeWorkspace() {
       if (!cache.has(clinicianId)) cache.set(clinicianId, clinicianHistoricalPerformancePeriods({
         clinicianId, attendanceCoverage: importedSessionOverlay?.attendanceCoverage ?? [], practiceReports: historicalReports,
         snapshots: historicalClinicalSnapshots, consultSnapshots: completeClinicalReports?.eligibleSnapshots ?? [],
+        appointmentSnapshots: appointmentSources.snapshots,
+        appointmentClassificationSnapshots: appointmentSources.classificationSnapshots,
+        consultExcludedFollowUpEvidence: excludedFollowUpEvidence,
+        unresolvedAppointmentEvidence: appointmentSources.excludedFollowUpEvidence,
         calendarSnapshots: localRetentionState.snapshots, classificationSnapshots: localRetentionState.snapshots,
         overrides: localRetentionState.sameDayVisitOverrides,
         attributions: clinicalAttributions ?? [],
@@ -1036,7 +1050,7 @@ export default function PracticeWorkspace() {
       }));
       return cache.get(clinicianId)!;
     };
-  }, [importedSessionOverlay?.attendanceCoverage, historicalReports, historicalClinicalSnapshots, completeClinicalReports,
+  }, [importedSessionOverlay?.attendanceCoverage, historicalReports, historicalClinicalSnapshots, appointmentSources, completeClinicalReports,
     localRetentionState.snapshots, localRetentionState.sameDayVisitOverrides, clinicalAttributions,
     currentConsultCohort, excludedFollowUpEvidence, today]);
   const historicalCapacityById = useMemo(() => {
@@ -2954,7 +2968,7 @@ export default function PracticeWorkspace() {
     const practice = name === "Whole Practice";
     const unique = practice || hasUniqueClinicianIdentity(context.clinicians, name, workspace.settings.teamId);
     let historyNote = "";
-    if (!practice && unique) {
+    if (!practice && unique && kind !== "consult") {
       const id = context.clinicians.find(person => (person.goalId ?? null) === workspace.settings.teamId && normalizeClinicianName(person.label) === normalizeClinicianName(name))!.id;
       const period = report === historicalReports.year ? "year" : "3mo";
       const history = clinicianHistory(id);
@@ -2975,7 +2989,7 @@ export default function PracticeWorkspace() {
     if (kind === "consult") {
       const consult = practice ? report.consults.practice : report.consults.byClinician.find((item) => normalizeClinicianName(item.clinician ?? "") === normalizeClinicianName(name));
       return { range, value: consult?.conversionRate, benchmark,
-        detail: `${historyNote}${report.consults.bookingEvidenceAvailable && (consult?.evaluated ?? 0) > 0 ? fmt(consult?.converted) : "Unknown"} booking closes / ${fmt(consult?.evaluated)} evaluated; ${fmt(consult?.consultations)} consultations; ${fmt(consult?.pending)} pending; booking history ${report.consults.coverageVerified ? "verified" : "unverified"}` };
+        detail: `${historyNote}${(consult?.evaluated ?? 0) + (consult?.internalReferralsProtected ?? 0) > 0 ? fmt(consult?.converted) : "Unknown"} same-clinician closes / ${fmt(consult?.evaluated)} evaluated; ${fmt(consult?.consultations)} consultations; ${fmt(consult?.pending)} pending; ${fmt(consult?.internalReferralsProtected)} referrals excluded; appointment coverage ${report.consults.coverageVerified ? "verified" : "unverified"}` };
     }
     if (kind === "retention") return { range, value: practice ? practiceRetention : row?.initialRetentionPct, benchmark,
       detail: `${historyNote}${fmt(practice ? activity?.retainedClientPairs : row?.retainedClients)} retained / ${fmt(practice ? activity?.initialRetentionDenominator : row?.initialRetentionDenominator)} evaluated starts; ${fmt(practice ? activity?.immatureClientPairsExcluded : row?.pendingInitialClients)} pending; coverage ${(practice ? activity?.initialRetentionCoverageVerified : row?.initialRetentionCoverageVerified) ? "verified" : "unverified"}` };
@@ -3016,10 +3030,10 @@ export default function PracticeWorkspace() {
     const unique = hasUniqueClinicianIdentity(context.clinicians, person.label, workspace.settings.teamId);
     const row = unique ? consultConversionSummary.byClinician.find((metric) => normalizeClinicianName(metric.clinician ?? "") === normalizeClinicianName(person.label)) : undefined;
     return { id: String(person.id), label: person.label, value: row?.conversionRate,
-      detail: unique ? `${consultConversionSummary.bookingEvidenceAvailable && (row?.evaluated ?? 0) > 0 ? fmt(row?.converted) : "Unknown"} booking closes / ${fmt(row?.evaluated)} evaluated; ${fmt(row?.consultations)} consultations; ${fmt(row?.pending)} pending` : "Unknown: clinician name maps to multiple IDs; resolve the import mapping.",
+      detail: unique ? `${(row?.evaluated ?? 0) + (row?.internalReferralsProtected ?? 0) > 0 ? fmt(row?.converted) : "Unknown"} same-clinician closes / ${fmt(row?.evaluated)} evaluated; ${fmt(row?.consultations)} consultations; ${fmt(row?.pending)} pending; ${fmt(row?.internalReferralsProtected)} referrals excluded` : "Unknown: clinician name maps to multiple IDs; resolve the import mapping.",
     };
   }), { id: "practice", label: "Whole Practice", value: consultConversionSummary.practice.conversionRate,
-    detail: `${consultConversionSummary.bookingEvidenceAvailable && consultConversionSummary.practice.evaluated > 0 ? fmt(consultConversionSummary.practice.converted) : "Unknown"} booking closes / ${fmt(consultConversionSummary.practice.evaluated)} evaluated; ${fmt(consultConversionSummary.practice.consultations)} consultations; ${fmt(consultConversionSummary.practice.pending)} pending`,
+    detail: `${consultConversionSummary.practice.evaluated + consultConversionSummary.practice.internalReferralsProtected > 0 ? fmt(consultConversionSummary.practice.converted) : "Unknown"} same-clinician closes / ${fmt(consultConversionSummary.practice.evaluated)} evaluated; ${fmt(consultConversionSummary.practice.consultations)} consultations; ${fmt(consultConversionSummary.practice.pending)} pending; ${fmt(consultConversionSummary.practice.internalReferralsProtected)} referrals excluded`,
   }].map((row) => ({ ...row, practice: row.id === "practice" }));
   const historicalHelp = <details className="pw-heading-help pw-historical-help"><summary aria-label="Historical performance help">?</summary><p>Historical performance uses complete calendar months with observations through {historicalMetrics.window.asOf}. Only covered mature months contribute to attrition; no eligible months means Unknown.</p></details>;
   const recordedClinicianCount =
@@ -3400,7 +3414,7 @@ export default function PracticeWorkspace() {
     const clinical = history.clinician[period] ?? { ...base, activity: null, clinicians: [],
       consults: { ...base.consults, byClinician: [] }, periodAttrition: { ...base.periodAttrition, byClinician: [] } };
     const attrition = history.attrition[period];
-    return [period, { ...clinical, window: { ...clinical.window, attrition: attrition?.window.attrition ?? base.window.attrition },
+    return [period, { ...clinical, consults: base.consults, window: { ...clinical.window, attrition: attrition?.window.attrition ?? base.window.attrition },
       attritionActivity: attrition?.attritionActivity ?? null, attritionClinicians: attrition?.attritionClinicians ?? [],
       periodAttrition: attrition?.periodAttrition ?? { ...base.periodAttrition, byClinician: [] } }];
   })) as typeof historicalReports : historicalReports;
@@ -4689,10 +4703,10 @@ export default function PracticeWorkspace() {
                         </div>
                         <dl style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(130px, 1fr))", gap: 12, margin: 0 }}>
                           <div><dt>Consultations</dt><dd style={{ margin: 0 }}><strong>{fmt(contributorConsult?.consultations)}</strong></dd></div>
-                          <div><dt>Verified booking closes</dt><dd style={{ margin: 0 }}><strong>{consultConversionSummary.bookingEvidenceAvailable && (contributorConsult?.evaluated ?? 0) > 0 ? fmt(contributorConsult?.converted) : "Unknown"}</strong></dd></div>
+                          <div><dt>Same-clinician closes</dt><dd style={{ margin: 0 }}><strong>{(contributorConsult?.evaluated ?? 0) + (contributorConsult?.internalReferralsProtected ?? 0) > 0 ? fmt(contributorConsult?.converted) : "Unknown"}</strong></dd></div>
                           <div><dt className="pw-visually-hidden">Close rate</dt><dd style={{ margin: 0 }}><PercentageKpi label="Close rate" value={contributorConsult?.conversionRate ?? null} benchmark={selectedContributorName === "Whole Practice" ? null : consultConversionSummary.practice.conversionRate} /></dd></div>
                         </dl>
-                        <p className="pw-note">{fmt(contributorConsult?.pending)} pending</p>
+                        <p className="pw-note">{fmt(contributorConsult?.pending)} pending · Referrals excluded: {fmt(contributorConsult?.internalReferralsProtected)}</p>
                         {compareWholePractice ? <MetricComparison rows={consultComparisonRows.map((row) => ({ ...row, detail: undefined }))} percentage unit="%" label="Consult metric comparison" /> : selectedContributorName !== "Whole Practice" && <p className="pw-note">Whole Practice close rate: {fmt(consultConversionSummary.practice.conversionRate, "percent")}</p>}
                         {consultConversionSummary.bookingLimitation && <p className="pw-note">{consultConversionSummary.bookingLimitation}</p>}
                         {!compareWholePractice && selectedContributorName !== "Whole Practice" && !hasUniqueClinicianIdentity(context.clinicians, selectedContributorName, workspace.settings.teamId) && <p className="pw-note">Imported clinician metrics are unknown: this name maps to multiple clinician IDs.</p>}
@@ -4700,7 +4714,7 @@ export default function PracticeWorkspace() {
                           <summary>How these numbers are calculated</summary>
                         <div className="pw-number-grid pw-consult-audit">
                           <div><span>Observed treatment starts</span><strong>{fmt(contributorConsult?.observedTreatmentStarts)}</strong></div>
-                          <div><span>Verified booking closes</span><strong>{consultConversionSummary.bookingEvidenceAvailable && (contributorConsult?.evaluated ?? 0) > 0 ? fmt(contributorConsult?.converted) : "Unknown"}</strong></div>
+                          <div><span>Same-clinician closes</span><strong>{(contributorConsult?.evaluated ?? 0) + (contributorConsult?.internalReferralsProtected ?? 0) > 0 ? fmt(contributorConsult?.converted) : "Unknown"}</strong></div>
                           <div><span>Evaluated</span><strong>{fmt(contributorConsult?.evaluated)}</strong></div>
                           <div>
                             <span>Needs attribution</span>
@@ -4708,7 +4722,7 @@ export default function PracticeWorkspace() {
                               {fmt(contributorConsult?.needsAttribution)}
                             </strong>
                             <small>
-                              Booking time or original scheduled clinician is unresolved.
+                              Appointment order, clinician or follow-up coverage is unresolved.
                             </small>
                           </div>
                           <div>
@@ -4726,11 +4740,11 @@ export default function PracticeWorkspace() {
                         </div>
                         <p className="pw-note">
                           Practice conversion is de-duplicated once per client.
-                          A close occurs when the first qualifying treatment appointment is booked,
-                          credited to its scheduled clinician even if the appointment is later
-                          cancelled or missed. Booking time determines the one-calendar-month window.
-                          Completed treatment proves a booking occurred, not its time or original
-                          scheduled clinician. Attendance-only records cannot establish a booking miss.
+                          A consultation followed by a qualifying full-session appointment under
+                          the same clinician counts as a close, even if cancelled or missed.
+                          The recorded appointment sequence and one-calendar-month follow-up window
+                          are used; booking-created timestamps are not required or invented.
+                          Cross-clinician referrals are excluded, not counted as failures.
                         </p>
                         <p className="pw-note">Current-team consultation cohorts use the selected activity dates, with all treatment follow-up retained. Close rate uses evaluated journeys; pending journeys are excluded.</p>
                         {compareWholePractice && consultComparisonRows.map((row) => <p className="pw-note" key={row.id}>{row.label}: {row.detail}</p>)}
@@ -4793,7 +4807,7 @@ export default function PracticeWorkspace() {
                                     </div>
                                     <div>
                                       <span>
-                                        Observed treatment clinician: {journey.treatmentStartClinician ?? "Unknown"}
+                                        Recorded full-session clinician: {journey.scheduledClinician ?? journey.treatmentStartClinician ?? "Unknown"}
                                       </span>
                                       <span>
                                         Consult clinician
@@ -4807,7 +4821,7 @@ export default function PracticeWorkspace() {
                                         <span>Legacy confirmed owner</span>
                                         <select
                                           aria-label={`Confirmed owner for ${journey.clientId}`}
-                                          disabled={consultConversionSummary.measurement === "scheduled_treatment"}
+                                          disabled={consultConversionSummary.measurement != null}
                                           value={reviewClinician}
                                           onChange={(event) => setConsultReviewClinicians((prior) => ({ ...prior, [journey.clientId]: event.target.value }))}
                                         >
@@ -4818,7 +4832,7 @@ export default function PracticeWorkspace() {
                                       <button
                                         type="button"
                                         className="pw-text-button"
-                                        disabled={consultConversionSummary.measurement === "scheduled_treatment" || !journey.treatmentDate || !reviewClinician}
+                                        disabled={consultConversionSummary.measurement != null || !journey.treatmentDate || !reviewClinician}
                                         onClick={() =>
                                           stageConsultAttributionOverride(
                                             journey.clientId,
@@ -4833,7 +4847,7 @@ export default function PracticeWorkspace() {
                                         type="button"
                                         className="pw-text-button"
                                         disabled={
-                                          consultConversionSummary.measurement === "scheduled_treatment" || !!journey.treatmentDate || journey.status === "pending" || !reviewClinician
+                                          consultConversionSummary.measurement != null || !!journey.treatmentDate || journey.status === "pending" || !reviewClinician
                                         }
                                         onClick={() =>
                                           stageConsultAttributionOverride(
@@ -4868,7 +4882,7 @@ export default function PracticeWorkspace() {
                                 attribution candidates.
                               </p>
                             )}
-                            {consultConversionSummary.measurement === "scheduled_treatment" && <p className="pw-note">Legacy closer confirmations are preserved but cannot establish booking time or the original scheduled clinician.</p>}
+                            {consultConversionSummary.measurement != null && <p className="pw-note">Legacy confirmations are preserved; recorded consultation and full-session appointments determine closes automatically.</p>}
                           </div>
                         </details>
                       </section>
