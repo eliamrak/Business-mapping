@@ -336,7 +336,7 @@ test("Team and Sessions integrate both histories while activity-date consults re
   assert.match(historyStack, /Last 3 mature months/);
   assert.match(sessions, /activityPeriodCaption\(sharedPeriod, periodRange\)/);
   assert.match(sessions, /rows=\{consultComparisonRows(?:\.map|\})/);
-  assert.match(sessions, /contributorConsult\?\.conversionRate/);
+  assert.match(sessions, /contributorConsult\?\.observedConversionRate/);
   assert.match(source, /clinicalComparisonRowsFor\(kind, period\)/);
   assert.match(source, /kind === "consult" \? currentConsultPeople : people/);
   const historicalValues = source.slice(source.indexOf("  const historicalValuesFor ="), source.indexOf("  const consultComparisonRows ="));

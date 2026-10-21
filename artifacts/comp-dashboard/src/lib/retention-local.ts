@@ -299,6 +299,8 @@ export type ConsultConversionMetric = {
   needsAttribution: number;
   internalReferralsProtected: number;
   evaluated: number;
+  /** Evaluated subset only; unresolved outcomes and referrals are not in this denominator. */
+  observedConversionRate: number | null;
   conversionRate: number | null;
 };
 
@@ -2109,6 +2111,7 @@ const blankConsultMetric = (clinician: string | null): ConsultConversionMetric =
   internalReferralsProtected: 0,
   evaluated: 0,
   conversionRate: null,
+  observedConversionRate: null,
 });
 
 const finishConsultMetric = (
@@ -2118,6 +2121,7 @@ const finishConsultMetric = (
   return {
     ...metric,
     evaluated,
+    observedConversionRate: evaluated > 0 ? (metric.converted / evaluated) * 100 : null,
     conversionRate: evaluated > 0 ? (metric.converted / evaluated) * 100 : null,
   };
 };

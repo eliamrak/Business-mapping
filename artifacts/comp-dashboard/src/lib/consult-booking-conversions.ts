@@ -30,7 +30,7 @@ const observationDay = (value: string) => Number.isFinite(Date.parse(value))
 const blankMetric = (clinician: string | null): ConsultConversionMetric => ({
   clinician, rateBasis: "observable_scheduled_sessions", observedTreatmentStarts: 0,
   consultations: 0, converted: 0, candidateConversions: 0, missed: 0, pending: 0,
-  needsAttribution: 0, internalReferralsProtected: 0, evaluated: 0, conversionRate: null,
+  needsAttribution: 0, internalReferralsProtected: 0, evaluated: 0, observedConversionRate: null, conversionRate: null,
 });
 
 /** Observable appointments establish scheduling existence without inventing a booking clock. */
@@ -215,7 +215,8 @@ export function summarizeBookingConversions(
   }
   const finish = (metric: ConsultConversionMetric): ConsultConversionMetric => {
     const evaluated = metric.converted + metric.missed;
-    return { ...metric, evaluated, conversionRate: evaluated && !incompleteRates.has(metric)
+    return { ...metric, evaluated, observedConversionRate: evaluated > 0 ? 100 * metric.converted / evaluated : null,
+      conversionRate: evaluated && !incompleteRates.has(metric)
       ? 100 * metric.converted / evaluated : null };
   };
   const reasons = [...new Set(journeys

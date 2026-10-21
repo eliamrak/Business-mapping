@@ -2984,11 +2984,11 @@ export default function PracticeWorkspace() {
     const range = kind === "attrition" ? report.window.attrition : report.window.cohort;
     const practiceRetention = activity?.initialRetentionRate == null ? null : activity.initialRetentionRate * 100;
     const benchmark = kind === "retention" ? practiceRetention
-      : kind === "consult" ? report.consults.practice.conversionRate : activity?.averageClientEndingsPerFullMonth;
+      : kind === "consult" ? report.consults.practice.observedConversionRate : activity?.averageClientEndingsPerFullMonth;
     if (!unique) return { range, value: null, benchmark, detail: "Unknown: clinician name maps to multiple IDs; resolve the import mapping." };
     if (kind === "consult") {
       const consult = practice ? report.consults.practice : report.consults.byClinician.find((item) => normalizeClinicianName(item.clinician ?? "") === normalizeClinicianName(name));
-      return { range, value: consult?.conversionRate, benchmark,
+      return { range, value: consult?.observedConversionRate, benchmark,
         detail: `${historyNote}${(consult?.evaluated ?? 0) + (consult?.internalReferralsProtected ?? 0) > 0 ? fmt(consult?.converted) : "Unknown"} same-clinician closes / ${fmt(consult?.evaluated)} evaluated; ${fmt(consult?.consultations)} consultations; ${fmt(consult?.pending)} pending; ${fmt(consult?.internalReferralsProtected)} referrals excluded; appointment coverage ${report.consults.coverageVerified ? "verified" : "unverified"}` };
     }
     if (kind === "retention") return { range, value: practice ? practiceRetention : row?.initialRetentionPct, benchmark,
@@ -3017,7 +3017,7 @@ export default function PracticeWorkspace() {
         value: comparisonRows
           ? <MetricComparison rows={comparisonRows.map((row) => ({ ...row, detail: undefined }))} unit={kind === "attrition" ? "endings / month" : "%"} percentage={kind !== "attrition"} label={`${period === "3mo" ? "Trailing 3 months" : "Trailing year"} ${kind} comparison`} />
           : kind === "attrition" ? <strong>{metric.value == null ? "Unknown" : fmt(metric.value)} endings / month</strong>
-          : <PercentageKpi label={kind === "retention" ? "Retention" : "Close rate"} value={metric.value} goal={workingWorkspace.settings.performanceTargets?.[kind === "retention" ? "retentionPct" : "closeRatePct"]} benchmark={name === "Whole Practice" ? null : metric.benchmark} period={metric.range} benchmarkPeriod={metric.range} showPeriod={false} />,
+          : <PercentageKpi label={kind === "retention" ? "Retention" : "Observed close rate"} value={metric.value} goal={workingWorkspace.settings.performanceTargets?.[kind === "retention" ? "retentionPct" : "closeRatePct"]} benchmark={name === "Whole Practice" ? null : metric.benchmark} period={metric.range} benchmarkPeriod={metric.range} showPeriod={false} />,
         detail: <details><summary>Counts and coverage</summary>
           {comparisonRows && <p>Available date ranges can differ by clinician. A Whole Practice marker is shown only for matching dates.</p>}
           {comparisonRows ? comparisonRows.map((row) => <p key={row.id}>{row.label}: {row.detail}</p>) : <p>{metric.detail}</p>}
@@ -3029,10 +3029,10 @@ export default function PracticeWorkspace() {
   const consultComparisonRows = [...currentConsultPeople.map((person) => {
     const unique = hasUniqueClinicianIdentity(context.clinicians, person.label, workspace.settings.teamId);
     const row = unique ? consultConversionSummary.byClinician.find((metric) => normalizeClinicianName(metric.clinician ?? "") === normalizeClinicianName(person.label)) : undefined;
-    return { id: String(person.id), label: person.label, value: row?.conversionRate,
+    return { id: String(person.id), label: person.label, value: row?.observedConversionRate,
       detail: unique ? `${(row?.evaluated ?? 0) + (row?.internalReferralsProtected ?? 0) > 0 ? fmt(row?.converted) : "Unknown"} same-clinician closes / ${fmt(row?.evaluated)} evaluated; ${fmt(row?.consultations)} consultations; ${fmt(row?.pending)} pending; ${fmt(row?.internalReferralsProtected)} referrals excluded` : "Unknown: clinician name maps to multiple IDs; resolve the import mapping.",
     };
-  }), { id: "practice", label: "Whole Practice", value: consultConversionSummary.practice.conversionRate,
+  }), { id: "practice", label: "Whole Practice", value: consultConversionSummary.practice.observedConversionRate,
     detail: `${consultConversionSummary.practice.evaluated + consultConversionSummary.practice.internalReferralsProtected > 0 ? fmt(consultConversionSummary.practice.converted) : "Unknown"} same-clinician closes / ${fmt(consultConversionSummary.practice.evaluated)} evaluated; ${fmt(consultConversionSummary.practice.consultations)} consultations; ${fmt(consultConversionSummary.practice.pending)} pending; ${fmt(consultConversionSummary.practice.internalReferralsProtected)} referrals excluded`,
   }].map((row) => ({ ...row, practice: row.id === "practice" }));
   const historicalHelp = <details className="pw-heading-help pw-historical-help"><summary aria-label="Historical performance help">?</summary><p>Historical performance uses complete calendar months with observations through {historicalMetrics.window.asOf}. Only covered mature months contribute to attrition; no eligible months means Unknown.</p></details>;
@@ -4220,7 +4220,7 @@ export default function PracticeWorkspace() {
                               <HistoricalPeriodValues dates="help" periodLabels={{ "3mo": "Last 3 mature months", year: "Last 12 mature months" }} values={historicalValuesFor("attrition", person.label)} difference={historicalDifferenceFor("attrition", person.label)} />
                             </div>
                             <div>
-                              <span>Close rate</span>
+                              <span>Observed close rate</span>
                               <HistoricalPeriodValues dates="help" values={historicalValuesFor("consult", person.label)} difference={historicalDifferenceFor("consult", person.label)} />
                             </div>
                           </div>
@@ -4678,8 +4678,8 @@ export default function PracticeWorkspace() {
                       />
                     </section>
                     {widgetGrid("sessions", <>
-                      <section className="pw-clinical-card" aria-label="Historical close rate card" data-widget-id="close-rate" data-widget-title="Close rate">
-                        <div className="pw-label-help"><h3>Historical close rate</h3>{historicalHelp}</div>
+                      <section className="pw-clinical-card" aria-label="Historical close rate card" data-widget-id="close-rate" data-widget-title="Observed close rate">
+                        <div className="pw-label-help"><h3>Observed close rate</h3>{historicalHelp}</div>
                         <HistoricalPeriodValues dates="help" values={historicalValuesFor("consult", compareWholePractice ? "Whole Practice" : selectedContributorName, compareWholePractice)} difference={historicalDifferenceFor("consult", compareWholePractice ? "Whole Practice" : selectedContributorName)} />
                       </section>
                       <section className="pw-clinical-card" aria-label="Retention card" data-widget-id="retention" data-widget-title="Retention">
@@ -4695,7 +4695,7 @@ export default function PracticeWorkspace() {
                       <section className="pw-metric-panel pw-consult-summary" data-widget-id="current-consultations" data-widget-title="Selected-period consultations" data-widget-size="wide">
                         <div className="pw-section-heading">
                           <div>
-                            <h3>Close rate</h3>
+                            <h3>Observed close rate</h3>
                             <p>
                               {activityPeriodCaption(sharedPeriod, periodRange)}
                             </p>
@@ -4704,11 +4704,11 @@ export default function PracticeWorkspace() {
                         <dl style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(130px, 1fr))", gap: 12, margin: 0 }}>
                           <div><dt>Consultations</dt><dd style={{ margin: 0 }}><strong>{fmt(contributorConsult?.consultations)}</strong></dd></div>
                           <div><dt>Same-clinician closes</dt><dd style={{ margin: 0 }}><strong>{(contributorConsult?.evaluated ?? 0) + (contributorConsult?.internalReferralsProtected ?? 0) > 0 ? fmt(contributorConsult?.converted) : "Unknown"}</strong></dd></div>
-                          <div><dt className="pw-visually-hidden">Close rate</dt><dd style={{ margin: 0 }}><PercentageKpi label="Close rate" value={contributorConsult?.conversionRate ?? null} benchmark={selectedContributorName === "Whole Practice" ? null : consultConversionSummary.practice.conversionRate} /></dd></div>
+                          <div><dt className="pw-visually-hidden">Observed close rate</dt><dd style={{ margin: 0 }}><PercentageKpi label="Observed close rate" value={contributorConsult?.observedConversionRate ?? null} benchmark={selectedContributorName === "Whole Practice" ? null : consultConversionSummary.practice.observedConversionRate} /></dd></div>
                         </dl>
-                        <p className="pw-note">{fmt(contributorConsult?.pending)} pending · Referrals excluded: {fmt(contributorConsult?.internalReferralsProtected)}</p>
-                        {compareWholePractice ? <MetricComparison rows={consultComparisonRows.map((row) => ({ ...row, detail: undefined }))} percentage unit="%" label="Consult metric comparison" /> : selectedContributorName !== "Whole Practice" && <p className="pw-note">Whole Practice close rate: {fmt(consultConversionSummary.practice.conversionRate, "percent")}</p>}
-                        {consultConversionSummary.bookingLimitation && <p className="pw-note">{consultConversionSummary.bookingLimitation}</p>}
+                        <p className="pw-note">{fmt(contributorConsult?.converted)} of {fmt(contributorConsult?.evaluated)} evaluated · {fmt(contributorConsult?.pending)} unresolved · Referrals excluded: {fmt(contributorConsult?.internalReferralsProtected)}</p>
+                        {compareWholePractice ? <MetricComparison rows={consultComparisonRows.map((row) => ({ ...row, detail: undefined }))} percentage unit="%" label="Observed close-rate comparison" /> : selectedContributorName !== "Whole Practice" && <p className="pw-note">Whole Practice observed close rate: {fmt(consultConversionSummary.practice.observedConversionRate, "percent")}</p>}
+                        {(contributorConsult?.pending ?? 0) > 0 ? <p className="pw-note">Some cohort outcomes unresolved.</p> : !consultConversionSummary.coverageVerified && <p className="pw-note">Coverage unverified.</p>}
                         {!compareWholePractice && selectedContributorName !== "Whole Practice" && !hasUniqueClinicianIdentity(context.clinicians, selectedContributorName, workspace.settings.teamId) && <p className="pw-note">Imported clinician metrics are unknown: this name maps to multiple clinician IDs.</p>}
                         <details>
                           <summary>How these numbers are calculated</summary>
@@ -4746,7 +4746,7 @@ export default function PracticeWorkspace() {
                           are used; booking-created timestamps are not required or invented.
                           Cross-clinician referrals are excluded, not counted as failures.
                         </p>
-                        <p className="pw-note">Current-team consultation cohorts use the selected activity dates, with all treatment follow-up retained. Close rate uses evaluated journeys; pending journeys are excluded.</p>
+                        <p className="pw-note">Observed close rate uses evaluated outcomes only; unresolved cases and referrals are excluded, not failures. It does not assert that the entire cohort is resolved. Current-team consultation cohorts use the selected activity dates, with all treatment follow-up retained. {consultConversionSummary.bookingLimitation}</p>
                         {compareWholePractice && consultComparisonRows.map((row) => <p className="pw-note" key={row.id}>{row.label}: {row.detail}</p>)}
                         </details>
                         <details className="pw-consult-resolution">

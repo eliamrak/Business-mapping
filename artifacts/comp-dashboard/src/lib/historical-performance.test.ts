@@ -115,6 +115,7 @@ test("historical closes use recorded same-clinician appointments without booking
   assert.equal(result.consults.bookingEvidenceAvailable, true);
   assert.ok(result.consults.bookingLimitation);
   assert.equal(result.consults.practice.conversionRate, 10);
+  assert.equal(result.consults.practice.observedConversionRate, 10);
   assert.equal(result.consults.practice.converted, 1);
   assert.equal(result.consults.practice.missed, 9);
   assert.equal(result.consults.practice.evaluated, 10);
@@ -149,6 +150,7 @@ test("different-provider sessions are referrals without same-clinician close or 
     assert.equal(metric.pending, 0);
     assert.equal(metric.internalReferralsProtected, 1);
     assert.equal(metric.conversionRate, null);
+    assert.equal(metric.observedConversionRate, null);
   }
   assert.ok(result.consults.byClinician.every(row => row.converted === 0));
 });
@@ -168,6 +170,7 @@ test("partial sources preserve positive same-clinician closes without treating u
     assert.equal(metric.pending, 1);
     assert.equal(metric.missed, 0);
     assert.equal(metric.conversionRate, null);
+    assert.equal(metric.observedConversionRate, 100);
   }
   assert.equal(result.consults.coverageVerified, false);
 });
@@ -222,7 +225,15 @@ test("consultations route to Sessions, Rooms remains in Growth, and clinical ide
   assert.match(sessions, /pw-consult-resolution/);
   assert.match(sessions, /Confirm closer/);
   assert.match(sessions, /Total sessions/);
-  assert.match(sessions, /Same-clinician closes/);
+  assert.match(sessions, /Observed close rate/);
+  assert.match(sessions, /value=\{contributorConsult\?\.observedConversionRate \?\? null\}/);
+  assert.match(sessions, /benchmark=\{selectedContributorName === "Whole Practice" \? null : consultConversionSummary\.practice\.observedConversionRate\}/);
+  const contributorMetrics = source.slice(source.indexOf("  const contributorActivity ="), source.indexOf("  const consultComparisonRows ="));
+  assert.match(contributorMetrics, /kind === "consult" \? report\.consults\.practice\.observedConversionRate/);
+  assert.match(contributorMetrics, /value: consult\?\.observedConversionRate, benchmark/);
+  const comparisons = source.slice(source.indexOf("  const consultComparisonRows ="), source.indexOf("  const consultComparisonRows =") + 1500);
+  assert.match(comparisons, /value: row\?\.observedConversionRate/);
+  assert.match(comparisons, /value: consultConversionSummary\.practice\.observedConversionRate/);
   assert.doesNotMatch(growth, /pw-consult-resolution/);
   assert.match(growth, /setSection\("rooms"\)/);
   assert.match(source, /const contributorActivity =[\s\S]*?hasUniqueClinicianIdentity/);

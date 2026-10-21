@@ -25,6 +25,61 @@ function summarize(snapshots: LocalSnapshot[], asOf = "2026-03-01", options: Boo
 const clinician = (result: ReturnType<typeof summarize>, name = "Intake") =>
   result.byClinician.find(row => row.clinician === name)!;
 
+test("a known close and mature unknown preserve counts with an observed rate of 100", () => {
+  const result = summarize([attendance([
+    consult, appointment(), "unknown,Intake,2026-01-10,Phone,show",
+  ], undefined, false)]);
+  for (const metric of [result.practice, clinician(result)]) {
+    assert.equal(metric.consultations, 2);
+    assert.equal(metric.converted, 1);
+    assert.equal(metric.missed, 0);
+    assert.equal(metric.pending, 1);
+    assert.equal(metric.evaluated, 1);
+    assert.equal(metric.internalReferralsProtected, 0);
+    assert.equal(metric.conversionRate, null);
+    assert.equal(metric.observedConversionRate, 100);
+  }
+});
+
+for (const [converted, missed, pending, expectedRate] of [[28, 6, 3, "82.3529"], [2, 1, 1, "66.6667"]] as const) {
+test(`${converted} closes, ${missed} misses, ${pending} unresolved and one referral preserve classifications`, () => {
+  const rows: string[] = [];
+  for (let index = 0; index < converted; index++) rows.push(
+    `close-${index},Intake,2026-01-10,Phone,show`,
+    `close-${index},Intake,2026-01-20,Room A,show`,
+  );
+  for (let index = 0; index < missed; index++) rows.push(`miss-${index},Intake,2026-01-10,Phone,show`);
+  for (let index = 0; index < pending; index++) rows.push(`unknown-${index},Intake,2026-01-10,Phone,show`);
+  rows.push("referral,Intake,2026-01-10,Phone,show", "referral,Other,2026-01-20,Room A,show");
+  const result = summarize([attendance(rows)], undefined, {
+    unresolvedAppointmentEvidence: Array.from({ length: pending }, (_, index) => ({
+      clientId: `unknown-${index}`, serviceDate: "2026-01-20",
+    })),
+  });
+  for (const metric of [result.practice, clinician(result)]) {
+    assert.equal(metric.consultations, converted + missed + pending + 1);
+    assert.equal(metric.converted, converted);
+    assert.equal(metric.missed, missed);
+    assert.equal(metric.pending, pending);
+    assert.equal(metric.internalReferralsProtected, 1);
+    assert.equal(metric.evaluated, converted + missed);
+    assert.equal(metric.conversionRate, null);
+    assert.ok(Math.abs(metric.observedConversionRate! - converted / (converted + missed) * 100) < 1e-10);
+    assert.equal(metric.observedConversionRate!.toFixed(4), expectedRate);
+  }
+  assert.equal(result.journeys.filter(row => row.status === "converted").length, converted);
+  assert.equal(result.journeys.filter(row => row.status === "missed").length, missed);
+});
+}
+
+test("zero evaluated outcomes keep the observed rate null", () => {
+  for (const result of [summarize([]), summarize([attendance([consult], undefined, false)])]) {
+    assert.equal(result.practice.evaluated, 0);
+    assert.equal(result.practice.observedConversionRate, null);
+    assert.equal(result.practice.conversionRate, null);
+  }
+});
+
 test("same-clinician consultation then completed full session is one observable close", () => {
   const result = summarize([attendance([consult, appointment()])]);
   assert.equal(result.measurement, "consult_to_scheduled_session");
@@ -70,6 +125,7 @@ test("cross-clinician first appointment is protected and cannot become a practic
     assert.equal(metric.pending, 0);
     assert.equal(metric.internalReferralsProtected, 1);
     assert.equal(metric.evaluated, 0);
+    assert.equal(metric.observedConversionRate, null);
   }
   assert.equal(clinician(result, "Other").converted, 0);
   assert.equal(result.journeys[0].creditedClinician, null);
