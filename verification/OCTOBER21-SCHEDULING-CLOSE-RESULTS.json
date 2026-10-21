@@ -1,0 +1,96 @@
+{
+  "syntheticOnly": true,
+  "checks": [
+    {
+      "name": "Overview Whole Practice booking evidence 1280",
+      "pass": true
+    },
+    {
+      "name": "Overview Elia booking evidence 1280",
+      "pass": true
+    },
+    {
+      "name": "Overview Erin booking evidence 1280",
+      "pass": true
+    },
+    {
+      "name": "Sessions Whole Practice booking evidence 1280",
+      "pass": true
+    },
+    {
+      "name": "Sessions Elia booking evidence 1280",
+      "pass": true
+    },
+    {
+      "name": "Sessions Erin booking evidence 1280",
+      "pass": true
+    },
+    {
+      "name": "Team booking evidence 1280",
+      "pass": true
+    },
+    {
+      "name": "Overview Whole Practice booking evidence 390",
+      "pass": true
+    },
+    {
+      "name": "Overview Elia booking evidence 390",
+      "pass": true
+    },
+    {
+      "name": "Overview Erin booking evidence 390",
+      "pass": true
+    },
+    {
+      "name": "Sessions Whole Practice booking evidence 390",
+      "pass": true
+    },
+    {
+      "name": "Sessions Elia booking evidence 390",
+      "pass": true
+    },
+    {
+      "name": "Sessions Erin booking evidence 390",
+      "pass": true
+    },
+    {
+      "name": "Team booking evidence 390",
+      "pass": true
+    },
+    {
+      "name": "Overview Whole Practice booking evidence 320",
+      "pass": true
+    },
+    {
+      "name": "Overview Elia booking evidence 320",
+      "pass": true
+    },
+    {
+      "name": "Overview Erin booking evidence 320",
+      "pass": true
+    },
+    {
+      "name": "Sessions Whole Practice booking evidence 320",
+      "pass": true
+    },
+    {
+      "name": "Sessions Elia booking evidence 320",
+      "pass": true
+    },
+    {
+      "name": "Sessions Erin booking evidence 320",
+      "pass": true
+    },
+    {
+      "name": "Team booking evidence 320",
+      "pass": true
+    },
+    {
+      "name": "Legacy closer controls cannot manufacture scheduling evidence",
+      "pass": true
+    }
+  ],
+  "writes": [],
+  "external": [],
+  "browserErrors": []
+}

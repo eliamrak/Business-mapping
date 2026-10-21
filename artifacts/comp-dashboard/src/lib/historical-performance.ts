@@ -3,12 +3,12 @@ import { periodClientAttrition } from "./period-client-attrition.ts";
 import {
   buildLocalRetentionMetrics,
   estimateLocalClientActivity,
-  summarizeConsultConversions,
   type ClientActivityOptions,
   type ConsultAttributionOverrideInput,
   type LocalSnapshot,
   type SameDayVisitOverrides,
 } from "./retention-local.ts";
+import { summarizeBookingConversions as summarizeConsultConversions } from "./consult-booking-conversions.ts";
 
 export type HistoricalPerformancePeriod = "3mo" | "year";
 const iso = (date: Date) => date.toISOString().slice(0, 10);

@@ -100,7 +100,7 @@ test("mature dates alone cannot certify missing coverage or left-censored establ
   assert.equal(missing.periodAttrition.practice.percentage, null);
 });
 
-test("historical close effectiveness weights evaluated counts, preserves confirmation, and is independent of activity dates", () => {
+test("historical booking rates stay unknown without booking evidence despite attendance and legacy attribution", () => {
   const rows = [visit("july-close", "2026-07-02", true), visit("july-close", "2026-07-09")];
   const attributions: ConsultAttributionOverrideInput[] = [{ clientId: "july-close", outcome: "confirmed_closer", clinicianName: "Lane" }];
   for (let index = 0; index < 9; index++) {
@@ -111,11 +111,19 @@ test("historical close effectiveness weights evaluated counts, preserves confirm
   const snapshots = [snapshot(rows)];
   const input = { snapshots, attributions, today: "2026-10-14", cohortClinicianNames: ["Lane", "Moss"] };
   const result = historicalPerformance(input);
-  assert.equal(result.consults.practice.conversionRate, 10);
-  assert.equal(result.consults.practice.evaluated, 10);
+  assert.equal(result.consults.measurement, "scheduled_treatment");
+  assert.equal(result.consults.bookingEvidenceAvailable, false);
+  assert.ok(result.consults.bookingLimitation);
+  assert.equal(result.consults.practice.conversionRate, null);
+  assert.equal(result.consults.practice.evaluated, 0);
   assert.equal(result.consults.practice.consultations, 11);
-  assert.equal(result.consults.practice.pending, 1);
-  assert.equal(result.consults.byClinician.find((row) => row.clinician === "Lane")?.conversionRate, 10);
+  assert.equal(result.consults.practice.pending, 11);
+  assert.equal(result.consults.practice.observedTreatmentStarts, 1);
+  const lane = result.consults.byClinician.find((row) => row.clinician === "Lane");
+  assert.ok(lane);
+  assert.equal(lane.conversionRate, null);
+  assert.equal(lane.evaluated, 0);
+  assert.equal(lane.pending, 10);
   for (const range of [{ start: "2026-07-01", end: "2026-07-31" }, { start: "2026-08-01", end: "2026-08-31" }]) {
     summarizeConsultConversions(snapshots, {}, range.start, range.end, input.today, attributions);
     assert.deepEqual(historicalPerformance(input), result);
@@ -151,7 +159,7 @@ test("consultations route to Sessions, Rooms remains in Growth, and clinical ide
   assert.match(sessions, /pw-consult-resolution/);
   assert.match(sessions, /Confirm closer/);
   assert.match(sessions, /Total sessions/);
-  assert.match(sessions, /Confirmed closes/);
+  assert.match(sessions, /Verified booking closes/);
   assert.doesNotMatch(growth, /pw-consult-resolution/);
   assert.match(growth, /setSection\("rooms"\)/);
   assert.match(source, /const contributorActivity =[\s\S]*?hasUniqueClinicianIdentity/);

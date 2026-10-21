@@ -57,9 +57,9 @@ test("paired reports keep practice dates and all classification and follow-up ev
   assert.equal(result.practice, practiceReports);
   assert.deepEqual(result.practice.year.window.cohort, { start: "2025-10-01", end: "2026-09-30" });
   assert.deepEqual(result.clinician.year?.window.cohort, { start: "2026-06-01", end: "2026-09-30" });
-  assert.equal(result.clinician.year?.consults.practice.pending, 1);
-  assert.equal(result.clinician.year?.consults.practice.evaluated, 1);
-  assert.equal(result.clinician.year?.consults.practice.conversionRate, 0);
+  assert.equal(result.clinician.year?.consults.practice.pending, 2);
+  assert.equal(result.clinician.year?.consults.practice.evaluated, 0);
+  assert.equal(result.clinician.year?.consults.practice.conversionRate, null);
   assert.equal(result.clinician["3mo"]?.activity?.averageClientEndingsPerFullMonth, null);
   assert.equal(result.clinician["3mo"]?.activity, practiceReports["3mo"].activity,
     "independent attrition clipping preserves the original retention statistics");
@@ -170,7 +170,7 @@ function deepFreeze<T>(value: T): T {
   return value;
 }
 
-test("both histories expose distinct weighted results simultaneously without mutating evidence", () => {
+test("both histories preserve unknown booking rates and their distinct consult cohorts without mutating evidence", () => {
   const input = fixture();
   const before = structuredClone(input);
   deepFreeze(input);
@@ -178,12 +178,17 @@ test("both histories expose distinct weighted results simultaneously without mut
   assert.deepEqual(Object.keys(periods), ["3mo", "year"]);
   assert.deepEqual(periods["3mo"].window.cohort, { start: "2026-07-01", end: "2026-09-30" });
   assert.deepEqual(periods.year.window.cohort, { start: "2025-10-01", end: "2026-09-30" });
-  assert.equal(periods["3mo"].consults.practice.conversionRate, 0);
-  assert.equal(periods["3mo"].consults.practice.evaluated, 1);
-  assert.equal(periods.year.consults.practice.conversionRate, 50);
-  assert.equal(periods.year.consults.practice.evaluated, 2);
+  assert.equal(periods["3mo"].consults.practice.consultations, 2);
+  assert.equal(periods["3mo"].consults.practice.pending, 2);
+  assert.equal(periods["3mo"].consults.practice.observedTreatmentStarts, 0);
+  assert.equal(periods.year.consults.practice.consultations, 3);
+  assert.equal(periods.year.consults.practice.pending, 3);
+  assert.equal(periods.year.consults.practice.observedTreatmentStarts, 1);
   for (const period of ["3mo", "year"] as const) {
-    assert.equal(periods[period].consults.practice.pending, 1);
+    assert.equal(periods[period].consults.measurement, "scheduled_treatment");
+    assert.equal(periods[period].consults.bookingEvidenceAvailable, false);
+    assert.equal(periods[period].consults.practice.conversionRate, null);
+    assert.equal(periods[period].consults.practice.evaluated, 0);
     assert.deepEqual(periods[period], historicalPerformance({ ...input, period }));
   }
   assert.deepEqual(input, before);
@@ -245,7 +250,8 @@ test("missing evidence preserves unknown values and unverified coverage in both 
 
 test("recent-minus-baseline differences preserve percentage-point and monthly units and unknowns", () => {
   const periods = historicalPerformancePeriods(fixture());
-  assert.equal(historicalPeriodDifference(periods["3mo"].consults.practice.conversionRate, periods.year.consults.practice.conversionRate), -50);
+  assert.equal(historicalPeriodDifference(periods["3mo"].consults.practice.conversionRate, periods.year.consults.practice.conversionRate), null);
+  assert.equal(historicalPeriodDifference(25, 75), -50);
   assert.equal(historicalPeriodDifference(2.5, 1.25), 1.25);
   assert.equal(historicalPeriodDifference(0, 0), 0);
   assert.equal(historicalPeriodDifference(0, 10), -10);

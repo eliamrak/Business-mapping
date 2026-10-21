@@ -1,5 +1,6 @@
 import { historicalPerformance, type HistoricalPerformancePeriod } from "./historical-performance.ts";
-import { buildLocalRetentionMetrics, estimateLocalClientActivity, summarizeConsultConversions } from "./retention-local.ts";
+import { buildLocalRetentionMetrics, estimateLocalClientActivity } from "./retention-local.ts";
+import { summarizeBookingConversions as summarizeConsultConversions } from "./consult-booking-conversions.ts";
 import { periodClientAttrition } from "./period-client-attrition.ts";
 import type { SessionAttendanceCoverage, SessionPeriod } from "./session-trend.ts";
 

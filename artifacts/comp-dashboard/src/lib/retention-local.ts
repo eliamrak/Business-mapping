@@ -265,17 +265,22 @@ export type ConsultJourney = {
   treatmentDate: string | null;
   attributionIssue: string | null;
   attributionSource:
+    | "booking_event"
     | "manual_confirmed_closer"
     | "manual_missed_owner"
     | "manual_needs_review"
     | "treatment_start_candidate"
     | "consult_owner"
     | "none";
+  /** Verified scheduling event time; never inferred from appointment attendance. */
+  bookingDate?: string | null;
+  scheduledAppointmentDate?: string | null;
 };
 
 export type ConsultConversionMetric = {
   clinician: string | null;
-  rateBasis: "observed_treatment_starts" | "confirmed_closer_credit";
+  rateBasis: "observed_treatment_starts" | "confirmed_closer_credit" | "scheduled_treatment_bookings";
+  observedTreatmentStarts?: number;
   consultations: number;
   converted: number;
   candidateConversions: number;
@@ -289,6 +294,9 @@ export type ConsultConversionMetric = {
 };
 
 export type ConsultConversionSummary = {
+  measurement?: "scheduled_treatment";
+  bookingEvidenceAvailable?: boolean;
+  bookingLimitation?: string | null;
   coverageVerified: boolean;
   periodStart: string;
   periodEnd: string;
@@ -2099,6 +2107,7 @@ export type ConsultConversionOptions = {
   excludedFollowUpEvidence?: readonly { clientId: string; serviceDate: string }[];
 };
 
+/** Legacy attendance-based diagnostic. Scheduling close rates use summarizeBookingConversions. */
 export function summarizeConsultConversions(
   snapshots: LocalSnapshot[],
   sameDayVisitOverrides: SameDayVisitOverrides = {},

@@ -154,8 +154,8 @@ import {
   buildLocalRetentionMetrics,
   estimateLocalClientActivity,
   mergeImportedLocationRooms,
-  summarizeConsultConversions,
 } from "@/lib/retention-local";
+import { summarizeBookingConversions as summarizeConsultConversions } from "@/lib/consult-booking-conversions";
 import LeadFlow from "@/components/practice/lead-flow";
 import {
   applyBulkLeads,
@@ -2975,7 +2975,7 @@ export default function PracticeWorkspace() {
     if (kind === "consult") {
       const consult = practice ? report.consults.practice : report.consults.byClinician.find((item) => normalizeClinicianName(item.clinician ?? "") === normalizeClinicianName(name));
       return { range, value: consult?.conversionRate, benchmark,
-        detail: `${historyNote}${fmt(consult?.converted)} ${practice ? "treatment starts" : "confirmed closes"} / ${fmt(consult?.evaluated)} evaluated; ${fmt(consult?.consultations)} consultations; ${fmt(consult?.pending)} pending; coverage ${report.consults.coverageVerified ? "verified" : "unverified"}` };
+        detail: `${historyNote}${report.consults.bookingEvidenceAvailable && (consult?.evaluated ?? 0) > 0 ? fmt(consult?.converted) : "Unknown"} booking closes / ${fmt(consult?.evaluated)} evaluated; ${fmt(consult?.consultations)} consultations; ${fmt(consult?.pending)} pending; booking history ${report.consults.coverageVerified ? "verified" : "unverified"}` };
     }
     if (kind === "retention") return { range, value: practice ? practiceRetention : row?.initialRetentionPct, benchmark,
       detail: `${historyNote}${fmt(practice ? activity?.retainedClientPairs : row?.retainedClients)} retained / ${fmt(practice ? activity?.initialRetentionDenominator : row?.initialRetentionDenominator)} evaluated starts; ${fmt(practice ? activity?.immatureClientPairsExcluded : row?.pendingInitialClients)} pending; coverage ${(practice ? activity?.initialRetentionCoverageVerified : row?.initialRetentionCoverageVerified) ? "verified" : "unverified"}` };
@@ -3016,10 +3016,10 @@ export default function PracticeWorkspace() {
     const unique = hasUniqueClinicianIdentity(context.clinicians, person.label, workspace.settings.teamId);
     const row = unique ? consultConversionSummary.byClinician.find((metric) => normalizeClinicianName(metric.clinician ?? "") === normalizeClinicianName(person.label)) : undefined;
     return { id: String(person.id), label: person.label, value: row?.conversionRate,
-      detail: unique ? `${fmt(row?.converted)} confirmed closes / ${fmt(row?.evaluated)} evaluated; ${fmt(row?.consultations)} consultations; ${fmt(row?.pending)} pending` : "Unknown: clinician name maps to multiple IDs; resolve the import mapping.",
+      detail: unique ? `${consultConversionSummary.bookingEvidenceAvailable && (row?.evaluated ?? 0) > 0 ? fmt(row?.converted) : "Unknown"} booking closes / ${fmt(row?.evaluated)} evaluated; ${fmt(row?.consultations)} consultations; ${fmt(row?.pending)} pending` : "Unknown: clinician name maps to multiple IDs; resolve the import mapping.",
     };
   }), { id: "practice", label: "Whole Practice", value: consultConversionSummary.practice.conversionRate,
-    detail: `${fmt(consultConversionSummary.practice.converted)} treatment starts / ${fmt(consultConversionSummary.practice.evaluated)} evaluated; ${fmt(consultConversionSummary.practice.consultations)} consultations; ${fmt(consultConversionSummary.journeys.filter((journey) => journey.attributionSource === "manual_confirmed_closer").length)} confirmed closes; ${fmt(consultConversionSummary.practice.pending)} pending`,
+    detail: `${consultConversionSummary.bookingEvidenceAvailable && consultConversionSummary.practice.evaluated > 0 ? fmt(consultConversionSummary.practice.converted) : "Unknown"} booking closes / ${fmt(consultConversionSummary.practice.evaluated)} evaluated; ${fmt(consultConversionSummary.practice.consultations)} consultations; ${fmt(consultConversionSummary.practice.pending)} pending`,
   }].map((row) => ({ ...row, practice: row.id === "practice" }));
   const historicalHelp = <details className="pw-heading-help pw-historical-help"><summary aria-label="Historical performance help">?</summary><p>Historical performance uses complete calendar months with observations through {historicalMetrics.window.asOf}. Only covered mature months contribute to attrition; no eligible months means Unknown.</p></details>;
   const recordedClinicianCount =
@@ -4206,7 +4206,7 @@ export default function PracticeWorkspace() {
                               <HistoricalPeriodValues dates="help" periodLabels={{ "3mo": "Last 3 mature months", year: "Last 12 mature months" }} values={historicalValuesFor("attrition", person.label)} difference={historicalDifferenceFor("attrition", person.label)} />
                             </div>
                             <div>
-                              <span>Confirmed close</span>
+                              <span>Close rate</span>
                               <HistoricalPeriodValues dates="help" values={historicalValuesFor("consult", person.label)} difference={historicalDifferenceFor("consult", person.label)} />
                             </div>
                           </div>
@@ -4689,18 +4689,18 @@ export default function PracticeWorkspace() {
                         </div>
                         <dl style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(130px, 1fr))", gap: 12, margin: 0 }}>
                           <div><dt>Consultations</dt><dd style={{ margin: 0 }}><strong>{fmt(contributorConsult?.consultations)}</strong></dd></div>
-                          <div><dt>{selectedContributorName === "Whole Practice" ? "Became clients (treatment starts)" : "Confirmed closes"}</dt><dd style={{ margin: 0 }}><strong>{fmt(contributorConsult?.converted)}</strong></dd></div>
+                          <div><dt>Verified booking closes</dt><dd style={{ margin: 0 }}><strong>{consultConversionSummary.bookingEvidenceAvailable && (contributorConsult?.evaluated ?? 0) > 0 ? fmt(contributorConsult?.converted) : "Unknown"}</strong></dd></div>
                           <div><dt className="pw-visually-hidden">Close rate</dt><dd style={{ margin: 0 }}><PercentageKpi label="Close rate" value={contributorConsult?.conversionRate ?? null} benchmark={selectedContributorName === "Whole Practice" ? null : consultConversionSummary.practice.conversionRate} /></dd></div>
                         </dl>
                         <p className="pw-note">{fmt(contributorConsult?.pending)} pending</p>
                         {compareWholePractice ? <MetricComparison rows={consultComparisonRows.map((row) => ({ ...row, detail: undefined }))} percentage unit="%" label="Consult metric comparison" /> : selectedContributorName !== "Whole Practice" && <p className="pw-note">Whole Practice close rate: {fmt(consultConversionSummary.practice.conversionRate, "percent")}</p>}
-                        {contributorConsult && !consultConversionSummary.coverageVerified && <p className="pw-note">Observed conversions; report coverage is unverified.</p>}
+                        {consultConversionSummary.bookingLimitation && <p className="pw-note">{consultConversionSummary.bookingLimitation}</p>}
                         {!compareWholePractice && selectedContributorName !== "Whole Practice" && !hasUniqueClinicianIdentity(context.clinicians, selectedContributorName, workspace.settings.teamId) && <p className="pw-note">Imported clinician metrics are unknown: this name maps to multiple clinician IDs.</p>}
                         <details>
                           <summary>How these numbers are calculated</summary>
                         <div className="pw-number-grid pw-consult-audit">
-                          <div><span>Treatment-start candidates</span><strong>{fmt(contributorConsult?.candidateConversions)}</strong></div>
-                          {selectedContributorName === "Whole Practice" && <div><span>Confirmed closes</span><strong>{fmt(consultConversionSummary.journeys.filter((journey) => journey.attributionSource === "manual_confirmed_closer").length)}</strong></div>}
+                          <div><span>Observed treatment starts</span><strong>{fmt(contributorConsult?.observedTreatmentStarts)}</strong></div>
+                          <div><span>Verified booking closes</span><strong>{consultConversionSummary.bookingEvidenceAvailable && (contributorConsult?.evaluated ?? 0) > 0 ? fmt(contributorConsult?.converted) : "Unknown"}</strong></div>
                           <div><span>Evaluated</span><strong>{fmt(contributorConsult?.evaluated)}</strong></div>
                           <div>
                             <span>Needs attribution</span>
@@ -4708,8 +4708,7 @@ export default function PracticeWorkspace() {
                               {fmt(contributorConsult?.needsAttribution)}
                             </strong>
                             <small>
-                              Missing manual closer confirmation or missed-owner
-                              review.
+                              Booking time or original scheduled clinician is unresolved.
                             </small>
                           </div>
                           <div>
@@ -4727,12 +4726,11 @@ export default function PracticeWorkspace() {
                         </div>
                         <p className="pw-note">
                           Practice conversion is de-duplicated once per client.
-                          A qualifying treatment start counts for practice
-                          conversion, but clinician close rates use only manual
-                          closer confirmations. The treatment-start clinician is
-                          shown as a candidate until confirmed.
-                          Non-converted clients stay pending until one calendar
-                          month after consultation.
+                          A close occurs when the first qualifying treatment appointment is booked,
+                          credited to its scheduled clinician even if the appointment is later
+                          cancelled or missed. Booking time determines the one-calendar-month window.
+                          Completed treatment proves a booking occurred, not its time or original
+                          scheduled clinician. Attendance-only records cannot establish a booking miss.
                         </p>
                         <p className="pw-note">Current-team consultation cohorts use the selected activity dates, with all treatment follow-up retained. Close rate uses evaluated journeys; pending journeys are excluded.</p>
                         {compareWholePractice && consultComparisonRows.map((row) => <p className="pw-note" key={row.id}>{row.label}: {row.detail}</p>)}
@@ -4776,6 +4774,8 @@ export default function PracticeWorkspace() {
                                       <strong>{journey.clientId}</strong>
                                       <span>
                                         Consult {journey.consultDate}
+                                        {journey.bookingDate ? ` · booked ${journey.bookingDate}` : ""}
+                                        {journey.scheduledAppointmentDate ? ` · appointment ${journey.scheduledAppointmentDate}` : ""}
                                         {journey.treatmentDate
                                           ? ` · treatment start ${journey.treatmentDate}`
                                           : ""}
@@ -4793,7 +4793,7 @@ export default function PracticeWorkspace() {
                                     </div>
                                     <div>
                                       <span>
-                                        Candidate: {candidate ?? "needs review"}
+                                        Observed treatment clinician: {journey.treatmentStartClinician ?? "Unknown"}
                                       </span>
                                       <span>
                                         Consult clinician
@@ -4804,9 +4804,10 @@ export default function PracticeWorkspace() {
                                     </div>
                                     <div className="pw-consult-resolution-actions">
                                       <label className="pw-draft-field">
-                                        <span>Confirmed owner</span>
+                                        <span>Legacy confirmed owner</span>
                                         <select
                                           aria-label={`Confirmed owner for ${journey.clientId}`}
+                                          disabled={consultConversionSummary.measurement === "scheduled_treatment"}
                                           value={reviewClinician}
                                           onChange={(event) => setConsultReviewClinicians((prior) => ({ ...prior, [journey.clientId]: event.target.value }))}
                                         >
@@ -4817,7 +4818,7 @@ export default function PracticeWorkspace() {
                                       <button
                                         type="button"
                                         className="pw-text-button"
-                                        disabled={!journey.treatmentDate || !reviewClinician}
+                                        disabled={consultConversionSummary.measurement === "scheduled_treatment" || !journey.treatmentDate || !reviewClinician}
                                         onClick={() =>
                                           stageConsultAttributionOverride(
                                             journey.clientId,
@@ -4832,7 +4833,7 @@ export default function PracticeWorkspace() {
                                         type="button"
                                         className="pw-text-button"
                                         disabled={
-                                          !!journey.treatmentDate || journey.status === "pending" || !reviewClinician
+                                          consultConversionSummary.measurement === "scheduled_treatment" || !!journey.treatmentDate || journey.status === "pending" || !reviewClinician
                                         }
                                         onClick={() =>
                                           stageConsultAttributionOverride(
@@ -4867,6 +4868,7 @@ export default function PracticeWorkspace() {
                                 attribution candidates.
                               </p>
                             )}
+                            {consultConversionSummary.measurement === "scheduled_treatment" && <p className="pw-note">Legacy closer confirmations are preserved but cannot establish booking time or the original scheduled clinician.</p>}
                           </div>
                         </details>
                       </section>
