@@ -85,6 +85,7 @@ function fixture(configure = () => {}) {
       if (name === "react/jsx-runtime") return dashboardRequire(name);
       if (name === "@workspace/practice/hub") return hub;
       if (name === "@/components/hub/use-unsaved") return { useUnsaved(value) { dirty = value; } };
+      if (name === "@/components/ui/popover") return { Popover: ({ children }) => children, PopoverTrigger: ({ children }) => children, PopoverContent: () => null };
       if (name === "@/lib/profit-first-planning") return { ...planner, profitFirstPlanning(input) {
         localPlanning = structuredClone(input.workspace.moneyPlanning);
         report = planner.profitFirstPlanning(input);
@@ -274,7 +275,7 @@ test("rendered table keeps baseline percent, current dollars and needed dollars 
   ]);
   assert.equal(headers.length, 7);
   assert.match(textContent(headers[6]), /^Planning inputs/);
-  assert.ok(nodes(headers[6]).some(node => node.type === "summary" && node.props["aria-label"].startsWith("Help:")));
+  assert.ok(nodes(headers[6]).some(node => node.type === "button" && node.props["aria-label"].startsWith("Help:")));
   assert.deepEqual(rowCells(f, "Taxes").slice(0, 6), ["Taxes", "3%", "$300", "$1,200", "$900", "12%"]);
   assert.deepEqual(rowCells(f, "Operating expenses").slice(0, 6), ["Operating expenses", "28%", "$2,800", "$1,300", "-$1,500", "13%"]);
   const html = renderToStaticMarkup(f.tree);

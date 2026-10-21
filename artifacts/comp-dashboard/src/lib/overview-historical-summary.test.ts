@@ -53,15 +53,19 @@ const clinician = (retention: number, endings: number, months: number): Clinicia
   latestSixEndingMonths: [], latestSixClientEnds: 0, averageClientEndingsPerLatestSixMonths: null, partialEndingMonth: null,
 });
 function fixture(): Props {
-  const reports = historicalPerformancePeriods({ today: "2026-10-19", snapshots: [{
+  const snapshots: LocalSnapshot[] = [{
     id: "fixture", kind: "attendance", sourceHash: "fixture", importedAt: "2026-10-19T12:00:00Z",
     coverageStart: "2025-01-01", coverageEnd: "2026-10-19", coverageClinicians: ["Lane"],
     reportCoverage: { start: "2025-01-01", end: "2026-10-19", complete: true },
     rows: [{ clientId: "client", clinician: "Lane", status: "show", serviceDate: "2026-07-01", billingCode: "90837", location: null, sourceRowHash: "visit" }],
-  }] });
+  }];
+  const reports = historicalPerformancePeriods({ today: "2026-10-19", snapshots });
   for (const period of ["3mo", "year"] as const) {
     const report = reports[period];
     const recent = period === "3mo";
+    // Keep this rendering fixture's immature windows explicit as calendar policy evolves.
+    report.window.attrition = { ...report.window.cohort };
+    report.periodAttrition = periodClientAttrition({ snapshots, requestedWindow: report.window.attrition, asOf: report.window.asOf });
     assert.ok(report.activity);
     Object.assign(report.activity, {
       initialRetentionRate: recent ? 0.8 : 0.6, retainedClientPairs: recent ? 8 : 6,
@@ -71,6 +75,8 @@ function fixture(): Props {
       endingAttritionPct: 99, // Latest-month control must never become period attrition.
     });
     report.clinicians = [clinician(recent ? 40 : 20, recent ? 2 : 4, 2), { ...clinician(90, 10, 2), clinician: "Moss" }];
+    report.attritionActivity = structuredClone(report.activity);
+    report.attritionClinicians = structuredClone(report.clinicians);
     Object.assign(report.consults.practice, {
       consultations: recent ? 8 : 12, converted: recent ? 6 : 3,
       evaluated: recent ? 8 : 12, pending: recent ? 2 : 4, conversionRate: recent ? 75 : 25,
@@ -96,7 +102,7 @@ const card = (html: string, label: string) => {
   const sections = [...html.matchAll(/<section\b[^>]*aria-label="(Overview [^"]+)"/g)];
   const index = sections.findIndex(match => match[1] === label);
   assert.ok(index >= 0, `Missing ${label}`);
-  return html.slice(sections[index].index, sections[index + 1]?.index ?? html.indexOf('<button type="button"'));
+  return html.slice(sections[index].index, sections[index + 1]?.index ?? html.indexOf('<button type="button" class="pw-text-button"'));
 };
 const prominent = (html: string) => html.replace(/<details\b[\s\S]*?<\/details>/g, "");
 const periodRegion = (html: string, period: "3mo" | "year") => {
@@ -123,13 +129,14 @@ const julyFixture = (returned = false, asOf = "2026-11-30"): Props => {
 
 test("all four cards show both histories simultaneously with dates in accessible disclosures and no period toggles or removed cards", () => {
   const html = render();
-  assert.equal([...html.matchAll(/<section\b[^>]*aria-label="Overview /g)].length, 4);
+  const kpiLabels = [...html.matchAll(/<div class="[^"]*\bsw-content\b[^"]*"><section\b[^>]*aria-label="([^"]+)"/g)].map(match => match[1]);
+  assert.deepEqual(kpiLabels, labels);
   for (const label of labels) {
     const section = card(html, label);
     assert.equal([...section.matchAll(/data-period="3mo"/g)].length, 1);
     assert.equal([...section.matchAll(/data-period="year"/g)].length, 1);
-    assert.match(section, />Trailing 3 months<\/h4>/);
-    assert.match(section, />Trailing year<\/h4>/);
+    assert.match(section, label === labels[3] ? />Last 3 mature months<\/h4>/ : />Trailing 3 months<\/h4>/);
+    assert.match(section, label === labels[3] ? />Last 12 mature months<\/h4>/ : />Trailing year<\/h4>/);
     assert.match(section, /dateTime="2026-07-01"/);
     assert.match(section, /dateTime="2025-10-01"/);
     assert.equal([...section.matchAll(/dateTime="2026-09-30"/g)].length, 2);
@@ -137,8 +144,26 @@ test("all four cards show both histories simultaneously with dates in accessible
     assert.doesNotMatch(prominent(section), /dateTime=|percentage points vs 12-month baseline/);
   }
   assert.doesNotMatch(html, /<select|role="(?:tab|switch)"|type="(?:radio|checkbox)"|\shidden(?:=|\s|>)/);
-  assert.deepEqual([...html.matchAll(/<button\b[^>]*>(.*?)<\/button>/g)].map(match => match[1]), ["Sessions"]);
+  assert.match(html, /<button\b[^>]*aria-pressed="false">[\s\S]*?Edit layout<\/button>/);
+  assert.match(html, /<button type="button" class="pw-text-button">Sessions<\/button>/);
   assert.doesNotMatch(html, /<h[1-6][^>]*>[^<]*(?:hiring|rooms|owner pay|profit|revenue|projection|forecast|onboarding)/i);
+});
+
+test("summary widgets default to medium, honor saved order and sizes, and keep Sessions outside the layout", () => {
+  const props = fixture();
+  const defaults = render(props);
+  const widgets = (html: string) => [...html.matchAll(/data-widget-id="([^"]+)" data-widget-size="([^"]+)"/g)].map(([, id, size]) => ({ id, size }));
+  assert.deepEqual(widgets(defaults), ["caseload", "retention", "close-rate", "attrition"].map(id => ({ id, size: "medium" })));
+  assert.doesNotMatch(defaults, /pw-section-widget--card/);
+  assert.match(defaults, /data-section="summary"/);
+  assert.match(defaults, /<\/section><button type="button" class="pw-text-button">Sessions<\/button><\/div>$/);
+  props.layout = { version: 1, widgets: [{ id: "attrition", size: "wide" }, { id: "retention", size: "small" }] };
+  const before = structuredClone(props.layout);
+  assert.deepEqual(widgets(render(props)), [
+    { id: "attrition", size: "wide" }, { id: "retention", size: "small" },
+    { id: "caseload", size: "medium" }, { id: "close-rate", size: "medium" },
+  ]);
+  assert.deepEqual(props.layout, before);
 });
 
 test("values use percent full and percentage-point rate differences, with separate weekly and attrition count units", () => {
@@ -258,6 +283,7 @@ test("immature July renders unknown full totals and a separately dated mature ob
   const props = julyFixture(false, "2026-10-20");
   assert.ok(props.reports["3mo"].activity);
   Object.assign(props.reports["3mo"].activity, { endingFullMonthClientEnds: 9, endingFullMonthDenominator: 2, averageClientEndingsPerFullMonth: 4.5, endingAttritionPct: 99 });
+  props.reports["3mo"].attritionActivity = structuredClone(props.reports["3mo"].activity);
   const attrition = card(render(props), labels[3]);
   assert.match(prominent(attrition), /data-state="unknown"[\s\S]*?<span>-- clients ended<\/span>/);
   assert.doesNotMatch(prominent(attrition), /<span>(?:1|9) clients ended<\/span>|100%|99%/);
@@ -309,6 +335,54 @@ test("attrition coverage reasons render as plain-language explanations", () => {
   assert.match(attrition, /Unresolved later evidence could change an ending\./);
   assert.match(attrition, /No observed established clients provide a percentage denominator\./);
   for (const reason of reasons) assert.ok(!attrition.includes(reason), `Internal reason leaked: ${reason}`);
+});
+
+test("monthly attrition uses its own activity and clinician fields without cohort fallbacks", () => {
+  const props = fixture();
+  for (const period of ["3mo", "year"] as const) {
+    const report = props.reports[period];
+    assert.ok(report.attritionActivity);
+    report.attritionActivity.averageClientEndingsPerFullMonth = 7.5;
+    report.attritionClinicians = [{ ...clinician(40, 13, 2), clinician: " Lane " }];
+  }
+  assert.match(card(render(props), labels[3]), /7\.5 \/ mature month/);
+  props.contributor = " lAnE ";
+  let attrition = card(render(props), labels[3]);
+  assert.match(attrition, /6\.5 \/ mature month/);
+  assert.doesNotMatch(attrition, /7\.5 \/ mature month|1 \/ mature month|2 \/ mature month/);
+  for (const report of Object.values(props.reports)) report.attritionClinicians = [];
+  assert.match(card(render(props), labels[3]), /-- \/ mature month/);
+  for (const report of Object.values(props.reports)) report.attritionClinicians = [clinician(40, 13, 2), clinician(40, 13, 2)];
+  assert.doesNotMatch(card(render(props), labels[3]), /6\.5 \/ mature month/);
+  props.contributor = "Whole Practice";
+  for (const report of Object.values(props.reports)) report.attritionActivity = null;
+  attrition = card(render(props), labels[3]);
+  assert.match(attrition, /-- \/ mature month/);
+  assert.doesNotMatch(attrition, /4\.5 \/ mature month|2 \/ mature month/);
+});
+
+test("lagged mature attrition labels and dates remain separate from cohort dates and preserve unknown evidence", () => {
+  const props = fixture();
+  props.reports = historicalPerformancePeriods({ today: "2026-10-21", snapshots: [] });
+  const html = render(props);
+  const attrition = card(html, labels[3]);
+  assert.match(attrition, />Last 3 mature months<\/h4>/);
+  assert.match(attrition, />Last 12 mature months<\/h4>/);
+  assert.match(attrition, /dateTime="2026-04-01"/);
+  assert.match(attrition, /dateTime="2025-07-01"/);
+  assert.equal([...attrition.matchAll(/dateTime="2026-06-30"/g)].length, 2);
+  assert.match(attrition, /Attrition windows lag by 90 days so there is time to observe whether clients return\./);
+  assert.match(attrition, /Mature dates alone do not verify coverage or earlier treatment history\./);
+  assert.doesNotMatch(prominent(attrition), /lag by 90 days/);
+  assert.match(attrition, /data-state="unknown"/);
+  assert.doesNotMatch(attrition, /role="meter"|Report coverage verified\./);
+  for (const label of [labels[1], labels[2]]) {
+    const cohort = card(html, label);
+    assert.match(cohort, />Trailing 3 months<\/h4>/);
+    assert.match(cohort, /dateTime="2026-07-01"/);
+    assert.match(cohort, /dateTime="2026-09-30"/);
+    assert.doesNotMatch(cohort, /Last 3 mature months/);
+  }
 });
 
 test("legacy report without periodAttrition renders unknown safely despite monthly controls", () => {

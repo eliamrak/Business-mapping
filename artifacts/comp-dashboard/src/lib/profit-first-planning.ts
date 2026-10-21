@@ -39,6 +39,8 @@ export type ProfitFirstPlanningInput = {
   workspace: Workspace;
   context: Context;
   asOf: string;
+  /** Today reads Budget; Sandbox retains saved what-if estimates. */
+  costSource?: "budget" | "scenario";
   /** Monthly billed estimates, never collections. Explicit null overrides derived assumptions. */
   estimatedMonthlyValues?: Values;
   estimateSourcePeriod?: string;
@@ -66,7 +68,6 @@ export function profitFirstPlanning(input: ProfitFirstPlanningInput) {
   const date = validDate ? asOf : "2000-01-01";
   const periodStart = monthAt(date, 0), periodEnd = monthEnd(date);
   const sourcePeriod = input.estimateSourcePeriod?.trim() || `${periodStart} to ${periodEnd} (monthly planning assumptions as of ${asOf})`;
-  const overheadStart = monthAt(date, -12), overheadEnd = monthEnd(monthAt(date, -1));
   const reasons: string[] = validDate ? [] : ["Enter a valid planning date."];
   const assumptions = [
     "Planning estimates use billed income, not collections or bank balances. No spending record is required to plan configured costs.",
@@ -75,6 +76,7 @@ export function profitFirstPlanning(input: ProfitFirstPlanningInput) {
     "Revenue needed holds monthly costs and contribution goals constant, retaining percentage floors. It is a funding estimate, not a volume forecast; rerun payroll and variable costs for a changed income or staffing scenario.",
   ];
   const planning = w.moneyPlanning ?? {};
+  const budgetCosts = input.costSource === "budget";
   const values = { ...input.estimatedMonthlyValues, ...planning.estimatedMonthlyValues };
   const read = (key: string, fallback: () => number | null): number | null => {
     const value = Object.hasOwn(values, key) ? values[key] : fallback();
@@ -94,7 +96,7 @@ export function profitFirstPlanning(input: ProfitFirstPlanningInput) {
       return budgetAmount(b, start, end, values.sessions ?? 0, revenue ?? 0);
     }));
   }
-  const linesFor = (kinds: string[]) => w.budgets.filter(b => !b.archived && !b.planningOnly && w.categories.some(c => c.id === b.categoryId && !c.archived && kinds.includes(c.kind)));
+  const linesFor = (kinds: string[]) => w.budgets.filter(b => !b.archived && (!budgetCosts || !b.planningOnly) && w.categories.some(c => c.id === b.categoryId && !c.archived && kinds.includes(c.kind)));
   const taxObligations = read("taxObligations", () => {
     const lines = linesFor(["tax"]).filter(b => b.start <= periodEnd && (!b.end || b.end >= periodStart));
     // Revenue shares are allocation choices, not evidence of a tax liability.
@@ -107,8 +109,13 @@ export function profitFirstPlanning(input: ProfitFirstPlanningInput) {
   // explicit uncovered amount resolves that ambiguity without adding wages twice.
   const payrollObligations = payrollNeedsCombinedEstimate ? null : read("payrollObligations", () => 0);
   if (payrollNeedsCombinedEstimate) reasons.push("Payroll budgets may overlap roster compensation. Enter uncovered payroll obligations (zero if already included in monthly payroll estimates).");
-  let overheadSource = `${overheadStart} to ${overheadEnd}; configured operating budget accrual / 12`;
+  let overheadSource = `${periodStart} to ${periodEnd}; Budget operating lines only; no configured line is Unknown, an explicit zero line is zero`;
   function deriveOverhead(): number | null {
+    const lines = linesFor(["expense", "facility"]);
+    const hasFloor = w.settings.overheadFloorOverride || w.settings.overheadGoalBasis === "fixed_dollars" || w.settings.overheadFloorMonthly > 0;
+    if (budgetCosts) {
+      return lines.length ? budgetSum(lines, periodStart, periodEnd) : null;
+    }
     if (Object.hasOwn(planning.estimatedMonthlyValues ?? {}, "overhead")) {
       overheadSource = `${sourcePeriod}; saved monthly planning overhead override`;
       return known(values.overhead) ? values.overhead : null;
@@ -122,17 +129,13 @@ export function profitFirstPlanning(input: ProfitFirstPlanningInput) {
       overheadSource = `${sourcePeriod}; supplied monthly overhead estimate`;
       return known(values.overhead) ? values.overhead : null;
     }
-    const lines = linesFor(["expense", "facility"]);
-    const hasFloor = w.settings.overheadFloorOverride || w.settings.overheadGoalBasis === "fixed_dollars" || w.settings.overheadFloorMonthly > 0;
-    // A recurring allowance and its budget detail represent the same overhead, not two expenses.
     const totals = Array.from({ length: 12 }, (_, i) => {
       const start = monthAt(date, i - 12);
       const detail = budgetSum(lines, start, monthEnd(start));
-      if (detail === null) return null;
-      const floor = hasFloor ? w.settings.overheadFloorMonthly : 0;
-      return Math.max(detail, floor);
+      return detail === null ? null : Math.max(detail, hasFloor ? w.settings.overheadFloorMonthly : 0);
     });
     if (lines.length || hasFloor) {
+      overheadSource = `${monthAt(date, -12)} to ${monthEnd(monthAt(date, -1))}; configured operating budget accrual / 12`;
       const annual = sum(totals);
       return annual === null ? null : annual / 12;
     }
@@ -147,9 +150,39 @@ export function profitFirstPlanning(input: ProfitFirstPlanningInput) {
     return null;
   }
   const overhead = deriveOverhead();
-  const marketing = read("marketing", () => {
+  const marketing = (() => {
+    if (!budgetCosts && Object.hasOwn(values, "marketing")) return read("marketing", () => null);
     const lines = linesFor(["marketing"]);
-    const campaigns = w.campaigns.filter(c => !c.archived && !c.planningOnly && (!c.start || c.start <= periodEnd) && (!c.end || c.end >= periodStart));
+    if (budgetCosts) {
+      const campaigns = w.campaigns.filter(c => !c.archived && !c.planningOnly);
+      if (!lines.length && !campaigns.length) return null;
+      return sum([budgetSum(lines, periodStart, periodEnd), ...campaigns.map(c => {
+        if ((c.start && !dateValid(c.start)) || (c.end && !dateValid(c.end)) || (c.start && c.end && c.end < c.start)) {
+          reasons.push(`${c.name}: check the campaign start and end dates in Budget.`);
+          return null;
+        }
+        if ((c.start && c.start > periodEnd) || (c.end && c.end < periodStart)) return 0;
+        if (lines.some(b => b.campaignId === c.id && b.start <= periodEnd && (!b.end || b.end >= periodStart))) {
+          reasons.push(`${c.name}: campaign costs may overlap a linked marketing Budget line. Review both sources in Budget before calculating marketing.`);
+          return null;
+        }
+        if (!known(c.monthlySpend) || (c.otherMonthlyCost !== null && !known(c.otherMonthlyCost))) {
+          reasons.push(`${c.name}: enter campaign monthly spending in Budget, including an explicit zero if none.`);
+          return null;
+        }
+        const total = c.monthlySpend + (c.otherMonthlyCost ?? 0);
+        if (total === 0) return 0;
+        if (!c.start) {
+          reasons.push(`${c.name}: enter a campaign start date in Budget to calculate this month's marketing cost.`);
+          return null;
+        }
+        const first = c.start > periodStart ? c.start : periodStart;
+        const last = c.end && c.end < periodEnd ? c.end : periodEnd;
+        const days = (Date.parse(last) - Date.parse(first)) / 86400000 + 1;
+        return total * days / Number(periodEnd.slice(8));
+      })]);
+    }
+    const campaigns = w.campaigns.filter(c => !c.archived && (!c.start || c.start <= periodEnd) && (!c.end || c.end >= periodStart));
     if (campaigns.some(c => !c.start || lines.some(b => b.campaignId === c.id))) {
       reasons.push("Marketing campaign and budget coverage needs an explicit combined monthly estimate to avoid overlap.");
       return null;
@@ -161,7 +194,7 @@ export function profitFirstPlanning(input: ProfitFirstPlanningInput) {
       const days = (Date.parse(last) - Date.parse(first)) / 86400000 + 1;
       return (c.monthlySpend + (c.otherMonthlyCost ?? 0)) * days / Number(periodEnd.slice(8));
     })]);
-  });
+  })();
   const clinicianPay = read("clinicianPay", () => people.length ? null : 0);
   const ownerClinical = read("ownerClinicalPay", () => people.some(p => p.classification === "owner") ? null : 0);
   const erin = people.find(p => p.id === w.settings.familyW2ClinicianId);
@@ -194,15 +227,20 @@ export function profitFirstPlanning(input: ProfitFirstPlanningInput) {
     const effective = staffMemberAt(w, s, date);
     return staffCompensationKnown(effective) ? calculateStaffMemberCost(effective).totalAnnualCost / 12 : null;
   })));
-  const fees = read("fees", () => {
+  const fees = (() => {
+    if (!budgetCosts && Object.hasOwn(planning.estimatedMonthlyValues ?? {}, "fees")) return read("fees", () => null);
+    // Forecast fees use configured payment assumptions, never imported service charges as processor fees.
+    if (Object.hasOwn(input.estimatedMonthlyValues ?? {}, "fees")) {
+      return known(input.estimatedMonthlyValues!.fees) ? input.estimatedMonthlyValues!.fees : null;
+    }
     const pct = w.settings.processingPct === 0 ? 0 : revenue === null ? null : revenue * w.settings.collectionPct / 100 * w.settings.processingPct / 100;
     const fixed = w.settings.processingFixedPerTransaction === 0 ? 0 : known(values.sessions) ? values.sessions * w.settings.collectionPct / 100 * w.settings.processingTransactionsPerSession * w.settings.processingFixedPerTransaction : null;
     return sum([pct, fixed]);
-  });
+  })();
   const costs: PlanningCost[] = [
     { key: "overhead", label: "Overhead set-aside estimate", monthly: overhead, source: overheadSource },
-    { key: "marketing", label: "Existing marketing estimate", monthly: marketing, source: sourcePeriod },
-    { key: "fees", label: "Processing cost estimate", monthly: fees, source: sourcePeriod },
+    { key: "marketing", label: "Existing marketing estimate", monthly: marketing, source: budgetCosts ? `${periodStart} to ${periodEnd}; Budget marketing lines and campaign cost fields; no configured source is Unknown, an explicit zero is zero` : `${sourcePeriod}; scenario estimate or configured marketing costs` },
+    { key: "fees", label: "Processing cost estimate", monthly: fees, source: `${sourcePeriod}; ${!budgetCosts && Object.hasOwn(planning.estimatedMonthlyValues ?? {}, "fees") ? "saved scenario estimate" : "configured processing schedule and estimated payment transactions"}, not recorded processor fees or imported client charges` },
     { key: "ownerClinicalPay", label: "Owner clinical payroll estimate", monthly: ownerClinical, source: sourcePeriod },
     { key: "coOwnerSalaryPretax", label: "Configured salary allocated to owner payroll", monthly: erinSalary, source: `${sourcePeriod}; configured salary recipient, included in clinician pay` },
     { key: "ownerPayroll", label: "Separate owner payroll estimate", monthly: ownerSeparate, source: sourcePeriod },

@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
-import { budgetSchema, categorySchema, clinicianSettingSchema, emptyWorkspace, fundGoalSchema, goalSchema, workspaceSchema, conditionSchema, conditionResult, forecast, type Context, type ForecastMonth } from "@workspace/practice/hub";
+import { budgetSchema, campaignSchema, categorySchema, clinicianSettingSchema, emptyWorkspace, fundGoalSchema, goalSchema, workspaceSchema, conditionSchema, conditionResult, forecast, type Context, type ForecastMonth } from "@workspace/practice/hub";
 import { CURRENT_PLANNING_ALLOCATIONS, profitFirstPlanning, type PlanningGoalPurpose, type ProfitFirstPlanningInput } from "./profit-first-planning.ts";
 import { financialSessionGoal } from "./financial-session-goal.ts";
 
@@ -26,6 +26,163 @@ function addBudget(input: ProfitFirstPlanningInput, amount: number, cadence: "an
   input.workspace.categories.push(category);
   input.workspace.budgets.push(budgetSchema.parse({ id: randomUUID(), name: "Synthetic cost", categoryId: category.id, amount, cadence, start: "2025-01-01" }));
 }
+
+test("Budget edits feed selected-month Money costs despite old saved duplicates, preserving dates, cadence and stored values", () => {
+  const input = setup();
+  input.costSource = "budget";
+  addBudget(input, 2000, "monthly");
+  addBudget(input, 300, "monthly", "marketing");
+  input.workspace.budgets.forEach(line => { line.start = "2026-01-01"; line.end = "2026-01-31"; });
+  input.workspace.moneyPlanning = { estimatedMonthlyValues: { overhead: 9999, marketing: 8888, fees: 7777 } };
+  input.estimatedMonthlyValues!.marketing = 777;
+  input.estimatedMonthlyValues!.fees = 45;
+  const original = structuredClone(input);
+  let report = profitFirstPlanning(input);
+  close(report.costs.find(c => c.key === "overhead")!.monthly, 2000);
+  close(report.costs.find(c => c.key === "marketing")!.monthly, 300);
+  close(report.costs.find(c => c.key === "fees")!.monthly, 45);
+  assert.deepEqual(input, original);
+  input.workspace.budgets[0].amount = 2500;
+  input.workspace.budgets[1].amount = 400;
+  report = profitFirstPlanning(input);
+  close(report.rows.find(r => r.key === "operating-expenses")!.costMonthly, 2945);
+  input.asOf = "2026-02-01";
+  report = profitFirstPlanning(input);
+  close(report.costs.find(c => c.key === "overhead")!.monthly, 0);
+  close(report.costs.find(c => c.key === "marketing")!.monthly, 0);
+  assert.deepEqual(input.workspace.moneyPlanning, original.workspace.moneyPlanning);
+});
+
+test("Budget Rent edits and explicit zero ignore a preserved $12,000 overhead goal; scenario retains the goal", () => {
+  const input = setup();
+  input.costSource = "budget";
+  input.workspace.settings.overheadFloorMonthly = 12000;
+  input.workspace.settings.overheadFloorOverride = true;
+  input.workspace.settings.overheadGoalBasis = "fixed_dollars";
+  input.workspace.moneyPlanning = { estimatedMonthlyValues: { overhead: 15000 } };
+  const settings = structuredClone(input.workspace.settings);
+  const saved = structuredClone(input.workspace.moneyPlanning);
+  const overhead = () => profitFirstPlanning(input).costs.find(c => c.key === "overhead")!.monthly;
+  assert.equal(overhead(), null, "A target is not evidence of a configured Budget cost");
+  addBudget(input, 8500, "monthly");
+  input.workspace.budgets[0].name = "Rent";
+  close(overhead(), 8500);
+  input.workspace.budgets[0].amount = 9000;
+  close(overhead(), 9000);
+  input.workspace.budgets[0].amount = 0;
+  close(overhead(), 0);
+  input.workspace.settings.overheadGoalBasis = "fixed_percent";
+  input.workspace.settings.overheadGoalPercent = 100;
+  close(overhead(), 0);
+  input.workspace.settings = settings;
+  assert.deepEqual(input.workspace.moneyPlanning, saved);
+  input.costSource = "scenario";
+  close(overhead(), 15000);
+  input.workspace.moneyPlanning = {};
+  close(overhead(), 12000);
+  assert.deepEqual(input.workspace.settings, settings);
+});
+
+test("processing uses configured schedule/payment estimates, never legacy amount overrides or billed charges as actual fees", () => {
+  const input = setup();
+  input.costSource = "budget";
+  input.workspace.moneyPlanning = { estimatedMonthlyValues: { fees: 9999 } };
+  input.workspace.settings.processingPct = 3;
+  input.workspace.settings.collectionPct = 80;
+  input.workspace.settings.processingFixedPerTransaction = .3;
+  input.workspace.settings.processingTransactionsPerSession = 2;
+  input.estimatedMonthlyValues!.sessions = 10;
+  const before = structuredClone(input);
+  const report = profitFirstPlanning(input);
+  close(report.costs.find(c => c.key === "fees")!.monthly, 244.8);
+  assert.match(report.costs.find(c => c.key === "fees")!.source, /not recorded processor fees/);
+  assert.deepEqual(input, before);
+  delete input.estimatedMonthlyValues!.sessions;
+  assert.equal(profitFirstPlanning(input).costs.find(c => c.key === "fees")!.monthly, null);
+});
+
+test("Budget missing source, explicit zero, dated lines, and scenario-only lines remain distinct", () => {
+  const input = setup();
+  input.costSource = "budget";
+  input.workspace.settings.overheadFloorMonthly = 0;
+  input.workspace.settings.overheadFloorOverride = false;
+  input.workspace.moneyPlanning = { estimatedMonthlyValues: { overhead: 1234, marketing: 456, fees: 789 } };
+  const cost = (key: string) => profitFirstPlanning(input).costs.find(c => c.key === key)!.monthly;
+  assert.equal(cost("overhead"), null);
+  assert.equal(cost("marketing"), null);
+  addBudget(input, 0, "monthly");
+  addBudget(input, 0, "monthly", "marketing");
+  close(cost("overhead"), 0);
+  close(cost("marketing"), 0);
+  input.workspace.budgets.forEach(line => { line.planningOnly = true; line.amount = 999; });
+  assert.equal(cost("overhead"), null);
+  assert.equal(cost("marketing"), null);
+  input.costSource = "scenario";
+  close(cost("overhead"), 1234);
+  close(cost("marketing"), 456);
+  close(cost("fees"), 789);
+});
+
+test("Budget marketing reads and prorates existing campaign cost fields without a duplicate Budget line or input mutation", () => {
+  const input = setup();
+  input.costSource = "budget";
+  const campaign = campaignSchema.parse({ id: randomUUID(), name: "Existing campaign", start: "2026-01-10", end: "2026-01-20", monthlySpend: 310, otherMonthlyCost: 62 });
+  input.workspace.campaigns.push(campaign);
+  input.workspace.moneyPlanning = { estimatedMonthlyValues: { marketing: 9999 } };
+  input.estimatedMonthlyValues!.marketing = 8888;
+  const original = structuredClone(input);
+  const marketing = () => profitFirstPlanning(input).costs.find(c => c.key === "marketing")!;
+  close(marketing().monthly, 132);
+  assert.match(marketing().source, /Budget marketing lines and campaign cost fields/);
+  assert.deepEqual(input, original);
+  campaign.monthlySpend = 620;
+  close(marketing().monthly, 242);
+  addBudget(input, 100, "monthly", "marketing");
+  close(marketing().monthly, 342);
+  assert.equal(input.workspace.budgets.length, 1, "Reading campaign costs never copies them into Budget lines");
+  assert.deepEqual(input.workspace.moneyPlanning, original.workspace.moneyPlanning);
+  input.costSource = "scenario";
+  close(marketing().monthly, 9999);
+});
+
+test("Budget marketing linked campaign overlap stays Unknown with a plain reason and unchanged sources", () => {
+  const input = setup();
+  input.costSource = "budget";
+  input.workspace.campaigns.push(campaignSchema.parse({ id: randomUUID(), name: "Linked campaign", start: "2026-01-01", monthlySpend: 200, otherMonthlyCost: 20 }));
+  addBudget(input, 200, "monthly", "marketing");
+  input.workspace.budgets[0].campaignId = input.workspace.campaigns[0].id;
+  const original = structuredClone(input);
+  const report = profitFirstPlanning(input);
+  assert.equal(report.costs.find(c => c.key === "marketing")!.monthly, null);
+  assert.equal(report.rows.find(row => row.key === "operating-expenses")!.costMonthly, null);
+  assert.match(report.reasons.join(" "), /Linked campaign: campaign costs may overlap a linked marketing Budget line/);
+  assert.equal(report.status, "incomplete");
+  assert.deepEqual(input, original);
+});
+
+test("Budget marketing missing campaign date or spending stays Unknown, while explicit zero and proven out-of-month dates are zero", () => {
+  const input = setup();
+  input.costSource = "budget";
+  const campaign = campaignSchema.parse({ id: randomUUID(), name: "Campaign dates", monthlySpend: 100, otherMonthlyCost: 10 });
+  input.workspace.campaigns.push(campaign);
+  const marketing = () => profitFirstPlanning(input).costs.find(c => c.key === "marketing")!.monthly;
+  assert.equal(marketing(), null);
+  assert.match(profitFirstPlanning(input).reasons.join(" "), /enter a campaign start date in Budget/);
+  campaign.monthlySpend = 0; campaign.otherMonthlyCost = 0;
+  close(marketing(), 0);
+  campaign.monthlySpend = null; campaign.start = "2026-01-01";
+  assert.equal(marketing(), null);
+  assert.match(profitFirstPlanning(input).reasons.join(" "), /enter campaign monthly spending in Budget/);
+  campaign.start = "2026-02-01";
+  close(marketing(), 0);
+  campaign.start = null; campaign.end = "2025-12-31";
+  close(marketing(), 0);
+  campaign.end = null; campaign.start = "2026-01-01"; campaign.monthlySpend = 100;
+  campaign.planningOnly = true;
+  assert.equal(marketing(), null, "A scenario-only campaign is not a configured Today marketing source");
+  campaign.planningOnly = false; campaign.archived = true;
+  assert.equal(marketing(), null);
+});
 
 test("ambiguous owner funding metrics never choose a target by amount or row order", () => {
   for (const metric of ["coOwnerSalaryPretax", "ownerDistributionsPretax"] as const) {
@@ -85,6 +242,8 @@ test("current allocation overrides retain defaults, zero and overallocated total
 
 test("annual total / 12, already monthly average unchanged, labeled period retained", () => {
   const input = setup();
+  input.workspace.settings.overheadFloorMonthly = 0;
+  input.workspace.settings.overheadFloorOverride = false;
   input.overhead = { amount: 24000, basis: "annual-total", sourcePeriod: "2025 annual overhead estimate" };
   close(profitFirstPlanning(input).costs[0].monthly, 2000);
   input.overhead = { amount: 2000, basis: "monthly-average", sourcePeriod: "2025 monthly average estimate" };
@@ -94,22 +253,25 @@ test("annual total / 12, already monthly average unchanged, labeled period retai
   assert.equal(profitFirstPlanning(input).costs[0].monthly, null);
 });
 
-test("default overhead uses previous 12 calendar months; mixed cadence, annual accrual and allowance counted once", () => {
+test("Budget overhead uses the selected calendar month and mixed cadence without goal allowances", () => {
   const input = setup();
+  input.costSource = "budget";
   addBudget(input, 24000);
   addBudget(input, 100, "monthly");
   addBudget(input, 70, "weekly");
   addBudget(input, 140, "biweekly");
   addBudget(input, 1200, "once");
   const result = profitFirstPlanning(input);
-  close(result.costs[0].monthly, (24000 + 1200 + 3650 + 3650 + 1200) / 12);
-  assert.match(result.overheadSource, /2025-01-01 to 2025-12-31/);
+  close(result.costs[0].monthly, 24000 * 31 / 365 + 100 + 70 * 31 / 7 + 140 * 31 / 14);
+  assert.match(result.overheadSource, /2026-01-01 to 2026-01-31/);
   input.workspace.settings.overheadFloorMonthly = 4000;
-  close(profitFirstPlanning(input).costs[0].monthly, 4000);
+  close(profitFirstPlanning(input).costs[0].monthly, 24000 * 31 / 365 + 100 + 70 * 31 / 7 + 140 * 31 / 14);
 });
 
 test("monthly overhead input never divided again; unknown volume budgets stay unknown", () => {
   const input = setup();
+  input.workspace.settings.overheadFloorMonthly = 0;
+  input.workspace.settings.overheadFloorOverride = false;
   input.estimatedMonthlyValues!.overhead = 2100;
   close(profitFirstPlanning(input).costs[0].monthly, 2100);
   delete input.estimatedMonthlyValues!.overhead;
@@ -319,16 +481,18 @@ test("planning settings round-trip JSON, permit over 100%, and stay separate fro
   assert.equal(workspaceSchema.safeParse(stored).success, false);
 });
 
-test("persisted monthly overrides win over forecast inputs, retain zero and unknown, and do not redivide overhead", () => {
+test("saved revenue and allocation choices win; configured Budget overrides duplicate saved overhead without erasing it", () => {
   const input = setup();
+  input.costSource = "budget";
   input.overhead = { amount: 24000, basis: "annual-total", sourcePeriod: "Synthetic annual estimate" };
   input.workspace.moneyPlanning = { estimatedMonthlyValues: { revenue: 20000, overhead: 0 }, scenarioPercents: { "admin-payroll": 120 } };
   const result = profitFirstPlanning(input);
   close(result.income, 20000);
-  close(result.costs[0].monthly, 0);
+  assert.equal(result.costs[0].monthly, null, "No Budget line is configured");
   close(result.rows.find(r => r.key === "admin-payroll")!.requiredPercent, 120);
   input.workspace.moneyPlanning.estimatedMonthlyValues!.overhead = 2000;
-  close(profitFirstPlanning(input).costs[0].monthly, 2000);
+  assert.equal(profitFirstPlanning(input).costs[0].monthly, null);
+  assert.equal(input.workspace.moneyPlanning.estimatedMonthlyValues!.overhead, 2000);
   input.workspace.moneyPlanning.estimatedMonthlyValues!.revenue = null;
   assert.equal(profitFirstPlanning(input).income, null);
   input.workspace.moneyPlanning.scenarioPercents!["admin-payroll"] = -1;

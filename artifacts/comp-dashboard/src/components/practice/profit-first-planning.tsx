@@ -1,12 +1,14 @@
 import { useEffect, useId, useState } from "react";
 import { moneyPlanningSchema, type MoneyPlanningSettings } from "@workspace/practice/hub";
 import { useUnsaved } from "@/components/hub/use-unsaved";
+import { Popover, PopoverTrigger, PopoverContent } from "@/components/ui/popover";
 import { profitFirstPlanning, type PlanningBucket, type PlanningFundingGoal, type ProfitFirstPlanningInput } from "@/lib/profit-first-planning";
 import "./profit-first-planning.css";
 
 export type ProfitFirstPlanningProps = ProfitFirstPlanningInput & {
   /** Stage this object in the parent's active workspace/draft. No writes occur here. */
   onPlanningChange?: (next: MoneyPlanningSettings) => void;
+  onOpenBudget?: () => void;
   /** Funding editors belong in Goals; all supports combined editor integrations. */
   renderMode?: "allocations" | "funding" | "all";
 };
@@ -85,7 +87,7 @@ export default function ProfitFirstPlanning(props: ProfitFirstPlanningProps) {
     onBlur={event => stageNumber(`estimate:${key}`, event.target, maximum)}
     onKeyDown={event => { if (event.key === "Enter") event.currentTarget.blur(); }} />{fieldError(`estimate:${key}`)}</>;
   };
-  const help = (text: string) => <details className="pf-help"><summary aria-label={`Help: ${text}`}>?</summary><span>{text}</span></details>;
+  const help = (text: string) => <Popover><PopoverTrigger asChild><button type="button" className="pf-help" aria-label={`Help: ${text}`}>?</button></PopoverTrigger><PopoverContent className="pf-help-content" collisionPadding={12} aria-label="Planning explanation">{text}</PopoverContent></Popover>;
   const costValue = (key: string) => report.costs.find(cost => cost.key === key)?.monthly ?? null;
   const inlineCostKeys = ["overhead", "fees", "marketing", "taxObligations"];
   const secondaryReasons = report.reasons.filter(reason => reason !== "Quarterly tax planning estimate is missing."
@@ -120,7 +122,7 @@ export default function ProfitFirstPlanning(props: ProfitFirstPlanningProps) {
     {report.noFiniteRevenueSolution && <p className="pf-deficit">The percentage floors leave no room for fixed costs or additional goals. Higher revenue alone cannot fund this scenario.</p>}
     <div className="pf-table-scroll"><table role="table">
       <caption>Monthly allocation planning</caption>
-      <thead role="rowgroup"><tr role="row"><th role="columnheader" scope="col">Bucket</th><th role="columnheader" scope="col">Current %</th><th role="columnheader" scope="col">Current allocation ($/month)</th><th role="columnheader" scope="col">Budget needed ($/month)</th><th role="columnheader" scope="col">Gap ($/month)</th><th role="columnheader" scope="col">Required %</th><th role="columnheader" scope="col">Planning inputs {help("Editable inputs recalculate the monthly outputs. Percentage floors set minimum funding without reducing configured costs.")}</th></tr></thead>
+      <thead role="rowgroup"><tr role="row"><th role="columnheader" scope="col">Bucket</th><th role="columnheader" scope="col">Current %</th><th role="columnheader" scope="col">Current allocation ($/month)</th><th role="columnheader" scope="col">Budget needed ($/month)</th><th role="columnheader" scope="col">Gap ($/month)</th><th role="columnheader" scope="col">Required %</th><th role="columnheader" scope="col">Planning inputs {help("Current % and minimum income share are your allocation choices. Budget needed, Gap and Required % are calculated from costs and goals.")}</th></tr></thead>
       <tbody role="rowgroup">{report.rows.map(row => {
         const gap = row.requiredMonthly === null || row.currentMonthly === null ? null : row.requiredMonthly - row.currentMonthly;
         return <tr key={row.key} role="row">
@@ -129,13 +131,20 @@ export default function ProfitFirstPlanning(props: ProfitFirstPlanningProps) {
           onBlur={event => stageNumber(`current:${row.key}`, event.target, 100, true)} onKeyDown={event => { if (event.key === "Enter") event.currentTarget.blur(); }} /><span aria-hidden="true">%</span>{fieldError(`current:${row.key}`)}</label></td><td role="cell" data-label="Current allocation ($/month)">{dollars(row.currentMonthly)}</td>
         <td role="cell" data-label="Budget needed ($/month)">{dollars(row.requiredMonthly)}</td><td role="cell" data-label="Gap ($/month)" className={gap !== null && gap > 0 ? "pf-deficit" : undefined}>{dollars(gap)}</td>
         <td role="cell" data-label="Required %" className={row.requiredPercent !== null && row.requiredPercent > 100 ? "pf-deficit" : undefined}>{percent(row.requiredPercent)}</td>
-        <td role="cell" data-label="Planning inputs" className="pf-inline-inputs"><label><span>{row.key === "business-profit" ? "Profit floor %" : "Planned floor %"} {help("Minimum share of total monthly income; configured costs and contributions can require more.")}</span><input aria-label={`${row.label} scenario percentage floor`} type="number" min="0" step="0.1" placeholder="Unknown" disabled={!props.onPlanningChange} {...errorProps(`floor:${row.key}`)} value={drafts[`floor:${row.key}`] ?? row.scenarioPercent ?? ""}
+        <td role="cell" data-label="Planning inputs" className="pf-inline-inputs"><label><span>Minimum income share % {help("Your choice: reserve at least this percentage of total monthly income for this bucket. For example, 5% of $10,000 is $500. Budget costs and funding goals can require more; this does not replace Current %.")}</span><input aria-label={`${row.label} scenario percentage floor`} type="number" min="0" step="0.1" placeholder="Unknown" disabled={!props.onPlanningChange} {...errorProps(`floor:${row.key}`)} value={drafts[`floor:${row.key}`] ?? row.scenarioPercent ?? ""}
           onChange={event => editNumber(`floor:${row.key}`, event.target, (current, amount) => ({ ...current, scenarioPercents: { ...current.scenarioPercents, [row.key]: amount } }), Infinity)}
           onBlur={event => stageNumber(`floor:${row.key}`, event.target, Infinity)} onKeyDown={event => { if (event.key === "Enter") event.currentTarget.blur(); }} />{fieldError(`floor:${row.key}`)}</label>
           {row.key === "operating-expenses" && <>
-            <label><span>Overhead $ {help("Monthly overhead set-aside. Source periods are available below.")}</span>{estimateInput("overhead", costValue("overhead"), "Overhead set-aside estimate")}{costValue("overhead") === null && <small>Enter monthly overhead.</small>}</label>
-            <label><span>Processing $ {help("Monthly processing cost, including percentage and fixed fees.")}</span>{estimateInput("fees", costValue("fees"), "Processing cost estimate")}{costValue("fees") === null && <small>Enter monthly processing cost.</small>}</label>
-            <label><span>Marketing $</span>{estimateInput("marketing", costValue("marketing"), "Existing marketing estimate")}{costValue("marketing") === null && <small>Enter monthly marketing cost.</small>}</label>
+            {props.costSource !== "budget" ? <>
+              <label><span>Overhead estimate $</span>{estimateInput("overhead", costValue("overhead"), "Overhead set-aside estimate")}</label>
+              <label><span>Processing estimate $</span>{estimateInput("fees", costValue("fees"), "Processing cost estimate")}</label>
+              <label><span>Marketing estimate $</span>{estimateInput("marketing", costValue("marketing"), "Existing marketing estimate")}</label>
+            </> : <>
+            <div className="pf-cost-source"><span>Overhead (Budget source)</span><strong>{dollars(costValue("overhead"))}</strong></div>
+            <div className="pf-cost-source"><span>Marketing (Budget source)</span><strong>{dollars(costValue("marketing"))}</strong></div>
+            {props.onOpenBudget && <button type="button" className="pf-budget-link" onClick={props.onOpenBudget}>Open Budget</button>}
+            <div className="pf-cost-source"><span>Processing (calculated estimate) {help("Configured percentage and fixed processing fees applied to estimated collections and payment transactions. Billed sessions and client charges do not establish actual processor fees.")}</span><strong>{dollars(costValue("fees"))}</strong></div>
+            </>}
           </>}
           {row.key === "taxes" && <label><span>Quarterly taxes $ {help("Enter the quarterly tax amount. One third funds each month; no tax rate is assumed.")}</span>{estimateInput("taxObligations", costValue("taxObligations"), "Quarterly tax planning estimate", 3)}
             {costValue("taxObligations") === null && <small>Quarterly tax planning estimate is missing.</small>}

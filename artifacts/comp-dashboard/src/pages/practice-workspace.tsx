@@ -1,4 +1,4 @@
-import { useEffect, useId, useMemo, useRef, useState, type ReactNode } from "react";
+import { Children, Fragment, isValidElement, useEffect, useId, useMemo, useRef, useState, type ReactNode } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useUnsaved } from "@/components/hub/use-unsaved";
 import {
@@ -139,6 +139,8 @@ import Updates from "@/components/hub/updates";
 import { type ViewProps, fmt, monthLabel } from "@/components/hub/views";
 import WorkspaceSessions from "@/components/practice/workspace-sessions";
 import PercentageKpi from "@/components/practice/percentage-kpi";
+import SectionWidgetGrid from "@/components/practice/section-widget-grid";
+import { sectionLayoutSettingsPatch, type SectionLayoutKey, type SectionWidgetSize } from "@/lib/section-widget-layout";
 import MetricComparison from "@/components/practice/metric-comparison";
 import { hasUniqueClinicianIdentity } from "@/lib/metric-comparison";
 import { staffPaySummary } from "@/lib/staff-pay-summary";
@@ -745,7 +747,8 @@ export default function PracticeWorkspace() {
   const [section, setSection] = useState<Section>("summary");
   const [sessionMetricView, setSessionMetricView] =
     useState<SessionMetricView>("sessions");
-  const [sharedPeriod, setSharedPeriod] = useState<SharedPeriod>("30d");
+  const [sharedPeriod, setSharedPeriod] = useState<SharedPeriod>("90d");
+  const [moneyTab, setMoneyTab] = useState<"allocations" | "budget">("allocations");
   const [historicalPayBasis, setHistoricalPayBasis] = useState<HistoricalPayBasis>("dated");
   const [customPeriod, setCustomPeriod] = useState({
     start: "2026-09-01",
@@ -863,6 +866,7 @@ export default function PracticeWorkspace() {
   );
   const workspace = resolved?.workspace;
   const workingWorkspace = stagedWorkspace ?? workspace!;
+  const clinicalAttributions = workingWorkspace?.consultAttributionOverrides;
   const forecastWorkspace = resolved?.forecastWorkspace;
   const importEvidenceDeclarations = useMemo(() => localRetentionState.declarations
     ? localRetentionState.billingResolutions.length ? { ...localRetentionState.declarations.data, billingResolutions: localRetentionState.billingResolutions }
@@ -876,7 +880,7 @@ export default function PracticeWorkspace() {
   const currentReportCoverage = useMemo(() => context && workspace
     ? completeReportCoverage(localRetentionState.snapshots, currentPracticeClinicians(workingWorkspace, context, today), today, context.clinicians,
       { declarations: importEvidenceDeclarations, teamId: workspace.settings.teamId }) : null,
-  [context, workspace, stagedWorkspace, localRetentionState.snapshots, importEvidenceDeclarations, today]);
+  [context, workspace?.settings.teamId, workingWorkspace?.clinicians, localRetentionState.snapshots, importEvidenceDeclarations, today]);
   const rawImportedSessionOverlay = useMemo(
     () =>
       !sandbox && context && workspace
@@ -914,7 +918,7 @@ export default function PracticeWorkspace() {
   [context, workspace?.settings.teamId, completeClinicalReports]);
   const currentConsultCohort = useMemo(() => context && workspace
     ? currentPracticeClinicians(workingWorkspace, context, today).map((person) => person.label) : [],
-  [context, workspace, stagedWorkspace, today]);
+  [context, workingWorkspace?.settings.teamId, workingWorkspace?.clinicians, today]);
   const excludedFollowUpEvidence = useMemo(() => localRetentionState.snapshots.flatMap((snapshot) => snapshot.kind === "attendance" ? snapshot.rows.filter((row) => {
     if (row.status !== "show" || completeClinicalReports?.eligibleAttendanceRows.includes(row)) return false;
     const ids = context?.clinicians.filter((person) => normalizeClinicianName(person.label) === normalizeClinicianName(row.clinician)).map((person) => person.id) ?? [];
@@ -975,11 +979,11 @@ export default function PracticeWorkspace() {
     calendarScope: { clinicians: context?.clinicians ?? [], teamId: workspace?.settings.teamId ?? null, declarations: importEvidenceDeclarations },
     classificationSnapshots: localRetentionState.snapshots,
     overrides: localRetentionState.sameDayVisitOverrides,
-    attributions: (stagedWorkspace ?? workspace)?.consultAttributionOverrides ?? [],
+    attributions: clinicalAttributions ?? [],
     cohortClinicianNames: currentConsultCohort,
     excludedFollowUpEvidence,
     today,
-  }), [historicalClinicalSnapshots, completeClinicalReports, localRetentionState.snapshots, localRetentionState.sameDayVisitOverrides, stagedWorkspace, workspace, context, importEvidenceDeclarations, currentConsultCohort, excludedFollowUpEvidence, today]);
+  }), [historicalClinicalSnapshots, completeClinicalReports, localRetentionState.snapshots, localRetentionState.sameDayVisitOverrides, clinicalAttributions, workspace?.settings.teamId, context, importEvidenceDeclarations, currentConsultCohort, excludedFollowUpEvidence, today]);
   const historicalMetrics = historicalReports["3mo"];
   const historicalActivity = historicalMetrics.activity;
   const historicalClinicianActivityByName = new Map(historicalMetrics.clinicians.map((row) => [normalizeClinicianName(row.clinician), row]));
@@ -1002,7 +1006,7 @@ export default function PracticeWorkspace() {
         periodRange.start,
         periodRange.end,
         today,
-        (stagedWorkspace ?? workspace)?.consultAttributionOverrides ?? [],
+        clinicalAttributions ?? [],
         { cohortClinicianNames: currentConsultCohort, excludedFollowUpEvidence, classificationSnapshots: localRetentionState.snapshots },
       ),
     [
@@ -1015,8 +1019,7 @@ export default function PracticeWorkspace() {
       periodRange.start,
       periodRange.end,
       today,
-      stagedWorkspace,
-      workspace,
+      clinicalAttributions,
     ],
   );
   const modelContext = importedSessionOverlay?.context ?? context;
@@ -1028,13 +1031,13 @@ export default function PracticeWorkspace() {
         snapshots: historicalClinicalSnapshots, consultSnapshots: completeClinicalReports?.eligibleSnapshots ?? [],
         calendarSnapshots: localRetentionState.snapshots, classificationSnapshots: localRetentionState.snapshots,
         overrides: localRetentionState.sameDayVisitOverrides,
-        attributions: (stagedWorkspace ?? workspace)?.consultAttributionOverrides ?? [],
+        attributions: clinicalAttributions ?? [],
         cohortClinicianNames: currentConsultCohort, excludedFollowUpEvidence, today,
       }));
       return cache.get(clinicianId)!;
     };
   }, [importedSessionOverlay?.attendanceCoverage, historicalReports, historicalClinicalSnapshots, completeClinicalReports,
-    localRetentionState.snapshots, localRetentionState.sameDayVisitOverrides, stagedWorkspace, workspace,
+    localRetentionState.snapshots, localRetentionState.sameDayVisitOverrides, clinicalAttributions,
     currentConsultCohort, excludedFollowUpEvidence, today]);
   const historicalCapacityById = useMemo(() => {
     if (!workingWorkspace || !context || !modelContext) return new Map<number, ReturnType<typeof overviewHistoricalCapacity>>();
@@ -1043,7 +1046,7 @@ export default function PracticeWorkspace() {
       attendanceCoverage: importedSessionOverlay?.attendanceCoverage ?? [],
       historicalReports, selectedClinicianIds: [person.id], today, historyBasis: "available-history",
     })]));
-  }, [workingWorkspace, context, modelContext, importedSessionOverlay?.attendanceCoverage, historicalReports, today]);
+  }, [workingWorkspace?.settings.teamId, workingWorkspace?.clinicians, context, modelContext, importedSessionOverlay?.attendanceCoverage, historicalReports, today]);
   const historicalEarningsById = useMemo(() => {
     if (!workingWorkspace || !context) return new Map<number, HistoricalClinicianEarnings>();
     return createHistoricalClinicianEarningsReader({
@@ -1052,7 +1055,7 @@ export default function PracticeWorkspace() {
       sameDayVisitOverrides: localRetentionState.sameDayVisitOverrides,
       asOf: today, range: historicalReports["3mo"].window.cohort,
     });
-  }, [workingWorkspace, context, localRetentionState.snapshots, localRetentionState.sameDayVisitOverrides, importEvidenceDeclarations, today, historicalReports]);
+  }, [workingWorkspace?.settings.teamId, workingWorkspace?.clinicians, workingWorkspace?.terms, workingWorkspace?.events, context, localRetentionState.snapshots, localRetentionState.sameDayVisitOverrides, importEvidenceDeclarations, today, historicalReports]);
   const planProjection = useMemo(
     () =>
       savedResolved && modelContext
@@ -2955,14 +2958,15 @@ export default function PracticeWorkspace() {
       const id = context.clinicians.find(person => (person.goalId ?? null) === workspace.settings.teamId && normalizeClinicianName(person.label) === normalizeClinicianName(name))!.id;
       const period = report === historicalReports.year ? "year" : "3mo";
       const history = clinicianHistory(id);
-      const available = history.clinician[period];
-      if (!available) return { range: history.ranges[period].effectiveRange ?? report.window.cohort, value: null, benchmark: null,
-        detail: history.ranges[period].effectiveRange ? "Available history has gaps; complete coverage is required." : "No admitted history in this window." };
-      report = available;
-      if (history.ranges[period].clipped) historyNote = `Available history ${report.window.cohort.start} to ${report.window.cohort.end}; not confirmed employment tenure. `;
+      const available = kind === "attrition" ? history.attrition[period] : history.clinician[period];
+      const resolvedRange = kind === "attrition" ? history.attritionRanges[period] : history.ranges[period];
+      if (!available) return { range: resolvedRange.effectiveRange ?? (kind === "attrition" ? report.window.attrition : report.window.cohort), value: null, benchmark: null,
+        detail: resolvedRange.effectiveRange ? "Available history has gaps; complete coverage is required." : "No admitted history in this window." };
+      report = { ...report, ...available };
+      if (resolvedRange.clipped) historyNote = `Available history ${resolvedRange.effectiveRange!.start} to ${resolvedRange.effectiveRange!.end}; not confirmed employment tenure. `;
     }
-    const row = unique ? report.clinicians.find((item) => normalizeClinicianName(item.clinician) === normalizeClinicianName(name)) : undefined;
-    const activity = report.activity;
+    const row = unique ? (kind === "attrition" ? report.attritionClinicians : report.clinicians).find((item) => normalizeClinicianName(item.clinician) === normalizeClinicianName(name)) : undefined;
+    const activity = kind === "attrition" ? report.attritionActivity : report.activity;
     const range = kind === "attrition" ? report.window.attrition : report.window.cohort;
     const practiceRetention = activity?.initialRetentionRate == null ? null : activity.initialRetentionRate * 100;
     const benchmark = kind === "retention" ? practiceRetention
@@ -3390,11 +3394,16 @@ export default function PracticeWorkspace() {
     historicalReports, selectedClinicianIds: selectedContributor ? [selectedContributor.id] : people.map(person => person.id), today,
     historyBasis: selectedContributor ? "available-history" : "calendar",
   });
-  const overviewHistoricalReports = selectedContributor ? Object.fromEntries((["3mo", "year"] as const).map(period => [period,
-    clinicianHistory(selectedContributor.id).clinician[period] ?? { ...historicalReports[period], activity: null, clinicians: [],
-      consults: { ...historicalReports[period].consults, byClinician: [] },
-      periodAttrition: { ...historicalReports[period].periodAttrition, byClinician: [] } },
-  ])) as typeof historicalReports : historicalReports;
+  const overviewHistoricalReports = selectedContributor ? Object.fromEntries((["3mo", "year"] as const).map(period => {
+    const history = clinicianHistory(selectedContributor.id);
+    const base = historicalReports[period];
+    const clinical = history.clinician[period] ?? { ...base, activity: null, clinicians: [],
+      consults: { ...base.consults, byClinician: [] }, periodAttrition: { ...base.periodAttrition, byClinician: [] } };
+    const attrition = history.attrition[period];
+    return [period, { ...clinical, window: { ...clinical.window, attrition: attrition?.window.attrition ?? base.window.attrition },
+      attritionActivity: attrition?.attritionActivity ?? null, attritionClinicians: attrition?.attritionClinicians ?? [],
+      periodAttrition: attrition?.periodAttrition ?? { ...base.periodAttrition, byClinician: [] } }];
+  })) as typeof historicalReports : historicalReports;
   const fundProjection = (goal: LinkedFundGoal | undefined) => {
     if (mode === "practice" && (selectedMoneyRange.warnings.includes("Choose valid non-reversed reporting dates.") || (goal?.balanceDate && goal.balanceDate > selectedMoneyRange.range.end))) return null;
     return fundProjectionSummary(
@@ -3441,9 +3450,9 @@ export default function PracticeWorkspace() {
         100
       : null;
 
-  const namedGoalEditor = (
+  const namedGoalEditorContent = (
   <div className="pw-goal-editor">
-    <section className="pw-edit-item" aria-label="Performance targets">
+    <section className="pw-edit-item" aria-label="Performance targets" data-widget-id="performance-targets" data-widget-title="Performance targets">
       <div className="pw-label-help"><h3>Performance targets</h3><details className="pw-heading-help"><summary aria-label="About performance targets">?</summary><p>Optional practice targets for both historical windows. Caseload uses each clinician's editable desired weekly sessions. Attrition is a maximum; retention and close rate are minimums. These targets do not change observed results.</p></details></div>
       <div className="pw-edit-grid">
         {([["retentionPct", "Retention (%)"], ["closeRatePct", "Close rate (%)"], ["attritionPct", "Attrition maximum (%)"]] as const).map(([key, label]) => <DraftField key={key} label={label} type="number" min={0} max={100} value={workingWorkspace.settings.performanceTargets?.[key] ?? ""} onChange={value => stageSettings({ performanceTargets: { ...workingWorkspace.settings.performanceTargets, [key]: optionalNumber(value) } }, label)} />)}
@@ -3455,7 +3464,7 @@ export default function PracticeWorkspace() {
       const target = goalTarget(goal);
       const unit = goalUnit(row.metric);
       return (
-        <section className="pw-edit-item" key={row.name}>
+        <section className="pw-edit-item" key={row.name} data-widget-id={`goal-${row.metric}`} data-widget-title={row.name === "Owner pay" ? "Erin salary" : row.name === "Co-owner pay" ? "Elia distributions" : row.name}>
           <div className="pw-edit-item-heading">
             <div>
               <div className="pw-label-help"><h3>{row.name === "Owner pay" ? "Erin salary" : row.name === "Co-owner pay" ? "Elia distributions" : row.name === "Business Profit" ? "Business profit" : row.name}</h3><details className="pw-heading-help"><summary aria-label={`About ${row.name}`}>?</summary><p>{row.caption}</p></details></div>
@@ -3526,7 +3535,7 @@ export default function PracticeWorkspace() {
         </section>
       );
     })}
-    <section className="pw-edit-item">
+    <section className="pw-edit-item" data-widget-id="overhead" data-widget-title="Overhead">
       <div className="pw-edit-item-heading">
         <div>
           <h3>Overhead</h3>
@@ -3546,14 +3555,17 @@ export default function PracticeWorkspace() {
         </div></details>
       </div>
     </section>
-    <section className="pw-edit-item">
+    <section className="pw-edit-item pw-goal-funds" data-widget-id="fund-balances" data-widget-title="Fund balances" data-widget-size="wide">
       <div className="pw-edit-item-heading">
         <div>
           <div className="pw-label-help"><h3>Fund balances</h3><details className="pw-heading-help"><summary aria-label="About fund balances">?</summary><p>Targets are total balances, not annual expenses or monthly contributions. Blank balances are assumed $0 until entered.</p></details></div>
         </div>
         <button
           className="pw-button"
-          onClick={() => setSection("money")}
+          onClick={() => {
+            const target = document.querySelector<HTMLElement>('[aria-label="Monthly funding goals"]');
+            if (target) { target.tabIndex = -1; target.focus({ preventScroll: true }); target.scrollIntoView({ block: "start", behavior: "smooth" }); }
+          }}
         >
           Edit contributions
         </button>
@@ -3636,6 +3648,26 @@ export default function PracticeWorkspace() {
   </div>
   );
 
+  function widgetGrid(sectionKey: SectionLayoutKey, children: ReactNode, className = "", defaultSize: SectionWidgetSize = "medium") {
+    const flatten = (nodes: ReactNode): ReactNode[] => Children.toArray(nodes).flatMap(node => isValidElement(node) && node.type === Fragment
+      ? flatten((node.props as { children?: ReactNode }).children) : [node]);
+    const items = flatten(children).filter(isValidElement).map((child, index) => {
+      const props = child.props as Record<string, unknown>;
+      const id = String(props["data-widget-id"] ?? child.key ?? `widget-${index}`).replace(/[^a-zA-Z0-9_-]/g, "-").replace(/^-+/, "").slice(0, 80) || `widget-${index}`;
+      return { id, title: String(props["data-widget-title"] ?? props["aria-label"] ?? `Widget ${index + 1}`), content: child,
+        defaultSize: (props["data-widget-size"] as SectionWidgetSize | undefined) ?? defaultSize };
+    });
+    return <SectionWidgetGrid key={sectionKey} section={sectionKey} className={className} items={items} disabled={saving}
+      layout={workingWorkspace.settings.sectionLayouts?.[sectionKey]}
+      onChange={layout => stageSettings(sectionLayoutSettingsPatch(workingWorkspace.settings, sectionKey, layout), `${({ summary: "Overview", sessions: "Sessions", clinicians: "Team", money: "Money", marketing: "Growth", rooms: "Rooms", "current-goals": "Goals" })[sectionKey]} layout`)} />;
+  }
+  const namedGoalEditor = widgetGrid("current-goals", namedGoalEditorContent.props.children, "pw-goal-editor", "small");
+  const projectionBasisDetails = mode === "practice" && !visibleTool && <details className="pw-view-bar">
+    <summary>Projection basis</summary><span>{recordedClinicianCount
+      ? `${recordedClinicianCount} of ${viewProjection?.clinicianPace.length ?? 0} clinicians have observed session averages; desired sessions are not substituted. Unverified coverage remains an estimate.`
+      : "Observed session average unavailable; desired sessions are not substituted."}</span>
+    {viewProjection?.clinicianPace.map(person => <p className="pw-note" key={person.id}>{person.name}: {fmt(person.usedWeekly)} sessions / week · {person.basis}{person.recordedThrough ? ` · latest observation ${person.recordedThrough}` : ""}</p>)}
+  </details>;
   return (
     <div className="practice-theme pw-app" data-appearance="dark">
       <header className="pw-rail pw-top-navigation" aria-label="Practice navigation" data-unsaved-navigation>
@@ -3699,13 +3731,13 @@ export default function PracticeWorkspace() {
       <main className="pw-main">
         <header className="pw-header">
           <div>
-            <div className="pw-eyebrow">
+            {mode !== "practice" && <div className="pw-eyebrow">
               {mode === "sandbox"
                 ? "Independent model"
                 : mode === "goals"
                   ? "Future scenarios"
-                  : "Current business"}
-            </div>
+                  : ""}
+            </div>}
             <h1>
               {mode === "sandbox"
                 ? "Sandbox"
@@ -3817,17 +3849,6 @@ export default function PracticeWorkspace() {
             )}
           </div>
         </header>
-        {mode === "practice" && !visibleTool && ["summary", "money"].includes(section) && (
-          <details className="pw-view-bar">
-            <summary>Projection basis</summary>
-            <span>
-              {recordedClinicianCount
-                ? `${recordedClinicianCount} of ${viewProjection?.clinicianPace.length ?? 0} clinicians have observed session averages; desired sessions are not substituted. Unverified coverage remains an estimate.`
-                : "Observed session average unavailable; desired sessions are not substituted."}
-            </span>
-            {viewProjection?.clinicianPace.map((person) => <p className="pw-note" key={person.id}>{person.name}: {fmt(person.usedWeekly)} sessions / week · {person.basis}{person.recordedThrough ? ` · latest observation ${person.recordedThrough}` : ""}</p>)}
-          </details>
-        )}
         {error && (
           <div className="pw-error" role="alert">
             {error}
@@ -4048,7 +4069,7 @@ export default function PracticeWorkspace() {
                       )}
                     </>,
                   )}
-                  <div className="pw-clinicians">
+                  {widgetGrid("clinicians", <>
                     {people.map((person) => {
                       const result = calculateClinicianMetrics(person);
                       const classification = String(
@@ -4072,7 +4093,7 @@ export default function PracticeWorkspace() {
                           c.status !== "archived",
                       );
                       return (
-                        <article className="pw-person" key={person.id}>
+                        <article className="pw-person" key={person.id} data-widget-id={`clinician-${person.id}`} data-widget-title={person.label}>
                           <header>
                             <span className="pw-avatar">
                               {person.label
@@ -4178,15 +4199,15 @@ export default function PracticeWorkspace() {
                             </div>
                             <div>
                               <span>Retention</span>
-                              <HistoricalPeriodValues values={historicalValuesFor("retention", person.label)} difference={historicalDifferenceFor("retention", person.label)} />
+                              <HistoricalPeriodValues dates="help" values={historicalValuesFor("retention", person.label)} difference={historicalDifferenceFor("retention", person.label)} />
                             </div>
                             <div>
                               <span>Average monthly attrition</span>
-                              <HistoricalPeriodValues values={historicalValuesFor("attrition", person.label)} difference={historicalDifferenceFor("attrition", person.label)} />
+                              <HistoricalPeriodValues dates="help" periodLabels={{ "3mo": "Last 3 mature months", year: "Last 12 mature months" }} values={historicalValuesFor("attrition", person.label)} difference={historicalDifferenceFor("attrition", person.label)} />
                             </div>
                             <div>
                               <span>Confirmed close</span>
-                              <HistoricalPeriodValues values={historicalValuesFor("consult", person.label)} difference={historicalDifferenceFor("consult", person.label)} />
+                              <HistoricalPeriodValues dates="help" values={historicalValuesFor("consult", person.label)} difference={historicalDifferenceFor("consult", person.label)} />
                             </div>
                           </div>
                           <details className="pw-clinician-operating-details"><summary>Clinician details</summary>
@@ -4392,7 +4413,7 @@ export default function PracticeWorkspace() {
                         </article>
                       );
                     })}
-                  </div>
+                  </>, "pw-clinicians-widgets", "medium")}
                   {!people.length && (
                     <div className="pw-empty">
                       <Users />
@@ -4625,7 +4646,7 @@ export default function PracticeWorkspace() {
                     )}
                   <div className="pw-clinical-metric-grid pw-sessions-clinical-grid" aria-label="Sessions, retention and attrition">
                     <section className="pw-clinical-card" aria-label="Session trends card">
-                      <div className="pw-label-help"><h3>Total sessions</h3><span className="pw-period-caption">{activityPeriodCaption(sharedPeriod, periodRange)}</span></div><div className="pw-metric-hero"><strong>{fmt(selectedSessionEvidence.observedCompleted)}</strong></div>
+                      <div className="pw-label-help"><h3>Total sessions</h3><span className="pw-period-caption">{activityPeriodCaption(sharedPeriod, periodRange)}</span></div>
                       <WorkspaceSessions
                         compact
                         key={mode + "-" + workspace.settings.teamId}
@@ -4642,24 +4663,22 @@ export default function PracticeWorkspace() {
                         onSaved={async () => { await contextQuery.refetch(); void cache.invalidateQueries({ queryKey: ["session-records"] }); }}
                       />
                     </section>
-                    <div className="pw-clinical-history-stack">
-                      <section className="pw-clinical-card" aria-label="Historical close rate card">
+                    {widgetGrid("sessions", <>
+                      <section className="pw-clinical-card" aria-label="Historical close rate card" data-widget-id="close-rate" data-widget-title="Close rate">
                         <div className="pw-label-help"><h3>Historical close rate</h3>{historicalHelp}</div>
                         <HistoricalPeriodValues dates="help" values={historicalValuesFor("consult", compareWholePractice ? "Whole Practice" : selectedContributorName, compareWholePractice)} difference={historicalDifferenceFor("consult", compareWholePractice ? "Whole Practice" : selectedContributorName)} />
                       </section>
-                      <section className="pw-clinical-card" aria-label="Retention card">
+                      <section className="pw-clinical-card" aria-label="Retention card" data-widget-id="retention" data-widget-title="Retention">
                         <h3>Retention</h3>
                         <HistoricalPeriodValues dates="help" values={historicalValuesFor("retention", compareWholePractice ? "Whole Practice" : selectedContributorName, compareWholePractice)} difference={historicalDifferenceFor("retention", compareWholePractice ? "Whole Practice" : selectedContributorName)} />
                         <details><summary>Source and calculation</summary><p>Imported treatment starts within each labeled calendar period. Three attended treatment sessions with no initial gap over 28 days; PHONE excluded. Pending starts are not failures. Coverage is reported separately for each period.</p></details>
                       </section>
-                      <section className="pw-clinical-card" aria-label="Attrition card">
+                      <section className="pw-clinical-card" aria-label="Attrition card" data-widget-id="attrition" data-widget-title="Attrition">
                         <h3>Average monthly attrition</h3>
-                        <HistoricalPeriodValues dates="help" values={historicalValuesFor("attrition", compareWholePractice ? "Whole Practice" : selectedContributorName, compareWholePractice)} difference={historicalDifferenceFor("attrition", compareWholePractice ? "Whole Practice" : selectedContributorName)} />
+                        <HistoricalPeriodValues dates="help" periodLabels={{ "3mo": "Last 3 mature months", year: "Last 12 mature months" }} values={historicalValuesFor("attrition", compareWholePractice ? "Whole Practice" : selectedContributorName, compareWholePractice)} difference={historicalDifferenceFor("attrition", compareWholePractice ? "Whole Practice" : selectedContributorName)} />
                         <details><summary>Source and calculation</summary><p>Established treatment relationships need 90 covered days of follow-up. A later return removes the prior ending. Unknown mature coverage stays unknown, not zero. No attrition target or replacement requirement is invented.</p></details>
                       </section>
-                    </div>
-                  </div>
-                      <section className="pw-metric-panel pw-consult-summary">
+                      <section className="pw-metric-panel pw-consult-summary" data-widget-id="current-consultations" data-widget-title="Selected-period consultations" data-widget-size="wide">
                         <div className="pw-section-heading">
                           <div>
                             <h3>Close rate</h3>
@@ -4851,6 +4870,8 @@ export default function PracticeWorkspace() {
                           </div>
                         </details>
                       </section>
+                    </>, "pw-sessions-history-widgets", "small")}
+                  </div>
                   <details className="pw-panel"><summary>Financial session goal details</summary>
                     {sessionGoal.unavailableReasons.map((reason) => <p key={reason}>{reason}</p>)}
                     {sessionGoal.knownSourceAssumptions.map((assumption) => <p key={assumption}>{assumption}</p>)}
@@ -4956,10 +4977,9 @@ export default function PracticeWorkspace() {
                       Rooms
                     </button>
                   </nav>
-                  {(
-                    <div className="pw-edit-list">
+                  {widgetGrid("marketing", <>
                       {active(workingWorkspace.campaigns).map((c) => (
-                        <section className="pw-edit-item" key={c.id}>
+                        <section className="pw-edit-item" key={c.id} data-widget-id={`campaign-${c.id}`} data-widget-title={displayName(c.name, "Untitled campaign")}>
                           <div className="pw-edit-item-heading">
                             <h3>{displayName(c.name, "Untitled campaign")}</h3>
                             <span>
@@ -5164,7 +5184,7 @@ export default function PracticeWorkspace() {
                           </div>
                         </section>
                       ))}
-                      <div className="pw-edit-item">
+                      <div className="pw-edit-item" data-widget-id="marketing-services" data-widget-title="Marketing services and retainers">
                         <div className="pw-edit-item-heading">
                           <h3>Marketing services and retainers</h3>
                           <button
@@ -5290,11 +5310,7 @@ export default function PracticeWorkspace() {
                             </div>
                           ))}
                       </div>
-                    </div>
-                  )}
-                  {(
-                    <>
-                      <LeadFlow
+                      <LeadFlow data-widget-id="lead-flow" data-widget-title="Lead flow" data-widget-size="wide"
                         workspace={workingWorkspace}
                         context={context}
                         readOnly={sandbox}
@@ -5319,6 +5335,9 @@ export default function PracticeWorkspace() {
                           })
                         }
                       />
+                    </>, "pw-marketing-widgets", "medium")}
+                  {(
+                    <>
                     </>
                   )}
                   {marketingTab === "campaigns" &&
@@ -5388,9 +5407,9 @@ export default function PracticeWorkspace() {
                       limit={roomCapacitySlots || null}
                     />
                   </section>
-                  <div className="pw-edit-list">
+                  {widgetGrid("rooms", <>
                     {active(workingWorkspace.rooms).map((room) => (
-                      <details className="pw-edit-item" key={room.id}>
+                      <details className="pw-edit-item" key={room.id} data-widget-id={`room-${room.id}`} data-widget-title={room.name}>
                         <summary>{room.name} · {room.planningOnly ? "imported location needs configuration" : `${fmt(roomHours(room))} configured hours / week`}</summary>
                         <div className="pw-edit-item-heading">
                           <h3>{room.name}</h3>
@@ -5725,7 +5744,7 @@ export default function PracticeWorkspace() {
                         </div>
                       </details>
                     ))}
-                  </div>
+                  </>, "pw-rooms-widgets", "medium")}
                   {!active(workingWorkspace.rooms).length && (
                     <p className="pw-empty">No rooms yet.</p>
                   )}
@@ -5777,24 +5796,28 @@ export default function PracticeWorkspace() {
                   </div>
                 </>
               )}
-              {section === "budgets" && (
+              {section === "money" && mode === "practice" && <div className="pw-view-switch pw-money-tabs" role="group" aria-label="Money view">
+                <button type="button" aria-pressed={moneyTab === "allocations"} onClick={() => setMoneyTab("allocations")}>Allocations</button>
+                <button type="button" aria-pressed={moneyTab === "budget"} onClick={() => setMoneyTab("budget")}>Budget</button>
+              </div>}
+              {(section === "budgets" || section === "money" && mode === "practice" && moneyTab === "budget") && (
                 <>
                   {heading(
-                    "Operating expenses",
-                    "Recurring costs that keep the practice running. Marketing costs live in Marketing.",
+                    "Budget",
+                    "Operating and marketing line items. Changes use the existing review and save workflow and feed Money allocations.",
                     <button
                       className="pw-button"
                       onClick={() => stageNew("budgets")}
                     >
                       <Plus />
-                      Add expense
+                      Add budget item
                     </button>,
                   )}
                   <p className="pw-budget-date-note">
                     Forecast from affects the estimate. Billing dates are only
                     for your reference; monthly bills default to the 5th.
                   </p>
-                  {resolved?.goal && resolved.goal.annualOverheadGoal > 0 && (
+                  {section === "budgets" && resolved?.goal && resolved.goal.annualOverheadGoal > 0 && (
                     <div className="pw-budget-basis">
                       <div>
                         <strong>Overhead basis</strong>
@@ -5843,7 +5866,7 @@ export default function PracticeWorkspace() {
                       </div>
                     </div>
                   )}
-                  {workingWorkspace.settings.overheadMode === "detailed" &&
+                  {section === "budgets" && workingWorkspace.settings.overheadMode === "detailed" &&
                     !active(workingWorkspace.budgets).some((budget) =>
                       ["expense", "facility"].includes(
                         workingWorkspace.categories.find(
@@ -5873,7 +5896,7 @@ export default function PracticeWorkspace() {
                       <tbody>
                         {active(workingWorkspace.budgets)
                           .filter((b) =>
-                            ["expense", "facility"].includes(
+                            ["expense", "facility", "marketing"].includes(
                               workingWorkspace.categories.find(
                                 (c) => c.id === b.categoryId,
                               )?.kind ?? "",
@@ -5899,6 +5922,7 @@ export default function PracticeWorkspace() {
                                 <label className="pw-draft-field">
                                   <span>{b.name} category</span>
                                   <select
+                                    aria-label={b.name + " category"}
                                     value={b.categoryId}
                                     onChange={(event) =>
                                       stageRecord(
@@ -5913,7 +5937,7 @@ export default function PracticeWorkspace() {
                                       .filter(
                                         (c) =>
                                           c.kind === "expense" ||
-                                          c.kind === "facility",
+                                          c.kind === "facility" || c.kind === "marketing",
                                       )
                                       .map((c) => (
                                         <option key={c.id} value={c.id}>
@@ -5950,6 +5974,7 @@ export default function PracticeWorkspace() {
                                 <label className="pw-draft-field">
                                   <span>{b.name} frequency</span>
                                   <select
+                                    aria-label={b.name + " frequency"}
                                     value={b.cadence}
                                     onChange={(event) =>
                                       stageRecord(
@@ -6041,7 +6066,7 @@ export default function PracticeWorkspace() {
                     </table>
                   </div>
                   {!active(workingWorkspace.budgets).some((b) =>
-                    ["expense", "facility"].includes(
+                    ["expense", "facility", "marketing"].includes(
                       workingWorkspace.categories.find(
                         (c) => c.id === b.categoryId,
                       )?.kind ?? "",
@@ -6055,6 +6080,26 @@ export default function PracticeWorkspace() {
                       </p>
                     </div>
                   )}
+                  {active(workingWorkspace.campaigns).filter(campaign => !campaign.planningOnly).length > 0 && <section className="pw-budget-campaigns" aria-label="Campaign budgets">
+                    <div className="pw-label-help"><h3>Campaign budgets</h3><details className="pw-heading-help"><summary aria-label="About campaign budgets">?</summary><p>These are the existing campaign cost fields, not copied expenses. Dated campaign costs feed marketing allocations. Linked Budget lines that may duplicate campaign costs require review.</p></details></div>
+                    <div className="pw-edit-list">{active(workingWorkspace.campaigns).filter(campaign => !campaign.planningOnly).map(campaign => <div className="pw-edit-item" key={campaign.id}>
+                      <h4>{displayName(campaign.name, "Unnamed campaign")}</h4><div className="pw-edit-grid">
+                        <DraftField label={`${displayName(campaign.name, "Campaign")} ad budget ($/month)`} type="number" value={campaign.monthlySpend} onChange={value => stageRecord("campaigns", campaign.id, { monthlySpend: Number(value) }, "Campaign ad budget")} />
+                        <DraftField label={`${displayName(campaign.name, "Campaign")} other costs ($/month)`} type="number" value={campaign.otherMonthlyCost ?? 0} onChange={value => stageRecord("campaigns", campaign.id, { otherMonthlyCost: Number(value) }, "Campaign other costs")} />
+                        <DraftField label={`${displayName(campaign.name, "Campaign")} budget starts`} type="date" value={campaign.start ?? ""} onChange={value => stageRecord("campaigns", campaign.id, { start: value || null }, "Campaign budget start")} />
+                        <DraftField label={`${displayName(campaign.name, "Campaign")} budget ends`} type="date" value={campaign.end ?? ""} onChange={value => stageRecord("campaigns", campaign.id, { end: value || null }, "Campaign budget end")} />
+                      </div>
+                    </div>)}</div>
+                  </section>}
+                  <details className="pw-processing-assumptions"><summary>Processing fee assumptions</summary>
+                    <p>Schedule-based estimate, not recorded Stripe fees. Payment counts use the configured session proxy; billed sessions do not prove successful card payments.</p>
+                    <div className="pw-edit-grid">
+                      <DraftField label="Processing percentage (%)" type="number" min={0} max={100} value={workingWorkspace.settings.processingPct} onChange={value => stageSettings({ processingPct: Number(value) }, "Processing percentage")} />
+                      <DraftField label="Fixed fee per payment ($)" type="number" min={0} value={workingWorkspace.settings.processingFixedPerTransaction} onChange={value => stageSettings({ processingFixedPerTransaction: Number(value) }, "Fixed processing fee")} />
+                      <DraftField label="Estimated payments per attended session" type="number" min={0} max={10} value={workingWorkspace.settings.processingTransactionsPerSession} onChange={value => stageSettings({ processingTransactionsPerSession: Number(value) }, "Estimated payment count")} />
+                      <DraftField label="Expected collected share (%)" type="number" min={0} max={100} value={workingWorkspace.settings.collectionPct} onChange={value => stageSettings({ collectionPct: Number(value) }, "Expected collection share")} />
+                    </div>
+                  </details>
                   {active(workingWorkspace.budgets).some(
                     (b) =>
                       !["expense", "facility", "marketing"].includes(
@@ -6179,12 +6224,14 @@ export default function PracticeWorkspace() {
                   )}
                 </>
               )}
-              {section === "money" && mode === "practice" && (
+              {section === "money" && mode === "practice" && moneyTab === "allocations" && (
                 <>
                   <div className="pw-money-month-control"><label className="pw-draft-field"><span>Month</span><input type="month" aria-label="Money month" value={moneyPlanningMonth || today.slice(0, 7)} onChange={event => { if (/^\d{4}-\d{2}$/.test(event.target.value)) setMoneyPlanningMonth(event.target.value); }} /></label><button type="button" className="pw-button" onClick={() => setMoneyPlanningMonth(new Date(Date.UTC(Number(today.slice(0, 4)), Number(today.slice(5, 7)) - 2, 1)).toISOString().slice(0, 7))}>Last month</button></div>
                   <ProfitFirstPlanning
                     workspace={planningWorkspace}
                     context={modelContext ?? context}
+                    costSource="budget"
+                    onOpenBudget={() => setMoneyTab("budget")}
                     asOf={(moneyPlanningMonth || today.slice(0, 7)) + "-01"}
                     estimatedMonthlyValues={planningMonthlyValues}
                     estimateSourcePeriod={currentMoneyPlanning?.basis ?? "Current-month planning baseline unavailable; no desired-session substitution"}
@@ -6480,6 +6527,7 @@ export default function PracticeWorkspace() {
                   />
                   </details>
                   </details>
+                  {projectionBasisDetails}
                 </>
               )}
               {section === "money" && mode !== "practice" && (
@@ -7316,6 +7364,18 @@ export default function PracticeWorkspace() {
                     </div>
                   ))}
                   {achievedFunds.map(({ goal, result }) => <div className="pw-achievement-alert" role="status" key={"fund:" + goal.name}><strong>{goal.name} goal met</strong><p>{result.message}</p></div>)}
+                  <div className="pw-contributor-tabs" role="group" aria-label="Overview contributor">
+                    {contributorNames.map((name, index) => <button type="button" key={index === 0 ? "practice" : people[index - 1].id} aria-pressed={selectedContributorName === name} onClick={() => setSharedContributor(name)}>{name}</button>)}
+                  </div>
+                  <OverviewHistoricalSummary reports={overviewHistoricalReports} capacity={overviewCapacity} targets={workingWorkspace.settings.performanceTargets} layout={workingWorkspace.settings.sectionLayouts?.summary} onLayoutChange={layout => stageSettings(sectionLayoutSettingsPatch(workingWorkspace.settings, "summary", layout), "Overview layout")} contributor={selectedContributorName} contributorIdentityVerified={selectedContributorName === "Whole Practice" || hasUniqueClinicianIdentity(context.clinicians, selectedContributorName, workspace.settings.teamId)} onSessions={() => setSection("sessions")} />
+                  <div className="pw-overview-primary-grid">
+                    <section aria-label="Overview monthly surplus">
+                      <h3>{financialEstimates?.summary.values.profit == null && financialEstimates?.summary.surplusBeforeUnconfiguredMarketing != null ? "Surplus before unconfigured marketing" : "Estimated monthly surplus"}</h3><p>{monthLabel(summaryMonth?.date ?? today)} · planning estimate, not cash</p>
+                      <div className="pw-metric-hero"><strong>{money(financialEstimates?.summary.values.profit ?? financialEstimates?.summary.surplusBeforeUnconfiguredMarketing)}</strong><span>{financialEstimates?.summary.values.profit == null && financialEstimates?.summary.surplusBeforeUnconfiguredMarketing != null ? "Known dated costs included; additional marketing unresolved. Not operating profit." : "After estimated clinician pay and practice costs"}</span></div>
+                      <button className="pw-button" onClick={() => setSection("money")}>Money<ChevronRight /></button>
+                      <details><summary>How this is calculated</summary><p>{historicalPayBasis === "current-assumptions" ? "Current-pay scenario for historical configuration gaps." : "Configured pay dates respected."} Historical percentage compensation uses accepted discounted billed charges. Costs use configured assumptions, not paid receipts. Future revenue and percentage pay use clinician-card fee estimates. Incomplete source periods are excluded; missing inputs stay unknown. Recorded actual profit remains separate in Money.</p>{financialEstimates?.summary.reasons.map((warning) => <p key={warning}>{warning}</p>)}</details>
+                    </section>
+                  </div>
                   <details className="pw-overview-report-controls"><summary>Forecast controls</summary>
                   <SharedPeriodControls
                     period={sharedPeriod}
@@ -7397,6 +7457,7 @@ export default function PracticeWorkspace() {
                     </div>,
                   )}
                   </details>
+                  {projectionBasisDetails}
                   {mode === "practice" && practiceView === "actual" && (
                     <section className="pw-import-attention">
                       <div>
@@ -7423,18 +7484,6 @@ export default function PracticeWorkspace() {
                       </button>
                     </section>
                   )}
-                  <div className="pw-overview-primary-grid">
-                    <section aria-label="Overview monthly surplus">
-                      <h3>{financialEstimates?.summary.values.profit == null && financialEstimates?.summary.surplusBeforeUnconfiguredMarketing != null ? "Surplus before unconfigured marketing" : "Estimated monthly surplus"}</h3><p>{monthLabel(summaryMonth?.date ?? today)} · planning estimate, not cash</p>
-                      <div className="pw-metric-hero"><strong>{money(financialEstimates?.summary.values.profit ?? financialEstimates?.summary.surplusBeforeUnconfiguredMarketing)}</strong><span>{financialEstimates?.summary.values.profit == null && financialEstimates?.summary.surplusBeforeUnconfiguredMarketing != null ? "Known dated costs included; additional marketing unresolved. Not operating profit." : "After estimated clinician pay and practice costs"}</span></div>
-                      <button className="pw-button" onClick={() => setSection("money")}>Money<ChevronRight /></button>
-                      <details><summary>How this is calculated</summary><p>{historicalPayBasis === "current-assumptions" ? "Current-pay scenario for historical configuration gaps." : "Configured pay dates respected."} Historical percentage compensation uses accepted discounted billed charges. Costs use configured assumptions, not paid receipts. Future revenue and percentage pay use clinician-card fee estimates. Incomplete source periods are excluded; missing inputs stay unknown. Recorded actual profit remains separate in Money.</p>{financialEstimates?.summary.reasons.map((warning) => <p key={warning}>{warning}</p>)}</details>
-                    </section>
-                  </div>
-                  <div className="pw-contributor-tabs" role="group" aria-label="Overview contributor">
-                    {contributorNames.map((name, index) => <button type="button" key={index === 0 ? "practice" : people[index - 1].id} aria-pressed={selectedContributorName === name} onClick={() => setSharedContributor(name)}>{name}</button>)}
-                  </div>
-                  <OverviewHistoricalSummary reports={overviewHistoricalReports} capacity={overviewCapacity} targets={workingWorkspace.settings.performanceTargets} contributor={selectedContributorName} contributorIdentityVerified={selectedContributorName === "Whole Practice" || hasUniqueClinicianIdentity(context.clinicians, selectedContributorName, workspace.settings.teamId)} onSessions={() => setSection("sessions")} />
                   <details className="pw-overview-existing-details"><summary>Forecast and historical details</summary>
                   <div className="pw-summary">
                     {metrics.map((m) => (
@@ -8077,7 +8126,7 @@ export default function PracticeWorkspace() {
                     </button>,
                   )}
                   {namedGoalEditor}
-                  <ProfitFirstPlanning renderMode="funding" workspace={planningWorkspace} context={modelContext ?? context}
+                  <ProfitFirstPlanning renderMode="funding" costSource="budget" workspace={planningWorkspace} context={modelContext ?? context}
                     asOf={(moneyPlanningMonth || today.slice(0, 7)) + "-01"} estimatedMonthlyValues={planningMonthlyValues}
                     estimateSourcePeriod={currentMoneyPlanning?.basis ?? "Monthly planning inputs unavailable"}
                     legacyGoal={resolved?.goal} onPlanningChange={stageMoneyPlanning} />

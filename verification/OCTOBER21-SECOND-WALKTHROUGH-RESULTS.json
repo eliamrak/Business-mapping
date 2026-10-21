@@ -1,0 +1,129 @@
+{
+  "syntheticOnly": true,
+  "checks": [
+    {
+      "name": "Overview second-review layout 1280",
+      "pass": true
+    },
+    {
+      "name": "Sessions second-review layout 1280",
+      "pass": true
+    },
+    {
+      "name": "Team second-review layout 1280",
+      "pass": true
+    },
+    {
+      "name": "Growth second-review layout 1280",
+      "pass": true
+    },
+    {
+      "name": "Money second-review layout 1280",
+      "pass": true
+    },
+    {
+      "name": "Goals second-review layout 1280",
+      "pass": true
+    },
+    {
+      "name": "Overview second-review layout 900",
+      "pass": true
+    },
+    {
+      "name": "Sessions second-review layout 900",
+      "pass": true
+    },
+    {
+      "name": "Team second-review layout 900",
+      "pass": true
+    },
+    {
+      "name": "Growth second-review layout 900",
+      "pass": true
+    },
+    {
+      "name": "Money second-review layout 900",
+      "pass": true
+    },
+    {
+      "name": "Goals second-review layout 900",
+      "pass": true
+    },
+    {
+      "name": "Overview second-review layout 390",
+      "pass": true
+    },
+    {
+      "name": "Sessions second-review layout 390",
+      "pass": true
+    },
+    {
+      "name": "Team second-review layout 390",
+      "pass": true
+    },
+    {
+      "name": "Growth second-review layout 390",
+      "pass": true
+    },
+    {
+      "name": "Money second-review layout 390",
+      "pass": true
+    },
+    {
+      "name": "Goals second-review layout 390",
+      "pass": true
+    },
+    {
+      "name": "Overview second-review layout 320",
+      "pass": true
+    },
+    {
+      "name": "Sessions second-review layout 320",
+      "pass": true
+    },
+    {
+      "name": "Team second-review layout 320",
+      "pass": true
+    },
+    {
+      "name": "Growth second-review layout 320",
+      "pass": true
+    },
+    {
+      "name": "Money second-review layout 320",
+      "pass": true
+    },
+    {
+      "name": "Goals second-review layout 320",
+      "pass": true
+    },
+    {
+      "name": "Budget edits and additions feed allocations through the existing saved store",
+      "pass": true
+    },
+    {
+      "name": "Per-section layout reorder, bounded resize, reload and reset preserve other sections and inputs",
+      "pass": true
+    }
+  ],
+  "writes": [
+    {
+      "path": "/api/hub",
+      "method": "POST"
+    },
+    {
+      "path": "/api/hub",
+      "method": "POST"
+    },
+    {
+      "path": "/api/hub",
+      "method": "POST"
+    },
+    {
+      "path": "/api/hub",
+      "method": "POST"
+    }
+  ],
+  "external": [],
+  "browserErrors": []
+}

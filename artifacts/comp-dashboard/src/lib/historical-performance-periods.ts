@@ -43,6 +43,8 @@ export function clinicianAvailableHistoryRange(requestedRange: SessionPeriod, cl
 export type HistoricalPerformanceInput = Omit<Parameters<typeof historicalPerformance>[0], "period">;
 export type HistoricalPerformanceResult = ReturnType<typeof historicalPerformance>;
 export type HistoricalPerformancePeriods = Record<HistoricalPerformancePeriod, HistoricalPerformanceResult>;
+export type ClinicianHistoricalAttrition = Pick<HistoricalPerformanceResult,
+  "window" | "attritionActivity" | "attritionClinicians" | "periodAttrition">;
 
 /** Both calendar histories use the same evidence and observation cutoff. */
 export function historicalPerformancePeriods(input: HistoricalPerformanceInput): HistoricalPerformancePeriods {
@@ -55,6 +57,8 @@ export function historicalPerformancePeriods(input: HistoricalPerformanceInput):
 /** Re-evaluate both clinician windows without changing the practice baseline or
  * trimming classification/follow-up evidence to the selected event dates.
  * attendanceCoverage must be the post-admission, post-conflict provider proof.
+ * ranges/clinician retain cohort availability; attritionRanges/attrition are
+ * independent so a missing recent cohort cannot hide usable mature history.
  */
 export function clinicianHistoricalPerformancePeriods(input: HistoricalPerformanceInput & {
   clinicianId: number;
@@ -63,38 +67,61 @@ export function clinicianHistoricalPerformancePeriods(input: HistoricalPerforman
 }) {
   const practice = input.practiceReports ?? historicalPerformancePeriods(input);
   const ranges = {} as Record<HistoricalPerformancePeriod, AvailableHistoryRange>;
+  const attritionRanges = {} as Record<HistoricalPerformancePeriod, AvailableHistoryRange>;
+  const attrition = {} as Record<HistoricalPerformancePeriod, ClinicianHistoricalAttrition | null>;
   const clinician = {} as Record<HistoricalPerformancePeriod, HistoricalPerformanceResult | null>;
   for (const period of ["3mo", "year"] as const) {
     const base = practice[period];
     const resolved = clinicianAvailableHistoryRange(base.window.cohort, input.clinicianId, input.attendanceCoverage);
     ranges[period] = resolved;
+    const resolvedAttrition = clinicianAvailableHistoryRange(base.window.attrition, input.clinicianId, input.attendanceCoverage);
+    attritionRanges[period] = resolvedAttrition;
+    const attritionRange = resolvedAttrition.effectiveRange;
+    const options = () => ({ classificationSnapshots: input.classificationSnapshots ?? input.snapshots,
+      excludedFollowUpEvidence: input.excludedFollowUpEvidence ?? [] });
+    if (!attritionRange || !resolvedAttrition.coverageComplete) {
+      attrition[period] = null;
+    } else if (!resolvedAttrition.clipped) {
+      attrition[period] = base;
+    } else {
+      attrition[period] = {
+        window: { ...base.window, attrition: { ...attritionRange } },
+        attritionActivity: estimateLocalClientActivity(input.snapshots, input.overrides ?? {}, 56, 56, 28,
+          base.window.asOf, 90, attritionRange.start, attritionRange.end, options()),
+        attritionClinicians: buildLocalRetentionMetrics(input.snapshots, {}, input.overrides ?? {}, 28,
+          base.window.asOf, 90, attritionRange.start, attritionRange.end, options()).clientActivityByClinician,
+        periodAttrition: periodClientAttrition({ snapshots: input.snapshots, requestedWindow: attritionRange,
+          asOf: base.window.asOf, overrides: input.overrides ?? {}, ...options() }),
+      };
+    }
     const range = resolved.effectiveRange;
     if (!range || !resolved.coverageComplete) {
       clinician[period] = null;
       continue;
     }
-    if (!resolved.clipped) {
+    if (!resolved.clipped && attrition[period] === base) {
       clinician[period] = base;
       continue;
     }
-    const options = { classificationSnapshots: input.classificationSnapshots ?? input.snapshots,
-      excludedFollowUpEvidence: input.excludedFollowUpEvidence ?? [] };
-    const activity = estimateLocalClientActivity(input.snapshots, input.overrides ?? {}, 56, 56, 28,
-      base.window.asOf, 90, range.start, range.end, options);
+    const activity = resolved.clipped ? estimateLocalClientActivity(input.snapshots, input.overrides ?? {}, 56, 56, 28,
+      base.window.asOf, 90, range.start, range.end, options()) : base.activity;
+    const attritionReport = attrition[period];
     clinician[period] = {
-      window: { ...base.window, cohort: { ...range }, attrition: { ...range },
+      window: { ...base.window, cohort: { ...range }, attrition: { ...(attritionReport?.window.attrition ?? base.window.attrition) },
         endingObservationCutoff: activity?.endingObservationCutoff ?? base.window.endingObservationCutoff },
       activity,
-      clinicians: buildLocalRetentionMetrics(input.snapshots, {}, input.overrides ?? {}, 28,
-        base.window.asOf, 90, range.start, range.end, options).clientActivityByClinician,
-      periodAttrition: periodClientAttrition({ snapshots: input.snapshots, requestedWindow: range,
-        asOf: base.window.asOf, overrides: input.overrides ?? {}, ...options }),
-      consults: summarizeConsultConversions(input.consultSnapshots ?? input.snapshots, input.overrides ?? {},
+      clinicians: resolved.clipped ? buildLocalRetentionMetrics(input.snapshots, {}, input.overrides ?? {}, 28,
+        base.window.asOf, 90, range.start, range.end, options()).clientActivityByClinician : base.clinicians,
+      attritionActivity: attritionReport?.attritionActivity ?? null,
+      attritionClinicians: attritionReport?.attritionClinicians ?? [],
+      periodAttrition: attritionReport?.periodAttrition ?? periodClientAttrition({ snapshots: [],
+        requestedWindow: base.window.attrition, asOf: base.window.asOf }),
+      consults: resolved.clipped ? summarizeConsultConversions(input.consultSnapshots ?? input.snapshots, input.overrides ?? {},
         range.start, range.end, base.window.asOf, input.attributions ?? [],
-        { ...options, cohortClinicianNames: input.cohortClinicianNames }),
+        { ...options(), cohortClinicianNames: input.cohortClinicianNames }) : base.consults,
     };
   }
-  return { practice, clinician, ranges };
+  return { practice, clinician, ranges, attrition, attritionRanges };
 }
 
 export function historicalPeriodDifference(recent: number | null | undefined, baseline: number | null | undefined): number | null {

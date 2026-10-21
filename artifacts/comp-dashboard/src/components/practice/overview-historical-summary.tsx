@@ -2,6 +2,8 @@ import type { HistoricalPerformancePeriods } from "../../lib/historical-performa
 import { HistoricalPeriodValues } from "./historical-period-values";
 import { PercentageKpi } from "./percentage-kpi";
 import { overviewHistoricalAttrition, type OverviewHistoricalCapacityPeriod } from "../../lib/overview-historical-capacity.ts";
+import type { SectionLayout } from "../../lib/section-widget-layout.ts";
+import { SectionWidgetGrid } from "./section-widget-grid";
 import "./overview-historical-summary.css";
 
 const number = (value: number | null | undefined) => value == null ? "--" : new Intl.NumberFormat("en-US", { maximumFractionDigits: 1 }).format(value);
@@ -25,7 +27,7 @@ export function HistoricalDifference({ recent, baseline, unit }: { recent: numbe
 
 export type OverviewHistoricalTargets = Partial<Record<"retentionPct" | "closeRatePct" | "attritionPct", number | null>>;
 
-export function OverviewHistoricalSummary({ reports, capacity: providedCapacity, contributor = "Whole Practice", contributorIdentityVerified = true, targets, onSessions }: { reports: HistoricalPerformancePeriods; capacity: Record<"3mo" | "year", OverviewHistoricalCapacityPeriod>; contributor?: string; contributorIdentityVerified?: boolean; targets?: OverviewHistoricalTargets; onSessions: () => void }) {
+export function OverviewHistoricalSummary({ reports, capacity: providedCapacity, contributor = "Whole Practice", contributorIdentityVerified = true, targets, onSessions, layout, onLayoutChange }: { reports: HistoricalPerformancePeriods; capacity: Record<"3mo" | "year", OverviewHistoricalCapacityPeriod>; contributor?: string; contributorIdentityVerified?: boolean; targets?: OverviewHistoricalTargets; onSessions: () => void; layout?: SectionLayout; onLayoutChange?: (layout: SectionLayout | undefined) => void }) {
   const capacityFor = (period: typeof periods[number]): OverviewHistoricalCapacityPeriod => {
     const row = providedCapacity[period];
     return contributor === "Whole Practice" || contributorIdentityVerified ? row : {
@@ -45,7 +47,13 @@ export function OverviewHistoricalSummary({ reports, capacity: providedCapacity,
   } : { rate: clinician(period)?.initialRetentionPct, retained: clinician(period)?.retainedClients, denominator: clinician(period)?.initialRetentionDenominator, pending: clinician(period)?.pendingInitialClients, verified: clinician(period)?.initialRetentionCoverageVerified };
   const consultation = (period: typeof periods[number]) => contributor === "Whole Practice" ? reports[period].consults.practice : contributorIdentityVerified ? reports[period].consults.byClinician.find(row => normalize(row.clinician) === normalize(contributor)) : undefined;
   const attrition = overviewHistoricalAttrition(reports, contributor === "Whole Practice" ? undefined : contributorIdentityVerified ? contributor : "");
-  const monthlyAttrition = (period: typeof periods[number]) => contributor === "Whole Practice" ? reports[period].activity?.averageClientEndingsPerFullMonth : clinician(period)?.averageClientEndingsPerFullMonth;
+  const monthlyAttrition = (period: typeof periods[number]) => {
+    const report = reports[period];
+    if (contributor === "Whole Practice") return report.attritionActivity?.averageClientEndingsPerFullMonth;
+    if (!contributorIdentityVerified) return null;
+    const matches = report.attritionClinicians?.filter(row => normalize(row.clinician) === normalize(contributor)) ?? [];
+    return matches.length === 1 ? matches[0].averageClientEndingsPerFullMonth : null;
+  };
   const percentage = (label: string, period: typeof periods[number], value: number | null | undefined, baseline: number | null | undefined, goal?: number | null) => {
     const aboveScale = value != null && Number.isFinite(value) && value > 100;
     const baselineAboveScale = period === "3mo" && baseline != null && Number.isFinite(baseline) && baseline > 100;
@@ -58,7 +66,8 @@ export function OverviewHistoricalSummary({ reports, capacity: providedCapacity,
     return aboveScale ? <div className="pw-overview-percentage-overflow">{ring}<span className="pw-overview-percentage-actual" aria-hidden="true">{rate(value)}</span></div> : ring;
   };
   return <div className="pw-overview-historical-summary pw-overview-kpi-grid">
-    <section className="pw-overview-desired-capacity" aria-label="Overview desired session utilization">
+    <SectionWidgetGrid section="summary" layout={layout} onChange={next => onLayoutChange?.(next)} styledCards={false} items={[
+      { id: "caseload", title: "Caseload", defaultSize: "medium", content: <section className="pw-overview-desired-capacity" aria-label="Overview desired session utilization">
       <h3>Caseload</h3>
       <HistoricalPeriodValues dates="help" values={Object.fromEntries(periods.map(period => {
         const row = capacity[period];
@@ -70,8 +79,8 @@ export function OverviewHistoricalSummary({ reports, capacity: providedCapacity,
         <HistoricalDifference recent={capacity["3mo"].weekly} baseline={capacity.year.weekly} unit="sessions / week" />
         <HistoricalDifference recent={capacity["3mo"].utilizationPct} baseline={capacity.year.utilizationPct} unit="percentage points full" />
       </details>
-    </section>
-    <section aria-label="Overview initial retention">
+    </section> },
+      { id: "retention", title: "Retention", defaultSize: "medium", content: <section aria-label="Overview initial retention">
       <h3>Retention</h3>
       <HistoricalPeriodValues dates="help" values={Object.fromEntries(periods.map(period => {
         const report = reports[period];
@@ -81,8 +90,8 @@ export function OverviewHistoricalSummary({ reports, capacity: providedCapacity,
           detail: <details><summary>Definition</summary><p>{number(activity.retained)} retained / {number(activity.denominator)} evaluated starts; {number(activity.pending)} pending. Three attended treatment sessions with initial gaps no longer than 28 days; PHONE excluded. {activity.verified ? "Report coverage verified." : "Observed history; coverage unverified."}</p></details> }];
       })) as Parameters<typeof HistoricalPeriodValues>[0]["values"]} />
       <details className="pw-overview-exact-difference"><summary>Exact change</summary><HistoricalDifference recent={retention("3mo").rate} baseline={retention("year").rate} unit="percentage points" /></details>
-    </section>
-    <section aria-label="Overview consult conversion">
+    </section> },
+      { id: "close-rate", title: "Close rate", defaultSize: "medium", content: <section aria-label="Overview consult conversion">
       <h3>Close rate</h3>
       <HistoricalPeriodValues dates="help" values={Object.fromEntries(periods.map(period => {
         const report = reports[period];
@@ -91,18 +100,19 @@ export function OverviewHistoricalSummary({ reports, capacity: providedCapacity,
           detail: <><span>{number(consult?.consultations)} consultations → {number(consult?.converted)} {contributor === "Whole Practice" ? "started treatment" : "confirmed closes"}</span><small>{number(consult?.pending)} pending</small><details><summary>Definition</summary><p>{number(consult?.evaluated)} evaluated journeys. Started treatment means an attended qualifying treatment visit, not completed onboarding or a booking. One calendar-month follow-up; practice conversions counted once. Clinician closer credit requires the existing attribution rules. {report.consults.coverageVerified ? "Report coverage verified." : "Observed history; coverage unverified."}</p></details></> }];
       })) as Parameters<typeof HistoricalPeriodValues>[0]["values"]} />
       <details className="pw-overview-exact-difference"><summary>Exact change</summary><HistoricalDifference recent={consultation("3mo")?.conversionRate} baseline={consultation("year")?.conversionRate} unit="percentage points" /></details>
-    </section>
-    <section aria-label="Overview average monthly attrition">
+    </section> },
+      { id: "attrition", title: "Attrition", defaultSize: "medium", content: <section aria-label="Overview average monthly attrition">
       <h3>Attrition</h3>
-      <HistoricalPeriodValues dates="help" values={Object.fromEntries(periods.map(period => {
+      <HistoricalPeriodValues dates="help" periodLabels={{ "3mo": "Last 3 mature months", year: "Last 12 mature months" }} values={Object.fromEntries(periods.map(period => {
         const report = reports[period];
         const activity = attrition[period];
         return [period, { range: report.window.attrition,
           value: percentage("Client attrition", period, activity.attritionPct, attrition.year.attritionPct, targets?.attritionPct),
-          detail: <><span>{number(activity.total)} clients ended</span><span>{number(monthlyAttrition(period))} / mature month</span><details><summary>Definition</summary><p>{number(activity.total)} ended / {number(activity.eligibleClients)} unique observed established clients in the full labeled window. Established means three distinct attended treatment dates and active during the window. Count and percentage require covered follow-up through 90 days after that window; earlier unobserved clients are not certified.</p><p>Monthly average separately uses {number(activity.coveredMatureMonths)} covered mature months, with observations through {report.window.asOf}.</p>{activity.reasons.map(reason => <p key={reason}>{attritionReason(reason)}</p>)}{activity.observedMaturePortion && <p>Separate mature observed portion: {activity.observedMaturePortion.requestedWindow.start} to {activity.observedMaturePortion.requestedWindow.end}: {number(activity.observedMaturePortion.totalEnded)} ended / {number(activity.observedMaturePortion.totalEligible)} eligible, {rate(activity.observedMaturePortion.percentage)}. This is not the full trailing window.</p>}</details></> }];
+          detail: <><span>{number(activity.total)} clients ended</span><span>{number(monthlyAttrition(period))} / mature month</span><details><summary>Definition</summary><p>{number(activity.total)} ended / {number(activity.eligibleClients)} unique observed established clients in the full labeled window. Established means three distinct attended treatment dates and active during the window. Count and percentage require covered follow-up through 90 days after that window; earlier unobserved clients are not certified.</p><p>Attrition windows lag by 90 days so there is time to observe whether clients return. Mature dates alone do not verify coverage or earlier treatment history.</p><p>Monthly average separately uses {number(activity.coveredMatureMonths)} covered mature months, with observations through {report.window.asOf}.</p>{activity.reasons.map(reason => <p key={reason}>{attritionReason(reason)}</p>)}{activity.observedMaturePortion && <p>Separate mature observed portion: {activity.observedMaturePortion.requestedWindow.start} to {activity.observedMaturePortion.requestedWindow.end}: {number(activity.observedMaturePortion.totalEnded)} ended / {number(activity.observedMaturePortion.totalEligible)} eligible, {rate(activity.observedMaturePortion.percentage)}. This is not the full trailing window.</p>}</details></> }];
       })) as Parameters<typeof HistoricalPeriodValues>[0]["values"]} />
       <details className="pw-overview-exact-difference"><summary>Exact change</summary><HistoricalDifference recent={attrition["3mo"].attritionPct} baseline={attrition.year.attritionPct} unit="percentage points" /></details>
-    </section>
+    </section> },
+    ]} />
     <button type="button" className="pw-text-button" onClick={onSessions}>Sessions</button>
   </div>;
 }

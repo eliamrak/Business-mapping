@@ -355,8 +355,8 @@ test("deeply frozen inputs, including source reports, are unchanged and output r
 test("monthly ending controls cannot certify an unverified whole-window count or percent", () => {
   const reports = historicalPerformancePeriods({ snapshots: [], today: "2026-10-19" });
   // Controls intentionally make the latest-month rate disagree with period totals.
-  reports["3mo"].activity = { ...reports["3mo"].activity!, endingFullMonthClientEnds: 9, endingFullMonthDenominator: 2, endingAttritionPct: 99 };
-  reports.year.activity = { ...reports["3mo"].activity, endingFullMonthClientEnds: 13, endingFullMonthDenominator: 7 };
+  reports["3mo"].attritionActivity = { ...reports["3mo"].attritionActivity!, endingFullMonthClientEnds: 9, endingFullMonthDenominator: 2, endingAttritionPct: 99 };
+  reports.year.attritionActivity = { ...reports["3mo"].attritionActivity, endingFullMonthClientEnds: 13, endingFullMonthDenominator: 7 };
   const result = overviewHistoricalAttrition(freeze(reports));
   assert.equal(result["3mo"].total, null);
   assert.equal(result["3mo"].coveredMatureMonths, 2);
@@ -365,15 +365,15 @@ test("monthly ending controls cannot certify an unverified whole-window count or
   assert.equal(result["3mo"].eligibleClients, null);
   assert.equal(result["3mo"].attritionPct, null);
   assert.equal(result["3mo"].coverageComplete, false);
-  assert.ok(result["3mo"].reasons.includes("immature-follow-up"), "October cannot certify September endings through their 90-day follow-up");
+  assert.ok(result["3mo"].reasons.includes("incomplete-window-or-follow-up-coverage"), "Mature calendar dates cannot certify missing report coverage");
   assert.equal(overviewHistoricalAttrition(reports, "Missing")["3mo"].total, null);
 });
 
 test("monthly covered zero alone cannot certify a whole-window zero", () => {
   const reports = historicalPerformancePeriods({ snapshots: [], today: "2026-10-19" });
-  reports["3mo"].activity = { ...reports["3mo"].activity!, endingFullMonthClientEnds: 0, endingFullMonthDenominator: 0 };
+  reports["3mo"].attritionActivity = { ...reports["3mo"].attritionActivity!, endingFullMonthClientEnds: 0, endingFullMonthDenominator: 0 };
   assert.equal(overviewHistoricalAttrition(reports)["3mo"].total, null);
-  reports["3mo"].activity.endingFullMonthDenominator = 1;
+  reports["3mo"].attritionActivity.endingFullMonthDenominator = 1;
   assert.equal(overviewHistoricalAttrition(reports)["3mo"].total, null);
   assert.equal(overviewHistoricalAttrition(reports)["3mo"].attritionPct, null);
 });

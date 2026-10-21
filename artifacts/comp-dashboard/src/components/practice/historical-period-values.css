@@ -35,12 +35,15 @@
 .pw-app .pw-number input { max-width: 10rem; }
 .pw-app .pw-goal-editor { display: grid; grid-template-columns: minmax(0, 1fr); gap: 0; }
 .pw-app .pw-goal-editor > .pw-edit-item { padding: 14px 0; border: 0; border-bottom: 1px solid #34414b; border-radius: 0; background: transparent; min-width: 0; }
-.pw-app .pw-goal-editor .pw-edit-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+.pw-app .pw-goal-editor .pw-edit-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.pw-app .pw-goal-editor [data-widget-id="performance-targets"] .pw-edit-grid,
+.pw-app .pw-goal-editor [data-widget-id="overhead"] .pw-edit-grid { grid-template-columns: minmax(0, 1fr); }
 .pw-app .pw-goal-editor .pw-draft-field { min-width: 0; overflow-wrap: anywhere; }
-.pw-app .pw-goal-editor input[type="number"] { width: 10rem; max-width: 100%; }
+.pw-app .pw-goal-editor input[type="number"] { width: 12ch; min-width: 0; max-width: 100%; box-sizing: border-box; }
 .pw-app .pw-goal-editor button { max-width: 100%; white-space: normal; overflow-wrap: anywhere; }
 .pw-app .pw-goal-editor .pw-edit-item-heading { gap: 10px; flex-wrap: wrap; }
-.pw-app .pw-goal-editor .pw-progress-comparison { margin-top: 10px; }
+.pw-app .pw-goal-editor .pw-progress-comparison { margin-top: 10px; min-width: 0; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.pw-app .pw-goal-editor .pw-progress-comparison > * { min-width: 0; overflow-wrap: anywhere; }
 .pw-app .pw-goal-fund-grid { gap: 14px; }
 .pw-app .pw-goal-fund { min-width: 0; padding: 10px 0; border: 0; background: transparent; }
 .pw-app .pw-observed-earnings { display: grid; align-content: start; gap: 6px; min-width: 0; font-size: 12px; }
@@ -64,14 +67,14 @@
   .pw-app .pw-header { padding: 18px 32px 10px; }
   .pw-app .pw-content { padding-top: 16px; }
 }
-.pw-app .pw-clinical-metric-grid.pw-sessions-clinical-grid { grid-template-columns: minmax(0, 1.3fr) minmax(0, 1fr); }
-.pw-app .pw-clinical-history-stack { display: grid; gap: 16px; min-width: 0; align-content: start; }
-.pw-app .pw-clinical-history-stack > .pw-clinical-card { min-width: 0; padding: 0; border: 0; border-radius: 0; background: transparent; box-shadow: none; }
-.pw-app .pw-clinical-history-stack > .pw-clinical-card + .pw-clinical-card { border-top: 1px solid #34414b; padding-top: 12px; }
+.pw-app .pw-clinical-metric-grid.pw-sessions-clinical-grid { grid-template-columns: minmax(0, 1fr); }
+.pw-app .pw-clinical-history-stack { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; min-width: 0; align-content: start; }
+.pw-app .pw-clinical-history-stack > .pw-clinical-card { min-width: 0; padding: 14px; border: 1px solid #46515a; border-radius: 8px; background: #20272c; box-shadow: none; }
 .pw-app .pw-clinical-history-stack h3 { font-size: 17px; margin: 0 0 6px; }
 .pw-app .pw-clinical-history-stack > .pw-clinical-card > p { margin: 0 0 8px; }
 .pw-app .pw-clinical-history-stack .pw-historical-period-difference { grid-column: 1 / -1; font-size: 12px; margin: 0; }
 @media (max-width: 1000px) {
+  .pw-app .pw-clinical-history-stack { grid-template-columns: minmax(0, 1fr); }
   .pw-app .pw-clinical-metric-grid.pw-sessions-clinical-grid { grid-template-columns: minmax(0, 1fr); }
 }
 @media (max-width: 1100px) {

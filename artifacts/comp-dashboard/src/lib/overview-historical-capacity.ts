@@ -139,9 +139,10 @@ export function overviewHistoricalCapacity(input: OverviewHistoricalCapacityInpu
 export function overviewHistoricalAttrition(reports: HistoricalPerformancePeriods, clinicianName?: string) {
   const summarize = (period: "3mo" | "year") => {
     const report = reports[period];
-    const matches = clinicianName === undefined ? [] : report.clinicians.filter(row =>
+    const attritionClinicians = Object.hasOwn(report, "attritionClinicians") ? report.attritionClinicians : report.clinicians;
+    const matches = clinicianName === undefined ? [] : attritionClinicians.filter(row =>
       row.clinician.trim().replace(/\s+/g, " ").toLowerCase() === clinicianName.trim().replace(/\s+/g, " ").toLowerCase());
-    const source = clinicianName === undefined ? report.activity : matches.length === 1 ? matches[0] : null;
+    const source = clinicianName === undefined ? Object.hasOwn(report, "attritionActivity") ? report.attritionActivity : report.activity : matches.length === 1 ? matches[0] : null;
     const months = source?.endingFullMonthDenominator;
     const periodMatches = clinicianName === undefined ? [] : (report.periodAttrition?.byClinician ?? []).filter(row =>
       row.clinician.trim().replace(/\s+/g, " ").toLowerCase() === clinicianName.trim().replace(/\s+/g, " ").toLowerCase());

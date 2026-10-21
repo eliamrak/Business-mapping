@@ -5,6 +5,19 @@ export type SessionAttendanceCoverage = SessionPeriod & { clinicianId: number };
 const shift = (date: string, days: number) =>
   new Date(Date.parse(date + "T12:00:00Z") + days * 86400000).toISOString().slice(0, 10);
 
+/** Four consecutive covered calendar weeks; partial and missing weeks never count as zero. */
+export function withCoveredWeeklyAverage<T extends { date: number; completed: number | null }>(points: T[]) {
+  const weekMs = 7 * 86400000;
+  const weeks = new Map(points.filter((point) => point.completed !== null).map((point) => [point.date, point.completed!]));
+  return points.map((point) => {
+    const day = new Date(point.date).getUTCDay();
+    const monday = point.date - ((day + 6) % 7) * 86400000;
+    const window = Array.from({ length: 4 }, (_, index) => weeks.get(monday - index * weekMs));
+    return { ...point, trailingWeeklyAverage: window.every((value) => value !== undefined)
+      ? window.reduce<number>((sum, value) => sum + value!, 0) / 4 : null };
+  });
+}
+
 export function containedSessionRecords(records: SessionRecord[], clinicianIds: number[], period: SessionPeriod) {
   const ids = new Set(clinicianIds);
   return records.filter((record) => ids.has(record.clinicianId) &&
@@ -111,12 +124,14 @@ export function buildSessionTrend(
     const row = rowFor(start);
     const actual = sessionPeriodObservation(selected, clinicianIds, { start, end }, attendanceCoverage);
     const benchmark = sessionPeriodObservation(practice, practiceIds, { start, end }, attendanceCoverage);
+    const crossesWeek = (entries: SessionRecord[]) => entries.some((record) => record.start <= end && record.end >= start &&
+      (record.start < start || record.end > end));
     if (monday >= period.start && sunday <= period.end) {
-      row.completed = actual.coverageComplete ? actual.observedCompleted : null;
-      row.benchmark = benchmark.coverageComplete ? benchmark.observedCompleted : null;
+      row.completed = actual.coverageComplete && !crossesWeek(selected) ? actual.observedCompleted : null;
+      row.benchmark = benchmark.coverageComplete && !crossesWeek(practice) ? benchmark.observedCompleted : null;
     }
-    row.observedCompleted = row.completed === null ? actual.observedCompleted : null;
-    row.benchmarkObserved = row.benchmark === null ? benchmark.observedCompleted : null;
+    row.observedCompleted = row.completed === null && !crossesWeek(selected) ? actual.observedCompleted : null;
+    row.benchmarkObserved = row.benchmark === null && !crossesWeek(practice) ? benchmark.observedCompleted : null;
     if (row.observedCompleted !== null || row.completed !== null) row.label = `${start} to ${end}`;
   }
   // Non-calendar-week aggregates remain single period-rate observations at period end.

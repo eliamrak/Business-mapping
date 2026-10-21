@@ -934,10 +934,18 @@
   .pw-overview-bridge strong { font-size: 12px; }
 }
 .pw-goal-editor {
-  display: grid;
-  gap: 0;
+  display: block;
 }
-.pw-goal-editor > .pw-edit-item { border: 0; border-bottom: 1px solid #303842; border-radius: 0; padding: 16px 0; background: transparent; }
+.pw-goal-editor .pw-section-widget-content > .pw-edit-item { min-width: 0; border: 1px solid #46515a; border-radius: 8px; padding: 14px; background: #20272c; }
+.pw-goal-editor [aria-label="Performance targets"] .pw-edit-grid { grid-template-columns: minmax(0, 1fr); }
+.pw-goal-editor .pw-section-widget-content > .pw-goal-funds { border: 0; padding: 0; border-radius: 0; background: transparent; }
+.pw-goal-editor .pw-goal-fund { border: 1px solid #46515a; border-radius: 8px; padding: 14px; background: #20272c; }
+.pw-goal-editor .pw-goal-fund-grid { grid-template-columns: repeat(auto-fit, minmax(min(100%, 220px), 1fr)); }
+.pw-money-tabs { margin-bottom: 16px; }
+.pw-sessions-history-widgets .sw-content > .pw-clinical-card { padding: 14px; border: 1px solid #46515a; border-radius: 8px; background: #20272c; }
+.pw-sessions-history-widgets .sw-content > .pw-clinical-card h3 { font-size: 17px; }
+.pw-marketing-widgets .sw-content > .pw-edit-item,
+.pw-rooms-widgets .sw-content > .pw-edit-item { padding: 14px; border: 1px solid #46515a; border-radius: 8px; background: #20272c; }
 .pw-goal-editor .pw-edit-item-heading { margin-bottom: 10px; }
 .pw-goal-editor .pw-progress-comparison { margin-top: 10px; }
 .pw-goal-editor .pw-edit-grid { gap: 12px; grid-template-columns: repeat(2, minmax(0, 1fr)); }

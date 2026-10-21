@@ -61,8 +61,11 @@ test("paired reports keep practice dates and all classification and follow-up ev
   assert.equal(result.clinician.year?.consults.practice.evaluated, 1);
   assert.equal(result.clinician.year?.consults.practice.conversionRate, 0);
   assert.equal(result.clinician["3mo"]?.activity?.averageClientEndingsPerFullMonth, null);
-  assert.deepEqual(result.clinician["3mo"], practiceReports["3mo"]);
-  assert.equal(result.clinician["3mo"], practiceReports["3mo"], "unclipped covered history reuses the base report");
+  assert.equal(result.clinician["3mo"]?.activity, practiceReports["3mo"].activity,
+    "independent attrition clipping preserves the original retention statistics");
+  assert.equal(result.clinician["3mo"]?.consults, practiceReports["3mo"].consults);
+  assert.deepEqual(result.clinician["3mo"]?.window.attrition, { start: "2026-06-01", end: "2026-06-30" });
+  assert.deepEqual(result.attritionRanges["3mo"].requestedRange, { start: "2026-04-01", end: "2026-06-30" });
   assert.deepEqual(input, before);
   const gap = clinicianHistoricalPerformancePeriods({ ...input, clinicianId: 1, practiceReports,
     attendanceCoverage: [{ clinicianId: 1, start: "2026-06-01", end: "2026-07-31" },
@@ -89,6 +92,74 @@ test("complete unclipped reports reuse frozen base objects without reading metri
   assert.equal(result.clinician.year, practiceReports.year);
   assert.equal(result.ranges.year.clipped, false);
   assert.equal(result.ranges.year.coverageComplete, true);
+});
+
+test("clinician attrition clips its mature window independently from retention and consult cohorts", () => {
+  const rows = ["2026-05-03", "2026-05-10", "2026-06-01"].map(date => visit("ended", date));
+  rows.push(...["2026-07-03", "2026-07-10", "2026-07-17"].map(date => visit("retained", date)));
+  const input = { snapshots: [snapshot(rows, "2026-10-07")], today: "2026-10-21" };
+  const practiceReports = historicalPerformancePeriods(input);
+  const result = clinicianHistoricalPerformancePeriods({ ...input, practiceReports, clinicianId: 1,
+    attendanceCoverage: [{ clinicianId: 1, start: "2026-05-01", end: "2026-10-07" }] });
+  assert.deepEqual(result.ranges["3mo"].effectiveRange, { start: "2026-07-01", end: "2026-09-30" });
+  assert.deepEqual(result.attritionRanges["3mo"].effectiveRange, { start: "2026-05-01", end: "2026-06-30" });
+  const report = result.clinician["3mo"]!;
+  assert.equal(report.activity, practiceReports["3mo"].activity);
+  assert.equal(report.consults, practiceReports["3mo"].consults);
+  assert.deepEqual(report.window.cohort, practiceReports["3mo"].window.cohort);
+  assert.deepEqual(report.window.attrition, result.attritionRanges["3mo"].effectiveRange);
+  assert.equal(report.attritionActivity?.endingFullMonthClientEnds, 1);
+  assert.equal(report.attritionActivity?.endingFullMonthDenominator, 2);
+  assert.equal(report.attritionActivity?.averageClientEndingsPerFullMonth, 0.5);
+  assert.equal(report.periodAttrition.practice.percentage, 100);
+  assert.deepEqual(result.attrition["3mo"]?.periodAttrition, report.periodAttrition);
+  assert.deepEqual(practiceReports["3mo"].window.attrition, { start: "2026-04-01", end: "2026-06-30" });
+});
+
+test("retention gaps cannot hide independent attrition and attrition gaps cannot erase retention", () => {
+  const input = fixture();
+  const practiceReports = historicalPerformancePeriods(input);
+  const retentionGap = clinicianHistoricalPerformancePeriods({ ...input, clinicianId: 1, practiceReports,
+    attendanceCoverage: [{ clinicianId: 1, start: "2025-01-01", end: "2026-07-31" },
+      { clinicianId: 1, start: "2026-08-02", end: "2026-10-14" }] });
+  assert.equal(retentionGap.clinician["3mo"], null);
+  assert.equal(retentionGap.attrition["3mo"], practiceReports["3mo"]);
+  assert.equal(retentionGap.attritionRanges["3mo"].coverageComplete, true);
+  const attritionGap = clinicianHistoricalPerformancePeriods({ ...input, clinicianId: 1, practiceReports,
+    attendanceCoverage: [{ clinicianId: 1, start: "2025-01-01", end: "2026-04-30" },
+      { clinicianId: 1, start: "2026-05-02", end: "2026-10-14" }] });
+  assert.equal(attritionGap.attrition["3mo"], null);
+  assert.equal(attritionGap.attritionRanges["3mo"].coverageComplete, false);
+  assert.equal(attritionGap.clinician["3mo"]?.activity, practiceReports["3mo"].activity);
+  assert.equal(attritionGap.clinician["3mo"]?.attritionActivity, null);
+  assert.deepEqual(attritionGap.clinician["3mo"]?.attritionClinicians, []);
+  assert.equal(attritionGap.clinician["3mo"]?.periodAttrition.practice.percentage, null);
+  const noAttrition = clinicianHistoricalPerformancePeriods({ ...input, clinicianId: 1, practiceReports,
+    attendanceCoverage: [{ clinicianId: 1, start: "2026-07-01", end: "2026-10-14" }] });
+  assert.equal(noAttrition.attritionRanges["3mo"].effectiveRange, null);
+  assert.equal(noAttrition.attrition["3mo"], null);
+  assert.equal(noAttrition.clinician["3mo"]?.activity, practiceReports["3mo"].activity);
+});
+
+test("available event dates never substitute for follow-up or earlier establishment proof", () => {
+  const rows = ["2026-06-01", "2026-06-08", "2026-06-15"].map(date => visit("ending", date));
+  const source = snapshot(rows, "2026-08-31");
+  source.coverageStart = "2026-06-01";
+  source.reportCoverage!.start = "2026-06-01";
+  const input = { snapshots: [source], calendarSnapshots: [snapshot([], "2026-10-07")], today: "2026-10-21" };
+  const result = clinicianHistoricalPerformancePeriods({ ...input, clinicianId: 1,
+    attendanceCoverage: [{ clinicianId: 1, start: "2026-06-01", end: "2026-08-31" }] });
+  assert.deepEqual(result.attritionRanges["3mo"].effectiveRange, { start: "2026-06-01", end: "2026-06-30" });
+  const attrition = result.attrition["3mo"]!;
+  assert.equal(attrition.attritionActivity?.endingFullMonthDenominator, 0);
+  assert.equal(attrition.attritionActivity?.averageClientEndingsPerFullMonth, null);
+  assert.equal(attrition.periodAttrition.practice.totalEnded, null);
+  assert.equal(attrition.periodAttrition.practice.percentage, null);
+  assert.ok(attrition.periodAttrition.practice.reasons.includes("incomplete-window-or-follow-up-coverage"));
+  assert.ok(attrition.periodAttrition.practice.reasons.includes("left-censored-establishment"));
+  assert.equal(attrition.periodAttrition.practice.allHistoricalClientsCertified, false);
+  const noProof = clinicianHistoricalPerformancePeriods({ ...input, clinicianId: 1, attendanceCoverage: [] });
+  assert.equal(noProof.attrition["3mo"], null, "observed visit dates cannot supply an available-history range");
 });
 
 function deepFreeze<T>(value: T): T {
@@ -212,15 +283,17 @@ test("Team and Sessions integrate both histories while activity-date consults re
   }
   assert.doesNotMatch(sessions, /\{historicalControls\}/);
   assert.match(sessions, /className="pw-clinical-metric-grid pw-sessions-clinical-grid"/);
-  const stackStart = sessions.indexOf('<div className="pw-clinical-history-stack">');
-  const stackEnd = sessions.indexOf('<section className="pw-metric-panel pw-consult-summary">', stackStart);
+  const stackStart = sessions.indexOf('{widgetGrid("sessions", <>');
+  const stackEnd = sessions.indexOf('</>, "pw-sessions-history-widgets", "small")}', stackStart);
   const historyStack = stackStart >= 0 && stackEnd > stackStart ? sessions.slice(stackStart, stackEnd) : null;
-  assert.ok(historyStack, "historical close rate, retention and attrition share one unframed stack");
-  assert.equal([...historyStack.matchAll(/<section\b/g)].length, 3);
+  assert.ok(historyStack, "historical metrics and selected consultations share the editable grid below the full-width chart");
+  assert.equal([...historyStack.matchAll(/<section\b/g)].length, 4);
   assert.match(historyStack, /aria-label="Historical close rate card"/);
   assert.match(historyStack, /aria-label="Retention card"/);
   assert.match(historyStack, /aria-label="Attrition card"/);
   assert.doesNotMatch(historyStack, /aria-label="Session trends card"/);
+  assert.match(historyStack, /data-widget-id="current-consultations"/);
+  assert.match(historyStack, /Last 3 mature months/);
   assert.match(sessions, /activityPeriodCaption\(sharedPeriod, periodRange\)/);
   assert.match(sessions, /rows=\{consultComparisonRows(?:\.map|\})/);
   assert.match(sessions, /contributorConsult\?\.conversionRate/);

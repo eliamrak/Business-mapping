@@ -31,7 +31,8 @@ export function historicalPerformanceWindow(asOf: string, period: HistoricalPerf
   const endingObservationCutoff = iso(new Date(Date.parse(asOf + "T12:00:00Z") - 90 * 86400000));
   const anchor = calendarThrough < asOf ? calendarThrough : asOf;
   const cohort = monthsThrough(anchor);
-  return { asOf, calendarThrough: anchor, cohort, attrition: cohort, endingObservationCutoff };
+  const matureThrough = iso(new Date(Date.parse(anchor + "T12:00:00Z") - 90 * 86400000));
+  return { asOf, calendarThrough: anchor, cohort, attrition: monthsThrough(matureThrough), endingObservationCutoff };
 }
 
 export function historicalPerformance({ snapshots, consultSnapshots = snapshots, calendarSnapshots = snapshots, calendarScope, classificationSnapshots = snapshots, overrides = {}, attributions = [], cohortClinicianNames, excludedFollowUpEvidence = [], today, period = "3mo" }: {
@@ -66,6 +67,9 @@ export function historicalPerformance({ snapshots, consultSnapshots = snapshots,
     window: { ...window, endingObservationCutoff: retention?.endingObservationCutoff ?? window.endingObservationCutoff },
     activity: retention,
     clinicians: clinicians(window.cohort),
+    // Monthly ending statistics have their own mature event dates, not retention's cohort.
+    attritionActivity: activity(window.attrition),
+    attritionClinicians: clinicians(window.attrition),
     periodAttrition: periodClientAttrition({ snapshots, requestedWindow: window.attrition, asOf: window.asOf, overrides, ...options }),
     // Aggregate eligible/evaluated journeys once: never average monthly percentages.
     consults: summarizeConsultConversions(consultSnapshots, overrides, window.cohort.start, window.cohort.end, window.asOf, attributions, { ...options, cohortClinicianNames }),

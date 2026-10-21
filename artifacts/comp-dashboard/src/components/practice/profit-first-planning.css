@@ -19,12 +19,14 @@
 .pf-planning td.pf-inline-inputs { width: 250px; min-width: 250px; text-align: left; background: var(--pw-panel, hsl(var(--card, 0 0% 100%))); }
 .pf-inline-inputs label { grid-template-columns: minmax(0, 1fr) 100px; align-items: center; gap: 4px 8px; margin: 3px 0; font-size: 12px; }
 .pf-inline-inputs label input { width: 100%; }
+.pf-inline-inputs label > span { min-width: 0; white-space: normal; }
 .pf-inline-inputs label > small, .pf-inline-inputs label > .pf-deficit { grid-column: 1 / -1; }
-.pf-planning details.pf-help { display: inline; padding: 0; border: 0; font-weight: 400; color: var(--pw-muted, hsl(var(--muted-foreground, 215 16% 47%))); }
-.pf-planning .pf-help > summary { display: inline-flex; align-items: center; justify-content: center; width: 20px; height: 20px; border: 1px solid currentColor; border-radius: 50%; font-size: 12px; line-height: 1; font-weight: 400; vertical-align: middle; list-style: none; }
-.pf-help > summary::-webkit-details-marker { display: none; }
-.pf-help > summary:focus-visible { outline: 2px solid var(--pw-accent, hsl(var(--ring, 175 75% 35%))); outline-offset: 2px; }
-.pf-help[open] > span { display: block; margin-block: 4px; font-size: 12px; line-height: 1.4; text-align: left; overflow-wrap: anywhere; }
+.pf-planning button.pf-help { display: inline-flex; align-items: center; justify-content: center; width: 20px; height: 20px; padding: 0; border: 1px solid currentColor; border-radius: 50%; background: transparent; color: var(--pw-muted, hsl(var(--muted-foreground, 215 16% 47%))); font-size: 12px; line-height: 1; font-weight: 400; vertical-align: middle; cursor: pointer; }
+.pf-help:focus-visible { outline: 2px solid var(--pw-accent, hsl(var(--ring, 175 75% 35%))); outline-offset: 2px; }
+.pf-help-content { box-sizing: border-box; width: 320px; max-width: calc(100vw - 24px); max-height: var(--radix-popover-content-available-height); overflow-y: auto; padding: 16px; border: 1px solid hsl(var(--border, 214 32% 85%)); border-radius: 6px; background: hsl(var(--popover, 0 0% 100%)); color: hsl(var(--popover-foreground, 222 47% 11%)); box-shadow: 0 4px 16px #0003; z-index: 80; font-size: 14px; line-height: 1.5; text-align: left; overflow-wrap: anywhere; }
+.pf-cost-source { display: flex; justify-content: space-between; gap: 8px; margin: 6px 0; font-size: 12px; white-space: normal; overflow-wrap: anywhere; }
+.pf-cost-source strong { flex-shrink: 0; }
+.pf-budget-link { color: var(--pw-accent, hsl(var(--primary))); text-decoration: underline; cursor: pointer; }
 .pf-planning .pf-deficit, .pw-app .pf-planning p.pf-deficit { color: var(--pw-limit, #b42318); }
 .pf-planning legend { font-weight: 600; padding: 0; }
 .pf-planning label { display: grid; align-content: start; gap: 5px; overflow-wrap: anywhere; }

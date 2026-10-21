@@ -125,13 +125,13 @@ test("mature portion uses admitted coverage end rather than silently labeling a 
   assert.deepEqual(result.observedMaturePortion?.effectiveWindow, { start: "2026-07-01", end: "2026-07-22" });
 });
 
-test("historical report exposes the same helper for unchanged 3/12 windows", () => {
+test("historical report exposes the same conservative helper for lagged 3/12 windows", () => {
   const snapshots = [snapshot(three(), "2026-06-01", "2026-09-30")];
   for (const period of ["3mo", "year"] as const) {
     const report = historicalPerformance({ snapshots, today: "2026-10-20", period });
     const expected = run(snapshots, { asOf: "2026-10-20", requestedWindow: report.window.attrition });
     assert.deepEqual(report.periodAttrition, expected);
-    assert.deepEqual(report.window.attrition, { start: period === "3mo" ? "2026-07-01" : "2025-10-01", end: "2026-09-30" });
+    assert.deepEqual(report.window.attrition, { start: period === "3mo" ? "2026-04-01" : "2025-07-01", end: "2026-06-30" });
     assert.equal(report.periodAttrition.practice.totalEnded, null);
   }
 });

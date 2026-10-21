@@ -624,7 +624,28 @@ export const goalSearchSchema = z
   });
 export type GoalSearch = z.infer<typeof goalSearchSchema>;
 
+export const sectionLayoutKeySchema = z.enum([
+  "summary", "sessions", "clinicians", "money", "marketing", "rooms", "current-goals",
+]);
+export const sectionWidgetSizeSchema = z.enum(["small", "medium", "wide"]);
+export const sectionLayoutSchema = z.object({
+  version: z.literal(1),
+  widgets: z.array(z.object({
+    id: z.string().trim().min(1).max(160),
+    size: sectionWidgetSizeSchema,
+  })).max(64).superRefine((widgets, ctx) => {
+    if (new Set(widgets.map(widget => widget.id)).size !== widgets.length)
+      ctx.addIssue({ code: "custom", message: "Choose each widget once." });
+  }),
+});
+export const sectionLayoutsSchema = z.partialRecord(sectionLayoutKeySchema, sectionLayoutSchema);
+export type SectionLayoutKey = z.infer<typeof sectionLayoutKeySchema>;
+export type SectionWidgetSize = z.infer<typeof sectionWidgetSizeSchema>;
+export type SectionLayout = z.infer<typeof sectionLayoutSchema>;
+export type SectionLayouts = z.infer<typeof sectionLayoutsSchema>;
+
 export const settingsSchema = z.object({
+  sectionLayouts: sectionLayoutsSchema.optional(),
   practiceName: label.default("EMCounseling"),
   teamId: z.number().int().positive().nullable().default(null),
   teamSelectionExplicit: z.boolean().optional(),

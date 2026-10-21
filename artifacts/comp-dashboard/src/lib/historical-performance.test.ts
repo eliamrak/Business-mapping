@@ -17,14 +17,25 @@ const snapshot = (rows: AttendanceRow[], end = "2026-10-14"): LocalSnapshot => (
   reportCoverage: { start: "2025-01-01", end, complete: true }, coverageClinicians: ["Lane", "Moss"],
 });
 
-test("three-month and year bases share exact complete-calendar dates and never move attrition to an older cohort", () => {
+test("retention keeps recent calendar cohorts while attrition uses latest full mature months", () => {
   const window = historicalPerformanceWindow("2026-10-14");
   assert.deepEqual(window.cohort, { start: "2026-07-01", end: "2026-09-30" });
-  assert.deepEqual(window.attrition, window.cohort);
+  assert.deepEqual(window.attrition, { start: "2026-04-01", end: "2026-06-30" });
   assert.equal(window.endingObservationCutoff, "2026-07-16");
   assert.deepEqual(historicalPerformanceWindow("2026-10-14", "year").cohort, { start: "2025-10-01", end: "2026-09-30" });
   assert.deepEqual(historicalPerformanceWindow("2024-02-29").cohort, { start: "2023-12-01", end: "2024-02-29" });
   assert.deepEqual(historicalPerformanceWindow("2024-03-01", "year").cohort, { start: "2023-03-01", end: "2024-02-29" });
+  assert.deepEqual(historicalPerformanceWindow("2026-10-21", "3mo", "2026-10-07").attrition,
+    { start: "2026-04-01", end: "2026-06-30" });
+  assert.deepEqual(historicalPerformanceWindow("2026-10-21", "year", "2026-10-07").attrition,
+    { start: "2025-07-01", end: "2026-06-30" });
+  assert.deepEqual(historicalPerformanceWindow("2026-10-21", "3mo", "2027-01-31").attrition, window.attrition);
+  assert.deepEqual(historicalPerformanceWindow("2026-10-21", "3mo", "2026-08-31").attrition,
+    { start: "2026-03-01", end: "2026-05-31" });
+  assert.deepEqual(historicalPerformanceWindow("2024-05-29").attrition,
+    { start: "2023-12-01", end: "2024-02-29" }, "exact E+90 includes a leap month end");
+  assert.deepEqual(historicalPerformanceWindow("2024-05-28").attrition,
+    { start: "2023-11-01", end: "2024-01-31" }, "one day before E+90 excludes the partial mature month");
 });
 
 test("retention uses weighted eligible starts; zero mature full attrition months stays unknown", () => {
@@ -42,6 +53,51 @@ test("retention uses weighted eligible starts; zero mature full attrition months
   assert.equal(result.activity?.averageClientEndingsPerFullMonth, null);
   assert.equal(result.clinicians.find((row) => row.clinician === "Lane")?.initialRetentionPct, 10);
   assert.deepEqual(snapshots, before);
+});
+
+test("lagged attrition has separate monthly statistics and preserves the unique-client equation", () => {
+  const rows = [
+    ...["2026-03-03", "2026-03-10", "2026-04-01"].map(date => visit("ended", date)),
+    ...["2026-04-03", "2026-04-10", "2026-04-17", "2026-07-01"].map(date => visit("returned", date)),
+    ...["2026-07-03", "2026-07-10", "2026-07-17"].map(date => visit("retained", date)),
+  ];
+  const snapshots = [snapshot(rows, "2026-10-07")];
+  const before = structuredClone(snapshots);
+  const report = historicalPerformance({ snapshots, today: "2026-10-21" });
+  assert.equal(report.activity?.retainedClientPairs, 1);
+  assert.equal(report.activity?.initialRetentionDenominator, 1);
+  assert.equal(report.activity?.endingFullMonthClientEnds, 0);
+  assert.equal(report.activity?.endingFullMonthDenominator, 0);
+  assert.equal(report.activity?.averageClientEndingsPerFullMonth, null);
+  assert.equal(report.attritionActivity?.endingFullMonthClientEnds, 1);
+  assert.equal(report.attritionActivity?.endingFullMonthDenominator, 3);
+  assert.equal(report.attritionActivity?.averageClientEndingsPerFullMonth, 1 / 3);
+  assert.deepEqual(report.attritionActivity?.monthlyEndedClients.map(row => row.month), ["2026-04", "2026-05", "2026-06"]);
+  assert.equal(report.attritionClinicians.find(row => row.clinician === "Lane")?.averageClientEndingsPerFullMonth, 1 / 3);
+  assert.equal(report.clinicians.find(row => row.clinician === "Lane")?.averageClientEndingsPerFullMonth, null);
+  assert.equal(report.periodAttrition.practice.totalEligible, 2);
+  assert.equal(report.periodAttrition.practice.totalEnded, 1);
+  assert.equal(report.periodAttrition.practice.percentage, 50);
+  assert.equal(report.periodAttrition.practice.allHistoricalClientsCertified, false);
+  const year = historicalPerformance({ snapshots, today: "2026-10-21", period: "year" });
+  assert.equal(year.attritionActivity?.endingFullMonthDenominator, 12);
+  assert.equal(year.attritionActivity?.averageClientEndingsPerFullMonth, 1 / 12);
+  assert.deepEqual(snapshots, before);
+});
+
+test("mature dates alone cannot certify missing coverage or left-censored establishment", () => {
+  const source = snapshot(["2026-04-01", "2026-04-08", "2026-04-15"].map(date => visit("boundary", date)), "2026-10-07");
+  source.reportCoverage!.start = "2026-04-01";
+  const report = historicalPerformance({ snapshots: [source], today: "2026-10-21" });
+  assert.equal(report.periodAttrition.practice.percentage, null);
+  assert.ok(report.periodAttrition.practice.reasons.includes("left-censored-establishment"));
+  assert.equal(report.periodAttrition.practice.allHistoricalClientsCertified, false);
+  const missing = historicalPerformance({ snapshots: [], calendarSnapshots: [source], today: "2026-10-21" });
+  assert.deepEqual(missing.window.attrition, report.window.attrition);
+  assert.equal(missing.attritionActivity, null);
+  assert.deepEqual(missing.attritionClinicians, []);
+  assert.equal(missing.periodAttrition.practice.totalEnded, null);
+  assert.equal(missing.periodAttrition.practice.percentage, null);
 });
 
 test("historical close effectiveness weights evaluated counts, preserves confirmation, and is independent of activity dates", () => {
@@ -112,7 +168,7 @@ test("canonical admission cannot move a September 30 report calendar back to Jun
   assert.equal(admitted.attendanceThrough, "2026-09-23");
   const result = historicalPerformance({ snapshots: admitted.eligibleSnapshots, consultSnapshots: admitted.eligibleSnapshots, calendarSnapshots: [source], classificationSnapshots: [source], today: "2026-10-19" });
   assert.deepEqual(result.window.cohort, { start: "2026-07-01", end: "2026-09-30" });
-  assert.deepEqual(result.window.attrition, result.window.cohort);
+  assert.deepEqual(result.window.attrition, { start: "2026-04-01", end: "2026-06-30" });
   assert.equal(result.window.calendarThrough, "2026-09-30");
   assert.equal(result.window.asOf, "2026-10-19");
   assert.equal(result.activity?.retainedClientPairs, 1);

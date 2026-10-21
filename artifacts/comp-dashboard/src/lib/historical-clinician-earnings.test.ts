@@ -1,5 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import {
   clinicianSettingSchema, emptyWorkspace, eventSchema, prepareBillingChargeResolution, termSchema,
   type Context, type ImportEvidenceDeclarations,
@@ -334,6 +335,25 @@ test("unsupported clinician events and unclassified services cannot fabricate co
   f.workspace.events = [];
   f.billing.rows[0].billingCode = "UNKNOWN";
   unknown(f, /compensation inputs/);
+});
+
+test("event-only earnings changes invalidate the workspace reader without stale compensated values", () => {
+  const f = fixture();
+  const reader = createHistoricalClinicianEarningsReader(f);
+  const previous = reader.get(1);
+  assert.equal(previous?.status, "available");
+  const workspace = { ...f.workspace, events: [eventSchema.parse({ id: crypto.randomUUID(),
+    name: "Synthetic pay event", field: "clinician.hire", targetId: "1", date: f.range.start, value: 100 })] };
+  const refreshed = createHistoricalClinicianEarningsReader({ ...f, workspace }).get(1);
+  assert.equal(refreshed?.status, "unavailable");
+  assert.equal(refreshed?.averageCompensatedPerCompletedSession, null);
+  assert.equal(reader.get(1), previous);
+  const source = readFileSync(new URL("../pages/practice-workspace.tsx", import.meta.url), "utf8");
+  const start = source.indexOf("const historicalEarningsById = useMemo(");
+  const end = source.indexOf("const planProjection", start);
+  assert.ok(start >= 0 && end > start);
+  assert.match(source.slice(start, end), /\}, \[[^\]]*workingWorkspace\?\.events/,
+    "workspace earnings cache must recreate its reader when only pay events change");
 });
 
 test("zero compensated treatment remains zero; no completed treatments remains unknown", () => {

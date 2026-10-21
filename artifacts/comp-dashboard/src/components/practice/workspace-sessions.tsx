@@ -39,7 +39,7 @@ import {
   weeklyGoalFromPeriodDesired,
 } from "@/lib/session-goals";
 import { firstHiringReviewMonth, observedBiweeklySessionRecords, summarizeHiringReadiness, summarizeLast1099Period, summarizeSessionOverview } from "@/lib/session-overview";
-import { containedSessionRecords, type SessionAttendanceCoverage, type SessionPeriod } from "@/lib/session-trend";
+import { containedSessionRecords, withCoveredWeeklyAverage, type SessionAttendanceCoverage, type SessionPeriod } from "@/lib/session-trend";
 import { buildCompleteSessionTrend as buildSessionTrend, completePeriodSessionSummary as selectedPeriodSessionSummary, completeSessionHistoryStart } from "@/lib/complete-session-summary";
 import SessionImportDialog from "./session-import-dialog";
 import BulkSessionEntry from "./bulk-session-entry";
@@ -445,7 +445,7 @@ export default function WorkspaceSessions({
     start: filteredPeriods.at(-1)?.start ?? shift(today, -27),
     end: filteredPeriods[0]?.end ?? today,
   };
-  const chartData = boundsValid ? buildSessionTrend(
+  const chartData = withCoveredWeeklyAverage(boundsValid ? buildSessionTrend(
     !selectedPeriod && historyRange === "4periods"
       ? practiceRecords.filter((record) => filteredPeriods.some((period) => period.start === record.start && period.end === record.end))
       : practiceRecords,
@@ -454,7 +454,7 @@ export default function WorkspaceSessions({
       (annualGoalFor(person.id, Number(date.slice(0, 4)), annualGoals) ?? person.sessionsPerWeek ?? 0), 0),
     requiredWeeklySessions,
     attendanceCoverage,
-  ) : [];
+  ) : []);
   const practiceSummary = selectedPeriodSessionSummary(practiceRecords, people.map((person) => person.id), chartBounds, attendanceCoverage, today);
   const selectedSummary = selectedPeriodSessionSummary(records, readIds, chartBounds, attendanceCoverage, today);
   const comparisonRows = [...people.map((person) => {
@@ -1206,31 +1206,32 @@ export default function WorkspaceSessions({
   );
   if (!compact) return fullView;
   return <section className="pw-metric-panel" aria-label="Sessions clinical card" style={{ minWidth: 0 }}>
-    <h3>Sessions</h3>
-    <p style={{ overflowWrap: "anywhere" }}>{contributorId === null ? "Whole Practice" : readPeople[0]?.label ?? "Selected clinician"} · {shortDate(chartBounds.start)} - {shortDate(chartBounds.end)}</p>
     <div className="pw-metric-hero">
-      <strong style={{ fontSize: 32 }}>{display(selectedSummary.completedWeekly ?? selectedSummary.calendarWindowWeeklyEstimate ?? null)}</strong>
-      <span>{selectedSummary.completedWeekly === null ? "Needs complete report" : "Complete-period sessions / week"}</span>
+      <strong style={{ fontSize: 32 }}>{display(selectedSummary.observedCompleted ?? null)}</strong>
+      <span>Observed sessions</span>
     </div>
-    <p>{display(selectedSummary.observedCompleted ?? null)} eligible sessions · {selectedSummary.observedCoverageDays} complete-period calendar days · incomplete periods excluded</p>
+    <p>{selectedSummary.observedCoverageDays} complete-period calendar days · incomplete periods excluded{selectedSummary.coverageComplete ? "" : "; selected-range total is partial"}</p>
+    <p>Weekly session counts and weekly capacity · {display(selectedSummary.completedWeekly)} sessions / week across covered calendar days</p>
     {compareWholePractice ? <MetricComparison rows={comparisonRows} unit="sessions / week" label="Session metric comparison" />
-      : <div aria-label="Selected-period calendar session trend" style={{ width: "100%", minWidth: 0, height: 180 }}>
+      : <div aria-label="Selected-period calendar session trend" style={{ width: "100%", minWidth: 0, height: 300 }}>
         <ResponsiveContainer width="100%" height="100%">
           <LineChart data={chartData} margin={{ top: 8, right: 8, bottom: 4, left: 0 }} accessibilityLayer>
             <CartesianGrid strokeDasharray="3 3" vertical={false} />
             <XAxis dataKey="date" type="number" scale="time" domain={['dataMin', 'dataMax']}
               tickFormatter={(date: number) => new Date(date).toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "UTC" })} minTickGap={30} />
-            <YAxis width={36} domain={[0, 'auto']} />
-            <Tooltip labelFormatter={(_, payload) => payload[0]?.payload.label ?? ""} formatter={(number: number) => display(number)} />
+            <YAxis width={44} domain={[0, 'auto']} />
+            <Tooltip labelFormatter={(_, payload) => payload[0]?.payload.label ?? ""} formatter={(number: number) => display(number, " sessions / week")} />
             <Legend iconSize={8} wrapperStyle={{ fontSize: 11 }} />
-            {chartData.some((point) => point.completed !== null) && <Line dataKey="completed" name="Sessions" stroke="#9fd8c2" strokeWidth={2} dot={{ r: 3 }} connectNulls={false} isAnimationActive={false} />}
+            <Line dataKey="completed" name="Weekly sessions" stroke="#9fd8c2" strokeWidth={2} dot={{ r: 3 }} connectNulls={false} isAnimationActive={false} />
+            <Line dataKey="trailingWeeklyAverage" name="4-week trailing average (covered weeks)" stroke="#e9c46a" strokeWidth={3} strokeDasharray="2 4" dot={false} connectNulls={false} isAnimationActive={false} />
             {chartData.some((point) => point.observedCompleted !== null) && <Line dataKey="observedCompleted" name="Observed (coverage unknown)" stroke="#9fd8c2" strokeWidth={0} dot={{ r: 4, fill: "#12171d", strokeWidth: 2 }} isAnimationActive={false} />}
             {chartData.some((point) => point.periodRate !== null) && <Line dataKey="periodRate" name="Period pace" stroke="#9fd8c2" strokeWidth={0} dot={{ r: 4 }} isAnimationActive={false} />}
-            <Line dataKey="capacity" name="Capacity" stroke={capacityColor} dot={false} strokeDasharray="6 3" isAnimationActive={false} />
+            <Line dataKey="capacity" name="Weekly capacity" stroke={capacityColor} dot={false} strokeDasharray="6 3" isAnimationActive={false} />
             {requiredPace !== null && <Line dataKey="required" name="Goal" stroke="#76dda4" dot={false} strokeDasharray="3 3" isAnimationActive={false} />}
           </LineChart>
         </ResponsiveContainer>
       </div>}
+    {!compareWholePractice && !chartData.some((point) => point.trailingWeeklyAverage !== null) && <p className="pw-note">4-week trailing average unavailable: four consecutive fully covered calendar weeks are required.</p>}
     {!chartData.some((point) => point.completed !== null || point.observedCompleted !== null || point.periodRate !== null) && <p className="pw-note">Eligible complete-period observations are unavailable for these dates.</p>}
     <details onToggle={(event) => setCompactDetailsOpen(event.currentTarget.open)}>
       <summary>Session entry, history and hiring</summary>
