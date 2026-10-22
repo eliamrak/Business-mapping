@@ -133,6 +133,7 @@ export const fields: Record<Collection, Field[]> = {
       "monthly",
       "weekly",
       "biweekly",
+      "quarterly",
       "annual",
       "once",
       "per_session",

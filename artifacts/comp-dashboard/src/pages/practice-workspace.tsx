@@ -40,6 +40,8 @@ import {
 import {
   forecast,
   monthEnd,
+  quarterlyBudgetBillingWindow,
+  quarterlyBudgetBillingDates,
   completeServicePeriodState,
   canonicalServicePeriod,
   referencedClinicianIds,
@@ -3662,6 +3664,16 @@ export default function PracticeWorkspace() {
   </div>
   );
 
+  function quarterlyScheduleDetails(b: Workspace["budgets"][number]) {
+    if (b.cadence !== "quarterly") return null;
+    const { start, end } = quarterlyBudgetBillingWindow((moneyPlanningMonth || today.slice(0, 7)) + "-01");
+    const dates = quarterlyBudgetBillingDates(b, start, end);
+    return <details className="pw-quarterly-budget-schedule"><summary>{b.name} quarterly schedule</summary>
+      <p>Amount is per calendar quarter, accrued by active calendar days. Billing dates do not change this cost estimate.</p>
+      <p>Planned bills ({start} to {end}): {dates.length ? dates.join(", ") : "None in this range"}. These are not recorded payments.</p>
+      <p>{b.billingReferenceStart ? "First bill reference" : "Effective start (no first bill reference entered)"}: {b.billingReferenceStart ?? b.start}. Repeat every three months on that day, clamped to month end when necessary.</p>
+    </details>;
+  }
   function widgetGrid(sectionKey: SectionLayoutKey, children: ReactNode, className = "", defaultSize: SectionWidgetSize = "medium") {
     const flatten = (nodes: ReactNode): ReactNode[] => Children.toArray(nodes).flatMap(node => isValidElement(node) && node.type === Fragment
       ? flatten((node.props as { children?: ReactNode }).children) : [node]);
@@ -5270,6 +5282,7 @@ export default function PracticeWorkspace() {
                                     "monthly",
                                     "weekly",
                                     "biweekly",
+                                    "quarterly",
                                     "annual",
                                     "once",
                                   ].map((cadence) => (
@@ -5323,6 +5336,7 @@ export default function PracticeWorkspace() {
                                   )
                                 }
                               />
+                              {quarterlyScheduleDetails(b)}
                             </div>
                           ))}
                       </div>
@@ -6005,6 +6019,7 @@ export default function PracticeWorkspace() {
                                       "monthly",
                                       "weekly",
                                       "biweekly",
+                                      "quarterly",
                                       "annual",
                                       "once",
                                       "per_session",
@@ -6081,6 +6096,7 @@ export default function PracticeWorkspace() {
                       </tbody>
                     </table>
                   </div>
+                  {active(workingWorkspace.budgets).filter(b => b.cadence === "quarterly" && ["expense", "facility", "marketing"].includes(workingWorkspace.categories.find(c => c.id === b.categoryId)?.kind ?? "")).map(b => <Fragment key={b.id}>{quarterlyScheduleDetails(b)}</Fragment>)}
                   {!active(workingWorkspace.budgets).some((b) =>
                     ["expense", "facility", "marketing"].includes(
                       workingWorkspace.categories.find(

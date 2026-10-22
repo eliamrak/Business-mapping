@@ -872,6 +872,7 @@ export default function MoneyFlowToday({
                 <option value="monthly">Monthly</option>
                 <option value="weekly">Weekly</option>
                 <option value="biweekly">Biweekly</option>
+                <option value="quarterly">Quarterly</option>
                 <option value="annual">Annual</option>
                 <option value="once">One-time</option>
                 <option value="per_session">Per session</option>

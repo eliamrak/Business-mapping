@@ -536,6 +536,34 @@ export function eventIssues(events: PlanEvent[]): string[] {
   return [...new Set(issues)];
 }
 
+export function quarterlyBudgetBillingWindow(start: string): { start: string; end: string } {
+  const lastMonth = monthDate(start, 11);
+  return { start, end: lastMonth.startsWith("+") ? "9999-12-31" : monthEnd(lastMonth) };
+}
+
+/** Planned quarterly dates only; never establishes a payment or changes accrual. */
+export function quarterlyBudgetBillingDates(
+  b: Workspace["budgets"][number],
+  start: string,
+  end: string,
+): string[] {
+  if (b.cadence !== "quarterly" || start > end || !active(b, start, end)) return [];
+  const anchor = b.billingReferenceStart ?? b.start;
+  const day = Number(anchor.slice(8, 10));
+  const through = b.end && b.end < end ? b.end : end;
+  const from = b.start > start ? b.start : start;
+  const dates: string[] = [];
+  // Always derive from the original anchor: Jan 31 -> Apr 30 -> Jul 31, not Jul 30.
+  const lastIndex = Math.floor(monthIndex(through, anchor) / 3);
+  for (let index = Math.max(0, Math.floor(monthIndex(from, anchor) / 3)); index <= lastIndex; index++) {
+    const month = monthDate(anchor, index * 3);
+    if (month > through) break;
+    const date = month.slice(0, 8) + String(Math.min(day, Number(monthEnd(month).slice(8, 10)))).padStart(2, "0");
+    if (date >= from && date <= through) dates.push(date);
+  }
+  return dates;
+}
+
 export function budgetAmount(
   b: Workspace["budgets"][number],
   start: string,
@@ -555,6 +583,19 @@ export function budgetAmount(
       return (b.amount * days) / 7;
     case "biweekly":
       return (b.amount * days) / 14;
+    case "quarterly": {
+      let total = 0;
+      const through = b.end && b.end < end ? b.end : end;
+      for (let date = b.start > start ? b.start : start; date <= through; ) {
+        const quarterStart = monthDate(date, -((Number(date.slice(5, 7)) - 1) % 3));
+        const quarterEnd = monthEnd(monthDate(quarterStart, 2));
+        const segmentEnd = through < quarterEnd ? through : quarterEnd;
+        total += b.amount * daysInclusive(date, segmentEnd) / daysInclusive(quarterStart, quarterEnd);
+        if (segmentEnd === through) break;
+        date = new Date(Date.parse(segmentEnd + "T12:00:00Z") + 86400000).toISOString().slice(0, 10);
+      }
+      return total;
+    }
     case "annual":
       return (
         (b.amount * days) /

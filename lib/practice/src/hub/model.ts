@@ -46,6 +46,7 @@ export const budgetSchema = z.object({
     "monthly",
     "weekly",
     "biweekly",
+    "quarterly",
     "annual",
     "once",
     "per_session",
