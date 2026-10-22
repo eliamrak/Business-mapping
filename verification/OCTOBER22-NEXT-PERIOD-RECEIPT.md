@@ -28,6 +28,14 @@ The synthetic fixture proves that 25 matching carryovers are not counted twice. 
 
 No database migration, dependency, artwork/icon, clinical metric definition, financial assumption or deployment contract is changed. No real-data fixtures are tracked. Browser emulation is not physical iPhone, native macOS or VoiceOver acceptance.
 
+## Saved-flow visibility follow-up
+
+The first published version hid a blocked proposal when the planner had not established a period, and did not show a proposal at all when saved package membership was absent. The follow-up renders a concise first blocking reason without requiring a period, with additional reasons collapsed. Missing membership explicitly says not to reupload or re-enter dates. A collapsed Source receipt exposes only package identity and aggregate membership/frozen-link/revision diagnostics so the live issue can be diagnosed through ordinary UI controls without browser network evaluation.
+
+This follow-up does not infer membership from equal import timestamps, change server eligibility, admit existing sources or repair any live declaration. The actual live cause remains unverified until the publisher reads those diagnostics. Pure regression cases cover already-saved packages, not only new upload acknowledgements. Before artifact typechecks run the existing root `pnpm run typecheck:libs` (`tsc --build`) so new shared exports are present in ignored generated declarations; this prerequisite does not alter source or weaken a gate.
+
+Follow-up evidence: 23 mounted checks (the original 14 plus missing, empty and invalid saved membership at 1440/390/320), 1,211 functional tests, 35 local compatibility checks, dashboard typecheck and production build pass. Independent review is clear for visibility and action safety, not live membership correctness. Manual coverage tools remain reachable but are additionally collapsed and are not presented as the current saved-report repair. No API or planner runtime change is included in this follow-up.
+
 ## Publisher gates
 
 Use only the base-to-reviewed-candidate delta. Re-read the actual clean publisher HEAD/tree, check touched-file preimages against the base, retain a rollback ref, apply with `git apply --check --index` followed by `git apply --index`, and create a normal descendant commit. Preserve all publisher memory/history, `.replit`, artifact contracts and accepted mobile-readiness changes. Do not reset history or copy a development database.

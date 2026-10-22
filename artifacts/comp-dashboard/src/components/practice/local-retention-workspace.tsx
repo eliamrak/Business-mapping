@@ -443,13 +443,16 @@ export default function LocalRetentionWorkspace({
   const nextPeriod = verifiedCoverage.dataThrough ? canonicalServicePeriod(new Date(Date.parse(verifiedCoverage.dataThrough + "T12:00:00Z") + 86400000).toISOString().slice(0, 10)) : null;
   const latestPackage = [...packages].sort((a, b) => b.importedAt.localeCompare(a.importedAt) || a.packageId.localeCompare(b.packageId))[0];
   const currentHistory = { snapshots, packages, declarations, billingResolutions: storedBillingResolutions, billingResolutionRevision, billingCodeMinutes, sameDayVisitOverrides };
-  const periodPlan = useMemo(() => latestPackage?.sourceIds?.length
-    ? planNextReportPeriod({ snapshots, storedDeclarations: declarations, roster, teamId, newSourceIds: latestPackage.sourceIds, today, billingResolutions: storedBillingResolutions }) : null,
-  [snapshots, declarations, roster, teamId, latestPackage?.sourceIds, today, storedBillingResolutions]);
+  const periodPlan = useMemo<NextReportPeriodPlan | null>(() => !latestPackage ? null : latestPackage.sourceIds?.length
+    ? planNextReportPeriod({ snapshots, storedDeclarations: declarations, roster, teamId, newSourceIds: latestPackage.sourceIds, today, billingResolutions: storedBillingResolutions })
+    : { status: "blocked", period: null, carryover: { rows: 0, matched: 0, conflicts: 0 }, reasons: ["The saved upload's attendance and billing source pair is unavailable. Its source receipt needs repair; do not upload the report again or re-enter its dates."] },
+  [snapshots, declarations, roster, teamId, latestPackage?.packageId, latestPackage?.sourceIds, today, storedBillingResolutions]);
   const knownPeriodSources = new Set(periodPlan?.period && periodPlan.status !== "up-to-date" ? latestPackage?.sourceIds ?? [] : []);
   const sourcesNeedingProof = snapshots.filter(source => missingProofIds.has(source.id) && !knownPeriodSources.has(source.id));
   const actionableCoverage = verifiedCoverage.incompletePeriods.filter(period => !/has not ended/.test(period.reason)
     && !(period.snapshotId && knownPeriodSources.has(period.snapshotId) && /Missing or invalid explicit complete report proof/.test(period.reason)));
+  const missingFrozenLinks = declarations?.data.sourceSets.reduce((count, set) => count + set.snapshotIds.filter(id =>
+    snapshots.filter(source => source.id === id && source.kind === set.kind).length !== 1).length, 0) ?? 0;
 
   function applySavedHistory(history: StoredImportHistory) {
     setSnapshots(history.snapshots); setPackages(history.packages ?? []);
@@ -736,13 +739,23 @@ export default function LocalRetentionWorkspace({
           {lastPackageImport && <p>Last package saved: {lastPackageImport.replace("T", " ").replace(/\.\d+Z$/, " UTC")}</p>}
           {["loading", "validating", "saving"].includes(feedback.stage) && <progress aria-label={importFeedbackTitle(feedback)} />}
         </div>
-        {periodPlan?.period && periodPlan.status !== "up-to-date" && <div className="pw-period-reconcile" aria-label="Saved report period reconciliation">
-          <strong>Expected next period · {periodPlan.period.start} – {periodPlan.period.end}</strong>
+        {periodPlan && periodPlan.status !== "up-to-date" && <div className="pw-period-reconcile" aria-label="Saved report period reconciliation">
+          <strong>{periodPlan.period ? `Expected next period · ${periodPlan.period.start} – ${periodPlan.period.end}` : "Saved report needs review"}</strong>
           {periodPlan.carryover.rows > 0 && <p>{periodPlan.carryover.matched} / {periodPlan.carryover.rows} prior-period rows match{periodPlan.carryover.conflicts > 0 ? `; ${periodPlan.carryover.conflicts} need review` : ""}.</p>}
-          {periodPlan.status === "ready" ? <>
+          {periodPlan.status === "ready" && periodPlan.period ? <>
             <p>Original records stay intact.</p>
             <button type="button" className="pw-button pw-primary" disabled={busy || feedback.stage === "unconfirmed"} onClick={() => void reconcileSavedPeriod()}>Reconcile this period</button>
-          </> : <details><summary>Reconciliation needs review</summary>{periodPlan.reasons.map(reason => <p key={reason}>{reason}</p>)}</details>}
+          </> : <>
+            <p>{periodPlan.reasons[0] ?? "The saved report could not be reconciled. Reload saved history before trying again."}</p>
+            {periodPlan.reasons.length > 1 && <details><summary>More review details</summary>{periodPlan.reasons.slice(1).map(reason => <p key={reason}>{reason}</p>)}</details>}
+            <details><summary>Source receipt</summary>
+              <p style={{ overflowWrap: "anywhere" }}>Saved package: {latestPackage?.packageId}</p>
+              <p>Package membership: {Array.isArray(latestPackage?.sourceIds) ? `${latestPackage.sourceIds.length} linked sources` : "not supplied"}.</p>
+              <p>Matching active sources: {(latestPackage?.sourceIds ?? []).filter(id => snapshots.filter(source => source.id === id).length === 1).length}.</p>
+              <p>Missing or duplicate frozen links: {missingFrozenLinks}.</p>
+              <p>Configuration revision: {declarations?.revision ?? "unavailable"}.</p>
+            </details>
+          </>}
         </div>}
         {error && <p className="pw-error" role="alert">{error}</p>}
         <div className="pw-import-coverage" aria-label="Saved data and metric coverage">
@@ -754,7 +767,7 @@ export default function LocalRetentionWorkspace({
         {(actionableCoverage.length > 0 || rawBillingEvidence.conflictingHashCount > 0 || rawBillingEvidence.ambiguousEncounterCount > 0 || verifiedCoverage.attendanceStatusConflictCount > 0 || rawBillingEvidence.staleResolutionCount > 0 || phoneChargeAnomalies(snapshots).length > 0) &&
           <div className="pw-import-attention" aria-label="Import attention items">
             <strong>Needs attention</strong>
-            {sourcesNeedingProof.length > 0 ? <p>{sourcesNeedingProof.length} saved sources lack complete report dates. Confirm the full report period, including days with no activity, before those sources can extend verified metrics.</p> : actionableCoverage.length > 0 && <p>Some report periods or provider identities remain unverified. Saved rows are retained; affected metrics remain unknown.</p>}
+            {periodPlan?.status === "blocked" ? <p>Review the saved report issue above. Original rows remain saved{nextPeriod ? "; its known period dates do not need re-entry." : ". Resolve that issue before changing coverage."}</p> : sourcesNeedingProof.length > 0 ? <p>{sourcesNeedingProof.length} saved sources lack complete report dates. Confirm the full report period, including days with no activity, before those sources can extend verified metrics.</p> : actionableCoverage.length > 0 && <p>Some report periods or provider identities remain unverified. Saved rows are retained; affected metrics remain unknown.</p>}
             {(rawBillingEvidence.conflictingHashCount > 0 || rawBillingEvidence.ambiguousEncounterCount > 0 || rawBillingEvidence.staleResolutionCount > 0 || verifiedCoverage.attendanceStatusConflictCount > 0 || phoneChargeAnomalies(snapshots).length > 0) && <p>Some source facts conflict or need a specific billing review. Affected values remain unknown.</p>}
             {(actionableCoverage.length > 0 || verifiedCoverage.attendanceStatusConflictCount > 0) && <a href="#import-coverage-review" onClick={() => openReview("import-coverage-review")}>Review coverage and identities</a>}
             {billingNeedsReview && <a href="#import-billing-review" onClick={() => openReview("import-billing-review")}>Review billing exceptions</a>}
@@ -775,11 +788,11 @@ export default function LocalRetentionWorkspace({
       )}
       <details className="pw-data-disclosure" id="import-coverage-review">
         <summary>Coverage and provider identities{actionableCoverage.length > 0 ? " · review needed" : ""}</summary>
-        {sourcesNeedingProof.length > 0 && <section aria-label="Missing complete report dates">
-          <h3>Confirm complete report dates</h3>
-          <p>These files were saved, but only contain observed service dates. Enter the full period shown on each source report; do not use the first and last appointment as proof.</p>
+        {sourcesNeedingProof.length > 0 && <details aria-label="Missing complete report dates">
+          <summary>{periodPlan?.status === "blocked" ? "Manual coverage for other reports" : "Confirm complete report dates"}</summary>
+          <p>{periodPlan?.status === "blocked" ? "Resolve the saved report issue above without re-entering its known period. These manual tools remain available for other reports that need explicit date coverage." : "These files were saved, but only contain observed service dates. Enter the full period shown on each source report; do not use the first and last appointment as proof."}</p>
           {sourcesNeedingProof.map(snapshot => <SnapshotCoverageConfirmation key={`${snapshot.id}:${JSON.stringify(snapshot.reportCoverage ?? null)}`} snapshot={snapshot} today={today} disabled={busy || feedback.stage === "unconfirmed" || snapshots.filter(source => source.id === snapshot.id).length !== 1} onSave={confirmSnapshotCoverage} />)}
-        </section>}
+        </details>}
         <details><summary>Existing provider mappings and advanced source declarations</summary>
         <section className="pw-import-provenance" aria-label="Verified complete report coverage">
         <h3>Data covers through {dateLabel(verifiedCoverage.dataThrough)}</h3>

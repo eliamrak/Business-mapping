@@ -14,6 +14,7 @@ Private import evidence, client reports, local mapping/state files, credentials 
 node --test lib/practice/test/*.test.ts artifacts/comp-dashboard/src/lib/*.test.ts verification/profit-first-planning-input.test.mjs verification/lazy-pdf-export.test.mjs verification/tpa-icons.test.mjs
 node --test artifacts/api-server/test/import-overlap-reconciliation.test.mjs artifacts/api-server/test/practice-retain-overlap.test.mjs artifacts/api-server/test/practice-report-coverage.test.mjs artifacts/api-server/test/practice-import-declarations.test.mjs artifacts/api-server/test/practice-import-coverage-confirmation.test.mjs artifacts/api-server/test/practice-next-report-period.test.mjs
 node --test verification/tidal-theme.test.mjs verification/lazy-pdf-export.test.mjs verification/mobile-readiness.test.cjs verification/tpa-icons.test.mjs
+pnpm run typecheck:libs
 pnpm --filter @workspace/comp-dashboard run typecheck
 pnpm --filter @workspace/api-server run typecheck
 PORT=23894 BASE_PATH=/ NODE_ENV=production pnpm --filter @workspace/comp-dashboard run build

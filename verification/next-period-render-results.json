@@ -33,6 +33,27 @@
     "/tmp/practice-next-period-render/metadata-stale.png",
     "/tmp/practice-next-period-render/metadata-unconfirmed.png",
     "/tmp/practice-next-period-render/metadata-recovered.png",
+    "/tmp/practice-next-period-render/missing-source-ids-1440.png",
+    "/tmp/practice-next-period-render/missing-source-ids-receipt-1440.png",
+    "/tmp/practice-next-period-render/empty-source-ids-1440.png",
+    "/tmp/practice-next-period-render/empty-source-ids-receipt-1440.png",
+    "/tmp/practice-next-period-render/missing-frozen-member-1440.png",
+    "/tmp/practice-next-period-render/missing-frozen-member-receipt-1440.png",
+    "/tmp/practice-next-period-render/missing-source-ids-390.png",
+    "/tmp/practice-next-period-render/missing-source-ids-receipt-390.png",
+    "/tmp/practice-next-period-render/missing-source-ids-manual-collapsed-390.png",
+    "/tmp/practice-next-period-render/empty-source-ids-390.png",
+    "/tmp/practice-next-period-render/empty-source-ids-receipt-390.png",
+    "/tmp/practice-next-period-render/empty-source-ids-manual-collapsed-390.png",
+    "/tmp/practice-next-period-render/missing-frozen-member-390.png",
+    "/tmp/practice-next-period-render/missing-frozen-member-receipt-390.png",
+    "/tmp/practice-next-period-render/missing-frozen-member-manual-collapsed-390.png",
+    "/tmp/practice-next-period-render/missing-source-ids-320.png",
+    "/tmp/practice-next-period-render/missing-source-ids-receipt-320.png",
+    "/tmp/practice-next-period-render/empty-source-ids-320.png",
+    "/tmp/practice-next-period-render/empty-source-ids-receipt-320.png",
+    "/tmp/practice-next-period-render/missing-frozen-member-320.png",
+    "/tmp/practice-next-period-render/missing-frozen-member-receipt-320.png",
     "/tmp/practice-next-period-render/data-1440.png",
     "/tmp/practice-next-period-render/data-390.png",
     "/tmp/practice-next-period-render/data-320.png"
@@ -210,11 +231,11 @@
         },
         {
           "method": "GET",
-          "path": "/api/business-goals"
+          "path": "/api/scenarios"
         },
         {
           "method": "GET",
-          "path": "/api/scenarios"
+          "path": "/api/business-goals"
         },
         {
           "method": "GET",
@@ -2311,6 +2332,375 @@
       "journalEntries": 5
     },
     {
+      "name": "missing-source-ids-1440",
+      "pass": true,
+      "requests": [
+        {
+          "method": "GET",
+          "path": "/api/hub"
+        },
+        {
+          "method": "GET",
+          "path": "/api/hub/context"
+        },
+        {
+          "method": "GET",
+          "path": "/api/business-goals"
+        },
+        {
+          "method": "GET",
+          "path": "/api/scenarios"
+        },
+        {
+          "method": "GET",
+          "path": "/api/practice-imports"
+        },
+        {
+          "method": "GET",
+          "path": "/api/practice-imports/billing-resolution-candidates"
+        },
+        {
+          "method": "GET",
+          "path": "/api/practice-imports/capabilities"
+        },
+        {
+          "method": "GET",
+          "path": "/api/practice-imports"
+        }
+      ],
+      "declarationRevision": 2,
+      "sourceSets": 2,
+      "journalEntries": 4
+    },
+    {
+      "name": "empty-source-ids-1440",
+      "pass": true,
+      "requests": [
+        {
+          "method": "GET",
+          "path": "/api/hub"
+        },
+        {
+          "method": "GET",
+          "path": "/api/hub/context"
+        },
+        {
+          "method": "GET",
+          "path": "/api/business-goals"
+        },
+        {
+          "method": "GET",
+          "path": "/api/scenarios"
+        },
+        {
+          "method": "GET",
+          "path": "/api/practice-imports"
+        },
+        {
+          "method": "GET",
+          "path": "/api/practice-imports/billing-resolution-candidates"
+        },
+        {
+          "method": "GET",
+          "path": "/api/practice-imports/capabilities"
+        },
+        {
+          "method": "GET",
+          "path": "/api/practice-imports"
+        }
+      ],
+      "declarationRevision": 2,
+      "sourceSets": 2,
+      "journalEntries": 4
+    },
+    {
+      "name": "missing-frozen-member-1440",
+      "pass": true,
+      "requests": [
+        {
+          "method": "GET",
+          "path": "/api/hub"
+        },
+        {
+          "method": "GET",
+          "path": "/api/hub/context"
+        },
+        {
+          "method": "GET",
+          "path": "/api/business-goals"
+        },
+        {
+          "method": "GET",
+          "path": "/api/scenarios"
+        },
+        {
+          "method": "GET",
+          "path": "/api/practice-imports"
+        },
+        {
+          "method": "GET",
+          "path": "/api/practice-imports/billing-resolution-candidates"
+        },
+        {
+          "method": "GET",
+          "path": "/api/practice-imports/capabilities"
+        },
+        {
+          "method": "GET",
+          "path": "/api/practice-imports"
+        }
+      ],
+      "declarationRevision": 2,
+      "sourceSets": 2,
+      "journalEntries": 4
+    },
+    {
+      "name": "missing-source-ids-390",
+      "pass": true,
+      "requests": [
+        {
+          "method": "GET",
+          "path": "/api/hub"
+        },
+        {
+          "method": "GET",
+          "path": "/api/hub/context"
+        },
+        {
+          "method": "GET",
+          "path": "/api/business-goals"
+        },
+        {
+          "method": "GET",
+          "path": "/api/scenarios"
+        },
+        {
+          "method": "GET",
+          "path": "/api/practice-imports"
+        },
+        {
+          "method": "GET",
+          "path": "/api/practice-imports/billing-resolution-candidates"
+        },
+        {
+          "method": "GET",
+          "path": "/api/practice-imports/capabilities"
+        },
+        {
+          "method": "GET",
+          "path": "/api/practice-imports"
+        }
+      ],
+      "declarationRevision": 2,
+      "sourceSets": 2,
+      "journalEntries": 4
+    },
+    {
+      "name": "empty-source-ids-390",
+      "pass": true,
+      "requests": [
+        {
+          "method": "GET",
+          "path": "/api/hub"
+        },
+        {
+          "method": "GET",
+          "path": "/api/hub/context"
+        },
+        {
+          "method": "GET",
+          "path": "/api/business-goals"
+        },
+        {
+          "method": "GET",
+          "path": "/api/scenarios"
+        },
+        {
+          "method": "GET",
+          "path": "/api/practice-imports"
+        },
+        {
+          "method": "GET",
+          "path": "/api/practice-imports/billing-resolution-candidates"
+        },
+        {
+          "method": "GET",
+          "path": "/api/practice-imports/capabilities"
+        },
+        {
+          "method": "GET",
+          "path": "/api/practice-imports"
+        }
+      ],
+      "declarationRevision": 2,
+      "sourceSets": 2,
+      "journalEntries": 4
+    },
+    {
+      "name": "missing-frozen-member-390",
+      "pass": true,
+      "requests": [
+        {
+          "method": "GET",
+          "path": "/api/hub"
+        },
+        {
+          "method": "GET",
+          "path": "/api/hub/context"
+        },
+        {
+          "method": "GET",
+          "path": "/api/business-goals"
+        },
+        {
+          "method": "GET",
+          "path": "/api/scenarios"
+        },
+        {
+          "method": "GET",
+          "path": "/api/practice-imports"
+        },
+        {
+          "method": "GET",
+          "path": "/api/practice-imports/billing-resolution-candidates"
+        },
+        {
+          "method": "GET",
+          "path": "/api/practice-imports/capabilities"
+        },
+        {
+          "method": "GET",
+          "path": "/api/practice-imports"
+        }
+      ],
+      "declarationRevision": 2,
+      "sourceSets": 2,
+      "journalEntries": 4
+    },
+    {
+      "name": "missing-source-ids-320",
+      "pass": true,
+      "requests": [
+        {
+          "method": "GET",
+          "path": "/api/hub"
+        },
+        {
+          "method": "GET",
+          "path": "/api/hub/context"
+        },
+        {
+          "method": "GET",
+          "path": "/api/business-goals"
+        },
+        {
+          "method": "GET",
+          "path": "/api/scenarios"
+        },
+        {
+          "method": "GET",
+          "path": "/api/practice-imports"
+        },
+        {
+          "method": "GET",
+          "path": "/api/practice-imports/billing-resolution-candidates"
+        },
+        {
+          "method": "GET",
+          "path": "/api/practice-imports/capabilities"
+        },
+        {
+          "method": "GET",
+          "path": "/api/practice-imports"
+        }
+      ],
+      "declarationRevision": 2,
+      "sourceSets": 2,
+      "journalEntries": 4
+    },
+    {
+      "name": "empty-source-ids-320",
+      "pass": true,
+      "requests": [
+        {
+          "method": "GET",
+          "path": "/api/hub"
+        },
+        {
+          "method": "GET",
+          "path": "/api/hub/context"
+        },
+        {
+          "method": "GET",
+          "path": "/api/business-goals"
+        },
+        {
+          "method": "GET",
+          "path": "/api/scenarios"
+        },
+        {
+          "method": "GET",
+          "path": "/api/practice-imports"
+        },
+        {
+          "method": "GET",
+          "path": "/api/practice-imports/billing-resolution-candidates"
+        },
+        {
+          "method": "GET",
+          "path": "/api/practice-imports/capabilities"
+        },
+        {
+          "method": "GET",
+          "path": "/api/practice-imports"
+        }
+      ],
+      "declarationRevision": 2,
+      "sourceSets": 2,
+      "journalEntries": 4
+    },
+    {
+      "name": "missing-frozen-member-320",
+      "pass": true,
+      "requests": [
+        {
+          "method": "GET",
+          "path": "/api/hub"
+        },
+        {
+          "method": "GET",
+          "path": "/api/hub/context"
+        },
+        {
+          "method": "GET",
+          "path": "/api/business-goals"
+        },
+        {
+          "method": "GET",
+          "path": "/api/scenarios"
+        },
+        {
+          "method": "GET",
+          "path": "/api/practice-imports"
+        },
+        {
+          "method": "GET",
+          "path": "/api/practice-imports/billing-resolution-candidates"
+        },
+        {
+          "method": "GET",
+          "path": "/api/practice-imports/capabilities"
+        },
+        {
+          "method": "GET",
+          "path": "/api/practice-imports"
+        }
+      ],
+      "declarationRevision": 2,
+      "sourceSets": 2,
+      "journalEntries": 4
+    },
+    {
       "name": "contrast-samples-1440",
       "pass": true,
       "sampled": 29,
@@ -2497,11 +2887,11 @@
         },
         {
           "method": "GET",
-          "path": "/api/scenarios"
+          "path": "/api/business-goals"
         },
         {
           "method": "GET",
-          "path": "/api/business-goals"
+          "path": "/api/scenarios"
         },
         {
           "method": "GET",

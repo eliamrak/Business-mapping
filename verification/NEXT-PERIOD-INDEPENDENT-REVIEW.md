@@ -87,3 +87,45 @@ The two package-pair findings are resolved by the re-reviewed changes described 
 The actual live 25-row comparison was not available or performed. Synthetic equality proves the code path, not that the owner's real carryover facts match. Before a real metadata action, use the authorized read-only live plan preview against the exact selected source pair; no new date question is needed. Code publication alone does not require a real-record metadata write.
 
 No claim of real PostgreSQL concurrency testing: rollback and CAS were tested through the isolated harness, with transaction/lock SQL inspected. The parent owns final type/build checks and the broader functional suite. This reviewer did not rerun or independently certify the reported 1207-test suite or 58 legacy API tests.
+
+## Scoped Frontend Review: Saved Import Exceptions
+
+Reviewed `codex/saved-import-review` against base `13784`, including the subsequent collapsed Source receipt disclosure. **No blocker found in the bounded frontend change.** This conclusion concerns exception visibility and action safety; it does not certify or repair the live eight-source package's actual membership, carryovers, or metadata.
+
+The new blocked fallback handles a saved package whose `sourceIds` are absent or empty. Nonempty but invalid membership still goes through the existing pure planner. The panel now renders blocked plans with `period: null`, shows the first reason directly, and keeps additional reasons in a closed details element. No package still yields no panel, and up-to-date plans remain hidden. The reconcile button requires both ready status and a non-null period; blocked fallback and missing-member cases expose no reconciliation action.
+
+The collapsed Source receipt uses existing in-memory package, snapshot, and declaration fields only: package ID; absent membership versus a supplied zero-length array; count of IDs matching exactly one active snapshot; count of frozen links missing or duplicated by ID/kind; declaration revision. These are diagnostic counts, not a membership certification. Duplicate frozen links are counted as links across declarations, not unique missing source IDs. No raw client facts or billing approval details are introduced by this disclosure.
+
+Persistence review: no backend or planner change is part of this frontend diff. No effect, fetch, mutation handler, upload branch, declaration payload, membership admission policy, or billing-journal path was added or altered. The existing explicit reconciliation handler and persistence guards remain unchanged. Reading the memoized fallback, expanding details, and displaying receipt counts cannot save metadata. Existing advanced date/identity controls retain their prior behavior; this patch does not grant them new authority.
+
+Independent verification: `git diff --check 13784` passed. Executed the actual extracted panel JSX with React server rendering entirely in memory: blocked null-period reasons visible, first reason outside details, remaining reasons collapsed, Source receipt collapsed, no blocked button, no ready-without-period button, ready-with-period explicit button retained, null/up-to-date panels absent, and zero callback writes. The initial extraction was refreshed to include the concurrently added receipt's local inputs before the successful run; no application file was edited.
+
+Mounted browser evidence is owned by the render agent. Waited for its completed receipt-specific run: `verification/next-period-render-results.json`, saved 2026-10-22T16:27:11Z, contains **23 passing checks, zero failures**, including missing `sourceIds`, empty `sourceIds`, and missing frozen-member/null-period scenarios at 1440, 390, and 320 widths. All nine exception cases recorded GET requests only and retained declaration revision 2. Inspected the test assertions covering unchanged raw rows/declarations, no reconciliation button or visible date input, visible first reason, collapsed remaining reasons, exact receipt counts, Enter/Space disclosure handling, and GET-only reload. The final artifacts include nine receipt screenshots; this reviewer visually inspected `missing-source-ids-receipt-320.png`. These are synthetic mounted-app results, not inspection of the live eight-source history.
+
+Final scoped disposition: **clear**, with no unintended persistence or newly enabled action path found. Live metadata remains pending; live membership is unknown and was not fixed or certified by this UI patch. No data writes, browser access to the live service, or code edits were performed by this reviewer.
+
+### Final Banner And Manual-Form Follow-up
+
+Reviewed the final additional diff before freeze. **Clear; no actual blocker found.** The blocked Needs attention banner now directs the user to the saved-report issue above. With a known `nextPeriod`, it explicitly says the dates do not need re-entry; otherwise it says to resolve the issue before changing coverage. This supersedes the contradictory old full-period confirmation instruction for blocked plans.
+
+The missing-date manual forms remain intact under a new, initially closed nested details element. Its blocked-state summary is Manual coverage for other reports; normal nonblocked guidance remains available. The forms' original snapshot arguments, duplicate-ID/busy/unconfirmed guards, and `confirmSnapshotCoverage` save handler are unchanged. No eligibility, admission, API payload, persistence handler, or automatic action changed.
+
+Independent in-memory rendering of the actual final banner/disclosure JSX passed: known-period blocked copy, unknown-period blocked copy, retained closed manual forms, unchanged nonblocked copy, zero save callbacks. `git diff --check 13784` passed. No application files were edited by this reviewer.
+
+Browser evidence boundary at freeze: the earlier completed receipt run passed 23/23, but the latest saved run (16:29:29Z) predates the corrected test selectors and shows nine test failures: six ambiguous descendant-summary locator failures and three expectations for known-period copy in the intentionally unknown-period fixture. Inspection identifies these as stale test expectations rather than a demonstrated application blocker. The updated render script was present; its rerun result had not yet been saved at this review's final read. This review does not claim a fresh 23/23 pass for the final banner change. Per parent request, review is frozen without further waiting.
+
+### Final Harness Assertion Review
+
+Reviewed the subsequent change from `innerText()` to `textContent()` on `manual.locator(':scope > summary')` while its parent coverage disclosure is closed. **No gate weakening found.** At that point the assertion establishes the direct summary's exact DOM label, not visibility. Its separate assertion that the manual disclosure lacks `open` is retained.
+
+Later in each of the same nine desktop/mobile exception cases, the harness opens the coverage parent using Enter, explicitly verifies the manual summary is visible while its manual disclosure remains closed, and verifies date inputs are hidden. It then opens the manual disclosure and a source form through their direct summaries and requires exactly two visible date inputs. It closes the disclosures using Space and verifies their closed state. POST/PUT counts remain zero and raw rows/declarations must remain unchanged, including after reload. Thus replacing the closed-parent structural text read does not remove the actual visibility, reachability, keyboard, or persistence gates.
+
+The earlier 23/23 pass predates these new manual-form assertions and must not be reused as the final run result. The final rerun is tracked in `/tmp/practice-saved-review-final-render.log`; its completed result will be recorded separately if available before this turn closes. No new application blocker identified.
+
+### Verified Final Result And Freeze
+
+Independently read the newly completed results and final log. `verification/next-period-render-results.json` was updated at **2026-10-22T16:31:31.514Z**, after both the final component change (16:28:59.883Z) and final harness correction (16:31:01.937Z). **23/23 checks pass; zero failures.** The final log agrees: `{"passed":23,"failed":[]}`. This supersedes the pending/failed intermediate browser evidence above.
+
+All nine missing-membership/empty-membership/missing-frozen-link cases across 1440, 390, and 320 widths pass the final manual-disclosure workflow assertions. Independently confirmed each result records GET requests only and declaration revision 2. The structural hidden-label assertion correction preserves the subsequent visible-summary, keyboard, visible-date-input, and unchanged-record checks.
+
+**Final bounded review: clear, no actual blockers. Report frozen.** The change exposes saved-import exceptions and diagnostic receipts without certifying or repairing actual live membership. Live metadata remains pending. This reviewer wrote only this report and made no code or data writes.
