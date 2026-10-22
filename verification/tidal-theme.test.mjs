@@ -77,8 +77,14 @@ test("all changed/new files stay within declared presentation and verification s
     "verification/OCTOBER22-TIDAL-OWNED-RECEIPT.md"]);
   // Existing publisher history only; its separate before/after hash guard owns preservation.
   const publisherHistory = new Set([".agents/memory/MEMORY.md", ".agents/memory/release-evidence-temp-files.md"]);
+  // Separately reviewed PDF-loading follow-up; report bodies have their own
+  // byte-parity contract. Keep this exact list rather than a broad path exemption.
+  const reviewedPdfFollowup = new Set([src + "components/tabs/export-tab.tsx",
+    "verification/lazy-pdf-build.mjs", "verification/lazy-pdf-build-results.json",
+    "verification/lazy-pdf-export-acceptance.mjs", "verification/lazy-pdf-export-results.json",
+    "verification/lazy-pdf-export.test.mjs", "verification/OCTOBER22-LAZY-PDF-RECEIPT.md"]);
   const changes = [...git("diff", base, "--name-only", "-z").split("\0"), ...git("ls-files", "--others", "--exclude-standard", "-z").split("\0")].filter(Boolean);
-  assert.deepEqual(changes.filter(file => !allowed.has(file) && !publisherHistory.has(file)), [], "Unexpected edits (including schema/API/dependencies) require separate review");
+  assert.deepEqual(changes.filter(file => !allowed.has(file) && !publisherHistory.has(file) && !reviewedPdfFollowup.has(file)), [], "Unexpected edits (including schema/API/dependencies) require separate review");
 });
 
 test("token defaults are statically imported by the eagerly loaded workspace", () => {

@@ -27,6 +27,10 @@ introduced. No automatic app reload or business-state mutation is performed.
 - Frontend TypeScript and Vite production build passed. Existing sourcemap and
   large-chunk warnings remain. The eager/dynamic PDF conflict is eliminated.
 - Independent code and rendered review passed with no blocking finding.
+- Tidal motion/token suite: 21/21 passed after registering the exact seven
+  separately reviewed PDF follow-up paths in its source allowlist. No broad
+  directory exemption, theme assertion or numeric check was removed. The old
+  theme-only allowlist correctly rejected the new follow-up before registration.
 
 Local commands:
 
