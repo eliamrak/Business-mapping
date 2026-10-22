@@ -1,0 +1,111 @@
+{
+  "syntheticOnly": true,
+  "normalization": "PDF random document IDs only; fixed clock both versions",
+  "results": [
+    {
+      "test": "baseline-report-0",
+      "pass": true,
+      "bytes": 26947,
+      "name": "compensation-internal-report-1792670400000.pdf"
+    },
+    {
+      "test": "baseline-report-1",
+      "pass": true,
+      "bytes": 6967,
+      "name": "clinician-compensation-sheet-1792670400000.pdf"
+    },
+    {
+      "test": "baseline-report-2",
+      "pass": true,
+      "bytes": 15864,
+      "name": "practice-financial-summary-1792670400000.pdf"
+    },
+    {
+      "test": "baseline-scenario-selection",
+      "pass": true
+    },
+    {
+      "test": "baseline-initial-network",
+      "pass": true,
+      "initialRequests": [
+        "/baseline",
+        "/style.css",
+        "/baseline/app.js",
+        "/baseline/chunks/chunk-ONFLSTVF.js",
+        "/baseline/chunks/chunk-Y6SLVHK3.js"
+      ]
+    },
+    {
+      "test": "candidate-report-0",
+      "pass": true,
+      "bytes": 26947,
+      "name": "compensation-internal-report-1792670400000.pdf"
+    },
+    {
+      "test": "candidate-report-1",
+      "pass": true,
+      "bytes": 6967,
+      "name": "clinician-compensation-sheet-1792670400000.pdf"
+    },
+    {
+      "test": "candidate-report-2",
+      "pass": true,
+      "bytes": 15864,
+      "name": "practice-financial-summary-1792670400000.pdf"
+    },
+    {
+      "test": "candidate-scenario-selection",
+      "pass": true
+    },
+    {
+      "test": "candidate-initial-network",
+      "pass": true,
+      "initialRequests": [
+        "/candidate",
+        "/style.css",
+        "/candidate/app.js",
+        "/candidate/chunks/chunk-Y6SLVHK3.js"
+      ]
+    },
+    {
+      "test": "candidate-390-no-overflow",
+      "pass": true
+    },
+    {
+      "test": "candidate-320-no-overflow",
+      "pass": true
+    },
+    {
+      "test": "report-0-baseline-parity",
+      "pass": true,
+      "normalizedSha256": "fa834ba6714aa70dc46e04d640d6d6e428d4449bbaeb0701d08caf94684b2f48"
+    },
+    {
+      "test": "report-1-baseline-parity",
+      "pass": true,
+      "normalizedSha256": "7d3e2cc728e49c7a00c5a2010c35217174ab085dd96c7a8514e0a7f1a56df383"
+    },
+    {
+      "test": "report-2-baseline-parity",
+      "pass": true,
+      "normalizedSha256": "3285cc35ca60349440f76588861ad0c80280ef5376f649486eb7284ee1edae76"
+    },
+    {
+      "test": "report-3-baseline-parity",
+      "pass": true,
+      "normalizedSha256": "df0956fe88c6562988664fd41d342c27dd74ebc430931017de394cd71add441e"
+    },
+    {
+      "test": "async-loading-disables-all-and-recovers",
+      "pass": true
+    },
+    {
+      "test": "chunk-failure-visible-and-unlocks",
+      "pass": true
+    },
+    {
+      "test": "refresh-after-network-recovery-exports",
+      "pass": true
+    }
+  ]
+}

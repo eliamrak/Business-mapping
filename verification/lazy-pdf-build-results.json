@@ -1,0 +1,92 @@
+{
+  "publicInputsOnly": true,
+  "htmlRoots": [
+    "assets/index-B7gAhgjg.js"
+  ],
+  "baseline": {
+    "file": "index-C-H583OO.js",
+    "bytes": 2477372,
+    "gzipBytes": 711138,
+    "sha256": "9852d90dbdb81c79b36aa690ba35b66991f066a57f2f003a5be0d5a4493f9165"
+  },
+  "initial": [
+    {
+      "file": "assets/index-B7gAhgjg.js",
+      "bytes": 2054220,
+      "gzipBytes": 573406,
+      "sha256": "6fb33e687a48fa7008974d0ac2e07fdd0fd91890e592ece891579b37bae93c3d"
+    }
+  ],
+  "initialBytes": 2054220,
+  "initialGzipBytes": 573406,
+  "initialPdfModules": [],
+  "graph": [
+    {
+      "file": "assets/goal-search.worker-BCdEFWIG.js",
+      "entry": true,
+      "imports": [],
+      "dynamicImports": [],
+      "pdfModules": []
+    },
+    {
+      "file": "assets/index-B7gAhgjg.js",
+      "entry": true,
+      "imports": [],
+      "dynamicImports": [
+        "assets/jspdf.es.min-CvjvfuT5.js",
+        "assets/jspdf.plugin.autotable-B0IxatYY.js",
+        "assets/jspdf.es.min-CvjvfuT5.js",
+        "assets/jspdf.plugin.autotable-B0IxatYY.js"
+      ],
+      "pdfModules": []
+    },
+    {
+      "file": "assets/jspdf.es.min-CvjvfuT5.js",
+      "entry": false,
+      "imports": [
+        "assets/index-B7gAhgjg.js"
+      ],
+      "dynamicImports": [
+        "assets/html2canvas.esm-DXEQVQnt.js",
+        "assets/purify.es-DSHCW8nm.js",
+        "assets/index.es-D9tQbE8s.js"
+      ],
+      "pdfModules": [
+        "node_modules/.pnpm/jspdf@4.2.1/node_modules/jspdf/dist/jspdf.es.min.js"
+      ]
+    },
+    {
+      "file": "assets/jspdf.plugin.autotable-B0IxatYY.js",
+      "entry": false,
+      "imports": [],
+      "dynamicImports": [],
+      "pdfModules": [
+        "node_modules/.pnpm/jspdf-autotable@5.0.8_jspdf@4.2.1/node_modules/jspdf-autotable/dist/jspdf.plugin.autotable.mjs"
+      ]
+    },
+    {
+      "file": "assets/html2canvas.esm-DXEQVQnt.js",
+      "entry": false,
+      "imports": [],
+      "dynamicImports": [],
+      "pdfModules": []
+    },
+    {
+      "file": "assets/purify.es-DSHCW8nm.js",
+      "entry": false,
+      "imports": [],
+      "dynamicImports": [],
+      "pdfModules": []
+    },
+    {
+      "file": "assets/index.es-D9tQbE8s.js",
+      "entry": false,
+      "imports": [
+        "assets/index-B7gAhgjg.js",
+        "assets/jspdf.es.min-CvjvfuT5.js"
+      ],
+      "dynamicImports": [],
+      "pdfModules": []
+    }
+  ]
+}

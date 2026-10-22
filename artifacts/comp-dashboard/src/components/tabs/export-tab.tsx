@@ -8,8 +8,15 @@ import { Label } from "@/components/ui/label";
 import { Download, FileText, Loader2 } from "lucide-react";
 import { calculateClinicianMetrics, calculateBusinessGoalOutputs, calculateCurrentRealityGap, calculateStaffMemberCost } from "@/lib/calculations";
 import { formatCurrency } from "@/lib/format";
-import jsPDF from "jspdf";
-import autoTable from "jspdf-autotable";
+import type jsPDF from "jspdf";
+
+async function loadPdfTools() {
+  const [{ jsPDF }, { autoTable }] = await Promise.all([
+    import("jspdf"),
+    import("jspdf-autotable"),
+  ]);
+  return { jsPDF, autoTable };
+}
 
 const STAFF_ROLE_LABELS: Record<string, string> = {
   admin: "Admin",
@@ -66,13 +73,16 @@ export default function PDFExportTab() {
   const [practiceName, setPracticeName] = useState("");
   const [selectedScenarioId, setSelectedScenarioId] = useState<number | null>(null);
   const [loading, setLoading] = useState<string | null>(null);
+  const [exportError, setExportError] = useState<string | null>(null);
 
   const { data: selectedScenario } = useScenarioForExport(selectedScenarioId);
 
   const generateInternalReport = () => {
+    setExportError(null);
     setLoading("internal");
-    setTimeout(() => {
+    setTimeout(async () => {
       try {
+        const { jsPDF, autoTable } = await loadPdfTools();
         const doc = new jsPDF();
         const date = new Date().toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" });
         addPageHeader(doc, practiceName, "Compensation Strategy — Internal Report", `Generated ${date}`);
@@ -249,15 +259,19 @@ export default function PDFExportTab() {
         }
 
         doc.save(`compensation-internal-report-${Date.now()}.pdf`);
+      } catch {
+        setExportError("The PDF could not be generated. Refresh the page and try again.");
       } finally { setLoading(null); }
     }, 50);
   };
 
   const generateClinicianSummary = () => {
     if (!selectedScenario && !clinicians?.length) return;
+    setExportError(null);
     setLoading("clinician");
-    setTimeout(() => {
+    setTimeout(async () => {
       try {
+        const { jsPDF, autoTable } = await loadPdfTools();
         const doc = new jsPDF();
         const date = new Date().toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" });
         addPageHeader(doc, practiceName, "Clinician Compensation Sheet", `Prepared ${date}`);
@@ -293,14 +307,18 @@ export default function PDFExportTab() {
         doc.text("W2 employees pay ~7.65% payroll tax. 1099 contractors pay ~15.3% self-employment tax. Consult a tax professional for guidance.", 14, y + 5);
 
         doc.save(`clinician-compensation-sheet-${Date.now()}.pdf`);
+      } catch {
+        setExportError("The PDF could not be generated. Refresh the page and try again.");
       } finally { setLoading(null); }
     }, 50);
   };
 
   const generatePracticeFinancialSummary = () => {
+    setExportError(null);
     setLoading("financial");
-    setTimeout(() => {
+    setTimeout(async () => {
       try {
+        const { jsPDF, autoTable } = await loadPdfTools();
         const doc = new jsPDF();
         const date = new Date().toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" });
         addPageHeader(doc, practiceName, "Practice Financial Summary", `Generated ${date}`);
@@ -441,12 +459,14 @@ export default function PDFExportTab() {
         }
 
         doc.save(`practice-financial-summary-${Date.now()}.pdf`);
+      } catch {
+        setExportError("The PDF could not be generated. Refresh the page and try again.");
       } finally { setLoading(null); }
     }, 50);
   };
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6" aria-busy={loading !== null}>
       <div>
         <h2 className="text-2xl font-bold tracking-tight">Export Reports</h2>
         <p className="text-muted-foreground">Generate professional PDF summaries for internal use or clinician communication.</p>
@@ -463,6 +483,8 @@ export default function PDFExportTab() {
         <p className="text-xs text-muted-foreground">Appears in the header of every exported PDF.</p>
       </div>
 
+      {exportError && <p role="alert" className="text-sm text-destructive">{exportError}</p>}
+
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
         <Card>
           <CardHeader>
@@ -476,7 +498,7 @@ export default function PDFExportTab() {
               Comprehensive internal report with all business goals, overhead breakdown, and per-clinician compensation.
               Uses all data from Team Builder.
             </p>
-            <Button className="w-full" onClick={generateInternalReport} disabled={loading === "internal"}>
+            <Button className="w-full" onClick={generateInternalReport} disabled={loading !== null}>
               {loading === "internal" ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Download className="h-4 w-4 mr-2" />}
               Generate PDF
             </Button>
@@ -507,7 +529,7 @@ export default function PDFExportTab() {
                 </SelectContent>
               </Select>
             </div>
-            <Button className="w-full" onClick={generateClinicianSummary} disabled={loading === "clinician"}>
+            <Button className="w-full" onClick={generateClinicianSummary} disabled={loading !== null}>
               {loading === "clinician" ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Download className="h-4 w-4 mr-2" />}
               Generate PDF
             </Button>
@@ -525,7 +547,7 @@ export default function PDFExportTab() {
             <p className="text-sm text-muted-foreground">
               Goal vs. reality comparison with net revenue projections — ideal for your accountant or financial review.
             </p>
-            <Button className="w-full" onClick={generatePracticeFinancialSummary} disabled={loading === "financial"}>
+            <Button className="w-full" onClick={generatePracticeFinancialSummary} disabled={loading !== null}>
               {loading === "financial" ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Download className="h-4 w-4 mr-2" />}
               Generate PDF
             </Button>
