@@ -13,6 +13,7 @@ import { bindBillingResolutions } from "@workspace/practice/hub";
 import { ImportDeclarationReview } from "./import-declaration-review";
 import { BillingResolutionReview } from "./billing-resolution-review";
 import { ReaderStatus } from "./reader-status";
+import { readPracticePackageFile } from "@/lib/practice-package-file";
 import { completeReportCoverage, type CompleteReportCoverage } from "@/lib/complete-report-coverage";
 import { summarizeReportedBilling } from "@/lib/reported-billing";
 import {
@@ -242,12 +243,6 @@ export function useLocalRetentionWorkspaceState(enabled = true): LocalRetentionW
   };
 }
 
-async function readText(file: File) {
-  if (!/\.json$/i.test(file.name) || !file.size || file.size > 10 * 1024 * 1024)
-    throw new Error("Choose a Practice package JSON file up to 10 MB.");
-  return await file.text();
-}
-
 function readImportConflict(apiError: ApiError) {
   const data = apiError.data as Record<string, unknown> | null;
   const conflict = new ImportConflict(
@@ -429,7 +424,7 @@ export default function LocalRetentionWorkspace({
     setError("");
     setPending(null);
     try {
-      const packageData = JSON.parse(await readText(file));
+      const packageData = await readPracticePackageFile(file);
       const parsed = importLocalPackage(packageData);
       const saved = await importStoredPackage(packageData);
       setSnapshots(saved.snapshots);
@@ -456,7 +451,7 @@ export default function LocalRetentionWorkspace({
         cause.code === "OVERLAP_REVIEW_REQUIRED"
       ) {
         try {
-          const packageData = JSON.parse(await readText(file));
+          const packageData = await readPracticePackageFile(file);
           const parsed = importLocalPackage(packageData);
           setPending({
             incoming: cause.incoming ?? parsed.snapshots,
@@ -674,14 +669,14 @@ export default function LocalRetentionWorkspace({
         <section>
           <Upload aria-hidden="true" />
           <h3>Complete package</h3>
-          <p>
-            Upload the one JSON package from the local converter. It contains
-            private stable IDs only.
+          <p id="converter-package-help">
+            Converter package · JSON · up to 10 MB. Private stable IDs only.
           </p>
           <input
             ref={packageInput}
             type="file"
-            accept=".json"
+            aria-label="Upload converter package"
+            aria-describedby="converter-package-help"
             disabled={busy}
             onChange={(event) => void importPackage(event.target.files?.[0])}
           />

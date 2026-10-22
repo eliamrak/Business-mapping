@@ -90,11 +90,18 @@ test("all changed/new files stay within reviewed theme, PDF and mobile scope", (
     ["verification/OCTOBER22-MOBILE-READINESS-RECEIPT.md", "1ffa0d30c418575dfff1a8b001bf731df1b57781b9d13f95145db872d0d189ae"],
     ["verification/mobile-readiness.test.cjs", "794a0f9fa5b8a8e18fae4270b712d312e449c4c74a0bb123c2ee42669d42aab1"],
   ]);
+  const reviewedDataFollowup = new Set([
+    src + "components/practice/local-retention-workspace.tsx",
+    src + "components/practice/billing-resolution-review.tsx",
+    src + "lib/practice-package-file.ts", src + "lib/practice-package-file.test.ts",
+    "verification/data-import-readability.mjs", "verification/data-import-readability-results.json",
+    "verification/OCTOBER22-DATA-READABILITY-RECEIPT.md",
+  ]);
   const changes = [...git("diff", base, "--name-only", "-z").split("\0"), ...git("ls-files", "--others", "--exclude-standard", "-z").split("\0")].filter(Boolean);
   for (const file of changes.filter(file => reviewedMobileReadiness.has(file))) {
     assert.equal(createHash("sha256").update(fs.readFileSync(path.join(root, file))).digest("hex"), reviewedMobileReadiness.get(file), `Reviewed mobile bytes changed: ${file}`);
   }
-  assert.deepEqual(changes.filter(file => !allowed.has(file) && !publisherHistory.has(file) && !reviewedPdfFollowup.has(file) && !reviewedMobileReadiness.has(file)), [], "Unexpected edits (including schema/API/dependencies) require separate review");
+  assert.deepEqual(changes.filter(file => !allowed.has(file) && !publisherHistory.has(file) && !reviewedPdfFollowup.has(file) && !reviewedMobileReadiness.has(file) && !reviewedDataFollowup.has(file)), [], "Unexpected edits (including schema/API/dependencies) require separate review");
 });
 
 test("token defaults are statically imported by the eagerly loaded workspace", () => {

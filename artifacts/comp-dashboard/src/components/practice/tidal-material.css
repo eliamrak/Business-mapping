@@ -78,6 +78,19 @@
 .pw-app[data-material="tidal"] .recharts-wrapper [fill="#9fd8c2"]{fill:#006e62}
 .pw-app[data-material="tidal"] .recharts-wrapper [stroke="#e9c46a"]{stroke:#956000}
 .pw-app[data-material="tidal"] .recharts-wrapper [stroke="#76dda4"]{stroke:#08774f}
+/* Dense import review needs a stable reading surface, not text over artwork. */
+.pw-app[data-material="tidal"] .pw-local-retention,
+.pw-app[data-material="tidal"] #retention-calculations{
+ background:var(--pw-tone-panel);color:var(--pw-tone-text);padding:20px;min-width:0;border-top:1px solid #efffff;overflow-wrap:anywhere}
+.pw-app[data-material="tidal"] .pw-local-retention .pw-import-provenance,
+.pw-app[data-material="tidal"] .pw-local-retention .pw-import-source{min-width:0;color:var(--pw-tone-text)}
+.pw-app[data-material="tidal"] .pw-local-retention .pw-import-provenance{padding-block:12px;border-bottom:1px solid var(--pw-tone-border)}
+.pw-app[data-material="tidal"] .pw-local-retention fieldset{border-color:var(--pw-tone-border);border-radius:4px}
+.pw-app[data-material="tidal"] .pw-local-retention :is(input,select,textarea){box-sizing:border-box;max-width:100%;background:var(--pw-tone-input);color:var(--pw-tone-text)}
+.pw-app[data-material="tidal"] .pw-local-retention input::file-selector-button{background:#00685e;color:#fff;border:1px solid #00685e;border-radius:4px;min-height:32px;padding:5px 10px;margin-right:8px;font:inherit}
+.pw-app[data-material="tidal"] .pw-local-retention input::file-selector-button:hover{background:#00554d}
+.pw-app[data-material="tidal"] .pw-local-retention .pw-local-import-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
+@media(max-width:900px){.pw-app[data-material="tidal"] .pw-local-retention,.pw-app[data-material="tidal"] #retention-calculations{padding:14px 12px}.pw-app[data-material="tidal"] .pw-local-retention .pw-local-import-grid{grid-template-columns:minmax(0,1fr)}}
 @media(max-width:760px){
  .pw-app[data-material="tidal"] h1:not(.pw-integrated-tool *){font-size:32px}
  .pw-app[data-material="tidal"] .pw-overview-historical-summary.pw-overview-kpi-grid .sw-content>section{min-height:260px;padding:16px 12px}

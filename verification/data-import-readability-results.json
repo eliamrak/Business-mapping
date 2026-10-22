@@ -1,0 +1,74 @@
+{
+  "phase": "candidate",
+  "syntheticOnly": true,
+  "noOwnerFiles": true,
+  "checks": [
+    {
+      "name": "expanded-all-subviews-1440",
+      "pass": true,
+      "sampled": 538,
+      "findings": []
+    },
+    {
+      "name": "page-fit-1440",
+      "pass": true
+    },
+    {
+      "name": "expanded-all-subviews-390",
+      "pass": true,
+      "sampled": 538,
+      "findings": []
+    },
+    {
+      "name": "page-fit-390",
+      "pass": true
+    },
+    {
+      "name": "expanded-all-subviews-320",
+      "pass": true,
+      "sampled": 538,
+      "findings": []
+    },
+    {
+      "name": "page-fit-320",
+      "pass": true
+    },
+    {
+      "name": "empty-state-contrast",
+      "pass": true
+    },
+    {
+      "name": "invalid-json-local-rejection",
+      "pass": true
+    },
+    {
+      "name": "wrong-schema-rejected-before-api",
+      "pass": true
+    },
+    {
+      "name": "native-picker-does-not-hide-extensionless-package",
+      "pass": true
+    },
+    {
+      "name": "upload-busy-state-prevents-duplicate-submission",
+      "pass": true
+    },
+    {
+      "name": "extensionless-valid-package-uses-synthetic-api",
+      "pass": true
+    },
+    {
+      "name": "overlap-review-contrast",
+      "pass": true
+    },
+    {
+      "name": "server-error-readable-and-not-saved",
+      "pass": true
+    },
+    {
+      "name": "no-runtime-errors",
+      "pass": true
+    }
+  ],
+  "errors": []
+}
