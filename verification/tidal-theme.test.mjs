@@ -109,6 +109,12 @@ test("all changed/new files stay within reviewed theme, PDF and mobile scope", (
     "verification/MINIMAL-IMPORT-INDEPENDENT-REVIEW.md",
     "verification/MINIMAL-IMPORT-RECONCILIATION-REVIEW.md",
     "verification/minimal-import-results.json",
+    src + "components/practice/import-declaration-review.tsx",
+    "lib/practice/src/hub/index.ts", "lib/practice/src/hub/next-report-period.ts", "lib/practice/test/next-report-period.test.ts",
+    "artifacts/api-server/test/practice-next-report-period.test.mjs",
+    "verification/next-period-render.mjs", "verification/next-period-render-results.json",
+    "verification/next-period-results.json", "verification/NEXT-PERIOD-INDEPENDENT-REVIEW.md",
+    "verification/OCTOBER22-NEXT-PERIOD-RECEIPT.md", "verification/CLOUD-DEVELOPMENT-HANDOFF.md",
   ]);
   const reviewedIconFollowup = new Set([
     "artifacts/comp-dashboard/index.html",

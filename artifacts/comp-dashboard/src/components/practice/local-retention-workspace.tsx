@@ -9,7 +9,7 @@ import {
 import { ApiError, customFetch } from "@workspace/api-client-react";
 import { Download, Save, RefreshCw, Upload } from "lucide-react";
 import type { StoredImportDeclarations, BillingChargeResolution } from "@workspace/practice/hub";
-import { bindBillingResolutions } from "@workspace/practice/hub";
+import { bindBillingResolutions, canonicalServicePeriod, planNextReportPeriod, type NextReportPeriodPlan } from "@workspace/practice/hub";
 import { ImportDeclarationReview } from "./import-declaration-review";
 import { BillingResolutionReview } from "./billing-resolution-review";
 import { ReaderStatus } from "./reader-status";
@@ -95,11 +95,13 @@ type StoredImportHistory = {
     importedAt: string;
     exportedAt: string;
     contentHash: string;
+    sourceIds?: string[];
   }>;
 };
 
 type ImportResponse = StoredImportHistory & {
   status: "added" | "duplicate" | "replaced" | "retained";
+  importedSourceIds?: string[];
 };
 
 type CoverageConfirmation = {
@@ -338,6 +340,7 @@ export default function LocalRetentionWorkspace({
 }) {
   const ownedState = useLocalRetentionWorkspaceState(!workspaceState);
   const [fallbackFeedback, setFallbackFeedback] = useState<ImportFeedback>({ stage: "idle" });
+  const [reportMode, setReportMode] = useState<"next" | "other">("next");
   const feedback = workspaceState?.importFeedback ?? ownedState.importFeedback ?? fallbackFeedback;
   const setFeedback = workspaceState?.setImportFeedback ?? (!workspaceState ? ownedState.setImportFeedback : undefined) ?? setFallbackFeedback;
   const {
@@ -385,8 +388,6 @@ export default function LocalRetentionWorkspace({
     .slice(0, 3);
   const remainingCoverageGaps = verifiedCoverage.incompletePeriods.length - recentCoverageGaps.length;
   const missingProofIds = new Set(verifiedCoverage.incompletePeriods.filter(period => period.snapshotId && /Missing or invalid explicit complete report proof/.test(period.reason)).map(period => period.snapshotId));
-  const sourcesNeedingProof = snapshots.filter(source => missingProofIds.has(source.id));
-  const actionableCoverage = verifiedCoverage.incompletePeriods.filter(period => !/has not ended/.test(period.reason));
   const billingNeedsReview = rawBillingEvidence.conflictingHashCount > 0 || rawBillingEvidence.ambiguousEncounterCount > 0 || rawBillingEvidence.staleResolutionCount > 0 || phoneChargeAnomalies(snapshots).length > 0;
   const openReview = (id: string) => { const element = document.getElementById(id); if (element instanceof HTMLDetailsElement) element.open = true; };
   const gapDescription = (period: CompleteReportCoverage["incompletePeriods"][number]) =>
@@ -439,6 +440,58 @@ export default function LocalRetentionWorkspace({
     [snapshots],
   );
   const lastPackageImport = packages.map(item => item.importedAt).sort().at(-1);
+  const nextPeriod = verifiedCoverage.dataThrough ? canonicalServicePeriod(new Date(Date.parse(verifiedCoverage.dataThrough + "T12:00:00Z") + 86400000).toISOString().slice(0, 10)) : null;
+  const latestPackage = [...packages].sort((a, b) => b.importedAt.localeCompare(a.importedAt) || a.packageId.localeCompare(b.packageId))[0];
+  const currentHistory = { snapshots, packages, declarations, billingResolutions: storedBillingResolutions, billingResolutionRevision, billingCodeMinutes, sameDayVisitOverrides };
+  const periodPlan = useMemo(() => latestPackage?.sourceIds?.length
+    ? planNextReportPeriod({ snapshots, storedDeclarations: declarations, roster, teamId, newSourceIds: latestPackage.sourceIds, today, billingResolutions: storedBillingResolutions }) : null,
+  [snapshots, declarations, roster, teamId, latestPackage?.sourceIds, today, storedBillingResolutions]);
+  const knownPeriodSources = new Set(periodPlan?.period && periodPlan.status !== "up-to-date" ? latestPackage?.sourceIds ?? [] : []);
+  const sourcesNeedingProof = snapshots.filter(source => missingProofIds.has(source.id) && !knownPeriodSources.has(source.id));
+  const actionableCoverage = verifiedCoverage.incompletePeriods.filter(period => !/has not ended/.test(period.reason)
+    && !(period.snapshotId && knownPeriodSources.has(period.snapshotId) && /Missing or invalid explicit complete report proof/.test(period.reason)));
+
+  function applySavedHistory(history: StoredImportHistory) {
+    setSnapshots(history.snapshots); setPackages(history.packages ?? []);
+    setDeclarations(history.declarations ?? null);
+    setBillingResolutions(history.billingResolutions ?? []);
+    setBillingResolutionRevision(history.billingResolutionRevision ?? 0);
+    setBillingCodeMinutes(history.billingCodeMinutes);
+    setSameDayVisitOverrides(history.sameDayVisitOverrides ?? {});
+  }
+
+  function planSavedPeriod(history: StoredImportHistory, sourceIds: string[]) {
+    return planNextReportPeriod({ snapshots: history.snapshots, storedDeclarations: history.declarations ?? null, roster, teamId,
+      newSourceIds: sourceIds, today, billingResolutions: history.billingResolutions ?? [] });
+  }
+
+  async function persistPeriod(history: StoredImportHistory, packageId: string, sourceIds: string[], plan: NextReportPeriodPlan, receipt: string) {
+    if (plan.status !== "ready" || !plan.data || !plan.period || !history.declarations) return false;
+    setFeedback({ stage: "saving", detail: `Report rows are saved. Reconciling ${plan.period.start} through ${plan.period.end}.` });
+    try {
+      const saved = await customFetch<StoredImportHistory>("/api/practice-imports/declarations", { method: "PUT", body: JSON.stringify({
+        expectedRevision: history.declarations.revision, confirmed: true, data: plan.data, nextPeriod: { packageId, sourceIds, teamId },
+      }) });
+      applySavedHistory(saved);
+      setFeedback({ stage: "saved", detail: `${receipt} Reporting period ${plan.period.start} through ${plan.period.end} reconciled; ${plan.carryover.matched} prior-period rows matched without adding them again.` });
+      setStatus(`Saved and reconciled the full ${plan.period.start} through ${plan.period.end} report. Original rows and prior declarations are retained.`);
+      return true;
+    } catch (cause) {
+      const unconfirmed = importFailureStage(true, cause instanceof ApiError ? cause.status : undefined) === "unconfirmed";
+      setFeedback({ stage: unconfirmed ? "unconfirmed" : "saved", detail: unconfirmed
+        ? "Report rows are saved; the period update was not confirmed. Reload saved history before retrying."
+        : "Report rows are saved. Period reconciliation needs review; no source was removed." });
+      setError(cause instanceof Error ? cause.message : "Reporting-period reconciliation could not be confirmed.");
+      return false;
+    }
+  }
+
+  async function reconcileSavedPeriod() {
+    if (busy || feedback.stage === "unconfirmed" || !periodPlan || periodPlan.status !== "ready" || !latestPackage?.sourceIds) return;
+    setBusy(true); setError("");
+    try { await persistPeriod(currentHistory, latestPackage.packageId, latestPackage.sourceIds, periodPlan, "Existing report rows remain saved."); }
+    finally { setBusy(false); }
+  }
 
   async function importPackage(file: File | undefined) {
     if (!file || busy || feedback.stage === "unconfirmed") return;
@@ -447,20 +500,19 @@ export default function LocalRetentionWorkspace({
     setPending(null);
     setFeedback({ stage: "validating", detail: file.name });
     let saveStarted = false;
+    const periodIntent = reportMode === "next" && nextPeriod !== null;
     try {
       const packageData = await readPracticePackageFile(file);
       const parsed = importLocalPackage(packageData);
       setFeedback({ stage: "saving", detail: "File checked. Waiting for the server to confirm saved history." });
       saveStarted = true;
       const saved = await importStoredPackage(packageData);
-      setSnapshots(saved.snapshots);
-      setPackages(saved.packages ?? []);
-      setBillingCodeMinutes(saved.billingCodeMinutes);
-      setSameDayVisitOverrides(saved.sameDayVisitOverrides ?? {});
-      setFeedback({ stage: saved.status === "duplicate" ? "duplicate" : "saved", detail: importReceipt({
+      applySavedHistory(saved);
+      const receipt = importReceipt({
         attendance: parsed.snapshots.find(source => source.kind === "attendance")?.rows.length ?? 0,
         billing: parsed.snapshots.find(source => source.kind === "billing")?.rows.length ?? 0,
-      }, saved.status) });
+      }, saved.status);
+      setFeedback({ stage: saved.status === "duplicate" ? "duplicate" : "saved", detail: receipt });
       if (saved.status === "duplicate") {
         setStatus(
           `Package ${parsed.packageId} is already loaded. Nothing was added.`,
@@ -475,6 +527,14 @@ export default function LocalRetentionWorkspace({
         );
       }
       if (parsed.warnings.length) setError(parsed.warnings.join(" "));
+      if (periodIntent && saved.importedSourceIds?.length) {
+        const plan = planSavedPeriod(saved, saved.importedSourceIds);
+        if (plan.status === "ready") await persistPeriod(saved, parsed.packageId, saved.importedSourceIds, plan, receipt);
+        else if (plan.status === "blocked") {
+          setFeedback({ stage: "saved", detail: `${receipt} Reporting-period reconciliation needs review.` });
+          setError(plan.reasons.slice(0, 3).join(" "));
+        }
+      }
     } catch (cause) {
       if (
         cause instanceof ImportConflict &&
@@ -659,6 +719,13 @@ export default function LocalRetentionWorkspace({
         <div className="pw-import-heading"><h2>Upload reports</h2>
           <button className="pw-button" disabled={busy} onClick={() => void reloadHistory()}><RefreshCw size={16} />Reload saved history</button>
         </div>
+        {nextPeriod && <div className="pw-report-period-choice">
+          <div className="pw-segmented" role="group" aria-label="Report scope">
+            <button type="button" aria-pressed={reportMode === "next"} disabled={busy} onClick={() => setReportMode("next")}>Next full period</button>
+            <button type="button" aria-pressed={reportMode === "other"} disabled={busy} onClick={() => setReportMode("other")}>Other report</button>
+          </div>
+          <span>{reportMode === "next" ? `${nextPeriod.start} – ${nextPeriod.end}` : "Saved as source history; existing coverage is unchanged"}</span>
+        </div>}
         <label className="pw-import-picker"><span><Upload size={18} aria-hidden="true" />Upload converter package</span>
           <small id="converter-package-help">JSON · up to 10 MB</small>
           <input ref={packageInput} type="file" aria-label="Upload converter package" aria-describedby="converter-package-help" disabled={busy || feedback.stage === "unconfirmed"} onChange={event => void importPackage(event.target.files?.[0])} />
@@ -669,6 +736,14 @@ export default function LocalRetentionWorkspace({
           {lastPackageImport && <p>Last package saved: {lastPackageImport.replace("T", " ").replace(/\.\d+Z$/, " UTC")}</p>}
           {["loading", "validating", "saving"].includes(feedback.stage) && <progress aria-label={importFeedbackTitle(feedback)} />}
         </div>
+        {periodPlan?.period && periodPlan.status !== "up-to-date" && <div className="pw-period-reconcile" aria-label="Saved report period reconciliation">
+          <strong>Expected next period · {periodPlan.period.start} – {periodPlan.period.end}</strong>
+          {periodPlan.carryover.rows > 0 && <p>{periodPlan.carryover.matched} / {periodPlan.carryover.rows} prior-period rows match{periodPlan.carryover.conflicts > 0 ? `; ${periodPlan.carryover.conflicts} need review` : ""}.</p>}
+          {periodPlan.status === "ready" ? <>
+            <p>Original records stay intact.</p>
+            <button type="button" className="pw-button pw-primary" disabled={busy || feedback.stage === "unconfirmed"} onClick={() => void reconcileSavedPeriod()}>Reconcile this period</button>
+          </> : <details><summary>Reconciliation needs review</summary>{periodPlan.reasons.map(reason => <p key={reason}>{reason}</p>)}</details>}
+        </div>}
         {error && <p className="pw-error" role="alert">{error}</p>}
         <div className="pw-import-coverage" aria-label="Saved data and metric coverage">
           <div><span>Saved sources</span><strong>{snapshots.length}</strong></div>

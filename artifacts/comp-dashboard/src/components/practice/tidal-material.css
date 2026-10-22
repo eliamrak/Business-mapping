@@ -132,6 +132,10 @@
 .pw-import-feedback p { margin:5px 0 0; font-size:13px; line-height:1.5; }
 .pw-import-feedback[data-stage="invalid"], .pw-import-feedback[data-stage="unconfirmed"] { border-color:var(--pw-tone-negative); }
 .pw-import-feedback progress { width:100%; max-width:320px; height:5px; display:block; margin-top:8px; accent-color:var(--pw-tone-positive); }
+.pw-report-period-choice { display:flex; align-items:center; flex-wrap:wrap; gap:10px; margin-block:10px; font-size:13px; }
+.pw-report-period-choice .pw-segmented { margin:0; }
+.pw-period-reconcile { padding-block:12px; border-bottom:1px solid var(--pw-tone-border); font-size:13px; }
+.pw-period-reconcile p { margin:5px 0 10px; }
 .pw-import-coverage { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:12px; margin-top:14px; }
 .pw-import-coverage > div { display:grid; gap:5px; }
 .pw-import-coverage span { color:var(--pw-tone-text-muted); font-size:12px; line-height:1.4; }

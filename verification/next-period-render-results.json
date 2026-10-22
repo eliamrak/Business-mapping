@@ -1,0 +1,2636 @@
+{
+  "syntheticOnly": true,
+  "mounted": "actual PracticeWorkspace",
+  "realPlannerServerRevalidation": true,
+  "contrastScope": "Computed CSS colors only. Inspect screenshots for artwork composited behind translucent surfaces; passing color samples do not establish pixel-level contrast.",
+  "period": {
+    "start": "2026-10-08",
+    "end": "2026-10-21",
+    "payDate": "2026-10-22"
+  },
+  "fixture": {
+    "providers": [
+      {
+        "id": 1,
+        "label": "Elia",
+        "teamId": 1
+      },
+      {
+        "id": 2,
+        "label": "Erin",
+        "teamId": 1
+      }
+    ],
+    "priorAttendance": 26,
+    "incomingAttendance": 28,
+    "carryovers": 25,
+    "individualReportCoverage": false
+  },
+  "screenshots": [
+    "/tmp/practice-next-period-render/saved-pair-reconciled-1440.png",
+    "/tmp/practice-next-period-render/upload-success-1440.png",
+    "/tmp/practice-next-period-render/changed-carryover.png",
+    "/tmp/practice-next-period-render/metadata-stale.png",
+    "/tmp/practice-next-period-render/metadata-unconfirmed.png",
+    "/tmp/practice-next-period-render/metadata-recovered.png",
+    "/tmp/practice-next-period-render/data-1440.png",
+    "/tmp/practice-next-period-render/data-390.png",
+    "/tmp/practice-next-period-render/data-320.png"
+  ],
+  "checks": [
+    {
+      "name": "saved-pair-explicit-reconcile",
+      "pass": true,
+      "requests": [
+        {
+          "method": "GET",
+          "path": "/api/hub"
+        },
+        {
+          "method": "GET",
+          "path": "/api/hub/context"
+        },
+        {
+          "method": "GET",
+          "path": "/api/business-goals"
+        },
+        {
+          "method": "GET",
+          "path": "/api/scenarios"
+        },
+        {
+          "method": "GET",
+          "path": "/api/practice-imports"
+        },
+        {
+          "method": "GET",
+          "path": "/api/practice-imports/billing-resolution-candidates"
+        },
+        {
+          "method": "GET",
+          "path": "/api/practice-imports/capabilities"
+        },
+        {
+          "method": "PUT",
+          "path": "/api/practice-imports/declarations",
+          "body": {
+            "expectedRevision": 2,
+            "confirmed": true,
+            "data": {
+              "version": 1,
+              "mappings": [
+                {
+                  "sourceLabel": "Elia",
+                  "clinicianId": 1,
+                  "clinicianLabel": "Elia",
+                  "teamId": 1
+                },
+                {
+                  "sourceLabel": "Erin",
+                  "clinicianId": 2,
+                  "clinicianLabel": "Erin",
+                  "teamId": 1
+                }
+              ],
+              "sourceSets": [
+                {
+                  "kind": "attendance",
+                  "snapshotIds": [
+                    "attendance-8dba12d3"
+                  ],
+                  "clinicianIds": [
+                    1,
+                    2
+                  ],
+                  "start": "2026-09-10",
+                  "end": "2026-10-12",
+                  "complete": true
+                },
+                {
+                  "kind": "billing",
+                  "snapshotIds": [
+                    "billing-98c4b484"
+                  ],
+                  "clinicianIds": [
+                    1,
+                    2
+                  ],
+                  "start": "2026-09-10",
+                  "end": "2026-10-12",
+                  "complete": true
+                },
+                {
+                  "kind": "attendance",
+                  "snapshotIds": [
+                    "attendance-8dba12d3",
+                    "attendance-494fc1e6"
+                  ],
+                  "clinicianIds": [
+                    1,
+                    2
+                  ],
+                  "start": "2026-09-10",
+                  "end": "2026-10-21",
+                  "complete": true
+                },
+                {
+                  "kind": "billing",
+                  "snapshotIds": [
+                    "billing-98c4b484",
+                    "billing-fa0f7fc2"
+                  ],
+                  "clinicianIds": [
+                    1,
+                    2
+                  ],
+                  "start": "2026-09-10",
+                  "end": "2026-10-21",
+                  "complete": true
+                }
+              ]
+            },
+            "nextPeriod": {
+              "packageId": "synthetic-next",
+              "sourceIds": [
+                "attendance-494fc1e6",
+                "billing-fa0f7fc2"
+              ],
+              "teamId": 1
+            }
+          }
+        },
+        {
+          "method": "GET",
+          "path": "/api/practice-imports/billing-resolution-candidates"
+        },
+        {
+          "method": "GET",
+          "path": "/api/hub"
+        },
+        {
+          "method": "GET",
+          "path": "/api/hub/context"
+        },
+        {
+          "method": "GET",
+          "path": "/api/business-goals"
+        },
+        {
+          "method": "GET",
+          "path": "/api/scenarios"
+        },
+        {
+          "method": "GET",
+          "path": "/api/practice-imports"
+        },
+        {
+          "method": "GET",
+          "path": "/api/practice-imports/billing-resolution-candidates"
+        },
+        {
+          "method": "GET",
+          "path": "/api/practice-imports/capabilities"
+        }
+      ],
+      "declarationRevision": 3,
+      "sourceSets": 4,
+      "journalEntries": 5
+    },
+    {
+      "name": "upload-next-period",
+      "pass": true,
+      "requests": [
+        {
+          "method": "GET",
+          "path": "/api/hub"
+        },
+        {
+          "method": "GET",
+          "path": "/api/hub/context"
+        },
+        {
+          "method": "GET",
+          "path": "/api/business-goals"
+        },
+        {
+          "method": "GET",
+          "path": "/api/scenarios"
+        },
+        {
+          "method": "GET",
+          "path": "/api/practice-imports"
+        },
+        {
+          "method": "GET",
+          "path": "/api/practice-imports/billing-resolution-candidates"
+        },
+        {
+          "method": "GET",
+          "path": "/api/practice-imports/capabilities"
+        },
+        {
+          "method": "POST",
+          "path": "/api/practice-imports/package",
+          "body": {
+            "package": {
+              "format": "emc-practice-local-import-package",
+              "version": 1,
+              "packageId": "synthetic-next",
+              "exportedAt": "2026-10-22T12:00:00Z",
+              "collections": {
+                "attendance": {
+                  "coverageStart": "2026-10-07",
+                  "coverageEnd": "2026-10-21",
+                  "rowCount": 28,
+                  "rows": [
+                    {
+                      "clientId": "new-start",
+                      "serviceDate": "2026-10-08",
+                      "clinician": "Elia",
+                      "location": "Room A",
+                      "status": "show"
+                    },
+                    {
+                      "clientId": "carry-24",
+                      "serviceDate": "2026-10-07",
+                      "clinician": "Elia",
+                      "location": "Room A",
+                      "status": "show"
+                    },
+                    {
+                      "clientId": "carry-23",
+                      "serviceDate": "2026-10-07",
+                      "clinician": "Erin",
+                      "location": "Room A",
+                      "status": "show"
+                    },
+                    {
+                      "clientId": "carry-22",
+                      "serviceDate": "2026-10-07",
+                      "clinician": "Elia",
+                      "location": "Room A",
+                      "status": "show"
+                    },
+                    {
+                      "clientId": "carry-21",
+                      "serviceDate": "2026-10-07",
+                      "clinician": "Erin",
+                      "location": "Room A",
+                      "status": "show"
+                    },
+                    {
+                      "clientId": "carry-20",
+                      "serviceDate": "2026-10-07",
+                      "clinician": "Elia",
+                      "location": "Room A",
+                      "status": "show"
+                    },
+                    {
+                      "clientId": "carry-19",
+                      "serviceDate": "2026-10-07",
+                      "clinician": "Erin",
+                      "location": "Room A",
+                      "status": "show"
+                    },
+                    {
+                      "clientId": "carry-18",
+                      "serviceDate": "2026-10-07",
+                      "clinician": "Elia",
+                      "location": "Room A",
+                      "status": "show"
+                    },
+                    {
+                      "clientId": "carry-17",
+                      "serviceDate": "2026-10-07",
+                      "clinician": "Erin",
+                      "location": "Room A",
+                      "status": "show"
+                    },
+                    {
+                      "clientId": "carry-16",
+                      "serviceDate": "2026-10-07",
+                      "clinician": "Elia",
+                      "location": "Room A",
+                      "status": "show"
+                    },
+                    {
+                      "clientId": "carry-15",
+                      "serviceDate": "2026-10-07",
+                      "clinician": "Erin",
+                      "location": "Room A",
+                      "status": "show"
+                    },
+                    {
+                      "clientId": "carry-14",
+                      "serviceDate": "2026-10-07",
+                      "clinician": "Elia",
+                      "location": "Room A",
+                      "status": "show"
+                    },
+                    {
+                      "clientId": "carry-13",
+                      "serviceDate": "2026-10-07",
+                      "clinician": "Erin",
+                      "location": "Room A",
+                      "status": "show"
+                    },
+                    {
+                      "clientId": "carry-12",
+                      "serviceDate": "2026-10-07",
+                      "clinician": "Elia",
+                      "location": "Room A",
+                      "status": "show"
+                    },
+                    {
+                      "clientId": "carry-11",
+                      "serviceDate": "2026-10-07",
+                      "clinician": "Erin",
+                      "location": "Room A",
+                      "status": "show"
+                    },
+                    {
+                      "clientId": "carry-10",
+                      "serviceDate": "2026-10-07",
+                      "clinician": "Elia",
+                      "location": "Room A",
+                      "status": "show"
+                    },
+                    {
+                      "clientId": "carry-9",
+                      "serviceDate": "2026-10-07",
+                      "clinician": "Erin",
+                      "location": "Room A",
+                      "status": "show"
+                    },
+                    {
+                      "clientId": "carry-8",
+                      "serviceDate": "2026-10-07",
+                      "clinician": "Elia",
+                      "location": "Room A",
+                      "status": "show"
+                    },
+                    {
+                      "clientId": "carry-7",
+                      "serviceDate": "2026-10-07",
+                      "clinician": "Erin",
+                      "location": "Room A",
+                      "status": "show"
+                    },
+                    {
+                      "clientId": "carry-6",
+                      "serviceDate": "2026-10-07",
+                      "clinician": "Elia",
+                      "location": "Room A",
+                      "status": "show"
+                    },
+                    {
+                      "clientId": "carry-5",
+                      "serviceDate": "2026-10-07",
+                      "clinician": "Erin",
+                      "location": "Room A",
+                      "status": "show"
+                    },
+                    {
+                      "clientId": "carry-4",
+                      "serviceDate": "2026-10-07",
+                      "clinician": "Elia",
+                      "location": "Room A",
+                      "status": "show"
+                    },
+                    {
+                      "clientId": "carry-3",
+                      "serviceDate": "2026-10-07",
+                      "clinician": "Erin",
+                      "location": "Room A",
+                      "status": "show"
+                    },
+                    {
+                      "clientId": "carry-2",
+                      "serviceDate": "2026-10-07",
+                      "clinician": "Elia",
+                      "location": "Room A",
+                      "status": "show"
+                    },
+                    {
+                      "clientId": "carry-1",
+                      "serviceDate": "2026-10-07",
+                      "clinician": "Erin",
+                      "location": "Room A",
+                      "status": "show"
+                    },
+                    {
+                      "clientId": "carry-0",
+                      "serviceDate": "2026-10-07",
+                      "clinician": "Elia",
+                      "location": "Room A",
+                      "status": "show"
+                    },
+                    {
+                      "clientId": "overlap",
+                      "serviceDate": "2026-10-12",
+                      "clinician": "Erin",
+                      "location": "Room A",
+                      "status": "show"
+                    },
+                    {
+                      "clientId": "new-end",
+                      "serviceDate": "2026-10-21",
+                      "clinician": "Erin",
+                      "location": "Room A",
+                      "status": "show"
+                    }
+                  ]
+                },
+                "billing": {
+                  "coverageStart": "2026-10-08",
+                  "coverageEnd": "2026-10-21",
+                  "rowCount": 3,
+                  "rows": [
+                    {
+                      "clientId": "new-start",
+                      "serviceDate": "2026-10-08",
+                      "clinician": "Elia",
+                      "totalFeeCharged": 150,
+                      "billingCode": "90837"
+                    },
+                    {
+                      "clientId": "overlap",
+                      "serviceDate": "2026-10-12",
+                      "clinician": "Erin",
+                      "totalFeeCharged": 150,
+                      "billingCode": "90837"
+                    },
+                    {
+                      "clientId": "new-end",
+                      "serviceDate": "2026-10-21",
+                      "clinician": "Erin",
+                      "totalFeeCharged": 150,
+                      "billingCode": "90837"
+                    }
+                  ]
+                }
+              },
+              "billingCodeMinutes": {
+                "90837": 60
+              }
+            },
+            "replaceOverlaps": false,
+            "retainOverlaps": false
+          }
+        },
+        {
+          "method": "PUT",
+          "path": "/api/practice-imports/declarations",
+          "body": {
+            "expectedRevision": 2,
+            "confirmed": true,
+            "data": {
+              "version": 1,
+              "mappings": [
+                {
+                  "sourceLabel": "Elia",
+                  "clinicianId": 1,
+                  "clinicianLabel": "Elia",
+                  "teamId": 1
+                },
+                {
+                  "sourceLabel": "Erin",
+                  "clinicianId": 2,
+                  "clinicianLabel": "Erin",
+                  "teamId": 1
+                }
+              ],
+              "sourceSets": [
+                {
+                  "kind": "attendance",
+                  "snapshotIds": [
+                    "attendance-8dba12d3"
+                  ],
+                  "clinicianIds": [
+                    1,
+                    2
+                  ],
+                  "start": "2026-09-10",
+                  "end": "2026-10-12",
+                  "complete": true
+                },
+                {
+                  "kind": "billing",
+                  "snapshotIds": [
+                    "billing-98c4b484"
+                  ],
+                  "clinicianIds": [
+                    1,
+                    2
+                  ],
+                  "start": "2026-09-10",
+                  "end": "2026-10-12",
+                  "complete": true
+                },
+                {
+                  "kind": "attendance",
+                  "snapshotIds": [
+                    "attendance-8dba12d3",
+                    "attendance-494fc1e6"
+                  ],
+                  "clinicianIds": [
+                    1,
+                    2
+                  ],
+                  "start": "2026-09-10",
+                  "end": "2026-10-21",
+                  "complete": true
+                },
+                {
+                  "kind": "billing",
+                  "snapshotIds": [
+                    "billing-98c4b484",
+                    "billing-fa0f7fc2"
+                  ],
+                  "clinicianIds": [
+                    1,
+                    2
+                  ],
+                  "start": "2026-09-10",
+                  "end": "2026-10-21",
+                  "complete": true
+                }
+              ]
+            },
+            "nextPeriod": {
+              "packageId": "synthetic-next",
+              "sourceIds": [
+                "attendance-494fc1e6",
+                "billing-fa0f7fc2"
+              ],
+              "teamId": 1
+            }
+          }
+        },
+        {
+          "method": "GET",
+          "path": "/api/practice-imports/billing-resolution-candidates"
+        },
+        {
+          "method": "GET",
+          "path": "/api/practice-imports/billing-resolution-candidates"
+        }
+      ],
+      "declarationRevision": 3,
+      "sourceSets": 4,
+      "journalEntries": 5
+    },
+    {
+      "name": "already-included-duplicate-no-metadata-write",
+      "pass": true,
+      "requests": [
+        {
+          "method": "GET",
+          "path": "/api/hub"
+        },
+        {
+          "method": "GET",
+          "path": "/api/hub/context"
+        },
+        {
+          "method": "GET",
+          "path": "/api/business-goals"
+        },
+        {
+          "method": "GET",
+          "path": "/api/scenarios"
+        },
+        {
+          "method": "GET",
+          "path": "/api/practice-imports"
+        },
+        {
+          "method": "GET",
+          "path": "/api/practice-imports/billing-resolution-candidates"
+        },
+        {
+          "method": "GET",
+          "path": "/api/practice-imports/capabilities"
+        },
+        {
+          "method": "PUT",
+          "path": "/api/practice-imports/declarations",
+          "body": {
+            "expectedRevision": 2,
+            "confirmed": true,
+            "data": {
+              "version": 1,
+              "mappings": [
+                {
+                  "sourceLabel": "Elia",
+                  "clinicianId": 1,
+                  "clinicianLabel": "Elia",
+                  "teamId": 1
+                },
+                {
+                  "sourceLabel": "Erin",
+                  "clinicianId": 2,
+                  "clinicianLabel": "Erin",
+                  "teamId": 1
+                }
+              ],
+              "sourceSets": [
+                {
+                  "kind": "attendance",
+                  "snapshotIds": [
+                    "attendance-8dba12d3"
+                  ],
+                  "clinicianIds": [
+                    1,
+                    2
+                  ],
+                  "start": "2026-09-10",
+                  "end": "2026-10-12",
+                  "complete": true
+                },
+                {
+                  "kind": "billing",
+                  "snapshotIds": [
+                    "billing-98c4b484"
+                  ],
+                  "clinicianIds": [
+                    1,
+                    2
+                  ],
+                  "start": "2026-09-10",
+                  "end": "2026-10-12",
+                  "complete": true
+                },
+                {
+                  "kind": "attendance",
+                  "snapshotIds": [
+                    "attendance-8dba12d3",
+                    "attendance-494fc1e6"
+                  ],
+                  "clinicianIds": [
+                    1,
+                    2
+                  ],
+                  "start": "2026-09-10",
+                  "end": "2026-10-21",
+                  "complete": true
+                },
+                {
+                  "kind": "billing",
+                  "snapshotIds": [
+                    "billing-98c4b484",
+                    "billing-fa0f7fc2"
+                  ],
+                  "clinicianIds": [
+                    1,
+                    2
+                  ],
+                  "start": "2026-09-10",
+                  "end": "2026-10-21",
+                  "complete": true
+                }
+              ]
+            },
+            "nextPeriod": {
+              "packageId": "synthetic-next",
+              "sourceIds": [
+                "attendance-494fc1e6",
+                "billing-fa0f7fc2"
+              ],
+              "teamId": 1
+            }
+          }
+        },
+        {
+          "method": "GET",
+          "path": "/api/practice-imports/billing-resolution-candidates"
+        },
+        {
+          "method": "POST",
+          "path": "/api/practice-imports/package",
+          "body": {
+            "package": {
+              "format": "emc-practice-local-import-package",
+              "version": 1,
+              "packageId": "synthetic-next",
+              "exportedAt": "2026-10-22T12:00:00Z",
+              "collections": {
+                "attendance": {
+                  "coverageStart": "2026-10-07",
+                  "coverageEnd": "2026-10-21",
+                  "rowCount": 28,
+                  "rows": [
+                    {
+                      "clientId": "new-start",
+                      "serviceDate": "2026-10-08",
+                      "clinician": "Elia",
+                      "location": "Room A",
+                      "status": "show"
+                    },
+                    {
+                      "clientId": "carry-24",
+                      "serviceDate": "2026-10-07",
+                      "clinician": "Elia",
+                      "location": "Room A",
+                      "status": "show"
+                    },
+                    {
+                      "clientId": "carry-23",
+                      "serviceDate": "2026-10-07",
+                      "clinician": "Erin",
+                      "location": "Room A",
+                      "status": "show"
+                    },
+                    {
+                      "clientId": "carry-22",
+                      "serviceDate": "2026-10-07",
+                      "clinician": "Elia",
+                      "location": "Room A",
+                      "status": "show"
+                    },
+                    {
+                      "clientId": "carry-21",
+                      "serviceDate": "2026-10-07",
+                      "clinician": "Erin",
+                      "location": "Room A",
+                      "status": "show"
+                    },
+                    {
+                      "clientId": "carry-20",
+                      "serviceDate": "2026-10-07",
+                      "clinician": "Elia",
+                      "location": "Room A",
+                      "status": "show"
+                    },
+                    {
+                      "clientId": "carry-19",
+                      "serviceDate": "2026-10-07",
+                      "clinician": "Erin",
+                      "location": "Room A",
+                      "status": "show"
+                    },
+                    {
+                      "clientId": "carry-18",
+                      "serviceDate": "2026-10-07",
+                      "clinician": "Elia",
+                      "location": "Room A",
+                      "status": "show"
+                    },
+                    {
+                      "clientId": "carry-17",
+                      "serviceDate": "2026-10-07",
+                      "clinician": "Erin",
+                      "location": "Room A",
+                      "status": "show"
+                    },
+                    {
+                      "clientId": "carry-16",
+                      "serviceDate": "2026-10-07",
+                      "clinician": "Elia",
+                      "location": "Room A",
+                      "status": "show"
+                    },
+                    {
+                      "clientId": "carry-15",
+                      "serviceDate": "2026-10-07",
+                      "clinician": "Erin",
+                      "location": "Room A",
+                      "status": "show"
+                    },
+                    {
+                      "clientId": "carry-14",
+                      "serviceDate": "2026-10-07",
+                      "clinician": "Elia",
+                      "location": "Room A",
+                      "status": "show"
+                    },
+                    {
+                      "clientId": "carry-13",
+                      "serviceDate": "2026-10-07",
+                      "clinician": "Erin",
+                      "location": "Room A",
+                      "status": "show"
+                    },
+                    {
+                      "clientId": "carry-12",
+                      "serviceDate": "2026-10-07",
+                      "clinician": "Elia",
+                      "location": "Room A",
+                      "status": "show"
+                    },
+                    {
+                      "clientId": "carry-11",
+                      "serviceDate": "2026-10-07",
+                      "clinician": "Erin",
+                      "location": "Room A",
+                      "status": "show"
+                    },
+                    {
+                      "clientId": "carry-10",
+                      "serviceDate": "2026-10-07",
+                      "clinician": "Elia",
+                      "location": "Room A",
+                      "status": "show"
+                    },
+                    {
+                      "clientId": "carry-9",
+                      "serviceDate": "2026-10-07",
+                      "clinician": "Erin",
+                      "location": "Room A",
+                      "status": "show"
+                    },
+                    {
+                      "clientId": "carry-8",
+                      "serviceDate": "2026-10-07",
+                      "clinician": "Elia",
+                      "location": "Room A",
+                      "status": "show"
+                    },
+                    {
+                      "clientId": "carry-7",
+                      "serviceDate": "2026-10-07",
+                      "clinician": "Erin",
+                      "location": "Room A",
+                      "status": "show"
+                    },
+                    {
+                      "clientId": "carry-6",
+                      "serviceDate": "2026-10-07",
+                      "clinician": "Elia",
+                      "location": "Room A",
+                      "status": "show"
+                    },
+                    {
+                      "clientId": "carry-5",
+                      "serviceDate": "2026-10-07",
+                      "clinician": "Erin",
+                      "location": "Room A",
+                      "status": "show"
+                    },
+                    {
+                      "clientId": "carry-4",
+                      "serviceDate": "2026-10-07",
+                      "clinician": "Elia",
+                      "location": "Room A",
+                      "status": "show"
+                    },
+                    {
+                      "clientId": "carry-3",
+                      "serviceDate": "2026-10-07",
+                      "clinician": "Erin",
+                      "location": "Room A",
+                      "status": "show"
+                    },
+                    {
+                      "clientId": "carry-2",
+                      "serviceDate": "2026-10-07",
+                      "clinician": "Elia",
+                      "location": "Room A",
+                      "status": "show"
+                    },
+                    {
+                      "clientId": "carry-1",
+                      "serviceDate": "2026-10-07",
+                      "clinician": "Erin",
+                      "location": "Room A",
+                      "status": "show"
+                    },
+                    {
+                      "clientId": "carry-0",
+                      "serviceDate": "2026-10-07",
+                      "clinician": "Elia",
+                      "location": "Room A",
+                      "status": "show"
+                    },
+                    {
+                      "clientId": "overlap",
+                      "serviceDate": "2026-10-12",
+                      "clinician": "Erin",
+                      "location": "Room A",
+                      "status": "show"
+                    },
+                    {
+                      "clientId": "new-end",
+                      "serviceDate": "2026-10-21",
+                      "clinician": "Erin",
+                      "location": "Room A",
+                      "status": "show"
+                    }
+                  ]
+                },
+                "billing": {
+                  "coverageStart": "2026-10-08",
+                  "coverageEnd": "2026-10-21",
+                  "rowCount": 3,
+                  "rows": [
+                    {
+                      "clientId": "new-start",
+                      "serviceDate": "2026-10-08",
+                      "clinician": "Elia",
+                      "totalFeeCharged": 150,
+                      "billingCode": "90837"
+                    },
+                    {
+                      "clientId": "overlap",
+                      "serviceDate": "2026-10-12",
+                      "clinician": "Erin",
+                      "totalFeeCharged": 150,
+                      "billingCode": "90837"
+                    },
+                    {
+                      "clientId": "new-end",
+                      "serviceDate": "2026-10-21",
+                      "clinician": "Erin",
+                      "totalFeeCharged": 150,
+                      "billingCode": "90837"
+                    }
+                  ]
+                }
+              },
+              "billingCodeMinutes": {
+                "90837": 60
+              }
+            },
+            "replaceOverlaps": false,
+            "retainOverlaps": false
+          }
+        }
+      ],
+      "declarationRevision": 3,
+      "sourceSets": 4,
+      "journalEntries": 5
+    },
+    {
+      "name": "other-report-raw-only",
+      "pass": true,
+      "requests": [
+        {
+          "method": "GET",
+          "path": "/api/hub"
+        },
+        {
+          "method": "GET",
+          "path": "/api/hub/context"
+        },
+        {
+          "method": "GET",
+          "path": "/api/business-goals"
+        },
+        {
+          "method": "GET",
+          "path": "/api/scenarios"
+        },
+        {
+          "method": "GET",
+          "path": "/api/practice-imports"
+        },
+        {
+          "method": "GET",
+          "path": "/api/practice-imports/billing-resolution-candidates"
+        },
+        {
+          "method": "GET",
+          "path": "/api/practice-imports/capabilities"
+        },
+        {
+          "method": "POST",
+          "path": "/api/practice-imports/package",
+          "body": {
+            "package": {
+              "format": "emc-practice-local-import-package",
+              "version": 1,
+              "packageId": "synthetic-next",
+              "exportedAt": "2026-10-22T12:00:00Z",
+              "collections": {
+                "attendance": {
+                  "coverageStart": "2026-10-07",
+                  "coverageEnd": "2026-10-21",
+                  "rowCount": 28,
+                  "rows": [
+                    {
+                      "clientId": "new-start",
+                      "serviceDate": "2026-10-08",
+                      "clinician": "Elia",
+                      "location": "Room A",
+                      "status": "show"
+                    },
+                    {
+                      "clientId": "carry-24",
+                      "serviceDate": "2026-10-07",
+                      "clinician": "Elia",
+                      "location": "Room A",
+                      "status": "show"
+                    },
+                    {
+                      "clientId": "carry-23",
+                      "serviceDate": "2026-10-07",
+                      "clinician": "Erin",
+                      "location": "Room A",
+                      "status": "show"
+                    },
+                    {
+                      "clientId": "carry-22",
+                      "serviceDate": "2026-10-07",
+                      "clinician": "Elia",
+                      "location": "Room A",
+                      "status": "show"
+                    },
+                    {
+                      "clientId": "carry-21",
+                      "serviceDate": "2026-10-07",
+                      "clinician": "Erin",
+                      "location": "Room A",
+                      "status": "show"
+                    },
+                    {
+                      "clientId": "carry-20",
+                      "serviceDate": "2026-10-07",
+                      "clinician": "Elia",
+                      "location": "Room A",
+                      "status": "show"
+                    },
+                    {
+                      "clientId": "carry-19",
+                      "serviceDate": "2026-10-07",
+                      "clinician": "Erin",
+                      "location": "Room A",
+                      "status": "show"
+                    },
+                    {
+                      "clientId": "carry-18",
+                      "serviceDate": "2026-10-07",
+                      "clinician": "Elia",
+                      "location": "Room A",
+                      "status": "show"
+                    },
+                    {
+                      "clientId": "carry-17",
+                      "serviceDate": "2026-10-07",
+                      "clinician": "Erin",
+                      "location": "Room A",
+                      "status": "show"
+                    },
+                    {
+                      "clientId": "carry-16",
+                      "serviceDate": "2026-10-07",
+                      "clinician": "Elia",
+                      "location": "Room A",
+                      "status": "show"
+                    },
+                    {
+                      "clientId": "carry-15",
+                      "serviceDate": "2026-10-07",
+                      "clinician": "Erin",
+                      "location": "Room A",
+                      "status": "show"
+                    },
+                    {
+                      "clientId": "carry-14",
+                      "serviceDate": "2026-10-07",
+                      "clinician": "Elia",
+                      "location": "Room A",
+                      "status": "show"
+                    },
+                    {
+                      "clientId": "carry-13",
+                      "serviceDate": "2026-10-07",
+                      "clinician": "Erin",
+                      "location": "Room A",
+                      "status": "show"
+                    },
+                    {
+                      "clientId": "carry-12",
+                      "serviceDate": "2026-10-07",
+                      "clinician": "Elia",
+                      "location": "Room A",
+                      "status": "show"
+                    },
+                    {
+                      "clientId": "carry-11",
+                      "serviceDate": "2026-10-07",
+                      "clinician": "Erin",
+                      "location": "Room A",
+                      "status": "show"
+                    },
+                    {
+                      "clientId": "carry-10",
+                      "serviceDate": "2026-10-07",
+                      "clinician": "Elia",
+                      "location": "Room A",
+                      "status": "show"
+                    },
+                    {
+                      "clientId": "carry-9",
+                      "serviceDate": "2026-10-07",
+                      "clinician": "Erin",
+                      "location": "Room A",
+                      "status": "show"
+                    },
+                    {
+                      "clientId": "carry-8",
+                      "serviceDate": "2026-10-07",
+                      "clinician": "Elia",
+                      "location": "Room A",
+                      "status": "show"
+                    },
+                    {
+                      "clientId": "carry-7",
+                      "serviceDate": "2026-10-07",
+                      "clinician": "Erin",
+                      "location": "Room A",
+                      "status": "show"
+                    },
+                    {
+                      "clientId": "carry-6",
+                      "serviceDate": "2026-10-07",
+                      "clinician": "Elia",
+                      "location": "Room A",
+                      "status": "show"
+                    },
+                    {
+                      "clientId": "carry-5",
+                      "serviceDate": "2026-10-07",
+                      "clinician": "Erin",
+                      "location": "Room A",
+                      "status": "show"
+                    },
+                    {
+                      "clientId": "carry-4",
+                      "serviceDate": "2026-10-07",
+                      "clinician": "Elia",
+                      "location": "Room A",
+                      "status": "show"
+                    },
+                    {
+                      "clientId": "carry-3",
+                      "serviceDate": "2026-10-07",
+                      "clinician": "Erin",
+                      "location": "Room A",
+                      "status": "show"
+                    },
+                    {
+                      "clientId": "carry-2",
+                      "serviceDate": "2026-10-07",
+                      "clinician": "Elia",
+                      "location": "Room A",
+                      "status": "show"
+                    },
+                    {
+                      "clientId": "carry-1",
+                      "serviceDate": "2026-10-07",
+                      "clinician": "Erin",
+                      "location": "Room A",
+                      "status": "show"
+                    },
+                    {
+                      "clientId": "carry-0",
+                      "serviceDate": "2026-10-07",
+                      "clinician": "Elia",
+                      "location": "Room A",
+                      "status": "show"
+                    },
+                    {
+                      "clientId": "overlap",
+                      "serviceDate": "2026-10-12",
+                      "clinician": "Erin",
+                      "location": "Room A",
+                      "status": "show"
+                    },
+                    {
+                      "clientId": "new-end",
+                      "serviceDate": "2026-10-21",
+                      "clinician": "Erin",
+                      "location": "Room A",
+                      "status": "show"
+                    }
+                  ]
+                },
+                "billing": {
+                  "coverageStart": "2026-10-08",
+                  "coverageEnd": "2026-10-21",
+                  "rowCount": 3,
+                  "rows": [
+                    {
+                      "clientId": "new-start",
+                      "serviceDate": "2026-10-08",
+                      "clinician": "Elia",
+                      "totalFeeCharged": 150,
+                      "billingCode": "90837"
+                    },
+                    {
+                      "clientId": "overlap",
+                      "serviceDate": "2026-10-12",
+                      "clinician": "Erin",
+                      "totalFeeCharged": 150,
+                      "billingCode": "90837"
+                    },
+                    {
+                      "clientId": "new-end",
+                      "serviceDate": "2026-10-21",
+                      "clinician": "Erin",
+                      "totalFeeCharged": 150,
+                      "billingCode": "90837"
+                    }
+                  ]
+                }
+              },
+              "billingCodeMinutes": {
+                "90837": 60
+              }
+            },
+            "replaceOverlaps": false,
+            "retainOverlaps": false
+          }
+        },
+        {
+          "method": "GET",
+          "path": "/api/practice-imports/billing-resolution-candidates"
+        }
+      ],
+      "declarationRevision": 2,
+      "sourceSets": 2,
+      "journalEntries": 4
+    },
+    {
+      "name": "changed-carryover-review",
+      "pass": true,
+      "requests": [
+        {
+          "method": "GET",
+          "path": "/api/hub"
+        },
+        {
+          "method": "GET",
+          "path": "/api/hub/context"
+        },
+        {
+          "method": "GET",
+          "path": "/api/business-goals"
+        },
+        {
+          "method": "GET",
+          "path": "/api/scenarios"
+        },
+        {
+          "method": "GET",
+          "path": "/api/practice-imports"
+        },
+        {
+          "method": "GET",
+          "path": "/api/practice-imports/billing-resolution-candidates"
+        },
+        {
+          "method": "GET",
+          "path": "/api/practice-imports/capabilities"
+        },
+        {
+          "method": "POST",
+          "path": "/api/practice-imports/package",
+          "body": {
+            "package": {
+              "format": "emc-practice-local-import-package",
+              "version": 1,
+              "packageId": "synthetic-next-changed",
+              "exportedAt": "2026-10-22T12:00:00Z",
+              "collections": {
+                "attendance": {
+                  "coverageStart": "2026-10-07",
+                  "coverageEnd": "2026-10-21",
+                  "rowCount": 28,
+                  "rows": [
+                    {
+                      "clientId": "new-start",
+                      "serviceDate": "2026-10-08",
+                      "clinician": "Elia",
+                      "location": "Room A",
+                      "status": "show"
+                    },
+                    {
+                      "clientId": "carry-24",
+                      "serviceDate": "2026-10-07",
+                      "clinician": "Elia",
+                      "location": "Room B",
+                      "status": "show"
+                    },
+                    {
+                      "clientId": "carry-23",
+                      "serviceDate": "2026-10-07",
+                      "clinician": "Erin",
+                      "location": "Room A",
+                      "status": "show"
+                    },
+                    {
+                      "clientId": "carry-22",
+                      "serviceDate": "2026-10-07",
+                      "clinician": "Elia",
+                      "location": "Room A",
+                      "status": "show"
+                    },
+                    {
+                      "clientId": "carry-21",
+                      "serviceDate": "2026-10-07",
+                      "clinician": "Erin",
+                      "location": "Room A",
+                      "status": "show"
+                    },
+                    {
+                      "clientId": "carry-20",
+                      "serviceDate": "2026-10-07",
+                      "clinician": "Elia",
+                      "location": "Room A",
+                      "status": "show"
+                    },
+                    {
+                      "clientId": "carry-19",
+                      "serviceDate": "2026-10-07",
+                      "clinician": "Erin",
+                      "location": "Room A",
+                      "status": "show"
+                    },
+                    {
+                      "clientId": "carry-18",
+                      "serviceDate": "2026-10-07",
+                      "clinician": "Elia",
+                      "location": "Room A",
+                      "status": "show"
+                    },
+                    {
+                      "clientId": "carry-17",
+                      "serviceDate": "2026-10-07",
+                      "clinician": "Erin",
+                      "location": "Room A",
+                      "status": "show"
+                    },
+                    {
+                      "clientId": "carry-16",
+                      "serviceDate": "2026-10-07",
+                      "clinician": "Elia",
+                      "location": "Room A",
+                      "status": "show"
+                    },
+                    {
+                      "clientId": "carry-15",
+                      "serviceDate": "2026-10-07",
+                      "clinician": "Erin",
+                      "location": "Room A",
+                      "status": "show"
+                    },
+                    {
+                      "clientId": "carry-14",
+                      "serviceDate": "2026-10-07",
+                      "clinician": "Elia",
+                      "location": "Room A",
+                      "status": "show"
+                    },
+                    {
+                      "clientId": "carry-13",
+                      "serviceDate": "2026-10-07",
+                      "clinician": "Erin",
+                      "location": "Room A",
+                      "status": "show"
+                    },
+                    {
+                      "clientId": "carry-12",
+                      "serviceDate": "2026-10-07",
+                      "clinician": "Elia",
+                      "location": "Room A",
+                      "status": "show"
+                    },
+                    {
+                      "clientId": "carry-11",
+                      "serviceDate": "2026-10-07",
+                      "clinician": "Erin",
+                      "location": "Room A",
+                      "status": "show"
+                    },
+                    {
+                      "clientId": "carry-10",
+                      "serviceDate": "2026-10-07",
+                      "clinician": "Elia",
+                      "location": "Room A",
+                      "status": "show"
+                    },
+                    {
+                      "clientId": "carry-9",
+                      "serviceDate": "2026-10-07",
+                      "clinician": "Erin",
+                      "location": "Room A",
+                      "status": "show"
+                    },
+                    {
+                      "clientId": "carry-8",
+                      "serviceDate": "2026-10-07",
+                      "clinician": "Elia",
+                      "location": "Room A",
+                      "status": "show"
+                    },
+                    {
+                      "clientId": "carry-7",
+                      "serviceDate": "2026-10-07",
+                      "clinician": "Erin",
+                      "location": "Room A",
+                      "status": "show"
+                    },
+                    {
+                      "clientId": "carry-6",
+                      "serviceDate": "2026-10-07",
+                      "clinician": "Elia",
+                      "location": "Room A",
+                      "status": "show"
+                    },
+                    {
+                      "clientId": "carry-5",
+                      "serviceDate": "2026-10-07",
+                      "clinician": "Erin",
+                      "location": "Room A",
+                      "status": "show"
+                    },
+                    {
+                      "clientId": "carry-4",
+                      "serviceDate": "2026-10-07",
+                      "clinician": "Elia",
+                      "location": "Room A",
+                      "status": "show"
+                    },
+                    {
+                      "clientId": "carry-3",
+                      "serviceDate": "2026-10-07",
+                      "clinician": "Erin",
+                      "location": "Room A",
+                      "status": "show"
+                    },
+                    {
+                      "clientId": "carry-2",
+                      "serviceDate": "2026-10-07",
+                      "clinician": "Elia",
+                      "location": "Room A",
+                      "status": "show"
+                    },
+                    {
+                      "clientId": "carry-1",
+                      "serviceDate": "2026-10-07",
+                      "clinician": "Erin",
+                      "location": "Room A",
+                      "status": "show"
+                    },
+                    {
+                      "clientId": "carry-0",
+                      "serviceDate": "2026-10-07",
+                      "clinician": "Elia",
+                      "location": "Room A",
+                      "status": "show"
+                    },
+                    {
+                      "clientId": "overlap",
+                      "serviceDate": "2026-10-12",
+                      "clinician": "Erin",
+                      "location": "Room A",
+                      "status": "show"
+                    },
+                    {
+                      "clientId": "new-end",
+                      "serviceDate": "2026-10-21",
+                      "clinician": "Erin",
+                      "location": "Room A",
+                      "status": "show"
+                    }
+                  ]
+                },
+                "billing": {
+                  "coverageStart": "2026-10-08",
+                  "coverageEnd": "2026-10-21",
+                  "rowCount": 3,
+                  "rows": [
+                    {
+                      "clientId": "new-start",
+                      "serviceDate": "2026-10-08",
+                      "clinician": "Elia",
+                      "totalFeeCharged": 150,
+                      "billingCode": "90837"
+                    },
+                    {
+                      "clientId": "overlap",
+                      "serviceDate": "2026-10-12",
+                      "clinician": "Erin",
+                      "totalFeeCharged": 150,
+                      "billingCode": "90837"
+                    },
+                    {
+                      "clientId": "new-end",
+                      "serviceDate": "2026-10-21",
+                      "clinician": "Erin",
+                      "totalFeeCharged": 150,
+                      "billingCode": "90837"
+                    }
+                  ]
+                }
+              },
+              "billingCodeMinutes": {
+                "90837": 60
+              }
+            },
+            "replaceOverlaps": false,
+            "retainOverlaps": false
+          }
+        },
+        {
+          "method": "GET",
+          "path": "/api/practice-imports/billing-resolution-candidates"
+        }
+      ],
+      "declarationRevision": 2,
+      "sourceSets": 2,
+      "journalEntries": 4
+    },
+    {
+      "name": "metadata-409-rows-saved",
+      "pass": true,
+      "requests": [
+        {
+          "method": "GET",
+          "path": "/api/hub"
+        },
+        {
+          "method": "GET",
+          "path": "/api/hub/context"
+        },
+        {
+          "method": "GET",
+          "path": "/api/business-goals"
+        },
+        {
+          "method": "GET",
+          "path": "/api/scenarios"
+        },
+        {
+          "method": "GET",
+          "path": "/api/practice-imports"
+        },
+        {
+          "method": "GET",
+          "path": "/api/practice-imports/billing-resolution-candidates"
+        },
+        {
+          "method": "GET",
+          "path": "/api/practice-imports/capabilities"
+        },
+        {
+          "method": "POST",
+          "path": "/api/practice-imports/package",
+          "body": {
+            "package": {
+              "format": "emc-practice-local-import-package",
+              "version": 1,
+              "packageId": "synthetic-next",
+              "exportedAt": "2026-10-22T12:00:00Z",
+              "collections": {
+                "attendance": {
+                  "coverageStart": "2026-10-07",
+                  "coverageEnd": "2026-10-21",
+                  "rowCount": 28,
+                  "rows": [
+                    {
+                      "clientId": "new-start",
+                      "serviceDate": "2026-10-08",
+                      "clinician": "Elia",
+                      "location": "Room A",
+                      "status": "show"
+                    },
+                    {
+                      "clientId": "carry-24",
+                      "serviceDate": "2026-10-07",
+                      "clinician": "Elia",
+                      "location": "Room A",
+                      "status": "show"
+                    },
+                    {
+                      "clientId": "carry-23",
+                      "serviceDate": "2026-10-07",
+                      "clinician": "Erin",
+                      "location": "Room A",
+                      "status": "show"
+                    },
+                    {
+                      "clientId": "carry-22",
+                      "serviceDate": "2026-10-07",
+                      "clinician": "Elia",
+                      "location": "Room A",
+                      "status": "show"
+                    },
+                    {
+                      "clientId": "carry-21",
+                      "serviceDate": "2026-10-07",
+                      "clinician": "Erin",
+                      "location": "Room A",
+                      "status": "show"
+                    },
+                    {
+                      "clientId": "carry-20",
+                      "serviceDate": "2026-10-07",
+                      "clinician": "Elia",
+                      "location": "Room A",
+                      "status": "show"
+                    },
+                    {
+                      "clientId": "carry-19",
+                      "serviceDate": "2026-10-07",
+                      "clinician": "Erin",
+                      "location": "Room A",
+                      "status": "show"
+                    },
+                    {
+                      "clientId": "carry-18",
+                      "serviceDate": "2026-10-07",
+                      "clinician": "Elia",
+                      "location": "Room A",
+                      "status": "show"
+                    },
+                    {
+                      "clientId": "carry-17",
+                      "serviceDate": "2026-10-07",
+                      "clinician": "Erin",
+                      "location": "Room A",
+                      "status": "show"
+                    },
+                    {
+                      "clientId": "carry-16",
+                      "serviceDate": "2026-10-07",
+                      "clinician": "Elia",
+                      "location": "Room A",
+                      "status": "show"
+                    },
+                    {
+                      "clientId": "carry-15",
+                      "serviceDate": "2026-10-07",
+                      "clinician": "Erin",
+                      "location": "Room A",
+                      "status": "show"
+                    },
+                    {
+                      "clientId": "carry-14",
+                      "serviceDate": "2026-10-07",
+                      "clinician": "Elia",
+                      "location": "Room A",
+                      "status": "show"
+                    },
+                    {
+                      "clientId": "carry-13",
+                      "serviceDate": "2026-10-07",
+                      "clinician": "Erin",
+                      "location": "Room A",
+                      "status": "show"
+                    },
+                    {
+                      "clientId": "carry-12",
+                      "serviceDate": "2026-10-07",
+                      "clinician": "Elia",
+                      "location": "Room A",
+                      "status": "show"
+                    },
+                    {
+                      "clientId": "carry-11",
+                      "serviceDate": "2026-10-07",
+                      "clinician": "Erin",
+                      "location": "Room A",
+                      "status": "show"
+                    },
+                    {
+                      "clientId": "carry-10",
+                      "serviceDate": "2026-10-07",
+                      "clinician": "Elia",
+                      "location": "Room A",
+                      "status": "show"
+                    },
+                    {
+                      "clientId": "carry-9",
+                      "serviceDate": "2026-10-07",
+                      "clinician": "Erin",
+                      "location": "Room A",
+                      "status": "show"
+                    },
+                    {
+                      "clientId": "carry-8",
+                      "serviceDate": "2026-10-07",
+                      "clinician": "Elia",
+                      "location": "Room A",
+                      "status": "show"
+                    },
+                    {
+                      "clientId": "carry-7",
+                      "serviceDate": "2026-10-07",
+                      "clinician": "Erin",
+                      "location": "Room A",
+                      "status": "show"
+                    },
+                    {
+                      "clientId": "carry-6",
+                      "serviceDate": "2026-10-07",
+                      "clinician": "Elia",
+                      "location": "Room A",
+                      "status": "show"
+                    },
+                    {
+                      "clientId": "carry-5",
+                      "serviceDate": "2026-10-07",
+                      "clinician": "Erin",
+                      "location": "Room A",
+                      "status": "show"
+                    },
+                    {
+                      "clientId": "carry-4",
+                      "serviceDate": "2026-10-07",
+                      "clinician": "Elia",
+                      "location": "Room A",
+                      "status": "show"
+                    },
+                    {
+                      "clientId": "carry-3",
+                      "serviceDate": "2026-10-07",
+                      "clinician": "Erin",
+                      "location": "Room A",
+                      "status": "show"
+                    },
+                    {
+                      "clientId": "carry-2",
+                      "serviceDate": "2026-10-07",
+                      "clinician": "Elia",
+                      "location": "Room A",
+                      "status": "show"
+                    },
+                    {
+                      "clientId": "carry-1",
+                      "serviceDate": "2026-10-07",
+                      "clinician": "Erin",
+                      "location": "Room A",
+                      "status": "show"
+                    },
+                    {
+                      "clientId": "carry-0",
+                      "serviceDate": "2026-10-07",
+                      "clinician": "Elia",
+                      "location": "Room A",
+                      "status": "show"
+                    },
+                    {
+                      "clientId": "overlap",
+                      "serviceDate": "2026-10-12",
+                      "clinician": "Erin",
+                      "location": "Room A",
+                      "status": "show"
+                    },
+                    {
+                      "clientId": "new-end",
+                      "serviceDate": "2026-10-21",
+                      "clinician": "Erin",
+                      "location": "Room A",
+                      "status": "show"
+                    }
+                  ]
+                },
+                "billing": {
+                  "coverageStart": "2026-10-08",
+                  "coverageEnd": "2026-10-21",
+                  "rowCount": 3,
+                  "rows": [
+                    {
+                      "clientId": "new-start",
+                      "serviceDate": "2026-10-08",
+                      "clinician": "Elia",
+                      "totalFeeCharged": 150,
+                      "billingCode": "90837"
+                    },
+                    {
+                      "clientId": "overlap",
+                      "serviceDate": "2026-10-12",
+                      "clinician": "Erin",
+                      "totalFeeCharged": 150,
+                      "billingCode": "90837"
+                    },
+                    {
+                      "clientId": "new-end",
+                      "serviceDate": "2026-10-21",
+                      "clinician": "Erin",
+                      "totalFeeCharged": 150,
+                      "billingCode": "90837"
+                    }
+                  ]
+                }
+              },
+              "billingCodeMinutes": {
+                "90837": 60
+              }
+            },
+            "replaceOverlaps": false,
+            "retainOverlaps": false
+          }
+        },
+        {
+          "method": "PUT",
+          "path": "/api/practice-imports/declarations",
+          "body": {
+            "expectedRevision": 2,
+            "confirmed": true,
+            "data": {
+              "version": 1,
+              "mappings": [
+                {
+                  "sourceLabel": "Elia",
+                  "clinicianId": 1,
+                  "clinicianLabel": "Elia",
+                  "teamId": 1
+                },
+                {
+                  "sourceLabel": "Erin",
+                  "clinicianId": 2,
+                  "clinicianLabel": "Erin",
+                  "teamId": 1
+                }
+              ],
+              "sourceSets": [
+                {
+                  "kind": "attendance",
+                  "snapshotIds": [
+                    "attendance-8dba12d3"
+                  ],
+                  "clinicianIds": [
+                    1,
+                    2
+                  ],
+                  "start": "2026-09-10",
+                  "end": "2026-10-12",
+                  "complete": true
+                },
+                {
+                  "kind": "billing",
+                  "snapshotIds": [
+                    "billing-98c4b484"
+                  ],
+                  "clinicianIds": [
+                    1,
+                    2
+                  ],
+                  "start": "2026-09-10",
+                  "end": "2026-10-12",
+                  "complete": true
+                },
+                {
+                  "kind": "attendance",
+                  "snapshotIds": [
+                    "attendance-8dba12d3",
+                    "attendance-494fc1e6"
+                  ],
+                  "clinicianIds": [
+                    1,
+                    2
+                  ],
+                  "start": "2026-09-10",
+                  "end": "2026-10-21",
+                  "complete": true
+                },
+                {
+                  "kind": "billing",
+                  "snapshotIds": [
+                    "billing-98c4b484",
+                    "billing-fa0f7fc2"
+                  ],
+                  "clinicianIds": [
+                    1,
+                    2
+                  ],
+                  "start": "2026-09-10",
+                  "end": "2026-10-21",
+                  "complete": true
+                }
+              ]
+            },
+            "nextPeriod": {
+              "packageId": "synthetic-next",
+              "sourceIds": [
+                "attendance-494fc1e6",
+                "billing-fa0f7fc2"
+              ],
+              "teamId": 1
+            }
+          }
+        },
+        {
+          "method": "GET",
+          "path": "/api/practice-imports/billing-resolution-candidates"
+        }
+      ],
+      "declarationRevision": 2,
+      "sourceSets": 2,
+      "journalEntries": 4
+    },
+    {
+      "name": "metadata-500-after-commit-recover",
+      "pass": true,
+      "requests": [
+        {
+          "method": "GET",
+          "path": "/api/hub"
+        },
+        {
+          "method": "GET",
+          "path": "/api/hub/context"
+        },
+        {
+          "method": "GET",
+          "path": "/api/business-goals"
+        },
+        {
+          "method": "GET",
+          "path": "/api/scenarios"
+        },
+        {
+          "method": "GET",
+          "path": "/api/practice-imports"
+        },
+        {
+          "method": "GET",
+          "path": "/api/practice-imports/billing-resolution-candidates"
+        },
+        {
+          "method": "GET",
+          "path": "/api/practice-imports/capabilities"
+        },
+        {
+          "method": "POST",
+          "path": "/api/practice-imports/package",
+          "body": {
+            "package": {
+              "format": "emc-practice-local-import-package",
+              "version": 1,
+              "packageId": "synthetic-next",
+              "exportedAt": "2026-10-22T12:00:00Z",
+              "collections": {
+                "attendance": {
+                  "coverageStart": "2026-10-07",
+                  "coverageEnd": "2026-10-21",
+                  "rowCount": 28,
+                  "rows": [
+                    {
+                      "clientId": "new-start",
+                      "serviceDate": "2026-10-08",
+                      "clinician": "Elia",
+                      "location": "Room A",
+                      "status": "show"
+                    },
+                    {
+                      "clientId": "carry-24",
+                      "serviceDate": "2026-10-07",
+                      "clinician": "Elia",
+                      "location": "Room A",
+                      "status": "show"
+                    },
+                    {
+                      "clientId": "carry-23",
+                      "serviceDate": "2026-10-07",
+                      "clinician": "Erin",
+                      "location": "Room A",
+                      "status": "show"
+                    },
+                    {
+                      "clientId": "carry-22",
+                      "serviceDate": "2026-10-07",
+                      "clinician": "Elia",
+                      "location": "Room A",
+                      "status": "show"
+                    },
+                    {
+                      "clientId": "carry-21",
+                      "serviceDate": "2026-10-07",
+                      "clinician": "Erin",
+                      "location": "Room A",
+                      "status": "show"
+                    },
+                    {
+                      "clientId": "carry-20",
+                      "serviceDate": "2026-10-07",
+                      "clinician": "Elia",
+                      "location": "Room A",
+                      "status": "show"
+                    },
+                    {
+                      "clientId": "carry-19",
+                      "serviceDate": "2026-10-07",
+                      "clinician": "Erin",
+                      "location": "Room A",
+                      "status": "show"
+                    },
+                    {
+                      "clientId": "carry-18",
+                      "serviceDate": "2026-10-07",
+                      "clinician": "Elia",
+                      "location": "Room A",
+                      "status": "show"
+                    },
+                    {
+                      "clientId": "carry-17",
+                      "serviceDate": "2026-10-07",
+                      "clinician": "Erin",
+                      "location": "Room A",
+                      "status": "show"
+                    },
+                    {
+                      "clientId": "carry-16",
+                      "serviceDate": "2026-10-07",
+                      "clinician": "Elia",
+                      "location": "Room A",
+                      "status": "show"
+                    },
+                    {
+                      "clientId": "carry-15",
+                      "serviceDate": "2026-10-07",
+                      "clinician": "Erin",
+                      "location": "Room A",
+                      "status": "show"
+                    },
+                    {
+                      "clientId": "carry-14",
+                      "serviceDate": "2026-10-07",
+                      "clinician": "Elia",
+                      "location": "Room A",
+                      "status": "show"
+                    },
+                    {
+                      "clientId": "carry-13",
+                      "serviceDate": "2026-10-07",
+                      "clinician": "Erin",
+                      "location": "Room A",
+                      "status": "show"
+                    },
+                    {
+                      "clientId": "carry-12",
+                      "serviceDate": "2026-10-07",
+                      "clinician": "Elia",
+                      "location": "Room A",
+                      "status": "show"
+                    },
+                    {
+                      "clientId": "carry-11",
+                      "serviceDate": "2026-10-07",
+                      "clinician": "Erin",
+                      "location": "Room A",
+                      "status": "show"
+                    },
+                    {
+                      "clientId": "carry-10",
+                      "serviceDate": "2026-10-07",
+                      "clinician": "Elia",
+                      "location": "Room A",
+                      "status": "show"
+                    },
+                    {
+                      "clientId": "carry-9",
+                      "serviceDate": "2026-10-07",
+                      "clinician": "Erin",
+                      "location": "Room A",
+                      "status": "show"
+                    },
+                    {
+                      "clientId": "carry-8",
+                      "serviceDate": "2026-10-07",
+                      "clinician": "Elia",
+                      "location": "Room A",
+                      "status": "show"
+                    },
+                    {
+                      "clientId": "carry-7",
+                      "serviceDate": "2026-10-07",
+                      "clinician": "Erin",
+                      "location": "Room A",
+                      "status": "show"
+                    },
+                    {
+                      "clientId": "carry-6",
+                      "serviceDate": "2026-10-07",
+                      "clinician": "Elia",
+                      "location": "Room A",
+                      "status": "show"
+                    },
+                    {
+                      "clientId": "carry-5",
+                      "serviceDate": "2026-10-07",
+                      "clinician": "Erin",
+                      "location": "Room A",
+                      "status": "show"
+                    },
+                    {
+                      "clientId": "carry-4",
+                      "serviceDate": "2026-10-07",
+                      "clinician": "Elia",
+                      "location": "Room A",
+                      "status": "show"
+                    },
+                    {
+                      "clientId": "carry-3",
+                      "serviceDate": "2026-10-07",
+                      "clinician": "Erin",
+                      "location": "Room A",
+                      "status": "show"
+                    },
+                    {
+                      "clientId": "carry-2",
+                      "serviceDate": "2026-10-07",
+                      "clinician": "Elia",
+                      "location": "Room A",
+                      "status": "show"
+                    },
+                    {
+                      "clientId": "carry-1",
+                      "serviceDate": "2026-10-07",
+                      "clinician": "Erin",
+                      "location": "Room A",
+                      "status": "show"
+                    },
+                    {
+                      "clientId": "carry-0",
+                      "serviceDate": "2026-10-07",
+                      "clinician": "Elia",
+                      "location": "Room A",
+                      "status": "show"
+                    },
+                    {
+                      "clientId": "overlap",
+                      "serviceDate": "2026-10-12",
+                      "clinician": "Erin",
+                      "location": "Room A",
+                      "status": "show"
+                    },
+                    {
+                      "clientId": "new-end",
+                      "serviceDate": "2026-10-21",
+                      "clinician": "Erin",
+                      "location": "Room A",
+                      "status": "show"
+                    }
+                  ]
+                },
+                "billing": {
+                  "coverageStart": "2026-10-08",
+                  "coverageEnd": "2026-10-21",
+                  "rowCount": 3,
+                  "rows": [
+                    {
+                      "clientId": "new-start",
+                      "serviceDate": "2026-10-08",
+                      "clinician": "Elia",
+                      "totalFeeCharged": 150,
+                      "billingCode": "90837"
+                    },
+                    {
+                      "clientId": "overlap",
+                      "serviceDate": "2026-10-12",
+                      "clinician": "Erin",
+                      "totalFeeCharged": 150,
+                      "billingCode": "90837"
+                    },
+                    {
+                      "clientId": "new-end",
+                      "serviceDate": "2026-10-21",
+                      "clinician": "Erin",
+                      "totalFeeCharged": 150,
+                      "billingCode": "90837"
+                    }
+                  ]
+                }
+              },
+              "billingCodeMinutes": {
+                "90837": 60
+              }
+            },
+            "replaceOverlaps": false,
+            "retainOverlaps": false
+          }
+        },
+        {
+          "method": "PUT",
+          "path": "/api/practice-imports/declarations",
+          "body": {
+            "expectedRevision": 2,
+            "confirmed": true,
+            "data": {
+              "version": 1,
+              "mappings": [
+                {
+                  "sourceLabel": "Elia",
+                  "clinicianId": 1,
+                  "clinicianLabel": "Elia",
+                  "teamId": 1
+                },
+                {
+                  "sourceLabel": "Erin",
+                  "clinicianId": 2,
+                  "clinicianLabel": "Erin",
+                  "teamId": 1
+                }
+              ],
+              "sourceSets": [
+                {
+                  "kind": "attendance",
+                  "snapshotIds": [
+                    "attendance-8dba12d3"
+                  ],
+                  "clinicianIds": [
+                    1,
+                    2
+                  ],
+                  "start": "2026-09-10",
+                  "end": "2026-10-12",
+                  "complete": true
+                },
+                {
+                  "kind": "billing",
+                  "snapshotIds": [
+                    "billing-98c4b484"
+                  ],
+                  "clinicianIds": [
+                    1,
+                    2
+                  ],
+                  "start": "2026-09-10",
+                  "end": "2026-10-12",
+                  "complete": true
+                },
+                {
+                  "kind": "attendance",
+                  "snapshotIds": [
+                    "attendance-8dba12d3",
+                    "attendance-494fc1e6"
+                  ],
+                  "clinicianIds": [
+                    1,
+                    2
+                  ],
+                  "start": "2026-09-10",
+                  "end": "2026-10-21",
+                  "complete": true
+                },
+                {
+                  "kind": "billing",
+                  "snapshotIds": [
+                    "billing-98c4b484",
+                    "billing-fa0f7fc2"
+                  ],
+                  "clinicianIds": [
+                    1,
+                    2
+                  ],
+                  "start": "2026-09-10",
+                  "end": "2026-10-21",
+                  "complete": true
+                }
+              ]
+            },
+            "nextPeriod": {
+              "packageId": "synthetic-next",
+              "sourceIds": [
+                "attendance-494fc1e6",
+                "billing-fa0f7fc2"
+              ],
+              "teamId": 1
+            }
+          }
+        },
+        {
+          "method": "GET",
+          "path": "/api/practice-imports/billing-resolution-candidates"
+        },
+        {
+          "method": "GET",
+          "path": "/api/practice-imports"
+        },
+        {
+          "method": "GET",
+          "path": "/api/practice-imports/billing-resolution-candidates"
+        }
+      ],
+      "declarationRevision": 3,
+      "sourceSets": 4,
+      "journalEntries": 5
+    },
+    {
+      "name": "contrast-samples-1440",
+      "pass": true,
+      "sampled": 29,
+      "failures": [],
+      "fit": {
+        "viewport": 1440,
+        "page": 1440,
+        "controls": [
+          {
+            "text": "Reload saved history",
+            "left": 1025.046875,
+            "right": 1221,
+            "scroll": 194,
+            "width": 194
+          },
+          {
+            "text": "Next full period",
+            "left": 219,
+            "right": 345.515625,
+            "scroll": 125,
+            "width": 125
+          },
+          {
+            "text": "Other report",
+            "left": 353.515625,
+            "right": 462.640625,
+            "scroll": 107,
+            "width": 107
+          },
+          {
+            "text": "Reconcile this period",
+            "left": 219,
+            "right": 373.765625,
+            "scroll": 153,
+            "width": 153
+          },
+          {
+            "text": "Coverage and provider identities · review needed",
+            "left": 219,
+            "right": 1221,
+            "scroll": 1002,
+            "width": 1002
+          },
+          {
+            "text": "Billing exceptions",
+            "left": 219,
+            "right": 1221,
+            "scroll": 1002,
+            "width": 1002
+          },
+          {
+            "text": "More data tools",
+            "left": 219,
+            "right": 1221,
+            "scroll": 1002,
+            "width": 1002
+          },
+          {
+            "text": "Calculations and assumptions",
+            "left": 221,
+            "right": 1219,
+            "scroll": 998,
+            "width": 998
+          }
+        ]
+      }
+    },
+    {
+      "name": "layout-keyboard-contrast-1440",
+      "pass": true,
+      "requests": [
+        {
+          "method": "GET",
+          "path": "/api/hub"
+        },
+        {
+          "method": "GET",
+          "path": "/api/hub/context"
+        },
+        {
+          "method": "GET",
+          "path": "/api/business-goals"
+        },
+        {
+          "method": "GET",
+          "path": "/api/scenarios"
+        },
+        {
+          "method": "GET",
+          "path": "/api/practice-imports"
+        },
+        {
+          "method": "GET",
+          "path": "/api/practice-imports/billing-resolution-candidates"
+        },
+        {
+          "method": "GET",
+          "path": "/api/practice-imports/capabilities"
+        }
+      ],
+      "declarationRevision": 2,
+      "sourceSets": 2,
+      "journalEntries": 4
+    },
+    {
+      "name": "contrast-samples-390",
+      "pass": true,
+      "sampled": 29,
+      "failures": [],
+      "fit": {
+        "viewport": 390,
+        "page": 390,
+        "controls": [
+          {
+            "text": "Reload saved history",
+            "left": 31,
+            "right": 226.953125,
+            "scroll": 194,
+            "width": 194
+          },
+          {
+            "text": "Next full period",
+            "left": 31,
+            "right": 157.515625,
+            "scroll": 125,
+            "width": 125
+          },
+          {
+            "text": "Other report",
+            "left": 165.515625,
+            "right": 274.640625,
+            "scroll": 107,
+            "width": 107
+          },
+          {
+            "text": "Reconcile this period",
+            "left": 31,
+            "right": 185.765625,
+            "scroll": 153,
+            "width": 153
+          },
+          {
+            "text": "Coverage and provider identities · review needed",
+            "left": 31,
+            "right": 359,
+            "scroll": 328,
+            "width": 328
+          },
+          {
+            "text": "Billing exceptions",
+            "left": 31,
+            "right": 359,
+            "scroll": 328,
+            "width": 328
+          },
+          {
+            "text": "More data tools",
+            "left": 31,
+            "right": 359,
+            "scroll": 328,
+            "width": 328
+          },
+          {
+            "text": "Calculations and assumptions",
+            "left": 31,
+            "right": 359,
+            "scroll": 328,
+            "width": 328
+          }
+        ]
+      }
+    },
+    {
+      "name": "layout-keyboard-contrast-390",
+      "pass": true,
+      "requests": [
+        {
+          "method": "GET",
+          "path": "/api/hub"
+        },
+        {
+          "method": "GET",
+          "path": "/api/hub/context"
+        },
+        {
+          "method": "GET",
+          "path": "/api/scenarios"
+        },
+        {
+          "method": "GET",
+          "path": "/api/business-goals"
+        },
+        {
+          "method": "GET",
+          "path": "/api/practice-imports"
+        },
+        {
+          "method": "GET",
+          "path": "/api/practice-imports/billing-resolution-candidates"
+        },
+        {
+          "method": "GET",
+          "path": "/api/practice-imports/capabilities"
+        }
+      ],
+      "declarationRevision": 2,
+      "sourceSets": 2,
+      "journalEntries": 4
+    },
+    {
+      "name": "contrast-samples-320",
+      "pass": true,
+      "sampled": 29,
+      "failures": [],
+      "fit": {
+        "viewport": 320,
+        "page": 320,
+        "controls": [
+          {
+            "text": "Reload saved history",
+            "left": 31,
+            "right": 226.953125,
+            "scroll": 194,
+            "width": 194
+          },
+          {
+            "text": "Next full period",
+            "left": 31,
+            "right": 157.515625,
+            "scroll": 125,
+            "width": 125
+          },
+          {
+            "text": "Other report",
+            "left": 165.515625,
+            "right": 274.640625,
+            "scroll": 107,
+            "width": 107
+          },
+          {
+            "text": "Reconcile this period",
+            "left": 31,
+            "right": 185.765625,
+            "scroll": 153,
+            "width": 153
+          },
+          {
+            "text": "Coverage and provider identities · review needed",
+            "left": 31,
+            "right": 289,
+            "scroll": 258,
+            "width": 258
+          },
+          {
+            "text": "Billing exceptions",
+            "left": 31,
+            "right": 289,
+            "scroll": 258,
+            "width": 258
+          },
+          {
+            "text": "More data tools",
+            "left": 31,
+            "right": 289,
+            "scroll": 258,
+            "width": 258
+          },
+          {
+            "text": "Calculations and assumptions",
+            "left": 31,
+            "right": 289,
+            "scroll": 258,
+            "width": 258
+          }
+        ]
+      }
+    },
+    {
+      "name": "layout-keyboard-contrast-320",
+      "pass": true,
+      "requests": [
+        {
+          "method": "GET",
+          "path": "/api/hub"
+        },
+        {
+          "method": "GET",
+          "path": "/api/hub/context"
+        },
+        {
+          "method": "GET",
+          "path": "/api/business-goals"
+        },
+        {
+          "method": "GET",
+          "path": "/api/scenarios"
+        },
+        {
+          "method": "GET",
+          "path": "/api/practice-imports"
+        },
+        {
+          "method": "GET",
+          "path": "/api/practice-imports/billing-resolution-candidates"
+        },
+        {
+          "method": "GET",
+          "path": "/api/practice-imports/capabilities"
+        }
+      ],
+      "declarationRevision": 2,
+      "sourceSets": 2,
+      "journalEntries": 4
+    },
+    {
+      "name": "isolated-api-and-no-runtime-errors",
+      "pass": true,
+      "errors": [],
+      "serverErrors": [],
+      "blocked": []
+    }
+  ]
+}

@@ -23,6 +23,7 @@ export function ImportDeclarationReview({ snapshots, roster, teamId, stored, onS
   const [confirmed, setConfirmed] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const retainedPeriodSets = (stored?.data.sourceSets ?? []).filter((set, index, all) => index !== all.findIndex(candidate => candidate.kind === set.kind));
   async function save() {
     setError("");
     const mappings = labels.filter((label) => choices[normalizeProviderLabel(label)] !== "historical").map((sourceLabel) => {
@@ -41,10 +42,10 @@ export function ImportDeclarationReview({ snapshots, roster, teamId, stored, onS
       })),
     ];
     const data: ImportDeclarations = { version: 1, mappings,
-      sourceSets: sets.filter((set) => set.snapshotIds.length).map((set) => ({ ...set, complete: true as const,
+      sourceSets: [...sets.filter((set) => set.snapshotIds.length).map((set) => ({ ...set, complete: true as const,
         clinicianIds: [...new Set(mappings.filter((mapping) => snapshots.some((source) => set.snapshotIds.includes(source.id)
           && source.rows.some((row) => normalizeProviderLabel(row.clinician) === normalizeProviderLabel(mapping.sourceLabel)))).map((row) => row.clinicianId))],
-      })).filter((set) => set.clinicianIds.length > 0),
+      })).filter((set) => set.clinicianIds.length > 0), ...retainedPeriodSets],
       ...(historicalBillingProviders.length || stored?.data.historicalBillingProviders ? { historicalBillingProviders } : {}),
     };
     const response = await customFetch<{ declarations: StoredImportDeclarations | null }>("/api/practice-imports/declarations", {
@@ -56,6 +57,10 @@ export function ImportDeclarationReview({ snapshots, roster, teamId, stored, onS
   return <section className="pw-import-provenance" aria-label="Provider mappings and source-set coverage">
     <h3>Provider mappings and source-set coverage</h3>
     <p>Configuration {teamId ?? "Unassigned"} · {stored ? `confirmed revision ${stored.revision}` : "not confirmed"}</p>
+    {retainedPeriodSets.length > 0 && <details><summary>Additional confirmed report periods ({retainedPeriodSets.length})</summary>
+      <p>These period declarations are retained when legacy mappings are edited.</p>
+      {retainedPeriodSets.map((set, index) => <p key={index}>{set.kind} · {set.start} through {set.end} · {set.snapshotIds.length} sources</p>)}
+    </details>}
     <form onSubmit={(event) => { event.preventDefault(); setBusy(true); void save().catch((cause) => setError(cause instanceof Error ? cause.message : "Confirmation failed.")).finally(() => setBusy(false)); }}>
       <fieldset disabled={busy} style={{ minWidth: 0 }}>
         {labels.map((label) => <label key={normalizeProviderLabel(label)} style={{ display: "grid", gap: 4, marginBlock: 10 }}>{label}

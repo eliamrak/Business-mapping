@@ -13,7 +13,7 @@ import { parseBillingResolutionJournal, parseStoredImportDeclarations } from "..
 import { assessAutomaticOverlap, overlapReviewMessage, sameSourceCoverageChanged } from "../lib/import-overlap-reconciliation";
 import { importDeclarationsSchema, normalizeProviderLabel, prepareBillingChargeResolution, reconcileBillingEvidence,
   resolveImportedProvider, bindBillingResolutions, resolveHistoricalBillingProvider,
-  validateHistoricalBillingProviders, restoreHistoricalBillingProviders, unverifiedDeletionMarker, deletionMarkerGuidance, legacyServiceCodes, type StoredImportDeclarations } from "@workspace/practice/hub";
+  validateHistoricalBillingProviders, restoreHistoricalBillingProviders, unverifiedDeletionMarker, deletionMarkerGuidance, legacyServiceCodes, planNextReportPeriod, type StoredImportDeclarations } from "@workspace/practice/hub";
 
 const router = Router();
 
@@ -336,6 +336,32 @@ const snapshotColumns = {
   reportCoverage: sql<Snapshot["reportCoverage"]>`to_jsonb(${practiceImportSnapshotsTable}) -> 'report_coverage'`,
 };
 
+async function packageSources(connection: Pick<typeof db, "execute">, practiceId: string, accountId: string,
+  snapshots: { packageImportId: string; kind: string; sourceHash: string }[], packages: { id: string; packageId: string }[]) {
+  const activeIds = new Set(snapshots.map(row => `${row.kind}-${row.sourceHash}`));
+  const validPair = (value: unknown): value is string[] => Array.isArray(value) && value.length === 2
+    && value.every(id => typeof id === "string" && activeIds.has(id))
+    && value.filter(id => id.startsWith("attendance-")).length === 1
+    && value.filter(id => id.startsWith("billing-")).length === 1;
+  const audit = await connection.execute(sql`SELECT package_id, detail FROM practice_import_audit
+    WHERE practice_id = ${practiceId} AND account_id = ${accountId}
+    AND action IN ('import', 'retain-overlap', 'replace-overlap') LIMIT 10001`);
+  const result = new Map<string, string[]>();
+  if (audit.rows.length >= 10001) return result;
+  for (const pkg of packages) {
+    const receipts = audit.rows.filter(row => row.package_id === pkg.packageId)
+      .map(row => (row.detail as { sourceIds?: unknown } | null)?.sourceIds).filter(value => value !== undefined);
+    if (receipts.length) {
+      if (receipts.every(validPair) && new Set(receipts.map(ids => [...ids].sort().join("|"))).size === 1)
+        result.set(pkg.id, [...receipts[0] as string[]].sort());
+    } else {
+      const owned = snapshots.filter(row => row.packageImportId === pkg.id).map(row => `${row.kind}-${row.sourceHash}`);
+      if (validPair(owned)) result.set(pkg.id, owned.sort());
+    }
+  }
+  return result;
+}
+
 async function historyFor(practiceId: string, accountId: string) {
   const [snapshots, packages] = await Promise.all([
     db
@@ -360,6 +386,7 @@ async function historyFor(practiceId: string, accountId: string) {
       ),
   ]);
   const historySnapshots = snapshots.map(snapshotFromRow);
+  const packageSourceIds = await packageSources(db, practiceId, accountId, snapshots, packages);
   return {
     ...(await readBillingResolutionJournal(db, practiceId, accountId)),
     declarations: await readDeclarations(db, practiceId, accountId),
@@ -380,6 +407,7 @@ async function historyFor(practiceId: string, accountId: string) {
       importedAt: row.importedAt.toISOString(),
       exportedAt: row.exportedAt.toISOString(),
       contentHash: row.contentHash,
+      sourceIds: [...(packageSourceIds.get(row.id) ?? [])].sort(),
     })),
   };
 }
@@ -494,7 +522,9 @@ router.post("/practice-imports/billing-resolutions", async (req, res) => {
 });
 
 router.put("/practice-imports/declarations", async (req, res) => {
-  const parsed = z.object({ expectedRevision: z.number().int().nonnegative(), confirmed: z.literal(true), data: importDeclarationsSchema }).strict().safeParse(req.body);
+  const parsed = z.object({ expectedRevision: z.number().int().nonnegative(), confirmed: z.literal(true), data: importDeclarationsSchema,
+    nextPeriod: z.object({ packageId: z.string().min(1).max(200), sourceIds: z.array(z.string().regex(/^(attendance|billing)-[0-9a-f]{8,64}$/)).length(2), teamId: z.number().int().positive().nullable() }).strict().optional(),
+  }).strict().safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ error: "Enter explicit provider mappings, source-set dates and confirmation." });
   const { practiceId, accountId, actor } = scope(res);
   const { data: incomingData, expectedRevision } = parsed.data;
@@ -512,6 +542,22 @@ router.put("/practice-imports/declarations", async (req, res) => {
       eq(practiceImportSnapshotsTable.practiceId, practiceId), eq(practiceImportSnapshotsTable.accountId, accountId), eq(practiceImportSnapshotsTable.active, 1),
     ));
     const snapshots = active.map(snapshotFromRow);
+    let nextPeriodAudit: { period: { start: string; end: string; payDate: string } | null; sourceIds: string[]; carryover: { rows: number; matched: number; conflicts: number } } | null = null;
+    if (parsed.data.nextPeriod) {
+      const packages = await tx.select().from(practiceImportPackagesTable).where(and(
+        eq(practiceImportPackagesTable.practiceId, practiceId), eq(practiceImportPackagesTable.accountId, accountId), eq(practiceImportPackagesTable.active, 1),
+      ));
+      const pkg = packages.find(row => row.packageId === parsed.data.nextPeriod!.packageId);
+      const pair = pkg ? (await packageSources(tx, practiceId, accountId, active, packages)).get(pkg.id) : undefined;
+      if (!pair || stableJson(pair) !== stableJson([...parsed.data.nextPeriod.sourceIds].sort()))
+        return { status: "next-period-review" as const, reasons: ["This source pair does not match the saved upload. Reload saved history before reconciling."], period: null };
+      const journal = await readBillingResolutionJournal(tx, practiceId, accountId);
+      const plan = planNextReportPeriod({ snapshots, storedDeclarations: old, roster, teamId: parsed.data.nextPeriod.teamId,
+        newSourceIds: parsed.data.nextPeriod.sourceIds, today: new Date().toISOString().slice(0, 10), billingResolutions: journal.billingResolutions });
+      if (plan.status !== "ready" || !plan.data || stableJson(plan.data) !== stableJson(data))
+        return { status: "next-period-review" as const, reasons: plan.reasons.length ? plan.reasons : ["The reporting-period proposal changed. Reload saved history before reconciling."], period: plan.period };
+      nextPeriodAudit = { period: plan.period, sourceIds: parsed.data.nextPeriod.sourceIds, carryover: plan.carryover };
+    }
     if (validateHistoricalBillingProviders(data, roster, snapshots).length) return "historical";
     for (const provider of data.historicalBillingProviders ?? []) {
       const prior = old?.data.historicalBillingProviders?.find((row) => row.id === provider.id);
@@ -550,9 +596,11 @@ router.put("/practice-imports/declarations", async (req, res) => {
       await tx.insert(practiceImportAuditTable).values({ id: randomUUID(), practiceId, accountId, packageId: "historical-billing-providers", action: "confirm-historical-billing-providers", actor,
         detail: { version: 1, declarationRevision: expectedRevision + 1, providers: historicalBillingProviders ?? [] } });
     await tx.insert(practiceImportAuditTable).values({ id: randomUUID(), practiceId, accountId, packageId: "import-declarations", action: "confirm-import-declarations", actor,
-      detail: { oldDeclarations: old, newDeclarations: storedData, revision: expectedRevision + 1, basis: "owner-confirmation" } });
+      detail: { oldDeclarations: old, newDeclarations: storedData, revision: expectedRevision + 1,
+        basis: nextPeriodAudit ? "known-next-reporting-period" : "owner-confirmation", ...(nextPeriodAudit ? { nextPeriod: nextPeriodAudit } : {}) } });
     return "saved";
   });
+  if (typeof result === "object" && result.status === "next-period-review") return res.status(409).json({ code: "NEXT_PERIOD_REVIEW_REQUIRED", error: result.reasons.join(" "), period: result.period });
   if (result === "migration") return res.status(503).json({ code: "IMPORT_DECLARATIONS_MIGRATION_REQUIRED", error: "Apply migration 009 before confirming mappings and source sets." });
   if (result === "stale") return res.status(409).json({ error: "Import declarations changed. Reload before confirming." });
   if (result === "historical") return res.status(400).json({ error: "Historical billing identity or frozen source coverage needs review. Do not create a clinician card or reuse an active clinician name." });
@@ -830,6 +878,7 @@ router.post("/practice-imports/package", async (req, res) => {
       action: replacing ? "replace-overlap" : retaining ? "retain-overlap" : "import",
       actor,
       detail: {
+        sourceIds: snapshots.map(snapshot => `${snapshot.kind}-${snapshot.sourceHash}`).sort(),
         replacedSnapshotCount: replacing ? overlapping.length : 0,
         retainedOverlapSnapshotCount: retaining ? (automaticRetention ? reviewOverlapping.length : overlapping.length) : 0,
         automaticOverlapReconciliation: automaticRetention,
@@ -873,6 +922,7 @@ router.post("/practice-imports/package", async (req, res) => {
     });
   return res.json({
     status: result.status,
+    importedSourceIds: snapshots.map(source => `${source.kind}-${source.sourceHash}`),
     ...(await historyFor(practiceId, accountId)),
   });
 });
