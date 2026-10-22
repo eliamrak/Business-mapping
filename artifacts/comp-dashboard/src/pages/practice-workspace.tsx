@@ -196,6 +196,7 @@ import "@/pages/hub.css";
 import "@/pages/practice-workspace.css";
 import "@/pages/practice-approved.css";
 import "@/components/practice/historical-period-values.css";
+import { TidalMaterial } from "@/components/practice/tidal-material";
 
 type Mode = "practice" | "sandbox" | "goals";
 type IntegratedTool =
@@ -3695,7 +3696,8 @@ export default function PracticeWorkspace() {
     {viewProjection?.clinicianPace.map(person => <p className="pw-note" key={person.id}>{person.name}: {fmt(person.usedWeekly)} sessions / week · {person.basis}{person.recordedThrough ? ` · latest observation ${person.recordedThrough}` : ""}</p>)}
   </details>;
   return (
-    <div className="practice-theme pw-app" data-appearance="dark">
+    <div className="practice-theme pw-app" data-appearance="dark" data-material="tidal">
+      <TidalMaterial section={`${mode}:${section}:${visibleTool ?? ""}`} />
       <header className="pw-rail pw-top-navigation" aria-label="Practice navigation" data-unsaved-navigation>
         <div className="pw-brand">
           <span className="pw-brand-mark">EMC</span>

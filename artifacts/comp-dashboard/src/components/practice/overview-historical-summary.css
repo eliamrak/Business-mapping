@@ -10,9 +10,9 @@
 .pw-app .pw-overview-historical-summary.pw-overview-kpi-grid .sw-content > section {
   min-width: 0;
   padding: 12px;
-  border: 1px solid #46515a;
+  border: 1px solid var(--pw-tone-border-strong);
   border-radius: 8px;
-  background: #20272c;
+  background: var(--pw-tone-widget);
 }
 
 .pw-app .pw-overview-historical-summary.pw-overview-kpi-grid h3 {
@@ -84,7 +84,7 @@
   width: calc(var(--pw-overview-ring-size) - 24px);
   height: var(--pw-overview-ring-size);
   transform: translateX(-50%);
-  color: #9fd8c2;
+  color: var(--pw-tone-positive);
   font-size: 19px;
   font-weight: 600;
   font-variant-numeric: tabular-nums;
@@ -135,7 +135,7 @@
 
 .pw-app .pw-overview-historical-summary.pw-overview-kpi-grid .pw-overview-target {
   font-size: 12px;
-  color: #76dda4;
+  color: var(--pw-tone-goal);
 }
 
 .pw-app .pw-overview-historical-summary.pw-overview-kpi-grid details {
@@ -150,11 +150,11 @@
   font-size: 11px;
   align-content: center;
   cursor: pointer;
-  color: #c2cbd1;
+  color: var(--pw-tone-text-detail);
 }
 
 .pw-app .pw-overview-historical-summary.pw-overview-kpi-grid summary:focus-visible {
-  outline: 2px solid #76dda4;
+  outline: 2px solid var(--pw-tone-goal);
   outline-offset: 2px;
 }
 
@@ -170,7 +170,7 @@
 
 .pw-app .pw-overview-historical-summary.pw-overview-kpi-grid .pw-overview-exact-difference {
   margin-top: 0;
-  border-top: 1px solid #46515a;
+  border-top: 1px solid var(--pw-tone-border-strong);
 }
 
 .pw-app .pw-overview-historical-summary.pw-overview-kpi-grid > button {

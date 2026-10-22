@@ -1,0 +1,31 @@
+import fs from 'node:fs/promises';
+import path from 'node:path';
+import {createRequire} from 'node:module';
+const require=createRequire('/tmp/practice-oct20-render-deps/package.json');
+const {chromium}=require('playwright');
+const dir="/Users/eliam/Documents/Codex/2026-10-14/task-2/tidal-preview/integrated";
+const browser=await chromium.launch({headless:true,executablePath:'/Users/eliam/Library/Caches/ms-playwright/chromium_headless_shell-1234/chrome-headless-shell-mac-arm64/chrome-headless-shell'});
+const ctx=await browser.newContext({viewport:{width:1440,height:960},recordVideo:{dir:path.join(dir,'evidence/tour'),size:{width:1440,height:960}}});
+await ctx.addInitScript(()=>{const D=Date;window.Date=class extends D{constructor(...args){super(...(args.length?args:['2026-10-14T16:00:00Z']));}static now(){return new D('2026-10-14T16:00:00Z').valueOf();}};});
+const page=await ctx.newPage();
+const video=page.video();
+const errors=[];page.on('pageerror',e=>errors.push(e.message));
+await ctx.route('**/*',r=>new URL(r.request().url()).hostname==='127.0.0.1'?r.continue():r.abort());
+await page.goto('http://127.0.0.1:4183');await page.getByText('2 converted snapshots loaded',{exact:true}).waitFor();
+await page.waitForTimeout(500);
+for(let i=0;i<35;i++){await page.mouse.wheel(0,18);await page.waitForTimeout(20);}
+await page.waitForTimeout(500);
+for(let i=0;i<35;i++){await page.mouse.wheel(0,-18);await page.waitForTimeout(20);}
+const nav=page.getByRole('navigation',{name:'Practice sections',exact:true});
+await nav.getByRole('button',{name:/Sessions$/}).click();await page.waitForTimeout(700);
+await page.locator('.recharts-wrapper').first().hover({position:{x:300,y:100}}).catch(()=>{});await page.waitForTimeout(500);
+await nav.getByRole('button',{name:/Money$/}).click();await page.waitForTimeout(500);
+await page.getByRole('button',{name:'Budget',exact:true}).click();await page.waitForTimeout(700);
+await nav.getByRole('button',{name:/Goals$/}).click();await page.waitForTimeout(500);
+await page.getByRole('button',{name:'Edit layout',exact:true}).first().click();await page.waitForTimeout(500);
+await page.screenshot({path:path.join(dir,'evidence/layout-editor-1440.png'),fullPage:true});
+await page.getByRole('button',{name:'Done',exact:true}).first().click();
+await nav.getByRole('button',{name:/Overview$/}).click();await page.waitForTimeout(700);
+await ctx.close();await browser.close();
+await fs.copyFile(await video.path(),path.join(dir,'Practice-Tidal-Motion.webm'));
+console.log(JSON.stringify({errors,video:path.join(dir,'Practice-Tidal-Motion.webm')}));

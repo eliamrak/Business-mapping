@@ -1,0 +1,49 @@
+/* Owned presentation tokens. Dark defaults preserve existing non-Tidal surfaces. */
+:root {
+  --pw-tone-canvas: #090c10;
+  --pw-tone-navigation: #0d1116;
+  --pw-tone-panel: #12171d;
+  --pw-tone-shade: #182028;
+  --pw-tone-depth: #10161c;
+  --pw-tone-widget: #20272c;
+  --pw-tone-input: #19232b;
+  --pw-tone-action: #1b252e;
+  --pw-tone-border: #303842;
+  --pw-tone-border-strong: #46515a;
+  --pw-tone-border-action: #46535f;
+  --pw-tone-border-input: #52616d;
+  --pw-tone-track: #3b454b;
+  --pw-tone-text: #f2f4f5;
+  --pw-tone-text-secondary: #d7e4e9;
+  --pw-tone-text-detail: #c2cbd1;
+  --pw-tone-text-muted: #a8b3be;
+  --pw-tone-positive: #9fd8c2;
+  --pw-tone-goal: #76dda4;
+  --pw-tone-negative: #ee8c84;
+  --pw-tone-text-quiet: #7f939d;
+  --pw-tone-text-quiet-nav: #7f949f;
+}
+:root[data-practice-material="tidal"], .pw-app[data-material="tidal"] {
+  --pw-tone-canvas: #e3eef2;
+  --pw-tone-navigation: #d8e8ef;
+  --pw-tone-panel: #f1f6f8;
+  --pw-tone-shade: #e5eff3;
+  --pw-tone-depth: #edf5f7;
+  --pw-tone-widget: #e4eff3;
+  --pw-tone-input: #f5f9fa;
+  --pw-tone-action: #edf5f7;
+  --pw-tone-border: #a6bdc6;
+  --pw-tone-border-strong: #809da9;
+  --pw-tone-border-action: #8aa5b0;
+  --pw-tone-border-input: #7e9ca9;
+  --pw-tone-track: #b2c8cf;
+  --pw-tone-text: #102f43;
+  --pw-tone-text-secondary: #25495b;
+  --pw-tone-text-detail: #315262;
+  --pw-tone-text-muted: #3b5a69;
+  --pw-tone-positive: #006e62;
+  --pw-tone-goal: #097751;
+  --pw-tone-negative: #a32f3e;
+  --pw-tone-text-quiet: #3c5865;
+  --pw-tone-text-quiet-nav: #3c5865;
+}

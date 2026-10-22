@@ -14,7 +14,7 @@
 .pw-app .pw-historical-period-detail details { font-size: 12px; }
 .pw-app .pw-historical-period-detail summary { cursor: pointer; min-height: 32px; align-content: center; }
 .pw-app .pw-historical-period-detail p { font-size: 12px; margin: 4px 0; }
-.pw-app .pw-historical-difference { font-size: 12px; margin: 10px 0 0; color: #c2cbd1; }
+.pw-app .pw-historical-difference { font-size: 12px; margin: 10px 0 0; color: var(--pw-tone-text-detail); }
 .pw-app .pw-overview-historical-summary { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; }
 .pw-app .pw-overview-historical-summary > section { min-width: 0; padding: 14px 0; border-top: 1px solid #34414b; }
 .pw-app .pw-overview-historical-summary h3 { font-size: 17px; margin: 0 0 12px; }
@@ -69,7 +69,7 @@
 }
 .pw-app .pw-clinical-metric-grid.pw-sessions-clinical-grid { grid-template-columns: minmax(0, 1fr); }
 .pw-app .pw-clinical-history-stack { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; min-width: 0; align-content: start; }
-.pw-app .pw-clinical-history-stack > .pw-clinical-card { min-width: 0; padding: 14px; border: 1px solid #46515a; border-radius: 8px; background: #20272c; box-shadow: none; }
+.pw-app .pw-clinical-history-stack > .pw-clinical-card { min-width: 0; padding: 14px; border: 1px solid var(--pw-tone-border-strong); border-radius: 8px; background: var(--pw-tone-widget); box-shadow: none; }
 .pw-app .pw-clinical-history-stack h3 { font-size: 17px; margin: 0 0 6px; }
 .pw-app .pw-clinical-history-stack > .pw-clinical-card > p { margin: 0 0 8px; }
 .pw-app .pw-clinical-history-stack .pw-historical-period-difference { grid-column: 1 / -1; font-size: 12px; margin: 0; }

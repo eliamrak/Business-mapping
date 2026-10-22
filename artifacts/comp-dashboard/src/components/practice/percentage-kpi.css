@@ -1,8 +1,8 @@
 .pw-percentage-kpi {
-  --pw-percentage-color: #9fd8c2;
-  --pw-percentage-track: #3b454b;
-  --pw-percentage-practice: #f2f4f5;
-  --pw-percentage-goal: #76dda4;
+  --pw-percentage-color: var(--pw-tone-positive);
+  --pw-percentage-track: var(--pw-tone-track);
+  --pw-percentage-practice: var(--pw-tone-text);
+  --pw-percentage-goal: var(--pw-tone-goal);
   --pw-percentage-capacity: #b9c2c8;
   display: grid;
   justify-items: center;
@@ -72,7 +72,7 @@
   height: 16px;
   border-radius: 1px;
   background: var(--pw-percentage-practice);
-  box-shadow: 0 0 0 1px #12171d;
+  box-shadow: 0 0 0 1px var(--pw-tone-panel);
   content: "";
 }
 
