@@ -39,7 +39,14 @@ function addPackage(p,time=now){
   if(!duplicate){for(const s of parse(p))if(!state.snapshots.some(v=>v.id===s.id))state.snapshots.push(s);state.packages.push({packageId:p.packageId,contentHash:hash(p),exportedAt:p.exportedAt,importedAt:time,sourceIds});journal.push({action:'raw-package',sourceIds});}
   return {...structuredClone(state),importedSourceIds:sourceIds,status:duplicate?'duplicate':'added'};
 }
-function reset(scenario){mode=scenario;requests=[];journal=[];state={snapshots:[],packages:[],declarations:structuredClone(declaration),billingCodeMinutes:{'90837':60},sameDayVisitOverrides:{},billingResolutions:[],billingResolutionRevision:0};addPackage(prior,'2026-10-13T12:00:00Z');journal.push({action:'prior-source-proof'},{action:'prior-owner-confirmation'});if(['saved','missing-source-ids','empty-source-ids','missing-frozen-member'].includes(scenario))addPackage(incoming);
+function reset(scenario){mode=scenario;requests=[];journal=[];state={snapshots:[],packages:[],declarations:structuredClone(declaration),billingCodeMinutes:{'90837':60},sameDayVisitOverrides:{},billingResolutions:[],billingResolutionRevision:0};addPackage(prior,'2026-10-13T12:00:00Z');journal.push({action:'prior-source-proof'},{action:'prior-owner-confirmation'});if(['saved','saved-historical','missing-source-ids','empty-source-ids','missing-frozen-member'].includes(scenario))addPackage(incoming);
+  if(scenario==='saved-historical'){
+    const label='(deleted) Synthetic Former';
+    for(const source of state.snapshots.filter(s=>oldSources.some(old=>old.id===s.id)))source.rows.push(source.kind==='attendance'
+      ?{...source.rows[0],clientId:'historical-synthetic',clinician:label,sourceRowHash:'historical-attendance'}
+      :{...source.rows[0],clientId:'historical-synthetic',clinician:label,sourceRowHash:'historical-billing'});
+    state.declarations.data.historicalBillingProviders=[{id:'00000000-0000-4000-8000-000000000001',sourceLabel:label,sourceSets:[{snapshotIds:[oldSources.find(s=>s.kind==='billing').id],start:'2026-09-10',end:'2026-10-12',complete:true}]}];
+  }
   if(scenario==='missing-source-ids')delete state.packages.at(-1).sourceIds;
   if(scenario==='empty-source-ids')state.packages.at(-1).sourceIds=[];
   if(scenario==='missing-frozen-member')state.declarations.data.sourceSets[0].snapshotIds=['attendance-deadbeef'];
@@ -104,6 +111,19 @@ try{
     const button=panel().getByRole('button',{name:'Reconcile this period',exact:true});await button.focus();await page.keyboard.press('Enter');await settled();
     assert.equal(count('PUT'),1);assert.equal(count('POST'),0);assert.equal(raw(),before);assert.equal(state.declarations.data.sourceSets.length,4);assert.deepEqual(state.declarations.data.sourceSets.slice(0,2),declaration.data.sourceSets);assert.equal(journal.length,5);await coverage('2026-10-21');
     await page.reload();await enter();await coverage('2026-10-21');assert.equal(count('PUT'),1);await shot('saved-pair-reconciled-1440');
+  });
+  await test('saved-frozen-historical-exclusion-preserved',async()=>{
+    await open('saved-historical');await coverage('2026-10-07');
+    const beforeRows=raw(),beforeData=structuredClone(state.declarations.data),beforeJournal=JSON.stringify(state.billingResolutions);
+    const proposal=plan(newSources.map(s=>s.id));assert.equal(proposal.status,'ready',proposal.reasons.join(' '));assert.deepEqual(proposal.carryover,{rows:25,matched:25,conflicts:0});
+    const review=panel().getByLabel('Saved report period reconciliation',{exact:true});assert.match(await review.innerText(),/25 \/ 25 prior-period rows match/);
+    assert.equal(count('POST'),0);assert.equal(count('PUT'),0);
+    await review.getByRole('button',{name:'Reconcile this period',exact:true}).click();await settled();
+    assert.equal(count('POST'),0);assert.equal(count('PUT'),1);assert.equal(raw(),beforeRows);assert.equal(JSON.stringify(state.billingResolutions),beforeJournal);
+    assert.deepEqual(state.declarations.data.historicalBillingProviders,beforeData.historicalBillingProviders);
+    assert.deepEqual(state.declarations.data.mappings,beforeData.mappings);assert.deepEqual(state.declarations.data.sourceSets.slice(0,2),beforeData.sourceSets);
+    assert.ok(state.declarations.data.sourceSets.every(set=>set.clinicianIds.every(id=>[1,2].includes(id))));
+    await coverage('2026-10-21');await shot('saved-historical-preserved');
   });
   await test('upload-next-period',async()=>{
     await open('upload');const choice=panel().getByRole('button',{name:'Next full period',exact:true});assert.equal(await choice.getAttribute('aria-pressed'),'true');assert.match(await panel().locator('.pw-report-period-choice').innerText(),/2026-10-08.*2026-10-21/);

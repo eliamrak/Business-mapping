@@ -106,8 +106,9 @@ export function planNextReportPeriod(input: NextReportPeriodInput): NextReportPe
           issue(`Frozen member ${source.id} has a row outside its source bounds.`);
         const id = resolve(row);
         if (id === null || !set.clinicianIds.includes(id)) {
-          if (set.kind !== "billing" || resolveHistoricalBillingProvider(row.clinician, roster, data) === null)
-            issue(`Frozen member ${source.id} has an unmapped or out-of-scope provider.`);
+          // Preserve confirmed historical exclusions in frozen reports of either kind.
+          if (resolveHistoricalBillingProvider(row.clinician, roster, data) === null)
+            issue(`Frozen member ${source.id} has an unmapped or out-of-scope provider ${JSON.stringify(row.clinician)}.`);
         }
       }
     }
@@ -194,7 +195,7 @@ export function planNextReportPeriod(input: NextReportPeriodInput): NextReportPe
       issue(`Selected ${source.kind} coverage does not intersect the next period ${period.start} through ${period.end}.`);
     for (const row of source.rows) {
       const id = resolve(row);
-      if (id === null || !scope.includes(id)) issue(`Selected ${source.kind} provider lacks valid prior confirmed team scope.`);
+      if (id === null || !scope.includes(id)) issue(`Selected ${source.kind} provider lacks valid prior confirmed team scope: ${JSON.stringify(row.clinician)}.`);
       if (!row.clientId.trim()) issue(`Selected ${source.kind} has a row without a client identity.`);
       if (!validDate(row.serviceDate) || row.serviceDate < source.coverageStart || row.serviceDate > source.coverageEnd)
         issue(`Selected ${source.kind} row has an invalid service date or lies outside its source bounds.`);

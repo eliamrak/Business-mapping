@@ -21,9 +21,9 @@ PORT=23894 BASE_PATH=/ NODE_ENV=production pnpm --filter @workspace/comp-dashboa
 NODE_ENV=production pnpm --filter @workspace/api-server run build
 ```
 
-Expected functional/API counts after the deterministic duration follow-up: 1,215 / 77. The third command includes the separately accepted publisher mobile files; this source branch locally tests the other three suites. Do not use a broad API integration command requiring disposable database fixtures against the existing environment.
+Expected functional/API counts after the frozen historical-attendance follow-up: 1,220 / 79. The third command includes the separately accepted publisher mobile files; this source branch locally tests the other three suites. Do not use a broad API integration command requiring disposable database fixtures against the existing environment.
 
-Mounted UI harness: `node verification/next-period-render.mjs`, 14 checks. It needs Playwright/Chromium and local dependency/assets paths documented in its source; these are environment prerequisites, not permission to download client records. The current Mac evidence is recorded in the adjacent results JSON.
+Mounted UI harness: `node verification/next-period-render.mjs`, 24 checks including saved historical-exclusion reconciliation. It needs Playwright/Chromium and local dependency/assets paths documented in its source; these are environment prerequisites, not permission to download client records. The current Mac evidence is recorded in the adjacent results JSON.
 
 ## Existing hosting contract
 

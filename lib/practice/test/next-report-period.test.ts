@@ -47,6 +47,62 @@ test("Oct 12 frozen sets imply Oct 7 fully ended, then Oct 8-21 with Oct 22 payd
   ]);
 });
 
+function historicalAttendanceFixture() {
+  const f = fixture();
+  const historical = { ...row("historical-only", "2026-09-23"), clinician: "(deleted) Synthetic Former" };
+  changeRows(f, 0, rows => [...rows, historical]);
+  changeRows(f, 1, rows => [...rows, historical]);
+  f.storedDeclarations.data.historicalBillingProviders = [{
+    id: "00000000-0000-4000-8000-000000000001", sourceLabel: historical.clinician,
+    sourceSets: [{ snapshotIds: [ids.oldBilling], start: "2026-09-10", end: "2026-10-12", complete: true }],
+  }];
+  return f;
+}
+
+test("confirmed historical billing-only identity does not invalidate frozen attendance", () => {
+  const f = historicalAttendanceFixture(), before = structuredClone(f);
+  const plan = planNextReportPeriod(f);
+  assert.equal(plan.status, "ready", plan.reasons.join(" "));
+  assert.deepEqual(plan.period, { start: "2026-10-08", end: "2026-10-21", payDate: "2026-10-22" });
+  assert.deepEqual(plan.carryover, { rows: 25, matched: 25, conflicts: 0 });
+  assert.deepEqual(plan.data!.historicalBillingProviders, f.storedDeclarations.data.historicalBillingProviders);
+  assert.deepEqual(plan.data!.sourceSets.slice(0, 2), f.storedDeclarations.data.sourceSets);
+  assert.ok(plan.data!.sourceSets.every(set => set.clinicianIds.every(id => id === 1)));
+  assert.deepEqual(plan.data!.mappings, f.storedDeclarations.data.mappings);
+  assert.deepEqual(f, before);
+});
+
+test("frozen historical attendance still needs its existing explicit classification", () => {
+  const f = historicalAttendanceFixture();
+  f.storedDeclarations.data.historicalBillingProviders = [];
+  const plan = blocked(f, /Frozen member attendance-00000001 has an unmapped or out-of-scope provider/);
+  assert.ok(plan.reasons.some(reason => reason.includes(JSON.stringify("(deleted) Synthetic Former"))));
+});
+
+test("one confirmed historical identity never admits a different unmapped frozen provider", () => {
+  const f = historicalAttendanceFixture();
+  changeRows(f, 0, rows => [...rows, { ...row("genuinely-unmapped", "2026-09-23"), clinician: "Synthetic Unknown" }]);
+  const plan = blocked(f, /Frozen member attendance-00000001 has an unmapped or out-of-scope provider/);
+  assert.ok(plan.reasons.some(reason => reason.includes(JSON.stringify("Synthetic Unknown"))));
+});
+
+test("frozen historical exclusion does not admit incoming historical or new attendance providers", () => {
+  for (const clinician of ["(deleted) Synthetic Former", "Synthetic Unknown"]) {
+    const f = historicalAttendanceFixture();
+    changeRows(f, 2, rows => [...rows, { ...row("incoming-other", "2026-10-20"), clinician }]);
+    const plan = blocked(f, /Selected attendance provider lacks valid prior confirmed team scope/);
+    assert.ok(plan.reasons.some(reason => reason.includes(JSON.stringify(clinician))));
+  }
+});
+
+test("excluded historical carryover cannot masquerade as an admitted clinician visit", () => {
+  const f = historicalAttendanceFixture();
+  changeRows(f, 2, rows => [...rows, { ...row("historical-only", "2026-09-23"), clinician: "(deleted) Synthetic Former" }]);
+  const plan = blocked(f, /Selected attendance provider lacks valid prior confirmed team scope/);
+  assert.match(plan.reasons.join(" "), /novel facts without previously admitted complete source evidence/);
+  assert.deepEqual(plan.carryover, { rows: 26, matched: 25, conflicts: 1 });
+});
+
 test("25 occupied Oct 7 rows cannot manufacture prior period proof", () => {
   const f = fixture();
   f.storedDeclarations.data.sourceSets = [];

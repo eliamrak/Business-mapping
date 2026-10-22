@@ -368,6 +368,60 @@ function approvedCharges() {
     packageId: "billing-resolutions", actor: "synthetic-owner", detail: { revision: 1, oldRevision: 0, resolution } });
 }
 
+function frozenHistoricalAttendance() {
+  approvedCharges();
+  const historical = { ...row("synthetic-former", "2026-09-23"), clinician: "(deleted) Synthetic Former" };
+  for (const snapshot of state.snapshots.slice(0, 2)) {
+    snapshot.rows.push(structuredClone(historical));
+    snapshot.rowCount = snapshot.rows.length;
+  }
+  const providers = [{ id: "00000000-0000-4000-8000-000000000002", sourceLabel: historical.clinician,
+    sourceSets: [{ snapshotIds: [ids.oldBilling], start: "2026-09-10", end: "2026-10-12", complete: true }] }];
+  state.audits.push({ id: "synthetic-historical-registry", practiceId, accountId: practiceId,
+    action: "confirm-historical-billing-providers", packageId: "historical-billing-providers", actor: "synthetic-owner",
+    detail: { version: 1, declarationRevision: 4, providers } });
+  return providers;
+}
+
+test("PUT accepts already-confirmed historical billing-only labels in frozen attendance and preserves both journals", async () => {
+  const providers = frozenHistoricalAttendance(), payload = proposal(), before = durable();
+  payload.data.historicalBillingProviders = structuredClone(providers);
+  const response = await call(put, payload);
+  assert.equal(response.statusCode, 200, JSON.stringify(response.body));
+  assert.equal(response.body.declarations.revision, 5);
+  assert.deepEqual(response.body.declarations.data, payload.data);
+  assert.deepEqual(response.body.declarations.data.historicalBillingProviders, providers);
+  assert.deepEqual(response.body.declarations.data.mappings, before.saved.data.mappings);
+  for (const set of response.body.declarations.data.sourceSets) assert.deepEqual(set.clinicianIds, [1]);
+  assert.deepEqual(state.saved.data.sourceSets.slice(0, 2), before.saved.data.sourceSets);
+  assert.deepEqual(state.saved.data.mappings, before.saved.data.mappings);
+  assert.ok(!Object.hasOwn(state.saved.data, "historicalBillingProviders"));
+  assert.ok(!Object.hasOwn(state.saved.data, "billingResolutions"));
+  assert.deepEqual(response.body.billingResolutions, [before.audits[0].detail.resolution]);
+  assert.equal(response.body.billingResolutionRevision, 1);
+  assert.deepEqual(state.audits.slice(0, 2), before.audits);
+  assert.equal(state.audits.length, 3);
+  assert.equal(state.audits[2].action, "confirm-import-declarations");
+  assert.equal(state.audits[2].detail.basis, "known-next-reporting-period");
+  assert.deepEqual(state.audits[2].detail.nextPeriod.carryover, { rows: 25, matched: 25, conflicts: 0 });
+  assert.deepEqual(state.snapshots, before.snapshots);
+  assert.deepEqual(state.packages, before.packages);
+  assert.deepEqual(state.roster, before.roster);
+  assert.deepEqual(state.writes, ["declarations", "audit"]);
+  const after = durable(), reloaded = await call(get);
+  assert.deepEqual(reloaded.body.declarations.data.historicalBillingProviders, providers);
+  assert.deepEqual(reloaded.body.billingResolutions, response.body.billingResolutions);
+  assert.deepEqual(durable(), after);
+  assert.deepEqual(state.writes, ["declarations", "audit"]);
+});
+
+test("PUT rejects unclassified frozen historical attendance with an actionable provider label and zero writes", async () => {
+  frozenHistoricalAttendance();
+  state.audits = state.audits.filter(audit => audit.action !== "confirm-historical-billing-providers");
+  const response = await reviewWithoutWrites(proposal(), /Frozen member attendance-00000001 has an unmapped or out-of-scope provider/);
+  assert.ok(response.body.error.includes(JSON.stringify("(deleted) Synthetic Former")), response.body.error);
+});
+
 test("PUT rederives with the saved billing journal and preserves approvals and original anchors", async () => {
   approvedCharges(); const before = durable();
   const response = await call(put, proposal());

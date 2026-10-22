@@ -28,6 +28,7 @@
   },
   "screenshots": [
     "/tmp/practice-next-period-render/saved-pair-reconciled-1440.png",
+    "/tmp/practice-next-period-render/saved-historical-preserved.png",
     "/tmp/practice-next-period-render/upload-success-1440.png",
     "/tmp/practice-next-period-render/changed-carryover.png",
     "/tmp/practice-next-period-render/metadata-stale.png",
@@ -211,6 +212,152 @@
         {
           "method": "GET",
           "path": "/api/practice-imports/capabilities"
+        }
+      ],
+      "declarationRevision": 3,
+      "sourceSets": 4,
+      "journalEntries": 5
+    },
+    {
+      "name": "saved-frozen-historical-exclusion-preserved",
+      "pass": true,
+      "requests": [
+        {
+          "method": "GET",
+          "path": "/api/hub"
+        },
+        {
+          "method": "GET",
+          "path": "/api/hub/context"
+        },
+        {
+          "method": "GET",
+          "path": "/api/business-goals"
+        },
+        {
+          "method": "GET",
+          "path": "/api/scenarios"
+        },
+        {
+          "method": "GET",
+          "path": "/api/practice-imports"
+        },
+        {
+          "method": "GET",
+          "path": "/api/practice-imports/billing-resolution-candidates"
+        },
+        {
+          "method": "GET",
+          "path": "/api/practice-imports/capabilities"
+        },
+        {
+          "method": "PUT",
+          "path": "/api/practice-imports/declarations",
+          "body": {
+            "expectedRevision": 2,
+            "confirmed": true,
+            "data": {
+              "version": 1,
+              "mappings": [
+                {
+                  "sourceLabel": "Elia",
+                  "clinicianId": 1,
+                  "clinicianLabel": "Elia",
+                  "teamId": 1
+                },
+                {
+                  "sourceLabel": "Erin",
+                  "clinicianId": 2,
+                  "clinicianLabel": "Erin",
+                  "teamId": 1
+                }
+              ],
+              "sourceSets": [
+                {
+                  "kind": "attendance",
+                  "snapshotIds": [
+                    "attendance-8dba12d3"
+                  ],
+                  "clinicianIds": [
+                    1,
+                    2
+                  ],
+                  "start": "2026-09-10",
+                  "end": "2026-10-12",
+                  "complete": true
+                },
+                {
+                  "kind": "billing",
+                  "snapshotIds": [
+                    "billing-98c4b484"
+                  ],
+                  "clinicianIds": [
+                    1,
+                    2
+                  ],
+                  "start": "2026-09-10",
+                  "end": "2026-10-12",
+                  "complete": true
+                },
+                {
+                  "kind": "attendance",
+                  "snapshotIds": [
+                    "attendance-8dba12d3",
+                    "attendance-494fc1e6"
+                  ],
+                  "clinicianIds": [
+                    1,
+                    2
+                  ],
+                  "start": "2026-09-10",
+                  "end": "2026-10-21",
+                  "complete": true
+                },
+                {
+                  "kind": "billing",
+                  "snapshotIds": [
+                    "billing-98c4b484",
+                    "billing-fa0f7fc2"
+                  ],
+                  "clinicianIds": [
+                    1,
+                    2
+                  ],
+                  "start": "2026-09-10",
+                  "end": "2026-10-21",
+                  "complete": true
+                }
+              ],
+              "historicalBillingProviders": [
+                {
+                  "id": "00000000-0000-4000-8000-000000000001",
+                  "sourceLabel": "(deleted) Synthetic Former",
+                  "sourceSets": [
+                    {
+                      "snapshotIds": [
+                        "billing-98c4b484"
+                      ],
+                      "start": "2026-09-10",
+                      "end": "2026-10-12",
+                      "complete": true
+                    }
+                  ]
+                }
+              ]
+            },
+            "nextPeriod": {
+              "packageId": "synthetic-next",
+              "sourceIds": [
+                "attendance-494fc1e6",
+                "billing-fa0f7fc2"
+              ],
+              "teamId": 1
+            }
+          }
+        },
+        {
+          "method": "GET",
+          "path": "/api/practice-imports/billing-resolution-candidates"
         }
       ],
       "declarationRevision": 3,
@@ -1290,11 +1437,11 @@
         },
         {
           "method": "GET",
-          "path": "/api/scenarios"
+          "path": "/api/practice-imports"
         },
         {
           "method": "GET",
-          "path": "/api/practice-imports"
+          "path": "/api/scenarios"
         },
         {
           "method": "GET",
@@ -2427,11 +2574,11 @@
         },
         {
           "method": "GET",
-          "path": "/api/business-goals"
+          "path": "/api/scenarios"
         },
         {
           "method": "GET",
-          "path": "/api/scenarios"
+          "path": "/api/business-goals"
         },
         {
           "method": "GET",

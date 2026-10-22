@@ -44,6 +44,18 @@ The minimal correction accumulates configured minutes per normalized clinician, 
 
 The full functional suite now passes 1,215 tests; the 77 database-free API checks, 35 local compatibility checks, library build, both artifact typechecks and both production builds pass. See the independent review for the separately reproduced baseline failure and bounded numerical findings. No database or import/declaration change is involved; this follows the held saved-review candidate and requires no duplicate publication.
 
+## Frozen historical attendance consistency
+
+The live Source receipt established that the saved upload has two linked sources, both active, with no missing frozen links. Its first planner exception concerned an unmapped/out-of-scope provider in a frozen attendance member. Existing configuration already records historical billing-only classifications; the specific offending label was not established by the available UI and is not guessed here.
+
+The existing complete-report evaluator and declaration API allow those explicit historical identities to occur in frozen attendance without becoming clinician activity. The new planner incorrectly limited that exemption to billing sources. The narrow correction removes only that report-kind restriction during frozen-member validation, using the same existing explicit identity resolver. No new mapping or historical identity is created. Mappings, original source sets, declared clinician IDs, raw rows and approvals remain unchanged. Incoming historical/unknown providers and excluded historical carryovers remain blocked under the original rules. Any genuine unmapped frozen or incoming provider now identifies its exact source provider label in the exception, not client rows or guessed identity.
+
+Five new planner regressions cover the existing deleted-provider classification, missing classification, different unknown provider, incoming providers, and excluded historical carryover. Two actual-route database-free tests cover successful metadata planning/persistence with all previous classifications preserved and a missing-classification 409 with zero writes. A mounted saved-upload case checks the 25/25 proposal and preserved raw rows, mappings, registry, source sets and clinician scope. All writes in these tests are synthetic.
+
+The publication decision remains conditional on the real existing classification; code publication itself does not admit the owner's period. Read the post-publication proposal and any exact provider exception before any authorized real metadata action. Do not reupload or re-enter known dates, auto-map a provider, or claim a particular historical person caused the original exception without source evidence.
+
+Frozen follow-up validation: 1,220 functional tests, 79 database-free API tests, 35 local compatibility checks, 24 mounted browser checks, library build, both artifact typechecks and both production builds pass. Independent review reproduces the old blocked/new ready difference and confirms the actual clinical coverage/overlay excludes historical rows, yielding the expected 27 visits, $300 selected-period charges and 25/25 matched carryovers in its synthetic fixture. Eleven additional negative cases remain blocked. This is code/test evidence, not certification of the live package.
+
 ## Publisher gates
 
 Use only the base-to-reviewed-candidate delta. Re-read the actual clean publisher HEAD/tree, check touched-file preimages against the base, retain a rollback ref, apply with `git apply --check --index` followed by `git apply --index`, and create a normal descendant commit. Preserve all publisher memory/history, `.replit`, artifact contracts and accepted mobile-readiness changes. Do not reset history or copy a development database.
