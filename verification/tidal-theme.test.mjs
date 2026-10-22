@@ -97,11 +97,21 @@ test("all changed/new files stay within reviewed theme, PDF and mobile scope", (
     "verification/data-import-readability.mjs", "verification/data-import-readability-results.json",
     "verification/OCTOBER22-DATA-READABILITY-RECEIPT.md",
   ]);
+  const reviewedIconFollowup = new Set([
+    "artifacts/comp-dashboard/index.html",
+    ...["apple-touch-icon.png", "favicon-16.png", "favicon-32.png", "favicon.svg", "favicon.ico",
+      "icon-192.png", "icon-256.png", "icon-512.png", "logo.svg", "maskable-512.png", "site.webmanifest"].map(name => "artifacts/comp-dashboard/public/" + name),
+    src + "assets/tpa-horizon-lens-refined.original.png", "artifacts/comp-mobile/app.json",
+    ...["icon.png", "favicon-32.png", "tpa-adaptive-foreground.png"].map(name => "artifacts/comp-mobile/assets/images/" + name),
+    "tools/practice-converter/Resources/converter.icns",
+    ...["prepare-tpa-icons.mjs", "render-tpa-icons.swift", "tpa-icon-manifest.json", "tpa-icon-visual-qa.mjs",
+      "tpa-icons.test.mjs", "tpa-icon-visual-results.json", "OCTOBER22-TPA-HORIZON-ICON-RECEIPT.md"].map(name => "verification/" + name),
+  ]);
   const changes = [...git("diff", base, "--name-only", "-z").split("\0"), ...git("ls-files", "--others", "--exclude-standard", "-z").split("\0")].filter(Boolean);
   for (const file of changes.filter(file => reviewedMobileReadiness.has(file))) {
     assert.equal(createHash("sha256").update(fs.readFileSync(path.join(root, file))).digest("hex"), reviewedMobileReadiness.get(file), `Reviewed mobile bytes changed: ${file}`);
   }
-  assert.deepEqual(changes.filter(file => !allowed.has(file) && !publisherHistory.has(file) && !reviewedPdfFollowup.has(file) && !reviewedMobileReadiness.has(file) && !reviewedDataFollowup.has(file)), [], "Unexpected edits (including schema/API/dependencies) require separate review");
+  assert.deepEqual(changes.filter(file => !allowed.has(file) && !publisherHistory.has(file) && !reviewedPdfFollowup.has(file) && !reviewedMobileReadiness.has(file) && !reviewedDataFollowup.has(file) && !reviewedIconFollowup.has(file)), [], "Unexpected edits (including schema/API/dependencies) require separate review");
 });
 
 test("token defaults are statically imported by the eagerly loaded workspace", () => {

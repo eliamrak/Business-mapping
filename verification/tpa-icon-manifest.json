@@ -1,0 +1,124 @@
+{
+  "libraryFileId": "libfile_dceb00a6bf108191baf83dc4635958a2",
+  "selection": "Refined 5 Horizon Lens",
+  "original": {
+    "path": "artifacts/comp-dashboard/src/assets/tpa-horizon-lens-refined.original.png",
+    "bytes": 1949503,
+    "sha256": "21890ae5ad2f156e71541fb72b145a9c044fb13f301eedaa8c27e0cb64b9edfa",
+    "width": 1254,
+    "height": 1254
+  },
+  "version": "21890ae5ad2f",
+  "processing": "Exact source raster, sRGB resampling only; no generation, tracing, added lettering or artwork reinterpretation",
+  "padding": {
+    "webMaskableScale": 0.9,
+    "androidAdaptiveScale": 0.68,
+    "macContentScale": 0.82,
+    "macSmallContentScale": 0.92,
+    "macCornerRadiusRatio": 0.23
+  },
+  "assets": [
+    {
+      "path": "artifacts/comp-dashboard/public/favicon-16.png",
+      "bytes": 819,
+      "sha256": "a6dcbd15efeb47cd093c3354f9ae2fef8b3389b008232111f848b8bad153e519",
+      "width": 16,
+      "height": 16,
+      "pngColorType": 2
+    },
+    {
+      "path": "artifacts/comp-dashboard/public/favicon-32.png",
+      "bytes": 2255,
+      "sha256": "ee06c6c2de739d531b1199a52daaf2ffcbefe037f7a665374b5ff478eea8a12e",
+      "width": 32,
+      "height": 32,
+      "pngColorType": 2
+    },
+    {
+      "path": "artifacts/comp-dashboard/public/apple-touch-icon.png",
+      "bytes": 38860,
+      "sha256": "c5e39b9cd94aabb8bec03213d2d218dd700136458d19d9002e81f8f828f0b4aa",
+      "width": 180,
+      "height": 180,
+      "pngColorType": 2
+    },
+    {
+      "path": "artifacts/comp-dashboard/public/icon-192.png",
+      "bytes": 43742,
+      "sha256": "66133feb90a5df1069bfac3089e25341ca92b3e1432e9847a81e5a68d19eec84",
+      "width": 192,
+      "height": 192,
+      "pngColorType": 2
+    },
+    {
+      "path": "artifacts/comp-dashboard/public/icon-256.png",
+      "bytes": 74197,
+      "sha256": "e1fb1712cd167baa713208cc06694eb36d656e655187eca0a1656c9ecd9ce7a3",
+      "width": 256,
+      "height": 256,
+      "pngColorType": 2
+    },
+    {
+      "path": "artifacts/comp-dashboard/public/icon-512.png",
+      "bytes": 302829,
+      "sha256": "ca81cf530a23ae7dcf00e601dbaa6e20dbcec6b49f91b030058d6da837e7a959",
+      "width": 512,
+      "height": 512,
+      "pngColorType": 2
+    },
+    {
+      "path": "artifacts/comp-dashboard/public/maskable-512.png",
+      "bytes": 237608,
+      "sha256": "b56742fec368663d4d6c3c60cd6de930ba49ec5a314c8c69cf66d9315c00dc9c",
+      "width": 512,
+      "height": 512,
+      "pngColorType": 2
+    },
+    {
+      "path": "artifacts/comp-mobile/assets/images/icon.png",
+      "bytes": 1287251,
+      "sha256": "3beb38a74a876217c01d3fb742c888a49afe298687f4e43eeaebdff8cb04006c",
+      "width": 1024,
+      "height": 1024,
+      "pngColorType": 2
+    },
+    {
+      "path": "artifacts/comp-mobile/assets/images/tpa-adaptive-foreground.png",
+      "bytes": 701604,
+      "sha256": "80a4fd18f76451244e71f69a81297adcf27c681a59b3b608380b0a77f1d1f4b8",
+      "width": 1024,
+      "height": 1024,
+      "pngColorType": 6
+    },
+    {
+      "path": "artifacts/comp-mobile/assets/images/favicon-32.png",
+      "bytes": 2255,
+      "sha256": "ee06c6c2de739d531b1199a52daaf2ffcbefe037f7a665374b5ff478eea8a12e",
+      "width": 32,
+      "height": 32,
+      "pngColorType": 2
+    }
+  ],
+  "otherAssets": [
+    {
+      "path": "artifacts/comp-dashboard/public/favicon.svg",
+      "bytes": 51973,
+      "sha256": "6b44c3659edf852c7fdafdd6001ed23b90f2d34ef8e4abe0b95c25feba69633b"
+    },
+    {
+      "path": "artifacts/comp-dashboard/public/logo.svg",
+      "bytes": 51973,
+      "sha256": "6b44c3659edf852c7fdafdd6001ed23b90f2d34ef8e4abe0b95c25feba69633b"
+    },
+    {
+      "path": "artifacts/comp-dashboard/public/favicon.ico",
+      "bytes": 7326,
+      "sha256": "53b8c084083d891068ed6918251d2c9b21f94451f4071d374bd81e131ab76e63"
+    },
+    {
+      "path": "tools/practice-converter/Resources/converter.icns",
+      "bytes": 1689061,
+      "sha256": "065da2458907fe16a32fa2ca5b22600eb14d9e19411d02f442d4b70cfcfe9e18"
+    }
+  ]
+}

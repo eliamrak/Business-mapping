@@ -1,0 +1,42 @@
+{
+  "sourceUnchanged": true,
+  "syntheticIconBoardOnly": true,
+  "results": [
+    {
+      "width": 1440,
+      "dark": false,
+      "allImagesDecoded": true,
+      "noHorizontalOverflow": true
+    },
+    {
+      "width": 1440,
+      "dark": true,
+      "allImagesDecoded": true,
+      "noHorizontalOverflow": true
+    },
+    {
+      "width": 390,
+      "dark": false,
+      "allImagesDecoded": true,
+      "noHorizontalOverflow": true
+    },
+    {
+      "width": 390,
+      "dark": true,
+      "allImagesDecoded": true,
+      "noHorizontalOverflow": true
+    },
+    {
+      "width": 320,
+      "dark": false,
+      "allImagesDecoded": true,
+      "noHorizontalOverflow": true
+    },
+    {
+      "width": 320,
+      "dark": true,
+      "allImagesDecoded": true,
+      "noHorizontalOverflow": true
+    }
+  ]
+}

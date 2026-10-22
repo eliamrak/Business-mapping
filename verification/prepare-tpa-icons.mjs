@@ -1,0 +1,41 @@
+import fs from 'node:fs/promises';
+import path from 'node:path';
+import {createHash} from 'node:crypto';
+const root=path.resolve(import.meta.dirname,'..');
+const selected=path.resolve(root,'../tpa-icon-horizon/tpa-05-horizon-lens-refined.png');
+const derived=path.resolve(root,'../tpa-icon-horizon/derived');
+const hash=b=>createHash('sha256').update(b).digest('hex');
+const original=await fs.readFile(selected);
+if(hash(original)!=='21890ae5ad2f156e71541fb72b145a9c044fb13f301eedaa8c27e0cb64b9edfa')throw Error('Selected refined Horizon Lens source changed');
+const version=hash(original).slice(0,12);
+const assets=[];
+async function install(from,relative){const data=await fs.readFile(path.join(derived,from));const dest=path.join(root,relative);await fs.mkdir(path.dirname(dest),{recursive:true});await fs.writeFile(dest,data);assets.push({path:relative,bytes:data.length,sha256:hash(data),width:data.readUInt32BE(16),height:data.readUInt32BE(20),pngColorType:data[25]});}
+const publicDir='artifacts/comp-dashboard/public/';
+for(const [from,to]of [['web-16.png','favicon-16.png'],['web-32.png','favicon-32.png'],['web-180.png','apple-touch-icon.png'],['web-192.png','icon-192.png'],['web-256.png','icon-256.png'],['web-512.png','icon-512.png'],['maskable-512.png','maskable-512.png']])await install(from,publicDir+to);
+await install('web-1024.png','artifacts/comp-mobile/assets/images/icon.png');
+await install('android-adaptive-foreground.png','artifacts/comp-mobile/assets/images/tpa-adaptive-foreground.png');
+await install('web-32.png','artifacts/comp-mobile/assets/images/favicon-32.png');
+await fs.copyFile(path.join(derived,'converter.icns'),path.join(root,'tools/practice-converter/Resources/converter.icns'));
+const archive='artifacts/comp-dashboard/src/assets/tpa-horizon-lens-refined.original.png';
+await fs.writeFile(path.join(root,archive),original);
+const logo=await fs.readFile(path.join(derived,'web-180.png'));
+const svg=`<svg xmlns="http://www.w3.org/2000/svg" width="180" height="180" viewBox="0 0 180 180"><image width="180" height="180" href="data:image/png;base64,${logo.toString('base64')}"/></svg>\n`;
+for(const file of ['favicon.svg','logo.svg'])await fs.writeFile(path.join(root,publicDir,file),svg);
+const frames=await Promise.all([16,32,48].map(size=>fs.readFile(path.join(derived,`web-${size}.png`))));
+const header=Buffer.alloc(6+16*frames.length);header.writeUInt16LE(1,2);header.writeUInt16LE(frames.length,4);let offset=header.length;
+for(const [i,size]of [16,32,48].entries()){const at=6+16*i;header[at]=size;header[at+1]=size;header.writeUInt16LE(1,at+4);header.writeUInt16LE(32,at+6);header.writeUInt32LE(frames[i].length,at+8);header.writeUInt32LE(offset,at+12);offset+=frames[i].length;}
+await fs.writeFile(path.join(root,publicDir,'favicon.ico'),Buffer.concat([header,...frames]));
+const manifestFile=path.join(root,publicDir,'site.webmanifest');const manifest=JSON.parse(await fs.readFile(manifestFile,'utf8'));
+manifest.icons=[192,256,512].map(size=>({src:`/icon-${size}.png?v=${version}`,sizes:`${size}x${size}`,type:'image/png'}));
+manifest.icons.push({src:`/maskable-512.png?v=${version}`,sizes:'512x512',type:'image/png',purpose:'maskable'});
+manifest.theme_color='#031d34';manifest.background_color='#031d34';await fs.writeFile(manifestFile,JSON.stringify(manifest,null,2)+'\n');
+const appFile=path.join(root,'artifacts/comp-mobile/app.json');const app=JSON.parse(await fs.readFile(appFile,'utf8'));
+app.expo.android.adaptiveIcon={foregroundImage:'./assets/images/tpa-adaptive-foreground.png',backgroundColor:'#031d34'};
+app.expo.web.favicon='./assets/images/favicon-32.png';app.expo.splash.backgroundColor='#031d34';await fs.writeFile(appFile,JSON.stringify(app,null,2)+'\n');
+const htmlFile=path.join(root,'artifacts/comp-dashboard/index.html');let html=await fs.readFile(htmlFile,'utf8');
+for(const name of ['favicon-16.png','favicon-32.png','apple-touch-icon.png','site.webmanifest'])html=html.replace(`href="/${name}"`,`href="/${name}?v=${version}"`);
+await fs.writeFile(htmlFile,html);
+const otherAssets=[];
+for(const relative of [publicDir+'favicon.svg',publicDir+'logo.svg',publicDir+'favicon.ico','tools/practice-converter/Resources/converter.icns']){const bytes=await fs.readFile(path.join(root,relative));otherAssets.push({path:relative,bytes:bytes.length,sha256:hash(bytes)});}
+await fs.writeFile(path.join(root,'verification/tpa-icon-manifest.json'),JSON.stringify({libraryFileId:'libfile_dceb00a6bf108191baf83dc4635958a2',selection:'Refined 5 Horizon Lens',original:{path:archive,bytes:original.length,sha256:hash(original),width:1254,height:1254},version,processing:'Exact source raster, sRGB resampling only; no generation, tracing, added lettering or artwork reinterpretation',padding:{webMaskableScale:0.90,androidAdaptiveScale:0.68,macContentScale:0.82,macSmallContentScale:0.92,macCornerRadiusRatio:0.23},assets,otherAssets},null,2)+'\n');
+console.log(JSON.stringify({selection:'Refined 5 Horizon Lens',version,assets:assets.length,originalUnchanged:hash(await fs.readFile(selected))===hash(original)}));
