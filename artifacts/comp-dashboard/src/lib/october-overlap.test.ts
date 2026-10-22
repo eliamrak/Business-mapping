@@ -67,6 +67,34 @@ test("separate October 10 billing codes do not multiply the one clinical visit",
   assert.equal(result.fees.months[0].charges, 125);
 });
 
+test("one complete October 8-21 export retains October 14 show and cancellation as one visit without a history conflict", () => {
+  const sources = [attendance(["Mixed,Current,2026-10-14,Show,Room,90837", "Mixed,Current,2026-10-14,Cancelled,Room,90837"]),
+    billing(["Mixed,Current,2026-10-14,100,90837"])];
+  const before = structuredClone(sources), result = admitted(sources);
+  assert.deepEqual(sources[0].reportCoverage, { ...period, complete: true });
+  assert.equal(sources[0].rows.length, 2);
+  assert.equal(attendanceStatusConflicts(sources).length, 0);
+  assert.equal(result.proof.attendanceStatusConflictCount, 0);
+  assert.ok(!result.proof.incompletePeriods.some(row => row.start === period.start || row.conflictKind === "attendance-status"));
+  assert.equal(result.proof.attendanceThrough, period.end);
+  assert.equal(result.proof.eligibleAttendanceRows.length, 2);
+  for (const row of sources[0].rows) assert.ok(result.proof.eligibleAttendanceRows.includes(row));
+  assert.equal(result.summary.observedCompleted, 1);
+  assert.equal(result.summary.observedCoverageDays, 14);
+  assert.equal(derivedShowVisits(result.proof.eligibleSnapshots).length, 1);
+  assert.equal(result.overlay.diagnostic.attendanceStatusConflictCount, 0);
+  assert.equal(result.fees.months[0].charges, 100);
+  const metrics = buildLocalRetentionMetrics(result.proof.eligibleSnapshots, {}, {}, 28, "2026-10-22");
+  assert.equal(metrics.derivedShowVisits, 1);
+  assert.equal(metrics.attendanceByClinician[0].clientCancelled, 1);
+  const history = buildLocalVisitReconciliation(sources, {}, "2026-10-22");
+  assert.equal(history.rows.length, 1);
+  assert.equal(history.rows[0].status, "matched");
+  assert.equal(history.rows[0].reviewReason, null);
+  assert.deepEqual(history.rows[0].attendanceRows, sources[0].rows);
+  assert.deepEqual(sources, before);
+});
+
 test("matching mixed-status appointments in two complete exports are not a false correction", () => {
   const sources = [attendance(["Mixed,Current,2026-10-10,Show,Room,90837", "Mixed,Current,2026-10-10,Cancelled,Room,90837"]),
     attendance(["Other,Current,2026-10-09,Cancelled,Room,90837", "Mixed,Current,2026-10-10,Cancelled,Room,90837", "Mixed,Current,2026-10-10,Show,Room,90837"])];

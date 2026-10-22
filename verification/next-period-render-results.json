@@ -29,6 +29,10 @@
   "screenshots": [
     "/tmp/practice-next-period-render/saved-pair-reconciled-1440.png",
     "/tmp/practice-next-period-render/saved-historical-preserved.png",
+    "/tmp/practice-next-period-render/saved-mixed-attendance.png",
+    "/tmp/practice-next-period-render/billing-bounded-diagnostics-1440.png",
+    "/tmp/practice-next-period-render/billing-bounded-diagnostics-390.png",
+    "/tmp/practice-next-period-render/billing-bounded-diagnostics-320.png",
     "/tmp/practice-next-period-render/upload-success-1440.png",
     "/tmp/practice-next-period-render/changed-carryover.png",
     "/tmp/practice-next-period-render/metadata-stale.png",
@@ -363,6 +367,247 @@
       "declarationRevision": 3,
       "sourceSets": 4,
       "journalEntries": 5
+    },
+    {
+      "name": "saved-single-export-mixed-attendance",
+      "pass": true,
+      "requests": [
+        {
+          "method": "GET",
+          "path": "/api/hub"
+        },
+        {
+          "method": "GET",
+          "path": "/api/hub/context"
+        },
+        {
+          "method": "GET",
+          "path": "/api/business-goals"
+        },
+        {
+          "method": "GET",
+          "path": "/api/scenarios"
+        },
+        {
+          "method": "GET",
+          "path": "/api/practice-imports"
+        },
+        {
+          "method": "GET",
+          "path": "/api/practice-imports/billing-resolution-candidates"
+        },
+        {
+          "method": "GET",
+          "path": "/api/practice-imports/capabilities"
+        },
+        {
+          "method": "PUT",
+          "path": "/api/practice-imports/declarations",
+          "body": {
+            "expectedRevision": 2,
+            "confirmed": true,
+            "data": {
+              "version": 1,
+              "mappings": [
+                {
+                  "sourceLabel": "Elia",
+                  "clinicianId": 1,
+                  "clinicianLabel": "Elia",
+                  "teamId": 1
+                },
+                {
+                  "sourceLabel": "Erin",
+                  "clinicianId": 2,
+                  "clinicianLabel": "Erin",
+                  "teamId": 1
+                }
+              ],
+              "sourceSets": [
+                {
+                  "kind": "attendance",
+                  "snapshotIds": [
+                    "attendance-8dba12d3"
+                  ],
+                  "clinicianIds": [
+                    1,
+                    2
+                  ],
+                  "start": "2026-09-10",
+                  "end": "2026-10-12",
+                  "complete": true
+                },
+                {
+                  "kind": "billing",
+                  "snapshotIds": [
+                    "billing-98c4b484"
+                  ],
+                  "clinicianIds": [
+                    1,
+                    2
+                  ],
+                  "start": "2026-09-10",
+                  "end": "2026-10-12",
+                  "complete": true
+                },
+                {
+                  "kind": "attendance",
+                  "snapshotIds": [
+                    "attendance-8dba12d3",
+                    "attendance-b23b78b1"
+                  ],
+                  "clinicianIds": [
+                    1,
+                    2
+                  ],
+                  "start": "2026-09-10",
+                  "end": "2026-10-21",
+                  "complete": true
+                },
+                {
+                  "kind": "billing",
+                  "snapshotIds": [
+                    "billing-98c4b484",
+                    "billing-9456ee2a"
+                  ],
+                  "clinicianIds": [
+                    1,
+                    2
+                  ],
+                  "start": "2026-09-10",
+                  "end": "2026-10-21",
+                  "complete": true
+                }
+              ]
+            },
+            "nextPeriod": {
+              "packageId": "synthetic-next-mixed",
+              "sourceIds": [
+                "attendance-b23b78b1",
+                "billing-9456ee2a"
+              ],
+              "teamId": 1
+            }
+          }
+        },
+        {
+          "method": "GET",
+          "path": "/api/practice-imports/billing-resolution-candidates"
+        }
+      ],
+      "declarationRevision": 3,
+      "sourceSets": 4,
+      "journalEntries": 5
+    },
+    {
+      "name": "billing-conflict-bounded-diagnostics-1440",
+      "pass": true,
+      "requests": [
+        {
+          "method": "GET",
+          "path": "/api/hub"
+        },
+        {
+          "method": "GET",
+          "path": "/api/hub/context"
+        },
+        {
+          "method": "GET",
+          "path": "/api/business-goals"
+        },
+        {
+          "method": "GET",
+          "path": "/api/scenarios"
+        },
+        {
+          "method": "GET",
+          "path": "/api/practice-imports"
+        },
+        {
+          "method": "GET",
+          "path": "/api/practice-imports/billing-resolution-candidates"
+        },
+        {
+          "method": "GET",
+          "path": "/api/practice-imports/capabilities"
+        }
+      ],
+      "declarationRevision": 2,
+      "sourceSets": 2,
+      "journalEntries": 4
+    },
+    {
+      "name": "billing-conflict-bounded-diagnostics-390",
+      "pass": true,
+      "requests": [
+        {
+          "method": "GET",
+          "path": "/api/hub"
+        },
+        {
+          "method": "GET",
+          "path": "/api/hub/context"
+        },
+        {
+          "method": "GET",
+          "path": "/api/business-goals"
+        },
+        {
+          "method": "GET",
+          "path": "/api/scenarios"
+        },
+        {
+          "method": "GET",
+          "path": "/api/practice-imports"
+        },
+        {
+          "method": "GET",
+          "path": "/api/practice-imports/billing-resolution-candidates"
+        },
+        {
+          "method": "GET",
+          "path": "/api/practice-imports/capabilities"
+        }
+      ],
+      "declarationRevision": 2,
+      "sourceSets": 2,
+      "journalEntries": 4
+    },
+    {
+      "name": "billing-conflict-bounded-diagnostics-320",
+      "pass": true,
+      "requests": [
+        {
+          "method": "GET",
+          "path": "/api/hub"
+        },
+        {
+          "method": "GET",
+          "path": "/api/hub/context"
+        },
+        {
+          "method": "GET",
+          "path": "/api/scenarios"
+        },
+        {
+          "method": "GET",
+          "path": "/api/business-goals"
+        },
+        {
+          "method": "GET",
+          "path": "/api/practice-imports"
+        },
+        {
+          "method": "GET",
+          "path": "/api/practice-imports/billing-resolution-candidates"
+        },
+        {
+          "method": "GET",
+          "path": "/api/practice-imports/capabilities"
+        }
+      ],
+      "declarationRevision": 2,
+      "sourceSets": 2,
+      "journalEntries": 4
     },
     {
       "name": "upload-next-period",
@@ -1433,15 +1678,15 @@
         },
         {
           "method": "GET",
+          "path": "/api/scenarios"
+        },
+        {
+          "method": "GET",
           "path": "/api/business-goals"
         },
         {
           "method": "GET",
           "path": "/api/practice-imports"
-        },
-        {
-          "method": "GET",
-          "path": "/api/scenarios"
         },
         {
           "method": "GET",
@@ -2574,11 +2819,11 @@
         },
         {
           "method": "GET",
-          "path": "/api/scenarios"
+          "path": "/api/business-goals"
         },
         {
           "method": "GET",
-          "path": "/api/business-goals"
+          "path": "/api/scenarios"
         },
         {
           "method": "GET",

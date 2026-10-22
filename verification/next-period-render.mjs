@@ -39,7 +39,21 @@ function addPackage(p,time=now){
   if(!duplicate){for(const s of parse(p))if(!state.snapshots.some(v=>v.id===s.id))state.snapshots.push(s);state.packages.push({packageId:p.packageId,contentHash:hash(p),exportedAt:p.exportedAt,importedAt:time,sourceIds});journal.push({action:'raw-package',sourceIds});}
   return {...structuredClone(state),importedSourceIds:sourceIds,status:duplicate?'duplicate':'added'};
 }
-function reset(scenario){mode=scenario;requests=[];journal=[];state={snapshots:[],packages:[],declarations:structuredClone(declaration),billingCodeMinutes:{'90837':60},sameDayVisitOverrides:{},billingResolutions:[],billingResolutionRevision:0};addPackage(prior,'2026-10-13T12:00:00Z');journal.push({action:'prior-source-proof'},{action:'prior-owner-confirmation'});if(['saved','saved-historical','missing-source-ids','empty-source-ids','missing-frozen-member'].includes(scenario))addPackage(incoming);
+function reset(scenario){mode=scenario;requests=[];journal=[];state={snapshots:[],packages:[],declarations:structuredClone(declaration),billingCodeMinutes:{'90837':60},sameDayVisitOverrides:{},billingResolutions:[],billingResolutionRevision:0};
+  let baseline=prior,next=incoming;
+  if(scenario==='saved-mixed'){
+    next=structuredClone(incoming);next.packageId+='-mixed';
+    next.collections.attendance.rows.push(attendance('synthetic-mixed','2026-10-14'),{...attendance('synthetic-mixed','2026-10-14'),status:'cancelled'});next.collections.attendance.rowCount+=2;
+    next.collections.billing.rows.push(billing('synthetic-mixed','2026-10-14'));next.collections.billing.rowCount++;
+  }
+  if(scenario==='saved-billing-conflict'){
+    baseline=structuredClone(prior);next=structuredClone(incoming);baseline.packageId+='-billing-conflict';next.packageId+='-billing-conflict';
+    for(const pkg of [baseline,next])for(const collection of Object.values(pkg.collections))for(const row of collection.rows)if(row.clientId==='overlap'){row.clientId='private-billing-marker-QXZ';row.serviceDate='2026-10-08';}
+    for(const collection of Object.values(baseline.collections))collection.coverageEnd='2026-10-08';
+    next.collections.billing.rows.find(r=>r.clientId==='private-billing-marker-QXZ').totalFeeCharged=200;
+    const members=parse(baseline);for(const set of state.declarations.data.sourceSets)set.snapshotIds=[members.find(s=>s.kind===set.kind).id];
+  }
+  addPackage(baseline,'2026-10-13T12:00:00Z');journal.push({action:'prior-source-proof'},{action:'prior-owner-confirmation'});if(['saved','saved-historical','saved-mixed','saved-billing-conflict','missing-source-ids','empty-source-ids','missing-frozen-member'].includes(scenario))addPackage(next);
   if(scenario==='saved-historical'){
     const label='(deleted) Synthetic Former';
     for(const source of state.snapshots.filter(s=>oldSources.some(old=>old.id===s.id)))source.rows.push(source.kind==='attendance'
@@ -124,6 +138,21 @@ try{
     assert.deepEqual(state.declarations.data.mappings,beforeData.mappings);assert.deepEqual(state.declarations.data.sourceSets.slice(0,2),beforeData.sourceSets);
     assert.ok(state.declarations.data.sourceSets.every(set=>set.clinicianIds.every(id=>[1,2].includes(id))));
     await coverage('2026-10-21');await shot('saved-historical-preserved');
+  });
+  await test('saved-single-export-mixed-attendance',async()=>{
+    await open('saved-mixed');const beforeRows=raw(),beforeData=structuredClone(state.declarations.data);
+    const proposal=plan(state.packages.at(-1).sourceIds);assert.equal(proposal.status,'ready',proposal.reasons.join(' '));assert.deepEqual(proposal.carryover,{rows:25,matched:25,conflicts:0});
+    const review=panel().getByLabel('Saved report period reconciliation',{exact:true});assert.match(await review.innerText(),/25 \/ 25 prior-period rows match/);assert.equal(count('POST'),0);assert.equal(count('PUT'),0);
+    await review.getByRole('button',{name:'Reconcile this period',exact:true}).click();await settled();assert.equal(count('PUT'),1);assert.equal(count('POST'),0);assert.equal(raw(),beforeRows);assert.deepEqual(state.declarations.data.sourceSets.slice(0,2),beforeData.sourceSets);await coverage('2026-10-21');await shot('saved-mixed-attendance');
+  });
+  for(const width of [1440,390,320])await test('billing-conflict-bounded-diagnostics-'+width,async()=>{
+    await page.setViewportSize({width,height:1050});await open('saved-billing-conflict');const beforeRows=raw(),beforeProof=proof();
+    const review=panel().getByLabel('Saved report period reconciliation',{exact:true});assert.ok(await review.isVisible());assert.equal(await review.getByRole('button',{name:'Reconcile this period',exact:true}).count(),0);
+    const more=review.getByText('More review details',{exact:true});if(await more.count()){await more.focus();await page.keyboard.press('Enter');}
+    const text=await review.innerText();assert.match(text,/billing overlapping facts\/status\/fees or multiplicity conflict on 2026-10-08/);assert.match(text,/Fields: totalFeeCharged\./);
+    const priorId=state.packages[0].sourceIds.find(id=>id.startsWith('billing-')),nextId=state.packages.at(-1).sourceIds.find(id=>id.startsWith('billing-'));
+    assert.ok(text.includes(`Sources: ${priorId} (1 row), ${nextId} (1 row).`));assert.ok(!text.includes('private-billing-marker-QXZ'));assert.ok(!text.includes('$200'));assert.ok(!text.includes('200.00'));
+    assert.equal(count('POST'),0);assert.equal(count('PUT'),0);assert.equal(raw(),beforeRows);assert.equal(proof(),beforeProof);await steady();assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1));await shot('billing-bounded-diagnostics-'+width);
   });
   await test('upload-next-period',async()=>{
     await open('upload');const choice=panel().getByRole('button',{name:'Next full period',exact:true});assert.equal(await choice.getAttribute('aria-pressed'),'true');assert.match(await panel().locator('.pw-report-period-choice').innerText(),/2026-10-08.*2026-10-21/);

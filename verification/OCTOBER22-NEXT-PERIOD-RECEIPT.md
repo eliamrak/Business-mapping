@@ -56,6 +56,16 @@ The publication decision remains conditional on the real existing classification
 
 Frozen follow-up validation: 1,220 functional tests, 79 database-free API tests, 35 local compatibility checks, 24 mounted browser checks, library build, both artifact typechecks and both production builds pass. Independent review reproduces the old blocked/new ready difference and confirms the actual clinical coverage/overlay excludes historical rows, yielding the expected 27 visits, $300 selected-period charges and 25/25 matched carryovers in its synthetic fixture. Eleven additional negative cases remain blocked. This is code/test evidence, not certification of the live package.
 
+## Mixed attendance and bounded billing-conflict evidence
+
+The next-period planner now follows the established attendance rule: a single export may contain distinct same-day appointments with mixed statuses. It no longer rejects such a report solely for its within-source mixture. Both rows remain intact, existing attended-visit counting and same-day review rules are unchanged, and contradictory independent exports still block. Existing tests that incorrectly required an intra-export rejection were updated to assert this domain contract while retaining their cross-export negative checks.
+
+Billing admission decisions are unchanged. A cross-source difference now reports normalized field names, source IDs and row counts, without client identifiers, row hashes, raw fees, procedure values or full payloads. Different row counts are identified separately from distinct value changes; differences in composite row associations remain blocked even when individual value sets match. This does not choose an older/newer source, change charges, create an approval or resolve the live October 8 discrepancy.
+
+Synthetic engine tests preserve a same-day show and cancellation as two original rows, one completed visit, one cancellation and $100 reported charges. Actual-route tests preserve explicit-save behavior and return 409 with zero writes for conflicting fees/codes. Mounted tests cover the saved mixed report plus expanded billing diagnostics at 1440/390/320, with no overflow or private row values in the exception. No owner file is included in fixtures or receipts.
+
+Follow-up results: 1,225 functional tests, 82 database-free API tests, 35 local compatibility checks, 28 mounted checks, library build, both artifact typechecks and both production builds pass. Independent bounded review includes 97 focused tests and 864 source-order checks, with no remaining blocker. The live billing comparison still requires read-only inspection of the new diagnostic before any authorized admission; no real import/declaration/record operation was performed by this work.
+
 ## Publisher gates
 
 Use only the base-to-reviewed-candidate delta. Re-read the actual clean publisher HEAD/tree, check touched-file preimages against the base, retain a rollback ref, apply with `git apply --check --index` followed by `git apply --index`, and create a normal descendant commit. Preserve all publisher memory/history, `.replit`, artifact contracts and accepted mobile-readiness changes. Do not reset history or copy a development database.

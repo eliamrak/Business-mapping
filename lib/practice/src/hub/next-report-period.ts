@@ -237,14 +237,25 @@ export function planNextReportPeriod(input: NextReportPeriodInput): NextReportPe
           issue(`Billing facts have conflicting cancellation subtypes on ${rows[0].serviceDate}.`);
       }
     }
-    const encounters = new Map<string, string>();
+    const encounters = new Map<string, { facts: string; rows: readonly StructuralReportRow[]; sourceId: string }>();
     for (const source of sources) for (const [key, rows] of groups(source.rows.filter((row) => row.serviceDate >= period.start && row.serviceDate <= period.end))) {
       const facts = signature(rows, kind);
-      if (kind === "attendance" && new Set(rows.map((row) => JSON.stringify([text(row.status), text(row.location), text(row.cancellationSubtype)]))).size > 1)
-        issue(`Attendance facts within source ${source.id} have ambiguous statuses, locations or cancellation subtypes on ${rows[0].serviceDate}.`);
-      if (encounters.has(key) && encounters.get(key) !== facts && !approvedEncounters.has(key))
-        issue(`${kind} overlapping facts/status/fees or multiplicity conflict on ${rows[0].serviceDate}.`);
-      encounters.set(key, facts);
+      // One export may contain distinct same-day appointments; compare independent exports.
+      const previous = encounters.get(key);
+      if (previous && previous.facts !== facts && !approvedEncounters.has(key)) {
+        const fields: Array<[string, (row: StructuralReportRow) => unknown]> = [
+          ["billingCode", row => text(row.billingCode)], ["visitKind", row => text(row.visitKind)],
+          ["cancellationSubtype", row => text(row.cancellationSubtype)],
+        ];
+        if (kind === "attendance") fields.push(["status", row => text(row.status)], ["location", row => text(row.location)]);
+        else fields.push(["totalFeeCharged", row => row.totalFeeCharged ?? null]);
+        const values = (members: readonly StructuralReportRow[], read: (row: StructuralReportRow) => unknown) => JSON.stringify([...new Set(members.map(row => JSON.stringify(read(row))))].sort());
+        const changedFields = fields.filter(([, read]) => values(previous.rows, read) !== values(rows, read)).map(([field]) => field);
+        if (previous.rows.length !== rows.length) changedFields.push("rowCount");
+        if (!changedFields.length) changedFields.push("rowAssociation");
+        issue(`${kind} overlapping facts/status/fees or multiplicity conflict on ${rows[0].serviceDate}. Fields: ${changedFields.join(", ")}. Sources: ${previous.sourceId} (${previous.rows.length} ${previous.rows.length === 1 ? "row" : "rows"}), ${source.id} (${rows.length} ${rows.length === 1 ? "row" : "rows"}).`);
+      }
+      encounters.set(key, { facts, rows, sourceId: source.id });
     }
     const prior = data.sourceSets.filter((set) => set.kind === kind);
     const start = prior.map((set) => set.start).sort()[0];

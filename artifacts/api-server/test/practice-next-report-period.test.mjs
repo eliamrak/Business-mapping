@@ -183,6 +183,57 @@ test("ready PUT rederives Oct 8-21 from the Oct 12 frozen end, matches 25 copies
   assert.ok(state.queries.every(q => !/UPDATE "?clinicians|UPDATE "?practice_import_snapshots|DELETE|ALTER|CREATE TABLE/.test(q.sql)));
 });
 
+test("explicit PUT admits a saved pair with same-source October 14 show and cancellation without changing raw rows or mappings", async () => {
+  reset();
+  const attendance = state.snapshots[2];
+  const show = attendance.rows.find(row => row.serviceDate === "2026-10-14");
+  attendance.rows.push({ ...show, status: "cancelled", sourceRowHash: "synthetic-same-day-cancellation" });
+  attendance.rowCount = attendance.rows.length;
+  const payload = proposal(), before = durable();
+  const history = await call(get);
+  assert.equal(history.statusCode, 200);
+  assert.deepEqual(history.body.packages.find(pkg => pkg.packageId === "synthetic-next").sourceIds, [ids.attendance, ids.billing]);
+  assert.deepEqual(durable(), before); assert.deepEqual(state.writes, []);
+  const response = await call(put, payload);
+  assert.equal(response.statusCode, 200, JSON.stringify(response.body));
+  assert.equal(response.body.declarations.revision, 5);
+  assert.deepEqual(response.body.declarations.data, payload.data);
+  assert.deepEqual(state.saved.data.mappings, before.saved.data.mappings);
+  assert.deepEqual(state.saved.data.sourceSets.slice(0, 2), before.saved.data.sourceSets);
+  assert.deepEqual(state.snapshots, before.snapshots);
+  assert.deepEqual(state.packages, before.packages); assert.deepEqual(state.roster, before.roster);
+  assert.deepEqual(state.snapshots[2].rows.filter(row => row.serviceDate === "2026-10-14").map(row => row.status), ["show", "cancelled"]);
+  assert.deepEqual(state.writes, ["declarations", "audit"]);
+  assert.equal(state.audits.length, 1);
+  assert.equal(state.audits[0].detail.basis, "known-next-reporting-period");
+  assert.deepEqual(state.audits[0].detail.nextPeriod.sourceIds, [ids.attendance, ids.billing]);
+  assert.deepEqual(state.audits[0].detail.nextPeriod.carryover, { rows: 25, matched: 25, conflicts: 0 });
+  const saved = durable(), reloaded = await call(get);
+  assert.equal(reloaded.statusCode, 200);
+  assert.deepEqual(reloaded.body.declarations.data, payload.data);
+  assert.deepEqual(durable(), saved);
+});
+
+for (const [field, changedValue] of [["totalFeeCharged", 987654.32], ["billingCode", "PRIVATE-CORRECTED-CODE"]]) {
+  test(`PUT rejects cross-source changed billing ${field} with bounded diagnostics and zero writes`, async () => {
+    reset();
+    for (const snapshot of [state.snapshots[1], state.snapshots[3]]) {
+      const overlap = snapshot.rows.find(row => row.serviceDate === "2026-10-12");
+      overlap.clientId = "PRIVATE-CONFLICT-CLIENT";
+      overlap.sourceRowHash = `PRIVATE-ROW-HASH-${snapshot.sourceHash}`;
+    }
+    state.snapshots[3].rows.find(row => row.serviceDate === "2026-10-12")[field] = changedValue;
+    const response = await reviewWithoutWrites(proposal());
+    assert.deepEqual(Object.keys(response.body).sort(), ["code", "error", "period"]);
+    assert.deepEqual(response.body.period, { start: "2026-10-08", end: "2026-10-21", payDate: "2026-10-22" });
+    const message = response.body.error;
+    assert.ok(message.includes(`billing overlapping facts/status/fees or multiplicity conflict on 2026-10-12. Fields: ${field}. Sources: ${ids.oldBilling} (1 row), ${ids.billing} (1 row).`), message);
+    assert.ok(message.length < 500, "Conflict diagnostics stay bounded rather than dumping rows");
+    for (const value of ["PRIVATE-CONFLICT-CLIENT", "PRIVATE-ROW-HASH", String(changedValue), "90837", "Synthetic Lane", "Room A"])
+      assert.ok(!JSON.stringify(response.body).includes(value), `Diagnostics must not expose ${value}`);
+  });
+}
+
 test("carryover changed after proposal requires review with zero writes", async () => {
   for (const change of [
     rows => { rows[0].status = "cancelled"; },

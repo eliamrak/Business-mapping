@@ -102,6 +102,7 @@ test("all changed/new files stay within reviewed theme, PDF and mobile scope", (
     src + "lib/import-feedback.ts", src + "lib/import-feedback.test.ts",
     src + "lib/retention-local.ts", src + "lib/retention-exact-source-facts.test.ts",
     src + "lib/legacy-service-codes.test.ts",
+    src + "lib/october-overlap.test.ts",
     "artifacts/api-server/src/routes/practiceImports.ts",
     "artifacts/api-server/src/lib/import-overlap-reconciliation.ts",
     "artifacts/api-server/test/import-overlap-reconciliation.test.mjs",

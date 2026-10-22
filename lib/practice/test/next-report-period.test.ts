@@ -170,9 +170,51 @@ test("next-period overlap detects changed attendance status, billing fee and mul
   const f = fixture();
   changeRows(f, 2, (rows) => [...rows, { ...rows.find((r) => r.clientId === "overlap")!, sourceRowHash: "extra" }]);
   blocked(f, /multiplicity conflict/);
-  const withinSource = fixture();
-  changeRows(withinSource, 2, (rows) => [...rows, { ...rows.find((r) => r.clientId === "new")!, sourceRowHash: "conflicting-status", status: "cancelled" }]);
-  blocked(withinSource, /Attendance facts within source.*ambiguous statuses/);
+});
+
+test("one export's October 14 show and cancellation remain intact without a false contradiction", () => {
+  const f = fixture();
+  const show = row("same-day-observations", "2026-10-14", "same-day-show");
+  changeRows(f, 2, rows => [...rows, show, { ...show, sourceRowHash: "same-day-cancel", status: "cancelled" }]);
+  const before = structuredClone(f), plan = planNextReportPeriod(f);
+  assert.equal(plan.status, "ready", plan.reasons.join(" "));
+  assert.deepEqual(plan.carryover, { rows: 25, matched: 25, conflicts: 0 });
+  assert.deepEqual(f, before);
+  changeRows(f, 2, rows => [...rows, { ...rows.find(r => r.clientId === "overlap")!, status: "cancelled", sourceRowHash: "other-status" }]);
+  blocked(f, /attendance overlapping facts\/status\/fees or multiplicity conflict on 2026-10-12/);
+});
+
+test("billing conflict diagnostics expose changed field names, source IDs and counts only", () => {
+  for (const patch of [{ totalFeeCharged: 987.65 }, { billingCode: "PRIVATE-CODE" }, { visitKind: "PRIVATE-KIND" }, { cancellationSubtype: "PRIVATE-SUBTYPE" }]) {
+    const f = fixture();
+    changeRows(f, 3, rows => rows.map(r => r.clientId === "overlap" ? { ...r, ...patch } : r));
+    for (let index = 0; index < f.snapshots.length; index++) changeRows(f, index, rows => rows.map(r => ({ ...r, clientId: `PRIVATE-CLIENT-${r.clientId}`, sourceRowHash: `PRIVATE-HASH-${r.sourceRowHash}` })));
+    const before = structuredClone(f), plan = blocked(f, /billing overlapping facts\/status\/fees or multiplicity conflict/);
+    const reason = plan.reasons.find(r => r.startsWith("billing overlapping"))!;
+    assert.ok(reason.includes(`Fields: ${Object.keys(patch)[0]}.`), reason);
+    assert.ok(reason.includes(`Sources: ${ids.oldBilling} (1 row), ${ids.billing} (1 row).`), reason);
+    for (const value of ["overlap", "PRIVATE-CODE", "PRIVATE-KIND", "PRIVATE-SUBTYPE", "987.65"]) assert.ok(!reason.includes(value === "overlap" ? '"overlap"' : value));
+    for (const source of f.snapshots) for (const r of source.rows) { assert.ok(!reason.includes(r.sourceRowHash)); assert.ok(!reason.includes(r.clientId)); }
+    assert.deepEqual(f, before);
+  }
+});
+
+test("billing diagnostic distinguishes row-count changes from changed field values", () => {
+  const f = fixture();
+  changeRows(f, 3, rows => [...rows, { ...rows.find(r => r.clientId === "overlap")!, sourceRowHash: "extra-charge-copy" }]);
+  const plan = blocked(f, /billing overlapping facts/), reason = plan.reasons.find(r => r.startsWith("billing overlapping"))!;
+  assert.match(reason, /Fields: rowCount\./);
+  assert.ok(reason.includes(`${ids.oldBilling} (1 row), ${ids.billing} (2 rows)`));
+});
+
+test("billing association changes remain blocked even when individual value sets match", () => {
+  const f = fixture();
+  for (const index of [1, 3]) changeRows(f, index, rows => [...rows.filter(r => r.clientId !== "overlap"),
+    { ...row("association-private", "2026-10-12", `first-${index}`), billingCode: "90837", totalFeeCharged: index === 1 ? 100 : 125 },
+    { ...row("association-private", "2026-10-12", `second-${index}`), billingCode: "90785", totalFeeCharged: index === 1 ? 125 : 100 }]);
+  const plan = blocked(f, /billing overlapping facts/), reason = plan.reasons.find(r => r.startsWith("billing overlapping"))!;
+  assert.match(reason, /Fields: rowAssociation\./);
+  assert.ok(!reason.includes("association-private"));
 });
 
 test("billing reconciler blocks ambiguous repeated charges and hash collisions", () => {
@@ -308,7 +350,7 @@ test("late versus ordinary cancellation is a changed carryover fact and reasons 
   for (const source of f.snapshots) for (const r of source.rows) assert.ok(!plan.reasons.some((reason) => reason.includes(r.clientId)));
 });
 
-test("next-period late-cancel subtype changes block across and within sources", () => {
+test("late-cancel differences between exports block while one export retains multiple appointments", () => {
   const f = fixture();
   for (const index of [0, 2]) changeRows(f, index, (rows) => rows.map((r) => r.clientId === "overlap"
     ? { ...r, status: "cancelled", cancellationSubtype: index === 0 ? "late" : "ordinary" } : r));
@@ -316,7 +358,9 @@ test("next-period late-cancel subtype changes block across and within sources", 
   const within = fixture();
   changeRows(within, 2, (rows) => [...rows.map((r) => r.clientId === "new" ? { ...r, status: "cancelled", cancellationSubtype: "late" } : r),
     { ...row("new", "2026-10-20", "other-cancel"), status: "cancelled", cancellationSubtype: "ordinary" }]);
-  blocked(within, /ambiguous statuses, locations or cancellation subtypes/);
+  const before = structuredClone(within), plan = planNextReportPeriod(within);
+  assert.equal(plan.status, "ready", plan.reasons.join(" "));
+  assert.deepEqual(within, before);
 });
 
 function approvedFixture(amounts: readonly number[]) {
