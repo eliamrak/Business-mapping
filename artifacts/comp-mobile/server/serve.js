@@ -45,6 +45,52 @@ function getAppName() {
   }
 }
 
+function serveHealthcheck(res) {
+  let ready = false;
+  try {
+    const root = fs.realpathSync(STATIC_ROOT);
+    const requireBuildFile = (filePath) => {
+      const realPath = fs.realpathSync(filePath);
+      if (!realPath.startsWith(root + path.sep)) {
+        throw new Error("File outside static build");
+      }
+      const stat = fs.statSync(realPath);
+      if (!stat.isFile() || stat.size === 0) {
+        throw new Error("Build file is not ready");
+      }
+      fs.accessSync(realPath, fs.constants.R_OK);
+      return realPath;
+    };
+
+    for (const platform of ["ios", "android"]) {
+      const manifest = JSON.parse(fs.readFileSync(requireBuildFile(
+        path.join(STATIC_ROOT, platform, "manifest.json"),
+      ), "utf-8"));
+      const assetUrl = manifest?.launchAsset?.url;
+      if (typeof assetUrl !== "string" || !assetUrl.trim()) {
+        throw new Error("Missing launch asset URL");
+      }
+      const url = new URL(assetUrl, "http://localhost");
+      if (url.protocol !== "http:" && url.protocol !== "https:") {
+        throw new Error("Unsupported launch asset URL");
+      }
+      let pathname = url.pathname;
+      if (basePath && pathname.startsWith(basePath)) {
+        pathname = pathname.slice(basePath.length) || "/";
+      }
+      requireBuildFile(path.join(STATIC_ROOT, path.normalize(pathname)));
+    }
+    ready = true;
+  } catch {
+    // Incomplete, unreadable or malformed builds must fail readiness closed.
+  }
+  res.writeHead(ready ? 200 : 503, {
+    "content-type": "application/json",
+    "cache-control": "no-store",
+  });
+  res.end(JSON.stringify({ ready }));
+}
+
 function serveManifest(platform, res) {
   const manifestPath = path.join(STATIC_ROOT, platform, "manifest.json");
 
@@ -113,6 +159,10 @@ const server = http.createServer((req, res) => {
 
   if (basePath && pathname.startsWith(basePath)) {
     pathname = pathname.slice(basePath.length) || "/";
+  }
+
+  if (pathname === "/healthcheck") {
+    return serveHealthcheck(res);
   }
 
   if (pathname === "/" || pathname === "/manifest") {
