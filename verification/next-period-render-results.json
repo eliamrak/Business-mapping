@@ -33,6 +33,9 @@
     "/tmp/practice-next-period-render/billing-bounded-diagnostics-1440.png",
     "/tmp/practice-next-period-render/billing-bounded-diagnostics-390.png",
     "/tmp/practice-next-period-render/billing-bounded-diagnostics-320.png",
+    "/tmp/practice-next-period-render/billing-code-classification-1440.png",
+    "/tmp/practice-next-period-render/billing-code-classification-390.png",
+    "/tmp/practice-next-period-render/billing-code-classification-320.png",
     "/tmp/practice-next-period-render/upload-success-1440.png",
     "/tmp/practice-next-period-render/changed-carryover.png",
     "/tmp/practice-next-period-render/metadata-stale.png",
@@ -382,15 +385,15 @@
         },
         {
           "method": "GET",
+          "path": "/api/practice-imports"
+        },
+        {
+          "method": "GET",
           "path": "/api/business-goals"
         },
         {
           "method": "GET",
           "path": "/api/scenarios"
-        },
-        {
-          "method": "GET",
-          "path": "/api/practice-imports"
         },
         {
           "method": "GET",
@@ -586,6 +589,117 @@
         },
         {
           "method": "GET",
+          "path": "/api/business-goals"
+        },
+        {
+          "method": "GET",
+          "path": "/api/scenarios"
+        },
+        {
+          "method": "GET",
+          "path": "/api/practice-imports"
+        },
+        {
+          "method": "GET",
+          "path": "/api/practice-imports/billing-resolution-candidates"
+        },
+        {
+          "method": "GET",
+          "path": "/api/practice-imports/capabilities"
+        }
+      ],
+      "declarationRevision": 2,
+      "sourceSets": 2,
+      "journalEntries": 4
+    },
+    {
+      "name": "billing-code-classification-1440",
+      "pass": true,
+      "requests": [
+        {
+          "method": "GET",
+          "path": "/api/hub"
+        },
+        {
+          "method": "GET",
+          "path": "/api/hub/context"
+        },
+        {
+          "method": "GET",
+          "path": "/api/business-goals"
+        },
+        {
+          "method": "GET",
+          "path": "/api/scenarios"
+        },
+        {
+          "method": "GET",
+          "path": "/api/practice-imports"
+        },
+        {
+          "method": "GET",
+          "path": "/api/practice-imports/billing-resolution-candidates"
+        },
+        {
+          "method": "GET",
+          "path": "/api/practice-imports/capabilities"
+        }
+      ],
+      "declarationRevision": 2,
+      "sourceSets": 2,
+      "journalEntries": 5
+    },
+    {
+      "name": "billing-code-classification-390",
+      "pass": true,
+      "requests": [
+        {
+          "method": "GET",
+          "path": "/api/hub"
+        },
+        {
+          "method": "GET",
+          "path": "/api/hub/context"
+        },
+        {
+          "method": "GET",
+          "path": "/api/business-goals"
+        },
+        {
+          "method": "GET",
+          "path": "/api/scenarios"
+        },
+        {
+          "method": "GET",
+          "path": "/api/practice-imports"
+        },
+        {
+          "method": "GET",
+          "path": "/api/practice-imports/billing-resolution-candidates"
+        },
+        {
+          "method": "GET",
+          "path": "/api/practice-imports/capabilities"
+        }
+      ],
+      "declarationRevision": 2,
+      "sourceSets": 2,
+      "journalEntries": 5
+    },
+    {
+      "name": "billing-code-classification-320",
+      "pass": true,
+      "requests": [
+        {
+          "method": "GET",
+          "path": "/api/hub"
+        },
+        {
+          "method": "GET",
+          "path": "/api/hub/context"
+        },
+        {
+          "method": "GET",
           "path": "/api/scenarios"
         },
         {
@@ -607,7 +721,7 @@
       ],
       "declarationRevision": 2,
       "sourceSets": 2,
-      "journalEntries": 4
+      "journalEntries": 5
     },
     {
       "name": "upload-next-period",
@@ -1678,11 +1792,11 @@
         },
         {
           "method": "GET",
-          "path": "/api/scenarios"
+          "path": "/api/business-goals"
         },
         {
           "method": "GET",
-          "path": "/api/business-goals"
+          "path": "/api/scenarios"
         },
         {
           "method": "GET",

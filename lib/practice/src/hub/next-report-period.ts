@@ -216,11 +216,11 @@ export function planNextReportPeriod(input: NextReportPeriodInput): NextReportPe
   for (const kind of kinds) {
     const sources = [...oldSources.filter((source) => source.kind === kind), ...selected.filter((source) => source.kind === kind && !oldIds.has(source.id))];
     const approvedEncounters = new Set<string>();
+    const byEncounter = new Map<string, ReturnType<typeof reconcileBillingEvidence<StructuralReportRow & { totalFeeCharged: number }>>>();
     if (kind === "billing") {
       const entries = sources.flatMap((source) => source.rows.filter((row) => row.serviceDate >= period.start && row.serviceDate <= period.end)
         .map((row) => ({ snapshotId: source.id, row: { ...row, totalFeeCharged: row.totalFeeCharged ?? Number.NaN } })));
       const reconciled = reconcileBillingEvidence(entries, billingApprovals);
-      const byEncounter = new Map<string, typeof reconciled>();
       for (const group of reconciled) {
         const key = identity(group.row);
         byEncounter.set(key, [...(byEncounter.get(key) ?? []), group]);
@@ -253,7 +253,27 @@ export function planNextReportPeriod(input: NextReportPeriodInput): NextReportPe
         const changedFields = fields.filter(([, read]) => values(previous.rows, read) !== values(rows, read)).map(([field]) => field);
         if (previous.rows.length !== rows.length) changedFields.push("rowCount");
         if (!changedFields.length) changedFields.push("rowAssociation");
-        issue(`${kind} overlapping facts/status/fees or multiplicity conflict on ${rows[0].serviceDate}. Fields: ${changedFields.join(", ")}. Sources: ${previous.sourceId} (${previous.rows.length} ${previous.rows.length === 1 ? "row" : "rows"}), ${source.id} (${rows.length} ${rows.length === 1 ? "row" : "rows"}).`);
+        let detail = "";
+        if (kind === "billing" && changedFields.length === 1 && changedFields[0] === "billingCode" && previous.rows.length === 1 && rows.length === 1) {
+          const a = previous.rows[0], b = rows[0], codeA = text(a.billingCode), codeB = text(b.billingCode);
+          const classify = (code: string) => !code ? "missing" : code === "0" ? "explicit 0" : "nonempty";
+          const incoming = selected.filter(source => source.kind === "billing").flatMap(source => source.rows.filter(row => identity(row) === key));
+          const matchesA = incoming.filter(row => text(row.billingCode) === codeA).length;
+          const matchesB = incoming.filter(row => text(row.billingCode) === codeB).length;
+          const approval = (target: StructuralReportRow) => {
+            const evidence = (byEncounter.get(key) ?? []).filter(group => group.rows.some(row =>
+              row.clientId.trim() === target.clientId.trim() && text(row.clinician) === text(target.clinician)
+              && row.serviceDate === target.serviceDate && text(row.billingCode) === text(target.billingCode)));
+            if (evidence.length !== 1 || evidence[0].rows.some(row => text(row.billingCode) !== text(target.billingCode)
+              || text(row.clinician) !== text(target.clinician) || row.clientId.trim() !== target.clientId.trim()
+              || row.serviceDate !== target.serviceDate)) return "unverified";
+            if (evidence[0].known && evidence[0].resolutionId) return "accepted";
+            if (evidence[0].resolutionStale) return "stale";
+            return evidence[0].known ? "none" : "unverified";
+          };
+          detail = ` Code classification A: ${classify(codeA)}; B: ${classify(codeB)}. Incoming rows: ${incoming.length}; code matches A: ${matchesA}, B: ${matchesB}, neither: ${incoming.length - matchesA - matchesB}. Approval applicability A: ${approval(a)}; B: ${approval(b)}.`;
+        }
+        issue(`${kind} overlapping facts/status/fees or multiplicity conflict on ${rows[0].serviceDate}. Fields: ${changedFields.join(", ")}. Sources: ${previous.sourceId} (${previous.rows.length} ${previous.rows.length === 1 ? "row" : "rows"}), ${source.id} (${rows.length} ${rows.length === 1 ? "row" : "rows"}).${detail}`);
       }
       encounters.set(key, { facts, rows, sourceId: source.id });
     }

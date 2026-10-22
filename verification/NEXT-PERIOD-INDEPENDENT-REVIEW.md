@@ -182,3 +182,51 @@ Independent local evidence, entirely synthetic:
 Independent harness corrections: esbuild was resolved through the existing API-server package rather than the root package. A privacy assertion initially matched the generic fixture client `overlap` inside the diagnostic word `overlapping`; replacing generic identities/hashes with distinct private sentinels made the assertion precise. Both corrections concern the temporary harness, not application defects.
 
 Only this review section was appended in the repository; the additional harness is `/tmp/next-period-bounded-independent.mjs`. No runtime/test edits, owner-data reads, live browser access, network requests, database connections, or real metadata writes were performed. No full build, broad gate suite, real PostgreSQL concurrency, or actual-owner carryover equality is certified here. **No remaining blocker in this review scope.**
+
+## Independent Billing-Code Diagnostic Review (2026-10-22)
+
+Disposition: **one P2 blocker in diagnostic accuracy; admission/data parity verified.** Reviewed `codex/billing-code-diagnostic` and its working runtime diff against `847fd809`. Scope is the diagnostic suffix and moving the existing reconciliation map into the enclosing loop. Only this section was appended by this reviewer; runtime and test files were not edited.
+
+### P2: Ambiguous reconciliation evidence is falsely reported as no approval
+
+Location: `lib/practice/src/hub/next-report-period.ts:268` through the fallback at line 270. The helper guards multiple matching groups and mixed codes/providers, but never checks the matched group's `ambiguous` flag or unknown reconciliation state. A single homogeneous group can still be ambiguous. When it has no stale resolution, the fallback emits `none` despite `known: false` and `ambiguous: true`. This contradicts the requested unverified status for ambiguous groups and the explicit unknown-not-false-none requirement.
+
+Independent synthetic reproduction: add a frozen billing export with two distinct-hash same-code A rows for the same client/provider/date; traverse that export before the original frozen export, which has one A row. The selected billing export has one B row with code `0`. Existing reconciliation correctly marks the A group ambiguous and unknown. The final one-row A versus one-row B comparison nevertheless emits:
+
+```text
+billing overlapping facts/status/fees or multiplicity conflict on 2026-10-12. Fields: billingCode. Sources: billing-00000001 (1 row), billing-00000002 (1 row). Code classification A: nonempty; B: explicit 0. Incoming rows: 1; code matches A: 0, B: 1, neither: 0. Approval applicability A: none; B: none.
+```
+
+Expected A applicability: `unverified`. Both baseline and current planner remain blocked; this finding does not claim incorrect admission. Fix the diagnostic classification using already-computed reconciliation flags, preserving accepted/stale semantics and existing admission behavior. Include this same-code ambiguous-group case in the focused regression coverage.
+
+Independent verification, local and synthetic only:
+
+- `node --test lib/practice/test/next-report-period.test.ts`: **38/38 passed**.
+- Temporary in-memory esbuild harness `/tmp/billing-code-independent-review.mjs` loads the actual current planner and a baseline planner obtained by `git show 847fd809:lib/practice/src/hub/next-report-period.ts`. **778 generated cases passed** exact full-result comparison after removing only the added diagnostic suffix, plus deep input immutability checks. Cases cross eight null/empty/whitespace/zero/nonempty/case-normalized codes, six evidence variants (clean, missing hash, invalid fee, shared hash, multiplicity, changed clinical facts), and forward/reversed snapshot/row/selected-source orders; ten additional cases cover valid, absent, partial, stale and changed-code approvals with distinct/equal fee slots.
+- The 779th comparison is the explicit ambiguity reproduction above; baseline status, period, carryovers, proposal presence/data and existing reasons remain identical after stripping the suffix. Separate assertions confirm the reconciler's `ambiguous: true` and `known: false`, and the erroneous `none` output.
+- Generated diagnostic messages exclude sentinel client IDs, hashes, raw nonempty codes, clinical values and fee values. Static inspection confirms the suffix serializes only fixed code classes, counts and fixed approval labels. Existing dates/source IDs/counts remain intact.
+- Lookup checks trimmed client identity, normalized actual raw clinician label, service date and normalized billing code inside canonical reconciliation results. It does not trust a nullable resolved clinician ID alone. Mixed-provider/code groups and unmatched/duplicate groups return `unverified`. Incoming counts come only from selected billing sources and partition the normalized A/B codes; no unselected source contributes to those counts.
+- No admission condition was modified in the reviewed runtime diff. The preexisting historical-provider/null identity grouping issue is outside scope and was not repaired or certified. No owner data, network, database, browser, metadata writes, API/UI certification or broad gates were used.
+
+Harness correction: the first ambiguity fixture put the two-row export last, making the immediately compared pair a two-row/one-row conflict where the new suffix intentionally does not apply. Ordering the extra frozen export first reproduces the intended one-row/one-row code-only path without changing reconciliation ambiguity. This was a harness setup correction, not an application change.
+
+**Remaining blocker: classify ambiguous/unknown applicability conservatively instead of emitting false `none`.**
+
+## Independent Billing-Code Diagnostic Fix Re-Review (2026-10-22)
+
+Final disposition: **clear; the preceding P2 is resolved, with no remaining blocker in this bounded review.** This disposition supersedes the preceding review's remaining-blocker statement. Rechecked the working `codex/billing-code-diagnostic` runtime diff against `847fd809` after the applicability fix and inspected the targeted regression updates. Only this review section was appended in the repository by this reviewer.
+
+The homogeneous-group guard now checks every member's trimmed client ID, exact service date, normalized actual raw provider label and normalized code. Accepted applicability requires both `known` and `resolutionId`; explicit stale evidence returns `stale`; an otherwise unknown group returns `unverified`; `none` is restricted to known unapproved evidence. Mixed identity/code/provider groups remain unverified before applicability classification. Lookup continues to use canonical reconciliation output and actual provider labels, rather than nullable clinical identity alone.
+
+The distinction between `unverified` and `none` is diagnostic only. A single blank-code row with no matching blank re-export can remain known and unapproved (`none`); repeated blank-code rows with distinct hashes are canonically ambiguous and therefore `unverified`. The three initially failing expectations asserted `none` for the latter. The owner updated those cases to explicit expected applicability values with a canonical-ambiguity comment, without wildcard assertions. Independent inspection and execution confirm the distinction; the existing A-blank/B-zero/incoming-B case still reports `none` on both sides. Accepted and stale labels likewise do not authorize changed-code conflicts.
+
+Completed independent evidence:
+
+- `node --test lib/practice/test/next-report-period.test.ts`: **53/53 passed** after the explicit expectation corrections. The ten approval/hash-group/count-boundary focused tests also passed independently before those corrections.
+- `/tmp/billing-code-independent-review.mjs`: **784 baseline/current comparisons passed**, each comparing full results after stripping only the new suffix and deeply checking input immutability. This reruns the original 778 generated cases and the original same-code ambiguity reproduction, plus independent missing-hash, invalid-fee, mixed-client, mixed-date and mixed-provider cases. All five additional unknown/mixed cases report `unverified` for the affected side. The former blocker now reads `Approval applicability A: unverified; B: none.` and remains blocked identically to baseline.
+- Reconfirmed unchanged status, period, carryovers, proposal presence/data and preexisting reason content across those comparisons; generated privacy checks still pass. Static runtime diff review confirms no admission condition changed. New detail contains only bounded classes/counts/applicability labels and preserves existing date/source/count context.
+- `git diff --check 847fd809` passed before this append. No runtime/test files were edited by this reviewer. No owner records, live browser, network, database, metadata writes or broad gates were used. API/UI execution remains with the owning reviewers; the preexisting historical-provider/null identity grouping issue remains outside this scope.
+
+Independent harness setup correction: the first mixed-provider fixture lacked frozen scope for its additional provider and correctly stopped before diagnostics. Adding valid synthetic prior attendance/billing scope allowed the intended mixed-provider reconciliation assertion to run and pass. This did not require any application change.
+
+**No remaining blocker in the reviewed diagnostics-only change.**

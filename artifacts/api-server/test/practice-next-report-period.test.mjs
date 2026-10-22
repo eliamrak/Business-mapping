@@ -229,10 +229,34 @@ for (const [field, changedValue] of [["totalFeeCharged", 987654.32], ["billingCo
     const message = response.body.error;
     assert.ok(message.includes(`billing overlapping facts/status/fees or multiplicity conflict on 2026-10-12. Fields: ${field}. Sources: ${ids.oldBilling} (1 row), ${ids.billing} (1 row).`), message);
     assert.ok(message.length < 500, "Conflict diagnostics stay bounded rather than dumping rows");
+    if (field === "billingCode") {
+      assert.ok(message.includes("Code classification A: nonempty; B: nonempty."));
+      assert.ok(message.includes("Incoming rows: 1; code matches A: 0, B: 1, neither: 0."));
+      assert.ok(message.includes("Approval applicability A: none; B: none."));
+    }
     for (const value of ["PRIVATE-CONFLICT-CLIENT", "PRIVATE-ROW-HASH", String(changedValue), "90837", "Synthetic Lane", "Room A"])
       assert.ok(!JSON.stringify(response.body).includes(value), `Diagnostics must not expose ${value}`);
   });
 }
+
+test("PUT exposes old-old missing versus zero code classifications without admitting or writing", async () => {
+  reset();
+  const prior = state.snapshots[1].rows.find(row => row.serviceDate === "2026-10-12");
+  Object.assign(prior, { clientId: "PRIVATE-BILLING-CASE", serviceDate: "2026-10-08", billingCode: null, sourceRowHash: "PRIVATE-HASH-OLD" });
+  const otherId = "billing-00000003";
+  state.snapshots.push(source("billing", "00000003", "prior", [{ ...prior, billingCode: "0", sourceRowHash: "PRIVATE-HASH-OTHER" }], "2026-09-10", "2026-10-12"));
+  state.saved.data.sourceSets[1].snapshotIds.push(otherId);
+  const incoming = state.snapshots[3].rows.find(row => row.serviceDate === "2026-10-12");
+  Object.assign(incoming, { clientId: prior.clientId, serviceDate: prior.serviceDate, billingCode: "0", sourceRowHash: "PRIVATE-HASH-INCOMING" });
+  const payload = proposal();
+  payload.data.sourceSets.find(set => set.kind === "billing" && set.end === "2026-10-21").snapshotIds = [ids.oldBilling, otherId, ids.billing];
+  const response = await reviewWithoutWrites(payload), message = response.body.error;
+  assert.ok(message.includes(`Sources: ${ids.oldBilling} (1 row), ${otherId} (1 row).`));
+  assert.ok(message.includes("Code classification A: missing; B: explicit 0."));
+  assert.ok(message.includes("Incoming rows: 1; code matches A: 0, B: 1, neither: 0."));
+  assert.ok(message.includes("Approval applicability A: none; B: none."));
+  for (const value of ["PRIVATE-BILLING-CASE", "PRIVATE-HASH", "Synthetic Lane", "100.00"]) assert.ok(!message.includes(value));
+});
 
 test("carryover changed after proposal requires review with zero writes", async () => {
   for (const change of [

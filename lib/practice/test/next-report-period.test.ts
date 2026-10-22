@@ -405,6 +405,113 @@ test("approvals never cover extra charges, stale mappings or multiple competing 
   assert.equal(planNextReportPeriod(competing).status, "blocked");
 });
 
+const codeSourceA = "billing-00000003", codeSourceB = "billing-00000004";
+function codeConflictFixture(codeA: StructuralReportRow["billingCode"], codeB: StructuralReportRow["billingCode"], incomingCodes: StructuralReportRow["billingCode"][]) {
+  const f = fixture();
+  const charge = { ...row("PRIVATE-DIAGNOSTIC-CLIENT", "2026-10-12", "PRIVATE-DIAGNOSTIC-HASH-A"), billingCode: codeA, totalFeeCharged: 987.65 };
+  for (const [id, billingCode] of [[codeSourceA, codeA], [codeSourceB, codeB]] as const) {
+    f.snapshots.push({ ...f.snapshots[1], id, sourceHash: `PRIVATE-SOURCE-HASH-${id}`, rows: [{ ...charge, billingCode, sourceRowHash: `PRIVATE-ROW-HASH-${id}` }] });
+    f.storedDeclarations.data.sourceSets[1].snapshotIds.push(id);
+  }
+  changeRows(f, 3, rows => [...rows, ...incomingCodes.map((billingCode, index) => ({ ...charge, billingCode, sourceRowHash: `PRIVATE-INCOMING-HASH-${index}` }))]);
+  return f;
+}
+
+function codeConflictReason(f: ReturnType<typeof fixture>) {
+  const before = structuredClone(f), plan = blocked(f, /billing overlapping facts\/status\/fees or multiplicity conflict/);
+  const reason = plan.reasons.find(reason => reason.includes(`Sources: ${codeSourceA} (1 row), ${codeSourceB} (1 row).`));
+  assert.ok(reason, JSON.stringify(plan.reasons));
+  assert.match(reason, /Fields: billingCode\./);
+  assert.deepEqual(plan.carryover, { rows: 25, matched: 25, conflicts: 0 });
+  assert.deepEqual(f, before);
+  const diagnostics = JSON.stringify(plan.reasons);
+  for (const source of f.snapshots) for (const r of source.rows) {
+    assert.ok(!diagnostics.includes(JSON.stringify(r.clientId)), diagnostics);
+    assert.ok(!diagnostics.includes(JSON.stringify(r.sourceRowHash)), diagnostics);
+    for (const value of [r.clientId, r.sourceRowHash]) if (/PRIVATE|approved-|shifted-charge/.test(value)) assert.ok(!diagnostics.includes(value), diagnostics);
+    if (r.billingCode?.trim() && r.billingCode.trim() !== "0") assert.ok(!diagnostics.toLowerCase().includes(r.billingCode.trim().toLowerCase()), diagnostics);
+    if (r.totalFeeCharged && !Number.isInteger(r.totalFeeCharged)) assert.ok(!diagnostics.includes(String(r.totalFeeCharged)), diagnostics);
+  }
+  return reason;
+}
+
+// Blank-code rows with distinct hashes form ambiguous canonical evidence: unknown applicability is unverified, not none.
+for (const [name, incomingCodes, counts, applicabilityA] of [
+  ["A", [undefined], [1, 1, 0, 0], "unverified"],
+  ["B", ["0"], [1, 0, 1, 0], "none"],
+  ["neither", ["PRIVATE-CODE-NEITHER"], [1, 0, 0, 1], "none"],
+  ["absent", [], [0, 0, 0, 0], "none"],
+  ["multiple", [null, "0", "PRIVATE-CODE-NEITHER", "  "], [4, 2, 1, 1], "unverified"],
+] as const) test(`old-old missing versus explicit zero code diagnostic counts incoming ${name}`, () => {
+  const f = codeConflictFixture(undefined, "0", [...incomingCodes]);
+  const reason = codeConflictReason(f);
+  assert.match(reason, /Code classification A: missing; B: explicit 0\./);
+  const [total, a, b, neither] = counts;
+  assert.ok(reason.includes(`Incoming rows: ${total}; code matches A: ${a}, B: ${b}, neither: ${neither}.`), reason);
+  assert.ok(reason.includes(`Approval applicability A: ${applicabilityA}; B: none.`), reason);
+});
+
+for (const [name, codeA, codeB, classificationA, classificationB, applicabilityB] of [
+  ["null and nonempty", null, "PRIVATE-CODE-B", "missing", "nonempty", "none"],
+  ["blank and zero", " \t ", " 0 ", "missing", "explicit 0", "none"],
+  ["zero and nonempty", "0", "PRIVATE-CODE-B", "explicit 0", "nonempty", "none"],
+  ["nonempty and missing", "PRIVATE-CODE-A", undefined, "nonempty", "missing", "unverified"],
+  ["two nonempty codes", "PRIVATE-CODE-A", "PRIVATE-CODE-B", "nonempty", "nonempty", "none"],
+] as const) test(`billing code classifications expose categories only for ${name}`, () => {
+  const reason = codeConflictReason(codeConflictFixture(codeA, codeB, [codeB]));
+  assert.ok(reason.includes(`Code classification A: ${classificationA}; B: ${classificationB}.`), reason);
+  assert.match(reason, /Incoming rows: 1; code matches A: 0, B: 1, neither: 0\./);
+  assert.ok(reason.includes(`Approval applicability A: none; B: ${applicabilityB}.`), reason);
+});
+
+for (const applicability of ["accepted", "stale"] as const) test(`a safely computed ${applicability} approval never unblocks a billing code conflict`, () => {
+  const f = approvedFixture([913.27, 927.41]);
+  const charge = f.snapshots[1].rows.find(r => r.clientId === "approved-encounter")!;
+  for (const [id, billingCode] of [[codeSourceA, charge.billingCode], [codeSourceB, "PRIVATE-CODE-B"]] as const) {
+    f.snapshots.push({ ...f.snapshots[1], id, sourceHash: `PRIVATE-SOURCE-HASH-${id}`, rows: [{ ...charge, billingCode, sourceRowHash: `PRIVATE-PARTIAL-HASH-${id}` }] });
+    f.storedDeclarations.data.sourceSets[1].snapshotIds.push(id);
+  }
+  changeRows(f, 3, rows => rows.filter(r => r.sourceRowHash !== "shifted-charge-1"));
+  if (applicability === "stale") changeRows(f, 1, rows => rows.map(r => r.sourceRowHash === "approved-anchor-1" ? { ...r, sourceRowHash: "PRIVATE-CHANGED-ANCHOR" } : r));
+  const reason = codeConflictReason(f);
+  assert.match(reason, /Code classification A: nonempty; B: nonempty\./);
+  assert.match(reason, /Incoming rows: 1; code matches A: 1, B: 0, neither: 0\./);
+  assert.ok(reason.includes(`Approval applicability A: ${applicability}; B: none.`), reason);
+  assert.equal(planNextReportPeriod({ ...f, billingResolutions: [] }).status, "blocked");
+});
+
+test("a hash group joining different billing codes reports unverified applicability on both sides", () => {
+  const f = codeConflictFixture(undefined, "0", []);
+  for (const index of [4, 5]) changeRows(f, index, rows => rows.map(r => ({ ...r, sourceRowHash: "PRIVATE-COLLIDING-HASH" })));
+  assert.match(codeConflictReason(f), /Approval applicability A: unverified; B: unverified\./);
+});
+
+test("a hash group joining different clients with the same code reports unverified applicability", () => {
+  const f = codeConflictFixture("PRIVATE-CODE-A", "PRIVATE-CODE-B", []);
+  changeRows(f, 4, rows => [...rows, { ...rows[0], clientId: "ZZZ-PRIVATE-OTHER-CLIENT" }]);
+  assert.match(codeConflictReason(f), /Approval applicability A: unverified; B: none\./);
+});
+
+test("code classifications and approval applicability are limited to single-row code-only conflicts", () => {
+  for (const patch of [{ totalFeeCharged: 654.32 }, { visitKind: "PRIVATE-VISIT-KIND" }]) {
+    const f = codeConflictFixture(undefined, "0", []);
+    changeRows(f, 5, rows => rows.map(r => ({ ...r, ...patch })));
+    const plan = blocked(f, /billing overlapping facts\/status\/fees or multiplicity conflict/);
+    const reason = plan.reasons.find(reason => reason.includes(`Sources: ${codeSourceA} (1 row), ${codeSourceB} (1 row).`))!;
+    assert.ok(reason);
+    assert.ok(!reason.includes("Code classification"), reason);
+    assert.ok(!reason.includes("Approval applicability"), reason);
+  }
+  const f = codeConflictFixture(undefined, "0", []);
+  changeRows(f, 5, rows => [...rows, { ...rows[0], sourceRowHash: "PRIVATE-SECOND-ROW-HASH" }]);
+  const plan = blocked(f, /billing overlapping facts\/status\/fees or multiplicity conflict/);
+  const reason = plan.reasons.find(reason => reason.includes(`Sources: ${codeSourceA} (1 row), ${codeSourceB} (2 rows).`))!;
+  assert.ok(reason);
+  assert.match(reason, /Fields: billingCode, rowCount\./);
+  assert.ok(!reason.includes("Code classification"), reason);
+  assert.ok(!reason.includes("Approval applicability"), reason);
+});
+
 test("selected sources present before or at the latest confirmation cannot auto-enable an old exclusion", () => {
   for (const index of [2, 3]) for (const importedAt of ["2026-10-12T23:59:59Z", "2026-10-13T00:00:00Z", "2026-10-12T20:00:00-04:00"]) {
     const f = fixture();

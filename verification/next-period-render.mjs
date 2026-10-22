@@ -46,14 +46,22 @@ function reset(scenario){mode=scenario;requests=[];journal=[];state={snapshots:[
     next.collections.attendance.rows.push(attendance('synthetic-mixed','2026-10-14'),{...attendance('synthetic-mixed','2026-10-14'),status:'cancelled'});next.collections.attendance.rowCount+=2;
     next.collections.billing.rows.push(billing('synthetic-mixed','2026-10-14'));next.collections.billing.rowCount++;
   }
-  if(scenario==='saved-billing-conflict'){
+  if(['saved-billing-conflict','saved-code-conflict'].includes(scenario)){
     baseline=structuredClone(prior);next=structuredClone(incoming);baseline.packageId+='-billing-conflict';next.packageId+='-billing-conflict';
     for(const pkg of [baseline,next])for(const collection of Object.values(pkg.collections))for(const row of collection.rows)if(row.clientId==='overlap'){row.clientId='private-billing-marker-QXZ';row.serviceDate='2026-10-08';}
     for(const collection of Object.values(baseline.collections))collection.coverageEnd='2026-10-08';
-    next.collections.billing.rows.find(r=>r.clientId==='private-billing-marker-QXZ').totalFeeCharged=200;
+    if(scenario==='saved-code-conflict'){
+      baseline.collections.billing.rows.find(r=>r.clientId==='private-billing-marker-QXZ').billingCode=null;
+      next.collections.billing.rows.find(r=>r.clientId==='private-billing-marker-QXZ').billingCode='0';
+    }else next.collections.billing.rows.find(r=>r.clientId==='private-billing-marker-QXZ').totalFeeCharged=200;
     const members=parse(baseline);for(const set of state.declarations.data.sourceSets)set.snapshotIds=[members.find(s=>s.kind===set.kind).id];
   }
-  addPackage(baseline,'2026-10-13T12:00:00Z');journal.push({action:'prior-source-proof'},{action:'prior-owner-confirmation'});if(['saved','saved-historical','saved-mixed','saved-billing-conflict','missing-source-ids','empty-source-ids','missing-frozen-member'].includes(scenario))addPackage(next);
+  addPackage(baseline,'2026-10-13T12:00:00Z');journal.push({action:'prior-source-proof'},{action:'prior-owner-confirmation'});
+  if(scenario==='saved-code-conflict'){
+    const variant=structuredClone(baseline);variant.packageId+='-code-variant';variant.collections.billing.rows.find(r=>r.clientId==='private-billing-marker-QXZ').billingCode='0';
+    addPackage(variant,'2026-10-13T11:00:00Z');state.declarations.data.sourceSets.find(set=>set.kind==='billing').snapshotIds.push(parse(variant).find(s=>s.kind==='billing').id);
+  }
+  if(['saved','saved-historical','saved-mixed','saved-billing-conflict','saved-code-conflict','missing-source-ids','empty-source-ids','missing-frozen-member'].includes(scenario))addPackage(next);
   if(scenario==='saved-historical'){
     const label='(deleted) Synthetic Former';
     for(const source of state.snapshots.filter(s=>oldSources.some(old=>old.id===s.id)))source.rows.push(source.kind==='attendance'
@@ -153,6 +161,15 @@ try{
     const priorId=state.packages[0].sourceIds.find(id=>id.startsWith('billing-')),nextId=state.packages.at(-1).sourceIds.find(id=>id.startsWith('billing-'));
     assert.ok(text.includes(`Sources: ${priorId} (1 row), ${nextId} (1 row).`));assert.ok(!text.includes('private-billing-marker-QXZ'));assert.ok(!text.includes('$200'));assert.ok(!text.includes('200.00'));
     assert.equal(count('POST'),0);assert.equal(count('PUT'),0);assert.equal(raw(),beforeRows);assert.equal(proof(),beforeProof);await steady();assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1));await shot('billing-bounded-diagnostics-'+width);
+  });
+  for(const width of [1440,390,320])await test('billing-code-classification-'+width,async()=>{
+    await page.setViewportSize({width,height:1050});await open('saved-code-conflict');const beforeRows=raw(),beforeProof=proof();
+    const review=panel().getByLabel('Saved report period reconciliation',{exact:true});assert.ok(await review.isVisible());assert.equal(await review.getByRole('button',{name:'Reconcile this period',exact:true}).count(),0);
+    const text=await review.innerText();assert.match(text,/Fields: billingCode\./);assert.match(text,/Code classification A: missing; B: explicit 0\./);
+    assert.match(text,/Incoming rows: 1; code matches A: 0, B: 1, neither: 0\./);assert.match(text,/Approval applicability A: none; B: none\./);
+    const a=state.packages[0].sourceIds.find(id=>id.startsWith('billing-')),b=state.packages[1].sourceIds.find(id=>id.startsWith('billing-'));
+    assert.ok(text.includes(`Sources: ${a} (1 row), ${b} (1 row).`));assert.ok(!text.includes('private-billing-marker-QXZ'));assert.ok(!text.includes('150.00'));
+    assert.equal(count('POST'),0);assert.equal(count('PUT'),0);assert.equal(raw(),beforeRows);assert.equal(proof(),beforeProof);await steady();assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1));await shot('billing-code-classification-'+width);
   });
   await test('upload-next-period',async()=>{
     await open('upload');const choice=panel().getByRole('button',{name:'Next full period',exact:true});assert.equal(await choice.getAttribute('aria-pressed'),'true');assert.match(await panel().locator('.pw-report-period-choice').innerText(),/2026-10-08.*2026-10-21/);
