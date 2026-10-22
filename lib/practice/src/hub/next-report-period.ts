@@ -1,6 +1,7 @@
 import { canonicalServicePeriod } from "./complete-periods.ts";
 import { reconcileBillingEvidence } from "./billing-evidence.ts";
 import type { BillingResolution } from "./billing-resolution.ts";
+import { semanticServiceCode, semanticVisitKind } from "./service-codes.ts";
 import {
   bindBillingResolutions, importDeclarationsSchema, normalizeProviderLabel, resolveImportedProvider,
   resolveHistoricalBillingProvider, validateHistoricalBillingProviders,
@@ -159,8 +160,9 @@ export function planNextReportPeriod(input: NextReportPeriodInput): NextReportPe
   const oldIds = new Set(data.sourceSets.flatMap((set) => set.snapshotIds));
   const oldSources = snapshots.filter((source) => oldIds.has(source.id));
   const identity = (row: StructuralReportRow) => JSON.stringify([row.clientId.trim(), resolve(row), row.serviceDate]);
-  const fact = (row: StructuralReportRow, kind: StructuralSnapshot["kind"]) => JSON.stringify([
-    row.clientId.trim(), resolve(row), row.serviceDate, text(row.billingCode), text(row.visitKind), text(row.cancellationSubtype),
+  const fact = (row: StructuralReportRow, kind: StructuralSnapshot["kind"], semantic = true) => JSON.stringify([
+    row.clientId.trim(), resolve(row), row.serviceDate, semantic ? semanticServiceCode(row.billingCode) : row.billingCode ?? null,
+    semantic ? semanticVisitKind(row) : row.visitKind ?? null, text(row.cancellationSubtype),
     ...(kind === "attendance" ? [text(row.status), text(row.location)] : [row.totalFeeCharged]),
   ]);
   const groups = (rows: readonly StructuralReportRow[]) => {
@@ -215,6 +217,15 @@ export function planNextReportPeriod(input: NextReportPeriodInput): NextReportPe
   const billingApprovals = bindBillingResolutions(input.billingResolutions ?? [], roster, data);
   for (const kind of kinds) {
     const sources = [...oldSources.filter((source) => source.kind === kind), ...selected.filter((source) => source.kind === kind && !oldIds.has(source.id))];
+    const touchedHashes = new Set(selected.filter(source => source.kind === kind).flatMap(source => source.rows.map(row => row.sourceRowHash)));
+    const rawHashes = new Map<string, string>();
+    for (const source of sources) for (const row of source.rows) {
+      if (!(row.serviceDate >= period.start && row.serviceDate <= period.end) && !touchedHashes.has(row.sourceRowHash)) continue;
+      const raw = fact(row, kind, false), previous = rawHashes.get(row.sourceRowHash);
+      if (!row.sourceRowHash?.trim() || previous !== undefined && previous !== raw)
+        issue(`${kind} source row identity has missing or conflicting raw facts on ${row.serviceDate}; semantic aliases cannot override hash evidence.`);
+      rawHashes.set(row.sourceRowHash, raw);
+    }
     const approvedEncounters = new Set<string>();
     const byEncounter = new Map<string, ReturnType<typeof reconcileBillingEvidence<StructuralReportRow & { totalFeeCharged: number }>>>();
     if (kind === "billing") {

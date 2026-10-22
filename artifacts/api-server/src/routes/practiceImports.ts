@@ -14,6 +14,7 @@ import { assessAutomaticOverlap, overlapReviewMessage, sameSourceCoverageChanged
 import { importDeclarationsSchema, normalizeProviderLabel, prepareBillingChargeResolution, reconcileBillingEvidence,
   resolveImportedProvider, bindBillingResolutions, resolveHistoricalBillingProvider,
   prepareBillingCodeResolution, acceptedBillingCodeRow, billingCodeHashConflicts, billingEncounterKey, isBillingCodeResolution, billingCodeResolutionSchema,
+  semanticServiceCode,
   validateHistoricalBillingProviders, restoreHistoricalBillingProviders, unverifiedDeletionMarker, deletionMarkerGuidance, legacyServiceCodes, planNextReportPeriod, type StoredImportDeclarations, type BillingChargeResolution } from "@workspace/practice/hub";
 
 const router = Router();
@@ -472,7 +473,7 @@ function billingCodeCases(snapshots: Snapshot[], practiceId: string, accountId: 
     encounters.set(key, [...(encounters.get(key) ?? []), { snapshotId: source.id, row }]);
   }
   const all = [...encounters.values()].flat();
-  return [...encounters.values()].filter(members => includeKeys.has(billingEncounterKey(members[0].row)) || new Set(members.map(entry => normalizeProviderLabel(entry.row.billingCode ?? ""))).size > 1)
+  return [...encounters.values()].filter(members => includeKeys.has(billingEncounterKey(members[0].row)) || new Set(members.map(entry => semanticServiceCode(entry.row.billingCode))).size > 1)
     .map(members => {
       const pinned = members.map(entry => ({ snapshotId: entry.snapshotId, row: entry.row })).sort((a, b) => stableJson(a).localeCompare(stableJson(b)));
       const caseToken = sha256(["billing-code", practiceId, accountId, declarationRevision, pinned]);

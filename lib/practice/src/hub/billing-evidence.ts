@@ -1,5 +1,5 @@
 import type { BillingChargeResolution, BillingChargeResolutionEvidence } from "./billing-resolution.ts";
-import { legacyServiceDefinition } from "./service-codes.ts";
+import { hasContradictoryConsultationKind, isPhoneConsultationCode, legacyServiceDefinition, semanticServiceCode, semanticVisitKind } from "./service-codes.ts";
 import { acceptedBillingCodeRow, billingCodeHashConflicts, billingEncounterKey, isBillingCodeResolution } from "./billing-code-resolution.ts";
 
 export type EncounterBillingRow = {
@@ -13,14 +13,16 @@ export type EncounterBillingRow = {
   sourceRowHash: string;
 };
 const normalize = (value: string) => value.trim().replace(/\s+/g, " ").toLowerCase();
-const code = (row: EncounterBillingRow) => normalize(row.billingCode ?? "");
+const code = (row: EncounterBillingRow) => semanticServiceCode(row.billingCode);
 const kind = (row: EncounterBillingRow) => {
   const legacy = legacyServiceDefinition(row.billingCode);
-  return legacy ? legacy.kind === "treatment" ? "" : legacy.kind : row.visitKind ?? (code(row) === "phone" ? "consultation" : "");
+  return legacy ? legacy.kind === "treatment" ? "" : legacy.kind : semanticVisitKind(row);
 };
 const identity = (row: EncounterBillingRow) => JSON.stringify([row.clientId.trim(), normalize(row.clinician), row.serviceDate, code(row)]);
 const same = (a: EncounterBillingRow, b: EncounterBillingRow) => identity(a) === identity(b)
-  && kind(a) === kind(b) && Object.is(a.totalFeeCharged, b.totalFeeCharged);
+  && kind(a) === kind(b) && (a.cancellationSubtype ?? null) === (b.cancellationSubtype ?? null) && Object.is(a.totalFeeCharged, b.totalFeeCharged);
+const sameRawServiceFacts = (a: EncounterBillingRow, b: EncounterBillingRow) => (a.billingCode ?? null) === (b.billingCode ?? null)
+  && (a.visitKind ?? null) === (b.visitKind ?? null);
 
 type Entry<T extends EncounterBillingRow> = { row: T; snapshotId: string };
 type ReconciledBillingGroup<T> = {
@@ -91,10 +93,13 @@ export function reconcileBillingEvidence<T extends EncounterBillingRow>(entries:
   const originalHashes = new Map<string, T>(), globalHashConflicts = new Set<string>();
   for (const { row } of entries) {
     const previous = originalHashes.get(row.sourceRowHash);
-    if (previous && (!same(previous, row) || (previous.cancellationSubtype ?? null) !== (row.cancellationSubtype ?? null))) globalHashConflicts.add(row.sourceRowHash);
+    if (previous && (!same(previous, row) || !sameRawServiceFacts(previous, row)
+      || (previous.cancellationSubtype ?? null) !== (row.cancellationSubtype ?? null))) globalHashConflicts.add(row.sourceRowHash);
     else originalHashes.set(row.sourceRowHash, row);
   }
   const codeGroups = [...codeCases.values()].flatMap(members => {
+    // Equivalent consultation aliases need no discretionary code approval.
+    if (members.every(entry => isPhoneConsultationCode(entry.row.billingCode))) return [];
     const relevant = resolutions.filter(isBillingCodeResolution).filter(resolution => billingEncounterKey(members[0].row)
       === billingEncounterKey({ ...members[0].row, clientId: resolution.clientId, clinician: resolution.clinicianLabel, serviceDate: resolution.serviceDate }));
     if (!relevant.length) return [];
@@ -144,8 +149,9 @@ export function reconcileBillingEvidence<T extends EncounterBillingRow>(entries:
     const missingHash = rows.some((row) => !row.sourceRowHash?.trim());
     const invalidFee = rows.some((row) => !Number.isFinite(row.totalFeeCharged));
     const inheritedHashConflict = handled.size > 0 && rows.some(row => globalHashConflicts.has(row.sourceRowHash));
-    const hashConflict = inheritedHashConflict || [...byHash.values()].some((items) => items.some((row) => !same(items[0], row)));
-    const conflicting = rows.some((row) => !same(rows[0], row));
+    const hashConflict = inheritedHashConflict || [...byHash.values()].some((items) => items.some((row) => !same(items[0], row)
+      || !sameRawServiceFacts(items[0], row)));
+    const conflicting = rows.some((row) => !same(rows[0], row) || hasContradictoryConsultationKind(row));
     const ambiguous = [...bySnapshot.values()].some((seen) => seen.size > 1)
       || (rows.length > 1 && !code(rows[0]) && new Set(rows.map((row) => row.sourceRowHash)).size > 1)
       || rows.some((row) => !row.clientId.trim() || !normalize(row.clinician));
@@ -156,10 +162,10 @@ export function reconcileBillingEvidence<T extends EncounterBillingRow>(entries:
       const acceptedRows = acceptedChargeRows(ordered, resolution);
       return acceptedRows ? [{ resolutionId: resolution.id, acceptedRows }] : [];
     });
-    const approval = !inheritedHashConflict && relevant.length === 1 && approvals.length === 1 ? approvals[0] : null;
+    const approval = !hashConflict && relevant.length === 1 && approvals.length === 1 ? approvals[0] : null;
     return {
       rows, row: rows[0], missingHash, invalidFee, hashConflict, conflicting, ambiguous,
-      known: !!approval || (!inheritedHashConflict && !relevant.length && !missingHash && !invalidFee && !conflicting && !ambiguous),
+      known: !!approval || (!hashConflict && !relevant.length && !missingHash && !invalidFee && !conflicting && !ambiguous),
       duplicateRowCount: rows.length - (approval?.acceptedRows.length ?? 1),
       codeResolution: false, ...(approval ?? {}),
       ...(!approval && relevant.length ? { resolutionStale: true } : {}),

@@ -42,7 +42,7 @@ try {
   const page = await browser.newPage({ viewport: { width: 1440, height: 1000 }, hasTouch: true });
   const errors = [], writes = [], captures = [];
   page.on("pageerror", error => errors.push(error.message));
-  let revision = 7, rejectNext = false, denyRead = false, malformedRead = false, gets = 0;
+  let revision = 7, rejectNext = false, denyRead = false, malformedRead = false, equivalentConsultations = false, gets = 0;
   const candidate = {
     caseToken: "synthetic-case-token", clientReference: "Synthetic private client A", clinicianLabel: "Synthetic Clinician", serviceDate: "2026-09-12", totalFeeCharged: 175,
     sources: [
@@ -60,7 +60,7 @@ try {
       assert.equal(request.method(), "GET"); gets++;
       if (denyRead) return respond({ error: "Synthetic owner access required" }, 403);
       if (malformedRead) return respond([]);
-      return respond({ revision, candidates: [candidate] });
+      return respond({ revision, candidates: equivalentConsultations ? [] : [candidate] });
     }
     assert.equal(request.method(), "POST");
     const payload = request.postDataJSON(); writes.push({ path: url.pathname, payload });
@@ -239,16 +239,13 @@ try {
     sourceHash: String(index + 1).repeat(64), importedAt: ["2026-10-13", "2026-10-16", "2026-10-22"][index] + "T12:00:00Z", billingCode,
   })));
   const freeSources = structuredClone(candidate.sources), writesBeforeFreePreview = writes.length;
-  for (const selected of [0, 1, 2]) {
-    await panel.getByRole("button", { name: "Reload billing code conflicts", exact: true }).click();
-    await item.locator(":scope > summary").click();
-    assert.equal(await item.getByRole("radio").count(), 3);
-    assert.equal(await item.locator('input[type="radio"]:checked').count(), 0);
-    await item.getByRole("radio").nth(selected).check();
-    await item.getByRole("button", { name: "Preview impact", exact: true }).click();
-    await item.getByText(`One billed charge of $0.00 using ${candidate.sources[selected].billingCode}.`, { exact: true }).waitFor();
-    await item.getByText("PHONE identifies a consultation; code 0 does not establish an appointment type. This billing choice does not rewrite attendance or confirm treatment.", { exact: true }).waitFor();
-    await capture(`free-phone-zero-preview-${selected}`, selected === 0 ? 320 : selected === 1 ? 390 : 1440);
+  equivalentConsultations = true;
+  await panel.getByRole("button", { name: "Reload billing code conflicts", exact: true }).click();
+  await panel.getByText("No billing code conflicts require review.", { exact: true }).waitFor();
+  assert.equal(await panel.getByRole("radio").count(), 0);
+  assert.equal(await panel.getByRole("button", { name: "Apply code choice", exact: true }).count(), 0);
+  for (const width of [320, 390, 1440]) {
+    await capture(`equivalent-consultations-no-choice-${width}`, width);
   }
   assert.equal(writes.length, writesBeforeFreePreview);
   assert.deepEqual(candidate.sources, freeSources);

@@ -12,7 +12,7 @@ const routeSource = readFileSync(local("../src/routes/practiceImports.ts"), "utf
 const bundle = await build({
   stdin: { contents: routeSource + `
     export { state, control } from '@workspace/db';
-    export { prepareBillingChargeResolution } from '@workspace/practice/hub';
+    export { prepareBillingChargeResolution, reconcileBillingEvidence } from '@workspace/practice/hub';
     export { parseBillingResolutionJournal } from '../lib/import-backup-validation';`,
     loader: "ts", resolveDir: local("../src/routes/") },
   bundle: true, write: false, platform: "node", format: "cjs",
@@ -105,7 +105,7 @@ const bundle = await build({
 });
 const compiled = { exports: {} };
 new Function("module", "exports", "require", bundle.outputFiles[0].text)(compiled, compiled.exports, require);
-const { default: router, state, control, prepareBillingChargeResolution, parseBillingResolutionJournal } = compiled.exports;
+const { default: router, state, control, prepareBillingChargeResolution, reconcileBillingEvidence, parseBillingResolutionJournal } = compiled.exports;
 const handler = (method, path) => {
   const layer = router.stack.find(layer => layer.route?.path === path && layer.route.methods[method]);
   assert.ok(layer, `Actual route ${method.toUpperCase()} ${path} must exist`);
@@ -116,6 +116,7 @@ const candidates = handler("get", "/practice-imports/billing-code-candidates");
 const accept = handler("post", "/practice-imports/billing-code-resolutions");
 const revoke = handler("post", "/practice-imports/billing-code-resolutions/:id/revoke");
 const history = handler("get", "/practice-imports");
+const chargeCandidates = handler("get", "/practice-imports/billing-resolution-candidates");
 const practiceId = "synthetic-code-review";
 const stamp = "2026-10-22T12:00:00.000Z";
 const uuid = i => `00000000-0000-4000-8000-${String(i).padStart(12, "0")}`;
@@ -337,72 +338,71 @@ function freePhoneZeroSources() {
     { coverageStart: "2026-10-08", coverageEnd: "2026-10-08", createdAt: new Date(`2026-10-${day}T12:00:00.000Z`) }));
 }
 
-for (const index of [0, 1, 2]) {
-  test(`PHONE/0/0 zero-fee October 8 dispute accepts source ${index + 1} with audit-only writes`, async () => {
+const billingGroups = snapshots => reconcileBillingEvidence(snapshots.filter(source => source.kind === "billing")
+  .flatMap(source => source.rows.map(row => ({ snapshotId: source.id, row }))));
+
+for (const explicitConsultation of [false, true]) {
+  test(`PHONE/0/0 auto-equivalence with ${explicitConsultation ? "explicit consultation" : "absent raw kind"} needs no choice or audit`, async () => {
     freePhoneZeroSources();
+    if (explicitConsultation) state.snapshots[0].rows[0].visitKind = "consultation";
     const before = durable(), response = await call(candidates);
     assert.equal(response.statusCode, 200, JSON.stringify(response.body));
     assert.equal(response.headers["cache-control"], "no-store");
-    const [candidate] = response.body.candidates;
-    assert.equal(response.body.candidates.length, 1);
-    assert.equal(candidate.canResolve, true, candidate.reason);
-    assert.equal(candidate.serviceDate, "2026-10-08");
-    assert.equal(candidate.totalFeeCharged, 0);
-    assert.deepEqual(candidate.sources.map(source => source.billingCode), ["PHONE", "0", "0"]);
-    assert.deepEqual(candidate.sources.map(source => source.importedAt),
+    assert.deepEqual(response.body, { revision: 0, candidates: [] });
+    const historical = await call(history);
+    assert.equal(historical.statusCode, 200);
+    assert.deepEqual(historical.body.billingResolutions, []);
+    assert.equal(historical.body.billingResolutionRevision, 0);
+    assert.deepEqual(historical.body.snapshots.map(source => source.rows[0].billingCode), ["PHONE", "0", "0"]);
+    assert.deepEqual(historical.body.snapshots.map(source => source.importedAt),
       ["13", "16", "22"].map(day => `2026-10-${day}T12:00:00.000Z`));
-    assert.equal(new Set(candidate.sources.map(source => source.choiceToken)).size, 3,
-      "Identical B/incoming row hashes still have distinct source choices");
-    assert.ok(state.snapshots.every(source => !Object.hasOwn(source.rows[0], "visitKind")));
-    assert.equal(state.snapshots[1].rows[0].sourceRowHash, state.snapshots[2].rows[0].sourceRowHash);
+    const groups = billingGroups(historical.body.snapshots);
+    assert.equal(groups.length, 1); assert.equal(groups[0].known, true);
+    assert.equal(groups[0].duplicateRowCount, 2); assert.equal(groups[0].codeResolution, false);
+    assert.equal(groups[0].resolutionId, undefined);
+    assert.deepEqual((await call(chargeCandidates)).body.candidates, []);
     assert.deepEqual(durable(), before); assert.deepEqual(state.writes, []);
-    const selected = candidate.sources[index];
-    const saved = await call(accept, { caseToken: candidate.caseToken, choiceToken: selected.choiceToken,
-      expectedRevision: response.body.revision, confirmed: true, approvalNote: "Synthetic free PHONE/zero source review" });
-    assert.equal(saved.statusCode, 200, JSON.stringify(saved.body));
-    assert.equal(saved.body.billingResolutionRevision, 1);
-    assert.equal(saved.body.resolutionStatus, "saved");
-    const [resolution] = saved.body.billingResolutions;
-    assert.equal(resolution.kind, "billing-code");
-    assert.deepEqual(resolution.selected, { snapshotId: selected.snapshotId,
-      sourceRowHash: before.snapshots[index].rows[0].sourceRowHash });
-    assert.deepEqual(resolution.evidence.map(entry => entry.billingCode), ["PHONE", "0", "0"]);
-    assert.ok(resolution.evidence.every(entry => entry.totalFeeCharged === 0 && entry.visitKind === null));
-    assert.deepEqual(state.writes, ["audit"]);
-    assert.deepEqual(raw(), { saved: before.saved, snapshots: before.snapshots,
-      packages: before.packages, roster: before.roster });
-    assert.equal(state.audits.length, 1);
-    assert.equal(state.audits[0].action, "accept-billing-code-exception");
-    assert.equal(state.audits[0].detail.affectsAttendance, false);
-    assert.equal(state.audits[0].detail.affectsCoverage, false);
-    const reloaded = (await preview()).candidates[0];
-    assert.equal(reloaded.stale, false); assert.equal(reloaded.canResolve, false);
-    assert.equal(reloaded.resolutionId, resolution.id);
-    assert.equal(reloaded.selectedChoiceToken, selected.choiceToken);
+    assert.equal(state.transactions, 0);
+    await rejected(accept, { caseToken: "f".repeat(64), choiceToken: "e".repeat(64), expectedRevision: 0,
+      confirmed: true, approvalNote: "No manual choice exists for equivalent consultation codes" }, 409);
   });
 }
 
-for (const [label, mutate] of [
-  ["positive fees", () => { state.snapshots.forEach(source => { source.rows[0].totalFeeCharged = 25; }); }],
+for (const [label, mutate, chargeReview] of [
   ["differing fee", () => { state.snapshots[0].rows[0].totalFeeCharged = 25; }],
-  ["explicit raw visit-kind difference", () => { state.snapshots[0].rows[0].visitKind = "consultation"; }],
+  ["contradictory raw visit-kind", () => { state.snapshots[0].rows[0].visitKind = "treatment"; }],
   ["same-source two rows", () => {
     state.snapshots[0].rows.push({ ...state.snapshots[0].rows[0], sourceRowHash: "synthetic-second-phone-row" });
     state.snapshots[0].rowCount = 2;
   }],
   ["cancellation subtype difference", () => { state.snapshots[0].rows[0].cancellationSubtype = "late_cancelled"; }],
-  ["conflicting reused row hash", () => { state.snapshots[0].rows[0].sourceRowHash = state.snapshots[1].rows[0].sourceRowHash; }],
-  ["code outside PHONE and zero", () => { state.snapshots[2].rows[0].billingCode = "90837";
-    state.snapshots[2].rows[0].sourceRowHash = "synthetic-other-code-row"; }],
+  ["nonfinite fee", () => { state.snapshots[0].rows[0].totalFeeCharged = Number.NaN; }, false],
+  ["conflicting reused raw hash", () => { state.snapshots[0].rows[0].sourceRowHash = state.snapshots[1].rows[0].sourceRowHash; }, false],
 ]) {
-  test(`PHONE/0/0 exception refuses ${label} at GET and POST with zero writes`, async () => {
+  test(`PHONE/0/0 ${label} stays unknown without discretionary code approval`, async () => {
     freePhoneZeroSources(); mutate();
-    const before = durable(), value = await preview(), candidate = value.candidates[0];
-    assert.equal(candidate.canResolve, false); assert.ok(candidate.reason);
-    for (const selected of candidate.sources) {
-      await rejected(accept, { caseToken: candidate.caseToken, choiceToken: selected.choiceToken,
-        expectedRevision: value.revision, confirmed: true, approvalNote: "Synthetic guarded PHONE/zero review" }, 400);
+    const before = durable(), response = await call(candidates);
+    assert.deepEqual(response.body, { revision: 0, candidates: [] });
+    const historical = await call(history), groups = billingGroups(historical.body.snapshots);
+    assert.equal(groups.length, 1); assert.equal(groups[0].known, false);
+    if (chargeReview !== false) {
+      const review = await call(chargeCandidates);
+      assert.equal(review.statusCode, 200);
+      assert.equal(review.body.candidates.length, 1);
+      assert.equal(review.body.candidates[0].canAccept, false);
     }
+    assert.deepEqual(historical.body.billingResolutions, []);
+    assert.deepEqual(durable(), before); assert.deepEqual(state.writes, []);
+  });
+}
+
+for (const blank of [null, ""]) {
+  test(`literal zero remains distinct from ${blank === null ? "missing" : "blank"} billing code`, async () => {
+    freePhoneZeroSources(); state.snapshots[0].rows[0].billingCode = blank;
+    const before = durable(), response = await call(candidates);
+    assert.equal(response.statusCode, 200);
+    assert.equal(response.body.candidates.length, 1);
+    assert.deepEqual(response.body.candidates[0].sources.map(source => source.billingCode), [blank, "0", "0"]);
     assert.deepEqual(durable(), before); assert.deepEqual(state.writes, []);
   });
 }

@@ -46,22 +46,23 @@ function reset(scenario){mode=scenario;requests=[];journal=[];state={snapshots:[
     next.collections.attendance.rows.push(attendance('synthetic-mixed','2026-10-14'),{...attendance('synthetic-mixed','2026-10-14'),status:'cancelled'});next.collections.attendance.rowCount+=2;
     next.collections.billing.rows.push(billing('synthetic-mixed','2026-10-14'));next.collections.billing.rowCount++;
   }
-  if(['saved-billing-conflict','saved-code-conflict'].includes(scenario)){
+  if(['saved-billing-conflict','saved-code-conflict','saved-consultation-alias'].includes(scenario)){
     baseline=structuredClone(prior);next=structuredClone(incoming);baseline.packageId+='-billing-conflict';next.packageId+='-billing-conflict';
     for(const pkg of [baseline,next])for(const collection of Object.values(pkg.collections))for(const row of collection.rows)if(row.clientId==='overlap'){row.clientId='private-billing-marker-QXZ';row.serviceDate='2026-10-08';}
     for(const collection of Object.values(baseline.collections))collection.coverageEnd='2026-10-08';
-    if(scenario==='saved-code-conflict'){
-      baseline.collections.billing.rows.find(r=>r.clientId==='private-billing-marker-QXZ').billingCode=null;
+    if(['saved-code-conflict','saved-consultation-alias'].includes(scenario)){
+      baseline.collections.billing.rows.find(r=>r.clientId==='private-billing-marker-QXZ').billingCode=scenario==='saved-consultation-alias'?'PHONE':null;
       next.collections.billing.rows.find(r=>r.clientId==='private-billing-marker-QXZ').billingCode='0';
+      if(scenario==='saved-consultation-alias')for(const pkg of [baseline,next])pkg.collections.billing.rows.find(r=>r.clientId==='private-billing-marker-QXZ').totalFeeCharged=0;
     }else next.collections.billing.rows.find(r=>r.clientId==='private-billing-marker-QXZ').totalFeeCharged=200;
     const members=parse(baseline);for(const set of state.declarations.data.sourceSets)set.snapshotIds=[members.find(s=>s.kind===set.kind).id];
   }
   addPackage(baseline,'2026-10-13T12:00:00Z');journal.push({action:'prior-source-proof'},{action:'prior-owner-confirmation'});
-  if(scenario==='saved-code-conflict'){
+  if(['saved-code-conflict','saved-consultation-alias'].includes(scenario)){
     const variant=structuredClone(baseline);variant.packageId+='-code-variant';variant.collections.billing.rows.find(r=>r.clientId==='private-billing-marker-QXZ').billingCode='0';
     addPackage(variant,'2026-10-13T11:00:00Z');state.declarations.data.sourceSets.find(set=>set.kind==='billing').snapshotIds.push(parse(variant).find(s=>s.kind==='billing').id);
   }
-  if(['saved','saved-historical','saved-mixed','saved-billing-conflict','saved-code-conflict','missing-source-ids','empty-source-ids','missing-frozen-member'].includes(scenario))addPackage(next);
+  if(['saved','saved-historical','saved-mixed','saved-billing-conflict','saved-code-conflict','saved-consultation-alias','missing-source-ids','empty-source-ids','missing-frozen-member'].includes(scenario))addPackage(next);
   if(scenario==='saved-historical'){
     const label='(deleted) Synthetic Former';
     for(const source of state.snapshots.filter(s=>oldSources.some(old=>old.id===s.id)))source.rows.push(source.kind==='attendance'
@@ -133,6 +134,19 @@ try{
     const button=panel().getByRole('button',{name:'Reconcile this period',exact:true});await button.focus();await page.keyboard.press('Enter');await settled();
     assert.equal(count('PUT'),1);assert.equal(count('POST'),0);assert.equal(raw(),before);assert.equal(state.declarations.data.sourceSets.length,4);assert.deepEqual(state.declarations.data.sourceSets.slice(0,2),declaration.data.sourceSets);assert.equal(journal.length,5);await coverage('2026-10-21');
     await page.reload();await enter();await coverage('2026-10-21');assert.equal(count('PUT'),1);await shot('saved-pair-reconciled-1440');
+  });
+  await test('saved-PHONE-zero-consultation-aliases-ready-without-code-choice',async()=>{
+    await open('saved-consultation-alias');await coverage('2026-10-07');
+    const beforeRows=raw(),beforeData=proof(),proposal=plan(state.packages.at(-1).sourceIds);
+    assert.equal(proposal.status,'ready',proposal.reasons.join(' '));assert.deepEqual(proposal.carryover,{rows:25,matched:25,conflicts:0});
+    const review=panel().getByLabel('Saved report period reconciliation',{exact:true});
+    await review.getByRole('button',{name:'Reconcile this period',exact:true}).waitFor();
+    await page.locator('#import-billing-review > summary').click();
+    const codes=page.locator('.pw-billing-code-review');await codes.locator(':scope > summary').click();
+    await codes.getByText('No billing code conflicts require review.',{exact:true}).waitFor();
+    assert.equal(await codes.getByRole('radio').count(),0);assert.equal(await codes.getByRole('button',{name:'Apply code choice',exact:true}).count(),0);
+    for(const width of [1440,390,320]){await page.setViewportSize({width,height:1050});await shot('equivalent-consultation-ready-'+width);}
+    assert.equal(count('POST'),0);assert.equal(count('PUT'),0);assert.equal(raw(),beforeRows);assert.equal(proof(),beforeData);
   });
   await test('saved-frozen-historical-exclusion-preserved',async()=>{
     await open('saved-historical');await coverage('2026-10-07');

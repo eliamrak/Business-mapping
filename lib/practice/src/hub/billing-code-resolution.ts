@@ -1,6 +1,6 @@
 import { z } from "zod/v4";
 import type { EncounterBillingRow } from "./billing-evidence.ts";
-import { isConsultationService, isDocumentationService } from "./service-codes.ts";
+import { isConsultationService, isDocumentationService, semanticServiceCode } from "./service-codes.ts";
 
 const text = (value: string | null | undefined) => (value ?? "").trim().replace(/\s+/g, " ").toLowerCase();
 export const billingEncounterKey = (row: EncounterBillingRow) => JSON.stringify([row.clientId.trim(), text(row.clinician), row.serviceDate]);
@@ -43,18 +43,12 @@ export function billingCodeHashConflicts(entries: readonly BillingCodeEntry[], m
 export function prepareBillingCodeResolution<T extends EncounterBillingRow>(entries: readonly BillingCodeEntry<T>[]) {
   if (entries.length < 2 || entries.length > 1000) return null;
   const first = entries[0].row;
-  // PHONE versus literal zero is the disputed code itself, not an independently
-  // exported visit-kind conflict. It may be reviewed only for a free encounter.
-  const freePhoneZeroDispute = entries.some(({ row }) => text(row.billingCode) === "phone")
-    && entries.some(({ row }) => text(row.billingCode) === "0")
-    && entries.every(({ row }) => ["phone", "0"].includes(text(row.billingCode))
-      && row.totalFeeCharged === 0 && row.visitKind == null);
   if (!first.clientId.trim() || !text(first.clinician) || new Set(entries.map(entry => entry.snapshotId)).size !== entries.length
     || entries.some(({ snapshotId, row }) => !snapshotId || !row.sourceRowHash?.trim() || !Number.isFinite(row.totalFeeCharged)
       || billingEncounterKey(row) !== billingEncounterKey(first) || row.totalFeeCharged !== first.totalFeeCharged
-      || serviceKind(row) !== serviceKind(first) && !freePhoneZeroDispute
+      || serviceKind(row) !== serviceKind(first)
       || (row.visitKind ?? null) !== (first.visitKind ?? null) || (row.cancellationSubtype ?? null) !== (first.cancellationSubtype ?? null))
-    || new Set(entries.map(({ row }) => text(row.billingCode))).size < 2
+    || new Set(entries.map(({ row }) => semanticServiceCode(row.billingCode))).size < 2
     || billingCodeHashConflicts(entries, entries)) return null;
   return { clientId: first.clientId.trim(), clinicianLabel: first.clinician, serviceDate: first.serviceDate,
     evidence: orderedEvidence(entries) };

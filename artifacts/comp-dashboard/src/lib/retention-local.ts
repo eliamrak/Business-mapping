@@ -1,4 +1,4 @@
-import { isConsultationService, isDocumentationService, isTreatmentService, isFreePhoneService, legacyServiceDefinition, reconcileBillingEvidence, unverifiedDeletionMarker, deletionMarkerGuidance } from "@workspace/practice/hub";
+import { isConsultationService, isDocumentationService, isTreatmentService, isFreePhoneService, isPhoneConsultationCode, legacyServiceDefinition, reconcileBillingEvidence, semanticVisitKind, unverifiedDeletionMarker, deletionMarkerGuidance } from "@workspace/practice/hub";
 
 export type LocalFactKind = "attendance" | "billing";
 export type ReportCoverage = { start: string; end: string; complete: true };
@@ -486,7 +486,8 @@ function factGroupKey(
 
 type SourceFact<T> = { row: T; snapshotId: string };
 const billingFact = (row: BillingRow) => JSON.stringify([
-  factGroupKey(row), row.billingCode ?? null, row.visitKind ?? null, row.totalFeeCharged,
+  factGroupKey(row), isPhoneConsultationCode(row.billingCode) ? "phone" : row.billingCode ?? null,
+  isPhoneConsultationCode(row.billingCode) ? semanticVisitKind(row) : row.visitKind ?? null, row.totalFeeCharged,
 ]);
 function exactCrossSourceCopies(entries: SourceFact<BillingRow>[], fact: (row: BillingRow) => string) {
   return entries.length > 1 && new Set(entries.map(entry => entry.snapshotId)).size === entries.length

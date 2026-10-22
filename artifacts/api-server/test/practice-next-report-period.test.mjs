@@ -12,7 +12,7 @@ const local = path => fileURLToPath(new URL(path, import.meta.url));
 const bundle = await build({
   stdin: {
     contents: readFileSync(new URL("../src/routes/practiceImports.ts", import.meta.url), "utf8")
-      + "\nexport { state } from '@workspace/db';\nexport { prepareBillingChargeResolution } from '@workspace/practice/hub';",
+      + "\nexport { state } from '@workspace/db';\nexport { prepareBillingChargeResolution, planNextReportPeriod } from '@workspace/practice/hub';",
     loader: "ts", resolveDir: local("../src/routes/"),
   },
   bundle: true, write: false, platform: "node", format: "cjs",
@@ -48,8 +48,10 @@ const bundle = await build({
           }
           if (sql.startsWith("SELECT detail FROM practice_import_audit")) {
             scope(...params);
-            const action = sql.includes("accept-billing-charge-exception") ? "accept-billing-charge-exception" : "confirm-historical-billing-providers";
-            return { rows: state.audits.filter(row => row.practiceId === params[0] && row.accountId === params[1] && row.action === action)
+            const actions = sql.includes("accept-billing-charge-exception")
+              ? ["accept-billing-charge-exception", "accept-billing-code-exception", "revoke-billing-code-exception"]
+              : ["confirm-historical-billing-providers"];
+            return { rows: state.audits.filter(row => row.practiceId === params[0] && row.accountId === params[1] && actions.includes(row.action))
               .map(row => ({ detail: structuredClone(row.detail) })) };
           }
           if (sql.startsWith("SELECT package_id, detail FROM practice_import_audit")) {
@@ -108,7 +110,7 @@ class FixedDate extends Date {
   static now() { return Date.parse("2026-10-22T12:00:00Z"); }
 }
 new Function("module", "exports", "require", "Date", bundle.outputFiles[0].text)(compiled, compiled.exports, require, FixedDate);
-const { default: router, state, prepareBillingChargeResolution } = compiled.exports;
+const { default: router, state, prepareBillingChargeResolution, planNextReportPeriod } = compiled.exports;
 const route = (method, path) => router.stack.find(layer => layer.route?.path === path && layer.route.methods[method]).route.stack[0].handle;
 const put = route("put", "/practice-imports/declarations");
 const get = route("get", "/practice-imports");
@@ -182,6 +184,70 @@ test("ready PUT rederives Oct 8-21 from the Oct 12 frozen end, matches 25 copies
     sourceIds: [ids.attendance, ids.billing], carryover: { rows: 25, matched: 25, conflicts: 0 } });
   assert.ok(state.queries.every(q => !/UPDATE "?clinicians|UPDATE "?practice_import_snapshots|DELETE|ALTER|CREATE TABLE/.test(q.sql)));
 });
+
+function savedPhoneZeroPeriod() {
+  reset();
+  const phone = { ...row("synthetic-consultation", "2026-10-08", "synthetic-phone-original"),
+    billingCode: "PHONE", totalFeeCharged: 0 };
+  state.snapshots[1].rows[1] = phone;
+  state.snapshots[1].createdAt = new Date("2026-10-13T12:00:00Z");
+  const incoming = state.snapshots[3].rows.find(row => row.serviceDate === "2026-10-08");
+  Object.assign(incoming, { ...phone, billingCode: "0", sourceRowHash: "synthetic-zero-reexport" });
+  const second = source("billing", "00000003", "middle", [{ ...incoming }], "2026-09-10", "2026-10-12");
+  second.createdAt = new Date("2026-10-16T12:00:00Z");
+  state.snapshots.push(second);
+  state.saved.data.sourceSets[1].snapshotIds.push("billing-00000003");
+}
+const savedPlan = history => planNextReportPeriod({ snapshots: history.snapshots, storedDeclarations: history.declarations,
+  roster: state.roster, teamId: 7, newSourceIds: history.packages.find(pkg => pkg.packageId === "synthetic-next").sourceIds,
+  today: "2026-10-22", billingResolutions: history.billingResolutions });
+
+test("saved October 8 PHONE/0/0 GET yields a ready proposal with no approval or writes; explicit PUT audits only coverage metadata", async () => {
+  savedPhoneZeroPeriod(); const before = durable(), response = await call(get);
+  assert.equal(response.statusCode, 200);
+  assert.deepEqual(response.body.billingResolutions, []); assert.equal(response.body.billingResolutionRevision, 0);
+  const copies = response.body.snapshots.filter(source => source.kind === "billing")
+    .flatMap(source => source.rows.filter(row => row.clientId === "synthetic-consultation"));
+  assert.deepEqual(copies.map(row => row.billingCode).sort(), ["0", "0", "PHONE"]);
+  assert.ok(copies.every(row => row.visitKind === undefined && row.totalFeeCharged === 0));
+  const plan = savedPlan(response.body);
+  assert.equal(plan.status, "ready", JSON.stringify(plan.reasons));
+  assert.deepEqual(plan.reasons, []);
+  assert.deepEqual(plan.period, { start: "2026-10-08", end: "2026-10-21", payDate: "2026-10-22" });
+  assert.deepEqual(plan.carryover, { rows: 25, matched: 25, conflicts: 0 });
+  assert.deepEqual(durable(), before); assert.deepEqual(state.writes, []);
+  const payload = { ...proposal(), data: plan.data }, saved = await call(put, payload);
+  assert.equal(saved.statusCode, 200, JSON.stringify(saved.body));
+  assert.equal(saved.body.declarations.revision, 5);
+  assert.deepEqual(saved.body.billingResolutions, []); assert.equal(saved.body.billingResolutionRevision, 0);
+  assert.deepEqual(state.writes, ["declarations", "audit"]);
+  assert.deepEqual(state.snapshots, before.snapshots); assert.deepEqual(state.packages, before.packages);
+  assert.deepEqual(state.roster, before.roster);
+  assert.deepEqual(state.saved.data.mappings, before.saved.data.mappings);
+  assert.deepEqual(state.saved.data.sourceSets.slice(0, 2), before.saved.data.sourceSets);
+  assert.equal(state.audits.length, 1);
+  assert.equal(state.audits[0].action, "confirm-import-declarations");
+  assert.equal(state.audits[0].detail.basis, "known-next-reporting-period");
+  assert.ok(!Object.hasOwn(state.saved.data, "billingResolutions"));
+});
+
+for (const [label, mutate] of [
+  ["fee difference", () => { state.snapshots[1].rows[1].totalFeeCharged = 25; }],
+  ["contradictory kind", () => { state.snapshots[1].rows[1].visitKind = "treatment"; }],
+  ["same-source multiplicity", () => { state.snapshots[1].rows.push({ ...state.snapshots[1].rows[1], sourceRowHash: "synthetic-extra-phone" }); }],
+  ["conflicting raw hash", () => { state.snapshots[1].rows[1].sourceRowHash = "synthetic-zero-reexport"; }],
+]) {
+  test(`saved PHONE/0/0 ${label} blocks proposal and explicit PUT without writes`, async () => {
+    savedPhoneZeroPeriod(); mutate();
+    const before = durable(), response = await call(get), plan = savedPlan(response.body);
+    assert.equal(plan.status, "blocked"); assert.ok(plan.reasons.length);
+    const payload = proposal();
+    payload.data.sourceSets.find(set => set.kind === "billing" && set.end === "2026-10-21")
+      .snapshotIds.push("billing-00000003");
+    await reviewWithoutWrites(payload);
+    assert.deepEqual(durable(), before); assert.deepEqual(state.writes, []);
+  });
+}
 
 test("explicit PUT admits a saved pair with same-source October 14 show and cancellation without changing raw rows or mappings", async () => {
   reset();

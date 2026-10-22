@@ -21,7 +21,7 @@ const row = (patch: Partial<EncounterBillingRow> = {}): EncounterBillingRow => (
 });
 function entries(): BillingCodeEntry[] {
   return [{ snapshotId: ids.a, row: row() },
-    { snapshotId: ids.b, row: row({ billingCode: "0", sourceRowHash: "synthetic-code-hash-b" }) }];
+    { snapshotId: ids.b, row: row({ billingCode: "90834", sourceRowHash: "synthetic-code-hash-b" }) }];
 }
 function threeSources() {
   const source = entries();
@@ -54,29 +54,32 @@ function freeze(value: unknown) {
   }
 }
 
-for (const selectedIndex of [0, 1, 2]) test(`free October 8 PHONE/0/0 dispute permits explicit source ${selectedIndex} without inventing visit kind`, () => {
+test("PHONE/0/0 consult aliases reconcile automatically with nullish or explicit consultation kind", () => {
   const source = threeSources().map((entry, index) => ({ ...entry, row: { ...entry.row,
-    serviceDate: "2026-10-08", billingCode: index === 0 ? "PHONE" : "0", visitKind: undefined, totalFeeCharged: 0 } }));
-  const before = structuredClone(source), resolution = approve(source, selectedIndex);
-  const [group] = reconcileBillingEvidence(source, [resolution]);
-  assert.equal(group.known, true); assert.equal(group.codeResolution, true);
-  assert.equal(group.rows.length, 3); assert.equal(group.acceptedRows?.length, 1);
-  assert.equal(group.row.billingCode, source[selectedIndex].row.billingCode);
-  assert.equal(group.row.visitKind, undefined);
-  assert.equal(group.acceptedRows?.reduce((sum, row) => sum + row.totalFeeCharged, 0), 0);
+    serviceDate: "2026-10-08", billingCode: index === 0 ? "PHONE" : "0",
+    visitKind: index === 0 ? "consultation" : undefined, totalFeeCharged: 0 } }));
+  const before = structuredClone(source);
+  assert.equal(prepareBillingCodeResolution(source), null, "equivalent aliases need no owner code choice");
+  const [group] = reconcileBillingEvidence(source);
+  assert.equal(group.known, true);
+  assert.equal(group.codeResolution, false);
+  assert.equal(group.resolutionId, undefined);
+  assert.equal(group.rows.length, 3);
+  assert.equal(group.duplicateRowCount, 2);
+  assert.equal(group.row.totalFeeCharged, 0);
   assert.deepEqual(source, before);
-  assertStale([...source, { snapshotId: "billing-added-source", row: { ...source[1].row } }], resolution);
 });
 
 for (const [name, change] of [
-  ["nonzero fee", (source: BillingCodeEntry[]) => source.forEach(entry => { entry.row.totalFeeCharged = 100; })],
-  ["explicit visit-kind difference", (source: BillingCodeEntry[]) => { source[0].row.visitKind = "consultation"; }],
-  ["same-source duplicate", (source: BillingCodeEntry[]) => source.push({ ...source[0], row: { ...source[0].row } })],
-  ["third distinct code", (source: BillingCodeEntry[]) => { source[2].row.billingCode = "90837"; source[2].row.sourceRowHash = "third-distinct"; }],
-] as const) test(`free PHONE/0 exception still rejects ${name}`, () => {
+  ["changed fee", (source: BillingCodeEntry[]) => { source[1].row.totalFeeCharged = 100; }],
+  ["contradictory explicit kind", (source: BillingCodeEntry[]) => { source[0].row.visitKind = "treatment"; }],
+  ["same-source second row", (source: BillingCodeEntry[]) => source.push({ ...source[0], row: { ...source[0].row, sourceRowHash: "second-consult" } })],
+] as const) test(`automatic consultation alias reconciliation refuses ${name}`, () => {
   const source = threeSources().map((entry, index) => ({ ...entry, row: { ...entry.row,
     billingCode: index === 0 ? "PHONE" : "0", visitKind: undefined, totalFeeCharged: 0 } }));
-  change(source); assert.equal(prepareBillingCodeResolution(source), null);
+  change(source);
+  assert.equal(prepareBillingCodeResolution(source), null);
+  assert.ok(reconcileBillingEvidence(source).every(group => !group.known));
 });
 
 test("draft preserves each exact raw code, fee and anchor without a default selection", () => {
@@ -89,8 +92,8 @@ test("draft preserves each exact raw code, fee and anchor without a default sele
   assert.equal(draft.evidence.length, 3);
   assert.deepEqual(draft.evidence.map(e => [e.snapshotId, e.billingCode, e.sourceRowHash, e.totalFeeCharged]), [
     [ids.a, "90837", "synthetic-code-hash-a", 125],
-    [ids.b, "0", "synthetic-code-hash-b", 125],
-    [ids.incoming, "0", "synthetic-code-hash-b", 125],
+    [ids.b, "90834", "synthetic-code-hash-b", 125],
+    [ids.incoming, "90834", "synthetic-code-hash-b", 125],
   ]);
   assert.deepEqual(prepareBillingCodeResolution([...source].reverse()), draft);
   assert.deepEqual(source, before);
@@ -120,18 +123,11 @@ for (const selectedIndex of [0, 1, 2]) {
   });
 }
 
-test("explicit zero and missing code are separate alternatives, including a zero fee", () => {
+test("explicit zero consultation and missing code remain distinct and cannot share a treatment code approval", () => {
   const source = entries().map((e, i) => ({ ...e, row: { ...e.row, billingCode: i ? "0" : null, totalFeeCharged: 0 } }));
   const draft = prepareBillingCodeResolution(source);
-  assert.ok(draft);
-  assert.deepEqual(draft.evidence.map(e => e.billingCode), [null, "0"]);
-  for (const selectedIndex of [0, 1]) {
-    const group = reconcileBillingEvidence(source, [approve(source, selectedIndex)])[0];
-    assert.equal(group.known, true);
-    assert.equal(group.acceptedRows?.length, 1);
-    assert.equal(group.acceptedRows![0].billingCode, selectedIndex ? "0" : null);
-    assert.equal(group.acceptedRows![0].totalFeeCharged, 0);
-  }
+  assert.equal(draft, null);
+  assert.equal(reconcileBillingEvidence(source).length, 2);
 });
 
 test("no approval leaves raw alternative-code groups unchosen and preserves baseline arithmetic", () => {
@@ -207,7 +203,7 @@ for (const [name, change] of [
   ["new source", (s: BillingCodeEntry[]) => [...s, { ...s[1], snapshotId: ids.incoming }]],
   ["removed source", (s: BillingCodeEntry[]) => s.slice(0, 1)],
   ["replaced source", (s: BillingCodeEntry[]) => s.map((e, i) => i ? { ...e, snapshotId: ids.incoming } : e)],
-  ["changed code", (s: BillingCodeEntry[]) => s.map((e, i) => i ? { ...e, row: { ...e.row, billingCode: "90834" } } : e)],
+  ["changed code", (s: BillingCodeEntry[]) => s.map((e, i) => i ? { ...e, row: { ...e.row, billingCode: "90832" } } : e)],
   ["changed hash", (s: BillingCodeEntry[]) => s.map((e, i) => i ? { ...e, row: { ...e.row, sourceRowHash: "changed-hash" } } : e)],
   ["changed equal fees", (s: BillingCodeEntry[]) => s.map(e => ({ ...e, row: { ...e.row, totalFeeCharged: 126 } }))],
   ["changed equal kinds", (s: BillingCodeEntry[]) => s.map(e => ({ ...e, row: { ...e.row, visitKind: "cancelled" } }))],
@@ -222,7 +218,7 @@ test("tampered evidence, identity and unmatched selected anchor fail closed", ()
     { ...resolution, clientId: "different-client" }, { ...resolution, clinicianLabel: "Different clinician" },
     { ...resolution, serviceDate: "2026-10-13" },
     { ...resolution, evidence: resolution.evidence.slice(1) },
-    { ...resolution, evidence: resolution.evidence.map((e, i) => i ? { ...e, billingCode: "90834" } : e) },
+    { ...resolution, evidence: resolution.evidence.map((e, i) => i ? { ...e, billingCode: "90832" } : e) },
     { ...resolution, evidence: resolution.evidence.map((e, i) => i ? { ...e, totalFeeCharged: 126 } : e) },
     { ...resolution, selected: { snapshotId: ids.a, sourceRowHash: source[1].row.sourceRowHash } },
     { ...resolution, selected: { snapshotId: ids.incoming, sourceRowHash: source[1].row.sourceRowHash } },
@@ -334,7 +330,7 @@ function plannerFixture(): NextReportPeriodInput {
   roster, teamId: 7, newSourceIds: [ids.attendance, ids.incoming], today: "2026-10-22" };
 }
 
-test("planner requires owner choice for A=90837, B=incoming=0, then advances without mutating sources", () => {
+test("planner requires owner choice for A=90837, B=incoming=90834, then advances without mutating sources", () => {
   const input = plannerFixture(), before = structuredClone(input);
   const blocked = planNextReportPeriod(input);
   assert.equal(blocked.status, "blocked");
@@ -414,16 +410,11 @@ for (const selectedIndex of [0, 1, 2]) {
   });
 }
 
-test("financial engine accepts one 90837 fee when the other two shared-hash codes are explicit zero", () => {
-  const { context } = financialFixture(0, "0");
-  const summary = summarizeImportedBillingActuals(context, new Set([71]));
-  assert.equal(summary.billed.get(71)?.get("2026-10-12"), 125);
-  assert.deepEqual(summary.unknownDates, []);
-  const selectedZero = financialFixture(1, "0");
-  const unclassified = summarizeImportedBillingActuals(selectedZero.context, new Set([71]));
-  assert.equal(unclassified.billed.get(71), undefined);
-  assert.ok(unclassified.unknownDates.some(r => r.reason?.includes("Unclassified")),
-    "code approval must not silently classify explicit zero as a recognized treatment");
+test("treatment versus explicit zero consultation is not an owner-resolvable alternate-code case", () => {
+  const source = threeSources().map((entry, i) => ({ ...entry,
+    row: { ...entry.row, visitKind: undefined, billingCode: i ? "0" : "90837" },
+  }));
+  assert.equal(prepareBillingCodeResolution(source), null);
 });
 
 for (const omittedIndex of [0, 1, 2]) {

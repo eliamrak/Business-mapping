@@ -134,12 +134,14 @@ test("all changed/new files stay within reviewed theme, PDF and mobile scope", (
   const reviewedBillingCodeFollowup = new Set([
     "lib/practice/src/hub/billing-code-resolution.ts", "lib/practice/src/hub/billing-resolution.ts",
     "lib/practice/src/hub/billing-evidence.ts", "lib/practice/src/hub/import-declarations.ts", "lib/practice/src/hub/engine.ts",
+    "lib/practice/src/hub/service-codes.ts",
     "lib/practice/test/billing-code-resolution.test.ts",
     "artifacts/api-server/src/lib/import-backup-validation.ts", "artifacts/api-server/test/practice-billing-code-review.test.mjs",
     "artifacts/api-server/test/backup-contract.test.mjs",
     src + "components/practice/billing-code-review.tsx", src + "lib/reported-billing.ts",
     src + "lib/import-derived-sessions.ts", src + "lib/retention-local.test.ts", src + "lib/billing-code-integration.test.ts",
     src + "lib/complete-report-coverage.ts",
+    src + "lib/zero-consultation.test.ts",
     "verification/billing-code-review-render.mjs", "verification/OCTOBER22-BILLING-CODE-REVIEW-RECEIPT.md",
     "verification/BILLING-CODE-INDEPENDENT-REVIEW.md",
   ]);

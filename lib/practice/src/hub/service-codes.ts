@@ -8,6 +8,13 @@ export const legacyServiceCodes = {
   "30003": { kind: "consultation", minutes: 25 },
 } as const;
 export const normalizedServiceCode = (code?: string | null) => code?.trim().toLowerCase() ?? "";
+/** Owner-defined consultation aliases; raw exports and source hashes remain untouched. */
+export const isPhoneConsultationCode = (code?: string | null) => ["phone", "0"].includes(normalizedServiceCode(code));
+export const semanticServiceCode = (code?: string | null) => isPhoneConsultationCode(code) ? "phone" : normalizedServiceCode(code);
+export const hasContradictoryConsultationKind = (row: ServiceRow) => isPhoneConsultationCode(row.billingCode)
+  && !!row.visitKind?.trim() && row.visitKind.trim().toLowerCase() !== "consultation";
+export const semanticVisitKind = (row: ServiceRow) => isPhoneConsultationCode(row.billingCode) && !hasContradictoryConsultationKind(row)
+  ? "consultation" : row.visitKind?.trim().toLowerCase() ?? "";
 export function legacyServiceDefinition(code?: string | null) {
   const key = normalizedServiceCode(code);
   return Object.hasOwn(legacyServiceCodes, key) ? legacyServiceCodes[key as keyof typeof legacyServiceCodes] : undefined;
@@ -15,8 +22,8 @@ export function legacyServiceDefinition(code?: string | null) {
 export const isDocumentationService = (row: ServiceRow) => legacyServiceDefinition(row.billingCode)?.kind === "documentation";
 export function isConsultationService(row: ServiceRow) {
   const known = legacyServiceDefinition(row.billingCode);
-  return known ? known.kind === "consultation" : normalizedServiceCode(row.billingCode) === "phone" || row.visitKind === "consultation";
+  return known ? known.kind === "consultation" : isPhoneConsultationCode(row.billingCode) || row.visitKind === "consultation";
 }
-export const isFreePhoneService = (row: ServiceRow) => normalizedServiceCode(row.billingCode) === "phone" || (!legacyServiceDefinition(row.billingCode) && row.visitKind === "consultation");
+export const isFreePhoneService = (row: ServiceRow) => isPhoneConsultationCode(row.billingCode) || (!legacyServiceDefinition(row.billingCode) && row.visitKind === "consultation");
 export const isTreatmentService = (row: ServiceRow) => !isDocumentationService(row) && !isConsultationService(row);
 export const isRecognizedTreatmentCode = (code?: string | null) => legacyServiceDefinition(code)?.kind === "treatment" || /^\d{5}$/.test(code?.trim() ?? "") && isTreatmentService({ billingCode: code });

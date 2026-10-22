@@ -1,4 +1,4 @@
-import { normalizeProviderLabel, reconcileBillingEvidence } from "@workspace/practice/hub";
+import { isPhoneConsultationCode, normalizeProviderLabel, reconcileBillingEvidence, semanticVisitKind } from "@workspace/practice/hub";
 
 type Row = {
   clientId: string;
@@ -21,8 +21,9 @@ export type OverlapSource = {
   rows: readonly Row[];
 };
 const identity = (row: Row) => JSON.stringify([row.clientId, normalizeProviderLabel(row.clinician), row.serviceDate]);
-const fact = (kind: string, row: Row) => JSON.stringify([
-  identity(row), row.billingCode ?? null, row.visitKind ?? null,
+const fact = (kind: string, row: Row, semantic = true) => JSON.stringify([
+  identity(row), semantic && isPhoneConsultationCode(row.billingCode) ? "phone" : row.billingCode ?? null,
+  semantic && isPhoneConsultationCode(row.billingCode) ? semanticVisitKind(row) : row.visitKind ?? null,
   ...(kind === "attendance"
     ? [row.status, row.cancellationSubtype ?? null, row.location ?? null]
     : [row.totalFeeCharged]),
@@ -102,8 +103,9 @@ export function assessAutomaticOverlap(
       if (!row.clientId.trim() || !row.sourceRowHash.trim() || !providerIsUnambiguous(row.clinician))
         return reject("identity-review");
       const value = fact(source.kind, row);
-      if (hashes.has(hash) && hashes.get(hash) !== value) return reject("row-hash-conflict");
-      hashes.set(hash, value);
+      const rawValue = fact(source.kind, row, false);
+      if (hashes.has(hash) && hashes.get(hash) !== rawValue) return reject("row-hash-conflict");
+      hashes.set(hash, rawValue);
       if (counts.has(key)) return reject(source.kind === "attendance" ? "attendance-multiplicity" : "billing-evidence-review");
       counts.add(key);
       if (facts.has(key) && facts.get(key) !== value)

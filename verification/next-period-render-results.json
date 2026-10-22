@@ -28,6 +28,9 @@
   },
   "screenshots": [
     "/tmp/practice-next-period-render/saved-pair-reconciled-1440.png",
+    "/tmp/practice-next-period-render/equivalent-consultation-ready-1440.png",
+    "/tmp/practice-next-period-render/equivalent-consultation-ready-390.png",
+    "/tmp/practice-next-period-render/equivalent-consultation-ready-320.png",
     "/tmp/practice-next-period-render/saved-historical-preserved.png",
     "/tmp/practice-next-period-render/saved-mixed-attendance.png",
     "/tmp/practice-next-period-render/billing-bounded-diagnostics-1440.png",
@@ -235,6 +238,47 @@
       ],
       "declarationRevision": 3,
       "sourceSets": 4,
+      "journalEntries": 5
+    },
+    {
+      "name": "saved-PHONE-zero-consultation-aliases-ready-without-code-choice",
+      "pass": true,
+      "requests": [
+        {
+          "method": "GET",
+          "path": "/api/hub"
+        },
+        {
+          "method": "GET",
+          "path": "/api/hub/context"
+        },
+        {
+          "method": "GET",
+          "path": "/api/business-goals"
+        },
+        {
+          "method": "GET",
+          "path": "/api/scenarios"
+        },
+        {
+          "method": "GET",
+          "path": "/api/practice-imports"
+        },
+        {
+          "method": "GET",
+          "path": "/api/practice-imports/billing-code-candidates"
+        },
+        {
+          "method": "GET",
+          "path": "/api/practice-imports/billing-resolution-candidates"
+        },
+        {
+          "method": "GET",
+          "path": "/api/practice-imports/capabilities"
+        }
+      ],
+      "declarationRevision": 2,
+      "sourceSets": 2,
       "journalEntries": 5
     },
     {

@@ -103,3 +103,46 @@ Ran nine additional synthetic downstream probes: all three source selections cro
 Additional adversarial probes independently rejected differing cancellation, nonzero fees, explicit kind, documentation code 2, consultation code 30003, treatment code 90837, and a shared hash carrying different PHONE/0 payloads. The UI preview explicitly distinguishes PHONE consultation from code 0's unestablished appointment type and says the billing choice does not rewrite attendance or confirm treatment. Read the updated synthetic browser receipt: all three free-case previews were captured at 320/390/1440 widths with no overflow, no browser errors, and no automatic writes. The reviewer did not rerun the browser harness.
 
 Only this bounded report was appended by the reviewer. No runtime/test files, private inputs, actual patient records, live owner choices, production services, or databases were modified or used. No remaining blocker was found within the follow-up scope; production acceptance and attendance classification remain outside this synthetic review.
+
+## Automatic Consultation Alias Review Against 65db
+
+This review follows the latest authoritative owner rule: literal code `0` and `PHONE` both identify consultation. It supersedes the preceding section's historical statement that 0 is unclassified. Reviewed all arriving runtime/test/UI diffs against `65db`, including the new synthetic `zero-consultation.test.ts`. Only this report was edited by the reviewer.
+
+### P2: Planner semantic attendance comparison bypasses a reused raw hash conflict
+
+Location: `lib/practice/src/hub/next-report-period.ts:163`.
+
+The planner now compares semantic facts for attendance but has no independent attendance raw-hash payload check. Executed a valid synthetic frozen-history fixture with old attendance/billing bounds September 10 through October 12, an October 22 incoming attendance/billing pair for October 8 through October 21, and a confirmed clinician/team mapping. The old and incoming attendance rows share the same client/provider/date/status/location and the same `sourceRowHash`, but the old code is PHONE and the incoming code is 0. Billing copies use independent hashes and otherwise equivalent PHONE/0 facts. `planNextReportPeriod` returns `ready` with no reasons; `assessAutomaticOverlap` on the same attendance sources returns `{ safe: false, reason: "row-hash-conflict" }`.
+
+Semantic aliases across independent rows should unblock the next-period proposal; the same raw hash carrying different source payloads must still fail. Add a raw-fact hash check for planner attendance inputs alongside semantic signatures, without removing automatic equivalence for distinct valid anchors. This affects retained/saved history reviewed by the declaration planner, even when a fresh import would have been stopped by the overlap API.
+
+### P2: Billing same-hash validation loses raw visit-kind differences
+
+Locations: `lib/practice/src/hub/billing-evidence.ts:94` and `:150`.
+
+The new semantic `same` comparison treats absent visit kind and explicit consultation as equal for PHONE/0. Hash-conflict checks separately preserve raw-code differences but do not preserve raw visit-kind differences. Executed two billing snapshots containing the same literal code 0, equal fee 0, exact encounter, and the same row hash; only the second row has `visitKind: "consultation"`. `reconcileBillingEvidence` returns `{ known: true, hashConflict: false }`, while `assessAutomaticOverlap` correctly rejects the identical pair as `row-hash-conflict`. Both raw kinds are supported export shapes, so this does not require a malformed treatment-kind payload.
+
+Keep semantic equivalence for independent rows but compare raw visit-kind payloads when validating a reused stable hash, in both the original global hash check and the final grouped check. Preserve established deduplication for truly identical payloads reusing their stable hash; no extra alias-specific multiplicity restriction is requested.
+
+### Verified Behavior And Evidence
+
+- Initial focused core/planner/classification/API run: 211 passing tests. After the arriving zero-consultation and actual next-period route additions, independently ran those suites plus the actual billing-code routes: 118 passing tests. An intermediate new-test assertion used nonexistent `firstTreatmentDate`; the agent corrected it to `treatmentDate`, and the rerun passed. These passing suites do not yet cover the two raw-hash reproductions above.
+- Automatic PHONE/0/0 candidates expose no discretionary code card or approval write. The saved three-source October fixture yields a ready October 8-21 proposal with 25 matched carryovers, no billing approval, and no writes on read; the explicit declaration PUT saves coverage metadata separately. Confirmed mappings, known-period intent, source membership and raw snapshots remain required/preserved.
+- Independently exercised the real clinical exports with PHONE, 0, and unmarked attendance against PHONE/0/0 billing. Each case yields one consultation, zero treatment visits, one canonical $0 billed row, no treatment replacement proof, and unchanged raw inputs. New clinical tests also cover conversion only after an attended treatment, three treatment visits for initial retention, and no retained-client progress from zero consultations.
+- Literal null/blank/00000/00 remain outside the consultation alias set. Independently checked equal positive and negative fee facts remain unchanged by semantic dedupe, identical stable-hash copies dedupe, and distinct same-source hashes remain ambiguous. Contradictory treatment kind, differing fees/cancellation, raw PHONE-versus-0 hash collisions, mappings and source multiplicity remain guarded by the billing/API checks exercised.
+- During review, code 0 initially bypassed the existing nonzero PHONE fee policy. The current `isFreePhoneService` was corrected to use the shared alias predicate; both 0 and PHONE now preserve the reported fee while withholding nonzero consultation treatment replacement. Independently verified both representative hash orders produce the same policy result. No fee was inferred from the numeric-looking code.
+- Read the updated UI wording and synthetic renderer: equivalent consultations have no code-selection controls; the warning describes both aliases as consultation. No converter/metadata-pipeline change was present in this review delta, and none is certified here.
+
+Current disposition for the 65db follow-up: two reproduced raw-hash guard gaps remain. No production access, actual owner choice, database call, private record read, or runtime/test edit was performed by this reviewer.
+
+## Final Automatic Alias Re-review
+
+Both P2 findings from the 65db follow-up are resolved. No outstanding reproduced finding remains in this reviewed change. The authoritative rule remains that literal 0 and PHONE are consultation aliases; no discretionary code approval is required for equivalent source facts.
+
+Reviewed `sameRawServiceFacts` in both the global and grouped billing hash checks: raw code and raw visit kind are compared independently of semantic consultation equivalence. Reviewed the planner's separate per-kind raw-fact hash map: next-period facts and hashes touched by selected-source carryovers are checked across frozen and selected sources. Automatic semantic comparison no longer masks either reported collision.
+
+Independently reran both concrete reproductions. Reused attendance hash with raw PHONE versus 0 now blocks the planner; reused billing hash with absent versus explicit consultation kind now yields `known: false, hashConflict: true`. Independent hashes with equivalent consultation kinds remain known, exact stable-hash copies still dedupe, and valid PHONE/0 next-period input still returns `ready`. Additional executable probes confirmed that selected carryover hash collisions block and an unrelated old hash conflict outside the period with no selected-source touch does not reopen historical review. Inputs remain unchanged.
+
+Independently passed 224 focused tests across zero-consultation clinical integration, billing code resolution, next-report planner, actual next-period API routes, and actual billing-code API routes. This includes the two newly arrived regression tests: billing raw-kind hash reuse versus independent/identical copies, and attendance raw-code hash reuse versus independent/identical copies. Automatic readiness, consultation-only clinical counts, source-backed fees, multiplicity guards, explicit declaration admission, and no automatic code/audit write remain covered.
+
+This closes the bounded independent runtime review; the parent's broader final gates and any converter/metadata work are separate. Only this report was appended. No runtime/test edits, private records, live owner choices, databases, or production services were used.
