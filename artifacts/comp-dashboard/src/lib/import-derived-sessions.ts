@@ -1,5 +1,6 @@
 import { dateRangeSchema, type SessionRecord, rangesOverlap } from "@workspace/practice";
-import { canonicalServicePeriod, reconcileBillingEvidence, resolveImportedProvider, bindBillingResolutions, isDocumentationService, isTreatmentService, isRecognizedTreatmentCode, type ImportEvidenceDeclarations, type Context, type ImportedBillingActual } from "@workspace/practice/hub";
+import { canonicalServicePeriod, reconcileBillingEvidence, resolveImportedProvider, bindBillingResolutions, isBillingCodeResolution, isDocumentationService, isTreatmentService, isRecognizedTreatmentCode, type ImportEvidenceDeclarations, type Context, type ImportedBillingActual } from "@workspace/practice/hub";
+import { billingRowsInSnapshots } from "./reported-billing.ts";
 import type { SessionAttendanceCoverage } from "./session-trend.ts";
 import {
   consultAttendanceClassifier,
@@ -94,6 +95,8 @@ export function buildImportedSessionOverlay(
   options: {
     /** Service classification only; actual rows and coverage still come from snapshots. */
     classificationSnapshots?: readonly LocalSnapshot[];
+    /** Validate pinned code choices against all retained facts before coverage filtering. */
+    billingEvidenceSnapshots?: readonly LocalSnapshot[];
     declarations?: ImportEvidenceDeclarations | null;
     clinicianActiveRanges?: Array<{ clinicianId: number; start: string; end: string | null }>;
     /** Workspace compensation effective dates must never restrict attendance coverage. */
@@ -214,10 +217,13 @@ export function buildImportedSessionOverlay(
     ]);
     scopedAttendanceCoverage.splice(0, scopedAttendanceCoverage.length, ...retained);
   }
-  for (const snapshot of snapshots) {
+  const billingEvidenceSnapshots = options.billingEvidenceSnapshots ?? snapshots;
+  const eligibleBillingRows = billingRowsInSnapshots(billingEvidenceSnapshots, snapshots);
+  for (const snapshot of billingEvidenceSnapshots) {
     if (snapshot.kind !== "billing") continue;
     for (const row of snapshot.rows) {
       billingEntries.push({ row, snapshotId: snapshot.sourceSnapshotId ?? snapshot.id });
+      if (!eligibleBillingRows.has(row)) continue;
       const matches =
         cliniciansByLabel.get(normalizeLabel(row.clinician)) ?? [];
       if (matches.length === 0) {
@@ -231,10 +237,16 @@ export function buildImportedSessionOverlay(
     }
   }
   const resolutions = bindBillingResolutions(options.declarations?.billingResolutions ?? [], context.clinicians, options.declarations);
-  const billingGroups = reconcileBillingEvidence(billingEntries, resolutions).filter((group) => group.rows.some((row) => cliniciansByLabel.get(normalizeLabel(row.clinician))?.length === 1));
+  const billingGroups = reconcileBillingEvidence(billingEntries, resolutions)
+    .filter(group => group.rows.some(row => eligibleBillingRows.has(row) && cliniciansByLabel.get(normalizeLabel(row.clinician))?.length === 1))
+    .map(group => ({ ...group,
+      row: group.acceptedRows ? group.row : group.rows.find(row => eligibleBillingRows.has(row)) ?? group.row,
+      known: group.known && (group.acceptedRows ? group.acceptedRows.every(row => eligibleBillingRows.has(row)) : group.rows.some(row => eligibleBillingRows.has(row))),
+    }));
   for (const group of billingGroups) {
     const payloads = new Set<string>();
     for (const row of group.known ? group.acceptedRows ?? [group.row] : group.rows) {
+      if (!eligibleBillingRows.has(row)) continue;
       const matches = cliniciansByLabel.get(normalizeLabel(row.clinician));
       if (matches?.length !== 1) continue;
       const payload = JSON.stringify(row);
@@ -355,7 +367,9 @@ export function buildImportedSessionOverlay(
         ...(context.importedBillingActuals ?? []),
         ...billingActuals,
       ],
-      ...(resolutions.length ? { billingChargeResolutions: resolutions } : {}),
+      // Code choices have already validated every retained source anchor above;
+      // canonical singleton actuals cannot revalidate that raw-evidence contract.
+      ...(resolutions.length ? { billingChargeResolutions: resolutions.filter(resolution => !isBillingCodeResolution(resolution)) } : {}),
     },
     derivedSessions,
     attendanceCoverage: scopedAttendanceCoverage,

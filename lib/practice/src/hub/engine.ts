@@ -21,7 +21,7 @@ import { conditionResult } from "./conditions.ts";
 import { estimateW2NetPay } from "./family-pay.ts";
 import { reconcileBillingEvidence } from "./billing-evidence.ts";
 import { isFreePhoneService, isTreatmentService, isRecognizedTreatmentCode } from "./service-codes.ts";
-import type { BillingChargeResolution } from "./billing-resolution.ts";
+import type { BillingResolution } from "./billing-resolution.ts";
 export { reconcileBillingEvidence } from "./billing-evidence.ts";
 
 export type Clinician = ClinicianMetricsInput & {
@@ -52,7 +52,7 @@ export type Context = {
   staff: Staff[];
   sessions: SessionRecord[];
   importedBillingActuals?: ImportedBillingActual[];
-  billingChargeResolutions?: (BillingChargeResolution & { mappingInvalid?: true })[];
+  billingChargeResolutions?: (BillingResolution & { mappingInvalid?: true })[];
 };
 
 export function overheadGoalAllowance(

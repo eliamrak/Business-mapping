@@ -1,7 +1,7 @@
 import { z } from "@workspace/practice";
 import {
-  billingChargeResolutionSchema, importDeclarationsSchema, restoreHistoricalBillingProviders,
-  type StoredImportDeclarations,
+  billingChargeResolutionSchema, billingCodeResolutionSchema, isBillingCodeResolution, importDeclarationsSchema, restoreHistoricalBillingProviders,
+  type StoredImportDeclarations, type BillingResolution,
 } from "@workspace/practice/hub";
 
 const text = z.string().min(1).max(320).refine(value => value.trim().length > 0);
@@ -43,14 +43,30 @@ const auditRow = z.object({ id: z.uuid(), ...scope, package_id: text, action: te
 
 /** The same invariant is used by recovery validation and the production reader. */
 export function parseBillingResolutionJournal(details: readonly unknown[]) {
-  const events = z.array(z.object({ revision: z.number().int().positive(),
-    resolution: billingChargeResolutionSchema }).passthrough()).max(1000).parse(details)
+  const events = z.array(z.union([z.object({ revision: z.number().int().positive(),
+    resolution: z.union([billingChargeResolutionSchema, billingCodeResolutionSchema]) }).passthrough(),
+    z.object({ revision: z.number().int().positive(), revokedResolutionId: z.uuid(),
+      approvalNote: z.string().trim().min(1).max(2000), revokedAt: stamp }).passthrough()])).max(1000).parse(details)
     .sort((a, b) => a.revision - b.revision);
-  if (events.some((row, index) => row.revision !== index + 1)
-    || new Set(events.map(row => row.resolution.id)).size !== events.length
-    || new Set(events.map(row => row.resolution.approvalToken)).size !== events.length)
-    throw new Error("Billing resolution journal requires review.");
-  return { billingResolutionRevision: events.length, billingResolutions: events.map(row => row.resolution) };
+  const active = new Map<string, BillingResolution>(), ids = new Set<string>(), chargeTokens = new Set<string>();
+  for (const [index, event] of events.entries()) {
+    if (event.revision !== index + 1) throw new Error("Billing resolution journal requires review.");
+    if ("resolution" in event) {
+      if ("revokedResolutionId" in event) throw new Error("Billing journal action is ambiguous.");
+      const resolution = z.union([billingChargeResolutionSchema, billingCodeResolutionSchema]).parse(event.resolution);
+      if (ids.has(resolution.id) || !isBillingCodeResolution(resolution) && chargeTokens.has(resolution.approvalToken))
+        throw new Error("Billing resolution journal requires review.");
+      if (!isBillingCodeResolution(resolution)) chargeTokens.add(resolution.approvalToken);
+      if ([...active.values()].some(other => (isBillingCodeResolution(other) || isBillingCodeResolution(resolution))
+        && other.clientId === resolution.clientId && other.clinicianLabel.trim().replace(/\s+/g, " ").toLowerCase() === resolution.clinicianLabel.trim().replace(/\s+/g, " ").toLowerCase()
+        && other.serviceDate === resolution.serviceDate)) throw new Error("A code choice cannot override another active encounter approval.");
+      ids.add(resolution.id); active.set(resolution.id, resolution);
+    } else {
+      if (!isBillingCodeResolution(active.get(event.revokedResolutionId))) throw new Error("Billing code reversal requires an active code choice.");
+      active.delete(event.revokedResolutionId);
+    }
+  }
+  return { billingResolutionRevision: events.length, billingResolutions: [...active.values()] };
 }
 
 export function parseStoredImportDeclarations(
@@ -103,7 +119,7 @@ export function validateDurableImportBackup(tables: Tables) {
   const scopeDeclarations = new Map(declarations.map(row => [scopeKey(row), row]));
   for (const key of new Set([...scopeDeclarations.keys(), ...scopeAudits.keys()])) {
     const events = scopeAudits.get(key) ?? [];
-    parseBillingResolutionJournal(events.filter(row => row.action === "accept-billing-charge-exception").map(row => row.detail));
+    parseBillingResolutionJournal(events.filter(row => ["accept-billing-charge-exception", "accept-billing-code-exception", "revoke-billing-code-exception"].includes(row.action)).map(row => row.detail));
     const historical = events.filter(row => row.action === "confirm-historical-billing-providers").map(row => row.detail);
     const declaration = scopeDeclarations.get(key);
     if (!declaration && historical.length) throw new Error("Historical billing journal requires its declaration revision.");

@@ -84,10 +84,15 @@ function memoryReader(state, PgDialect, getTableName) {
       state.readerScopes.push(params.slice(0, 2));
       if (sql.startsWith("SELECT revision")) return { rows: structuredClone(scoped(state.tables.practice_import_declarations, params[0], params[1])) };
       if (sql.startsWith("SELECT detail FROM practice_import_audit")) {
-        const action = sql.includes("confirm-historical-billing-providers")
-          ? "confirm-historical-billing-providers" : "accept-billing-charge-exception";
+        const actions = sql.includes("confirm-historical-billing-providers")
+          ? ["confirm-historical-billing-providers"] : ["accept-billing-charge-exception", "accept-billing-code-exception", "revoke-billing-code-exception"];
         return { rows: scoped(state.tables.practice_import_audit, params[0], params[1])
-          .filter((row) => row.action === action).slice(0, 1001).map((row) => ({ detail: structuredClone(row.detail) })) };
+          .filter((row) => actions.includes(row.action)).slice(0, 1001).map((row) => ({ detail: structuredClone(row.detail) })) };
+      }
+      if (sql.startsWith("SELECT package_id, detail FROM practice_import_audit")) {
+        return { rows: scoped(state.tables.practice_import_audit, params[0], params[1])
+          .filter(row => ["import", "retain-overlap", "replace-overlap"].includes(row.action)).slice(0, 10001)
+          .map(row => ({ package_id: row.package_id, detail: structuredClone(row.detail) })) };
       }
       throw new Error(`Unexpected reader query: ${sql}`);
     },
@@ -215,6 +220,37 @@ test("actual route roundtrip preserves five approvals, historical identities, de
     .every((query) => query.params[0] !== "practice_import_declarations"));
   assert.equal(state.sequenceValues.clinicians_id_seq, 7);
   assert.equal((await call("/hub/backup/restore", restoreBody(preview))).statusCode, 409);
+});
+
+for (const undone of [false, true]) test(`billing code choice ${undone ? "and reversal" : "alone"} roundtrips with prior charge approvals and raw records`, async () => {
+  const fixture = syntheticImportBackup(7, 1), original = structuredClone(fixture);
+  const id = "00000000-0000-4000-8000-000000000060";
+  const evidence = ["d", "e"].map((letter, index) => ({ snapshotId: "billing-" + letter.repeat(64),
+    sourceRowHash: `synthetic-code-${index}`, billingCode: index ? "0" : "90837", visitKind: null, cancellationSubtype: null, totalFeeCharged: 125 }));
+  const first = fixture.practice_import_audit[0];
+  const resolution = { kind: "billing-code", id, approvalToken: "f".repeat(64), clinicianId: 7,
+    clinicianLabel: first.detail.resolution.clinicianLabel, clientId: "synthetic-code-client", serviceDate: "2026-10-05", evidence,
+    selected: { snapshotId: evidence[1].snapshotId, sourceRowHash: evidence[1].sourceRowHash },
+    confirmedAt: "2026-10-22T12:00:00Z", approvalNote: "Synthetic explicit source code choice" };
+  fixture.practice_import_audit.push({ ...structuredClone(first), id, package_id: `billing-code-resolution:${id}`,
+    action: "accept-billing-code-exception", detail: { oldRevision: 5, revision: 6, resolution } });
+  if (undone) fixture.practice_import_audit.push({ ...structuredClone(first), id: "00000000-0000-4000-8000-000000000061",
+    package_id: `billing-code-reversal:${id}`, action: "revoke-billing-code-exception",
+    detail: { oldRevision: 6, revision: 7, revokedResolutionId: id, revokedAt: "2026-10-22T12:01:00Z", approvalNote: "Synthetic explicit undo" } });
+  const backup = await sourceBackup(fixture);
+  reset();
+  const preview = await call("/hub/backup/preview", backup);
+  assert.equal(preview.body.canRestore, true, JSON.stringify(preview.body));
+  assert.equal((await call("/hub/backup/restore", restoreBody(preview))).statusCode, 200);
+  assert.deepEqual((await call("/hub/backup")).body.tables, backup.tables);
+  const history = await call("/practice-imports");
+  assert.equal(history.body.billingResolutionRevision, undone ? 7 : 6);
+  assert.equal(history.body.billingResolutions.length, undone ? 5 : 6);
+  assert.deepEqual(history.body.billingResolutions.slice(0, 5), original.practice_import_audit
+    .filter(row => row.action === "accept-billing-charge-exception").map(row => row.detail.resolution));
+  if (!undone) assert.deepEqual(history.body.billingResolutions.at(-1), resolution);
+  assert.deepEqual(state.tables.practice_import_snapshots, original.practice_import_snapshots);
+  assert.deepEqual(state.tables.practice_import_declarations, original.practice_import_declarations);
 });
 
 test("v1 backups with 13 or 17 tables require the earlier release and cannot partially restore", async () => {

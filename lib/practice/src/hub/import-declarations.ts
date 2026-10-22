@@ -1,5 +1,5 @@
 import { z } from "zod/v4";
-import type { BillingChargeResolution, BillingChargeResolutionEvidence } from "./billing-resolution.ts";
+import type { BillingResolution, BillingChargeResolutionEvidence } from "./billing-resolution.ts";
 
 const date = z.string().regex(/^\d{4}-\d{2}-\d{2}$/).refine((value) => {
   const parsed = new Date(value + "T00:00:00Z");
@@ -128,7 +128,7 @@ export function resolveImportedProvider(
   return matches.length === 1 && (matches[0].goalId ?? null) === teamId ? matches[0].id : null;
 }
 
-export function bindBillingResolutions(resolutions: readonly BillingChargeResolution[], roster: readonly { id: number; label: string; goalId?: number | null }[], declarations?: ImportDeclarations | null): BillingChargeResolutionEvidence[] {
+export function bindBillingResolutions(resolutions: readonly BillingResolution[], roster: readonly { id: number; label: string; goalId?: number | null }[], declarations?: ImportDeclarations | null): BillingChargeResolutionEvidence[] {
   return resolutions.map((resolution) => {
     const mappings = declarations?.mappings.filter((row) => normalizeProviderLabel(row.sourceLabel) === normalizeProviderLabel(resolution.clinicianLabel)) ?? [];
     const valid = resolution.historicalProviderId !== undefined

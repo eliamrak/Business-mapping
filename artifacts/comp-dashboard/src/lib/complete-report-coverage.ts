@@ -167,7 +167,7 @@ export function completeReportCoverage(
         else eligibleAttendanceRows.add(row as AttendanceRow);
       }
       eligibleSnapshots.push({ ...structuredClone(sourceMetadata), id: `${snapshot.id}:complete:${clinicianId}:${period.start}`,
-        ...(snapshot.kind === "billing" && options.declarations?.billingResolutions?.length ? { sourceSnapshotId: snapshot.sourceSnapshotId ?? snapshot.id } : {}),
+        ...(snapshot.kind === "billing" ? { sourceSnapshotId: snapshot.sourceSnapshotId ?? snapshot.id } : {}),
         coverageStart: start, coverageEnd: end, reportCoverage: { start, end, complete: true },
         coverageClinicians: [clinicians.find((person) => person.id === clinicianId)!.label], rows: structuredClone(rows) } as LocalSnapshot);
     }

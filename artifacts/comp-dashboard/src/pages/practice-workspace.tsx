@@ -912,7 +912,7 @@ export default function PracticeWorkspace() {
   const importedSessionOverlay = useMemo(() => {
     if (!rawImportedSessionOverlay || !context || !workspace) return null;
     const ids = context.clinicians.filter((person) => (person.goalId ?? null) === workspace.settings.teamId).map((person) => person.id);
-    const accepted = buildImportedSessionOverlay(context, completeClinicalReports?.eligibleSnapshots ?? [], workspace.settings.teamId, localRetentionState.sameDayVisitOverrides, { declarations: importEvidenceDeclarations, classificationSnapshots: localRetentionState.snapshots });
+    const accepted = buildImportedSessionOverlay(context, completeClinicalReports?.eligibleSnapshots ?? [], workspace.settings.teamId, localRetentionState.sameDayVisitOverrides, { declarations: importEvidenceDeclarations, classificationSnapshots: localRetentionState.snapshots, billingEvidenceSnapshots: localRetentionState.snapshots });
     const proof = completeClinicalReports?.completeAttendanceCoverage.filter((range) => ids.includes(range.clinicianId)) ?? [];
     const state = completeServicePeriodState(accepted.context.sessions, ids, today, proof);
     return { ...accepted, diagnostic: { ...rawImportedSessionOverlay.diagnostic,

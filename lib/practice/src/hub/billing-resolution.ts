@@ -1,4 +1,5 @@
 import { z } from "zod/v4";
+import type { BillingCodeResolution } from "./billing-code-resolution.ts";
 
 const anchor = z.object({ snapshotId: z.string().min(1).max(300), sourceRowHash: z.string().min(1).max(200) }).strict();
 const charge = z.object({ amount: z.number().finite().positive().max(Number.MAX_SAFE_INTEGER), anchor }).strict();
@@ -20,5 +21,6 @@ export const billingChargeResolutionSchema = z.object({
   message: "An approval requires exactly one clinician or historical billing identity.",
 });
 export type BillingChargeResolution = z.infer<typeof billingChargeResolutionSchema>;
+export type BillingResolution = BillingChargeResolution | BillingCodeResolution;
 /** Derived validation only; never persisted as part of an approval. */
-export type BillingChargeResolutionEvidence = BillingChargeResolution & { mappingInvalid?: true };
+export type BillingChargeResolutionEvidence = BillingResolution & { mappingInvalid?: true };

@@ -14,4 +14,5 @@ export * from "./clinician-terms.ts";
 export * from "./goal-search.ts";
 export * from "./import-declarations.ts";
 export * from "./billing-resolution.ts";
+export * from "./billing-code-resolution.ts";
 export { prepareBillingChargeResolution } from "./billing-evidence.ts";

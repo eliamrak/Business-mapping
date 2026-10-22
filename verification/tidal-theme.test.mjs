@@ -56,7 +56,7 @@ test("retained app PNG has exact immutable selected-artwork SHA-256", () => {
   assert.equal(createHash("sha256").update(fs.readFileSync(path.join(root, file))).digest("hex"), expected, file);
 });
 
-test("workspace bytes differ only by declared presentation and collapsed Data calculations", () => {
+test("workspace bytes differ only by declared presentation and scoped all-source billing evidence", () => {
   const file = src + "pages/practice-workspace.tsx";
   const original = git("show", `${base}:${file}`);
   const themed = original
@@ -66,7 +66,9 @@ test("workspace bytes differ only by declared presentation and collapsed Data ca
     .replace('                    />\n                  </div>\n                </>\n              )}\n              {section === "marketing"', '                    />\n                  </details>\n                </>\n              )}\n              {section === "marketing"');
   const importSafe = themed.replace('    setReviewStaged(true);\n    setSection("rooms");\n    setMessage(\n      `Found ${result.addedRooms.length} imported attendance', '    setReviewStaged(true);\n    setMessage(\n      `Found ${result.addedRooms.length} imported attendance');
   assert.notEqual(themed, original, "Presentation anchors must exist");
-  assert.equal(read(file), importSafe);
+  const codeEvidenceSafe = importSafe.replace('classificationSnapshots: localRetentionState.snapshots });',
+    'classificationSnapshots: localRetentionState.snapshots, billingEvidenceSnapshots: localRetentionState.snapshots });');
+  assert.equal(read(file), codeEvidenceSafe);
 });
 
 test("all changed/new files stay within reviewed theme, PDF and mobile scope", () => {
@@ -128,11 +130,24 @@ test("all changed/new files stay within reviewed theme, PDF and mobile scope", (
     ...["prepare-tpa-icons.mjs", "render-tpa-icons.swift", "tpa-icon-manifest.json", "tpa-icon-visual-qa.mjs",
       "tpa-icons.test.mjs", "tpa-icon-visual-results.json", "OCTOBER22-TPA-HORIZON-ICON-RECEIPT.md"].map(name => "verification/" + name),
   ]);
+  // Separate encounter-scoped billing-code repair; never a blanket API/core exemption.
+  const reviewedBillingCodeFollowup = new Set([
+    "lib/practice/src/hub/billing-code-resolution.ts", "lib/practice/src/hub/billing-resolution.ts",
+    "lib/practice/src/hub/billing-evidence.ts", "lib/practice/src/hub/import-declarations.ts", "lib/practice/src/hub/engine.ts",
+    "lib/practice/test/billing-code-resolution.test.ts",
+    "artifacts/api-server/src/lib/import-backup-validation.ts", "artifacts/api-server/test/practice-billing-code-review.test.mjs",
+    "artifacts/api-server/test/backup-contract.test.mjs",
+    src + "components/practice/billing-code-review.tsx", src + "lib/reported-billing.ts",
+    src + "lib/import-derived-sessions.ts", src + "lib/retention-local.test.ts", src + "lib/billing-code-integration.test.ts",
+    src + "lib/complete-report-coverage.ts",
+    "verification/billing-code-review-render.mjs", "verification/OCTOBER22-BILLING-CODE-REVIEW-RECEIPT.md",
+    "verification/BILLING-CODE-INDEPENDENT-REVIEW.md",
+  ]);
   const changes = [...git("diff", base, "--name-only", "-z").split("\0"), ...git("ls-files", "--others", "--exclude-standard", "-z").split("\0")].filter(Boolean);
   for (const file of changes.filter(file => reviewedMobileReadiness.has(file))) {
     assert.equal(createHash("sha256").update(fs.readFileSync(path.join(root, file))).digest("hex"), reviewedMobileReadiness.get(file), `Reviewed mobile bytes changed: ${file}`);
   }
-  assert.deepEqual(changes.filter(file => !allowed.has(file) && !publisherHistory.has(file) && !reviewedPdfFollowup.has(file) && !reviewedMobileReadiness.has(file) && !reviewedDataFollowup.has(file) && !reviewedIconFollowup.has(file)), [], "Unexpected edits (including schema/API/dependencies) require separate review");
+  assert.deepEqual(changes.filter(file => !allowed.has(file) && !publisherHistory.has(file) && !reviewedPdfFollowup.has(file) && !reviewedMobileReadiness.has(file) && !reviewedDataFollowup.has(file) && !reviewedIconFollowup.has(file) && !reviewedBillingCodeFollowup.has(file)), [], "Unexpected edits (including schema/API/dependencies) require separate review");
 });
 
 test("token defaults are statically imported by the eagerly loaded workspace", () => {

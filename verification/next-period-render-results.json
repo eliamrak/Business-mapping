@@ -93,6 +93,10 @@
         },
         {
           "method": "GET",
+          "path": "/api/practice-imports/billing-code-candidates"
+        },
+        {
+          "method": "GET",
           "path": "/api/practice-imports/billing-resolution-candidates"
         },
         {
@@ -190,6 +194,10 @@
         },
         {
           "method": "GET",
+          "path": "/api/practice-imports/billing-code-candidates"
+        },
+        {
+          "method": "GET",
           "path": "/api/practice-imports/billing-resolution-candidates"
         },
         {
@@ -211,6 +219,10 @@
         {
           "method": "GET",
           "path": "/api/practice-imports"
+        },
+        {
+          "method": "GET",
+          "path": "/api/practice-imports/billing-code-candidates"
         },
         {
           "method": "GET",
@@ -248,6 +260,10 @@
         {
           "method": "GET",
           "path": "/api/practice-imports"
+        },
+        {
+          "method": "GET",
+          "path": "/api/practice-imports/billing-code-candidates"
         },
         {
           "method": "GET",
@@ -364,6 +380,10 @@
         },
         {
           "method": "GET",
+          "path": "/api/practice-imports/billing-code-candidates"
+        },
+        {
+          "method": "GET",
           "path": "/api/practice-imports/billing-resolution-candidates"
         }
       ],
@@ -385,15 +405,19 @@
         },
         {
           "method": "GET",
-          "path": "/api/practice-imports"
-        },
-        {
-          "method": "GET",
           "path": "/api/business-goals"
         },
         {
           "method": "GET",
           "path": "/api/scenarios"
+        },
+        {
+          "method": "GET",
+          "path": "/api/practice-imports"
+        },
+        {
+          "method": "GET",
+          "path": "/api/practice-imports/billing-code-candidates"
         },
         {
           "method": "GET",
@@ -494,6 +518,10 @@
         },
         {
           "method": "GET",
+          "path": "/api/practice-imports/billing-code-candidates"
+        },
+        {
+          "method": "GET",
           "path": "/api/practice-imports/billing-resolution-candidates"
         }
       ],
@@ -524,6 +552,10 @@
         {
           "method": "GET",
           "path": "/api/practice-imports"
+        },
+        {
+          "method": "GET",
+          "path": "/api/practice-imports/billing-code-candidates"
         },
         {
           "method": "GET",
@@ -564,6 +596,10 @@
         },
         {
           "method": "GET",
+          "path": "/api/practice-imports/billing-code-candidates"
+        },
+        {
+          "method": "GET",
           "path": "/api/practice-imports/billing-resolution-candidates"
         },
         {
@@ -598,6 +634,10 @@
         {
           "method": "GET",
           "path": "/api/practice-imports"
+        },
+        {
+          "method": "GET",
+          "path": "/api/practice-imports/billing-code-candidates"
         },
         {
           "method": "GET",
@@ -638,6 +678,10 @@
         },
         {
           "method": "GET",
+          "path": "/api/practice-imports/billing-code-candidates"
+        },
+        {
+          "method": "GET",
           "path": "/api/practice-imports/billing-resolution-candidates"
         },
         {
@@ -675,6 +719,10 @@
         },
         {
           "method": "GET",
+          "path": "/api/practice-imports/billing-code-candidates"
+        },
+        {
+          "method": "GET",
           "path": "/api/practice-imports/billing-resolution-candidates"
         },
         {
@@ -700,15 +748,19 @@
         },
         {
           "method": "GET",
-          "path": "/api/scenarios"
-        },
-        {
-          "method": "GET",
           "path": "/api/business-goals"
         },
         {
           "method": "GET",
+          "path": "/api/scenarios"
+        },
+        {
+          "method": "GET",
           "path": "/api/practice-imports"
+        },
+        {
+          "method": "GET",
+          "path": "/api/practice-imports/billing-code-candidates"
         },
         {
           "method": "GET",
@@ -746,6 +798,10 @@
         {
           "method": "GET",
           "path": "/api/practice-imports"
+        },
+        {
+          "method": "GET",
+          "path": "/api/practice-imports/billing-code-candidates"
         },
         {
           "method": "GET",
@@ -1096,7 +1152,15 @@
         },
         {
           "method": "GET",
+          "path": "/api/practice-imports/billing-code-candidates"
+        },
+        {
+          "method": "GET",
           "path": "/api/practice-imports/billing-resolution-candidates"
+        },
+        {
+          "method": "GET",
+          "path": "/api/practice-imports/billing-code-candidates"
         },
         {
           "method": "GET",
@@ -1130,6 +1194,10 @@
         {
           "method": "GET",
           "path": "/api/practice-imports"
+        },
+        {
+          "method": "GET",
+          "path": "/api/practice-imports/billing-code-candidates"
         },
         {
           "method": "GET",
@@ -1227,6 +1295,10 @@
               "teamId": 1
             }
           }
+        },
+        {
+          "method": "GET",
+          "path": "/api/practice-imports/billing-code-candidates"
         },
         {
           "method": "GET",
@@ -1513,6 +1585,10 @@
         },
         {
           "method": "GET",
+          "path": "/api/practice-imports/billing-code-candidates"
+        },
+        {
+          "method": "GET",
           "path": "/api/practice-imports/billing-resolution-candidates"
         },
         {
@@ -1771,6 +1847,10 @@
         },
         {
           "method": "GET",
+          "path": "/api/practice-imports/billing-code-candidates"
+        },
+        {
+          "method": "GET",
           "path": "/api/practice-imports/billing-resolution-candidates"
         }
       ],
@@ -1801,6 +1881,10 @@
         {
           "method": "GET",
           "path": "/api/practice-imports"
+        },
+        {
+          "method": "GET",
+          "path": "/api/practice-imports/billing-code-candidates"
         },
         {
           "method": "GET",
@@ -2062,6 +2146,10 @@
         },
         {
           "method": "GET",
+          "path": "/api/practice-imports/billing-code-candidates"
+        },
+        {
+          "method": "GET",
           "path": "/api/practice-imports/billing-resolution-candidates"
         }
       ],
@@ -2092,6 +2180,10 @@
         {
           "method": "GET",
           "path": "/api/practice-imports"
+        },
+        {
+          "method": "GET",
+          "path": "/api/practice-imports/billing-code-candidates"
         },
         {
           "method": "GET",
@@ -2439,6 +2531,10 @@
               "teamId": 1
             }
           }
+        },
+        {
+          "method": "GET",
+          "path": "/api/practice-imports/billing-code-candidates"
         },
         {
           "method": "GET",
@@ -2475,6 +2571,10 @@
         },
         {
           "method": "GET",
+          "path": "/api/practice-imports/billing-code-candidates"
+        },
+        {
+          "method": "GET",
           "path": "/api/practice-imports/billing-resolution-candidates"
         },
         {
@@ -2822,11 +2922,19 @@
         },
         {
           "method": "GET",
+          "path": "/api/practice-imports/billing-code-candidates"
+        },
+        {
+          "method": "GET",
           "path": "/api/practice-imports/billing-resolution-candidates"
         },
         {
           "method": "GET",
           "path": "/api/practice-imports"
+        },
+        {
+          "method": "GET",
+          "path": "/api/practice-imports/billing-code-candidates"
         },
         {
           "method": "GET",
@@ -2860,6 +2968,10 @@
         {
           "method": "GET",
           "path": "/api/practice-imports"
+        },
+        {
+          "method": "GET",
+          "path": "/api/practice-imports/billing-code-candidates"
         },
         {
           "method": "GET",
@@ -2904,6 +3016,10 @@
         },
         {
           "method": "GET",
+          "path": "/api/practice-imports/billing-code-candidates"
+        },
+        {
+          "method": "GET",
           "path": "/api/practice-imports/billing-resolution-candidates"
         },
         {
@@ -2942,6 +3058,10 @@
         {
           "method": "GET",
           "path": "/api/practice-imports"
+        },
+        {
+          "method": "GET",
+          "path": "/api/practice-imports/billing-code-candidates"
         },
         {
           "method": "GET",
@@ -2986,6 +3106,10 @@
         },
         {
           "method": "GET",
+          "path": "/api/practice-imports/billing-code-candidates"
+        },
+        {
+          "method": "GET",
           "path": "/api/practice-imports/billing-resolution-candidates"
         },
         {
@@ -3024,6 +3148,10 @@
         {
           "method": "GET",
           "path": "/api/practice-imports"
+        },
+        {
+          "method": "GET",
+          "path": "/api/practice-imports/billing-code-candidates"
         },
         {
           "method": "GET",
@@ -3068,6 +3196,10 @@
         },
         {
           "method": "GET",
+          "path": "/api/practice-imports/billing-code-candidates"
+        },
+        {
+          "method": "GET",
           "path": "/api/practice-imports/billing-resolution-candidates"
         },
         {
@@ -3106,6 +3238,10 @@
         {
           "method": "GET",
           "path": "/api/practice-imports"
+        },
+        {
+          "method": "GET",
+          "path": "/api/practice-imports/billing-code-candidates"
         },
         {
           "method": "GET",
@@ -3150,6 +3286,10 @@
         },
         {
           "method": "GET",
+          "path": "/api/practice-imports/billing-code-candidates"
+        },
+        {
+          "method": "GET",
           "path": "/api/practice-imports/billing-resolution-candidates"
         },
         {
@@ -3188,6 +3328,10 @@
         {
           "method": "GET",
           "path": "/api/practice-imports"
+        },
+        {
+          "method": "GET",
+          "path": "/api/practice-imports/billing-code-candidates"
         },
         {
           "method": "GET",
@@ -3300,6 +3444,10 @@
         },
         {
           "method": "GET",
+          "path": "/api/practice-imports/billing-code-candidates"
+        },
+        {
+          "method": "GET",
           "path": "/api/practice-imports/billing-resolution-candidates"
         },
         {
@@ -3405,6 +3553,10 @@
         },
         {
           "method": "GET",
+          "path": "/api/practice-imports/billing-code-candidates"
+        },
+        {
+          "method": "GET",
           "path": "/api/practice-imports/billing-resolution-candidates"
         },
         {
@@ -3507,6 +3659,10 @@
         {
           "method": "GET",
           "path": "/api/practice-imports"
+        },
+        {
+          "method": "GET",
+          "path": "/api/practice-imports/billing-code-candidates"
         },
         {
           "method": "GET",

@@ -1,6 +1,6 @@
 import { canonicalServicePeriod } from "./complete-periods.ts";
 import { reconcileBillingEvidence } from "./billing-evidence.ts";
-import type { BillingChargeResolution } from "./billing-resolution.ts";
+import type { BillingResolution } from "./billing-resolution.ts";
 import {
   bindBillingResolutions, importDeclarationsSchema, normalizeProviderLabel, resolveImportedProvider,
   resolveHistoricalBillingProvider, validateHistoricalBillingProviders,
@@ -39,7 +39,7 @@ export type NextReportPeriodInput = {
   /** Exact saved package membership; calling this planner asserts the owner's next-period intent. */
   readonly newSourceIds: readonly string[];
   readonly today: string;
-  readonly billingResolutions?: readonly BillingChargeResolution[];
+  readonly billingResolutions?: readonly BillingResolution[];
 };
 export type NextReportPeriodPlan = {
   status: "ready" | "blocked" | "up-to-date";
@@ -231,7 +231,8 @@ export function planNextReportPeriod(input: NextReportPeriodInput): NextReportPe
         // Charge approvals cover fees and charge slots, never changes to other clinical facts.
         const rows = evidence.flatMap((group) => group.rows);
         const unchangedFacts = new Set(rows.map((row) => fact({ ...row, totalFeeCharged: 0 }, "billing"))).size === 1;
-        if (evidence.every((group) => group.known && group.resolutionId && group.rows.every((row) => identity(row) === key)) && unchangedFacts)
+        if (evidence.every((group) => group.known && group.resolutionId && group.rows.every((row) => identity(row) === key))
+          && (unchangedFacts || evidence.length === 1 && evidence[0].codeResolution))
           approvedEncounters.add(key);
         if (new Set(rows.map((row) => text(row.cancellationSubtype))).size > 1)
           issue(`Billing facts have conflicting cancellation subtypes on ${rows[0].serviceDate}.`);

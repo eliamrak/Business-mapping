@@ -8,15 +8,16 @@ import {
 } from "react";
 import { ApiError, customFetch } from "@workspace/api-client-react";
 import { Download, Save, RefreshCw, Upload } from "lucide-react";
-import type { StoredImportDeclarations, BillingChargeResolution } from "@workspace/practice/hub";
+import type { StoredImportDeclarations, BillingResolution } from "@workspace/practice/hub";
 import { bindBillingResolutions, canonicalServicePeriod, planNextReportPeriod, type NextReportPeriodPlan } from "@workspace/practice/hub";
 import { ImportDeclarationReview } from "./import-declaration-review";
 import { BillingResolutionReview } from "./billing-resolution-review";
+import { BillingCodeReview } from "./billing-code-review";
 import { ReaderStatus } from "./reader-status";
 import { readPracticePackageFile } from "@/lib/practice-package-file";
 import { importFailureStage, importFeedbackTitle, importReceipt, type ImportFeedback } from "@/lib/import-feedback";
 import { completeReportCoverage, type CompleteReportCoverage } from "@/lib/complete-report-coverage";
-import { summarizeReportedBilling } from "@/lib/reported-billing";
+import { billingRowsInSnapshots, summarizeReportedBilling } from "@/lib/reported-billing";
 import {
   buildLocalRetentionMetrics,
   buildSameDayShowReview,
@@ -84,7 +85,7 @@ type PendingLocalSnapshot = {
 };
 
 type StoredImportHistory = {
-  billingResolutions?: BillingChargeResolution[];
+  billingResolutions?: BillingResolution[];
   billingResolutionRevision?: number;
   declarations?: StoredImportDeclarations | null;
   snapshots: LocalSnapshot[];
@@ -156,8 +157,8 @@ class ImportConflict extends Error {
 export type LocalRetentionWorkspaceState = {
   importFeedback?: ImportFeedback;
   setImportFeedback?: Dispatch<SetStateAction<ImportFeedback>>;
-  billingResolutions: BillingChargeResolution[];
-  setBillingResolutions: Dispatch<SetStateAction<BillingChargeResolution[]>>;
+  billingResolutions: BillingResolution[];
+  setBillingResolutions: Dispatch<SetStateAction<BillingResolution[]>>;
   billingResolutionRevision: number;
   setBillingResolutionRevision: Dispatch<SetStateAction<number>>;
   declarations: StoredImportDeclarations | null;
@@ -183,7 +184,7 @@ export type LocalRetentionWorkspaceState = {
 };
 
 export function useLocalRetentionWorkspaceState(enabled = true): LocalRetentionWorkspaceState {
-  const [billingResolutions, setBillingResolutions] = useState<BillingChargeResolution[]>([]);
+  const [billingResolutions, setBillingResolutions] = useState<BillingResolution[]>([]);
   const [billingResolutionRevision, setBillingResolutionRevision] = useState(0);
   const [declarations, setDeclarations] = useState<StoredImportDeclarations | null>(null);
   const [packages, setPackages] = useState<StoredImportHistory["packages"]>([]);
@@ -368,7 +369,8 @@ export default function LocalRetentionWorkspace({
   const billingResolutions = useMemo(() => bindBillingResolutions(storedBillingResolutions, roster, declarations?.data), [storedBillingResolutions, roster, declarations]);
   const verifiedCoverage = useMemo(() => coverageSummary ?? completeReportCoverage(snapshots, [], today), [coverageSummary, snapshots, today]);
   const eligibleMetricSnapshots = metricSnapshots ?? verifiedCoverage.eligibleSnapshots;
-  const reportedCharges = useMemo(() => summarizeReportedBilling(eligibleMetricSnapshots, today, { billingResolutions }), [eligibleMetricSnapshots, today, billingResolutions]);
+  const eligibleBillingRows = useMemo(() => billingRowsInSnapshots(snapshots, eligibleMetricSnapshots), [snapshots, eligibleMetricSnapshots]);
+  const reportedCharges = useMemo(() => summarizeReportedBilling(snapshots, today, { billingResolutions, eligibleRows: eligibleBillingRows }), [snapshots, eligibleBillingRows, today, billingResolutions]);
   const rawBillingEvidence = useMemo(() => summarizeReportedBilling(snapshots, today, { billingResolutions }).evidence, [snapshots, today, billingResolutions]);
   const chargedByClinician = useMemo(() => {
     const labels = new Map<string, { clinician: string; sourceRows: number }>();
@@ -379,9 +381,9 @@ export default function LocalRetentionWorkspace({
       labels.set(key, entry);
     }
     return [...labels.values()].sort((a, b) => a.clinician.localeCompare(b.clinician)).map((row) => ({ ...row,
-      charges: totalReportedCharges(summarizeReportedBilling(eligibleMetricSnapshots, today, { clinicianLabel: row.clinician, billingResolutions })),
+      charges: totalReportedCharges(summarizeReportedBilling(snapshots, today, { clinicianLabel: row.clinician, billingResolutions, eligibleRows: eligibleBillingRows })),
     }));
-  }, [eligibleMetricSnapshots, today, billingResolutions]);
+  }, [snapshots, eligibleMetricSnapshots, eligibleBillingRows, today, billingResolutions]);
   const recentCoverageGaps = [...verifiedCoverage.incompletePeriods]
     .filter((period) => period.start !== null && period.end !== null)
     .sort((a, b) => b.end!.localeCompare(a.end!) || b.start!.localeCompare(a.start!))
@@ -747,6 +749,7 @@ export default function LocalRetentionWorkspace({
             <button type="button" className="pw-button pw-primary" disabled={busy || feedback.stage === "unconfirmed"} onClick={() => void reconcileSavedPeriod()}>Reconcile this period</button>
           </> : <>
             <p>{periodPlan.reasons[0] ?? "The saved report could not be reconciled. Reload saved history before trying again."}</p>
+            {periodPlan.reasons.some(reason => /billing/i.test(reason)) && <a href="#import-billing-review" onClick={() => openReview("import-billing-review")}>Review billing conflicts</a>}
             {periodPlan.reasons.length > 1 && <details><summary>More review details</summary>{periodPlan.reasons.slice(1).map(reason => <p key={reason}>{reason}</p>)}</details>}
             <details><summary>Source receipt</summary>
               <p style={{ overflowWrap: "anywhere" }}>Saved package: {latestPackage?.packageId}</p>
@@ -799,7 +802,8 @@ export default function LocalRetentionWorkspace({
         <p>Attendance: {dateLabel(verifiedCoverage.attendanceThrough)} · Billing: {dateLabel(verifiedCoverage.billingThrough)}</p>
         <p>{verifiedCoverage.excludedRowsCount} raw rows excluded from eligible metrics.</p>
         {(rawBillingEvidence.conflictingHashCount > 0 || rawBillingEvidence.ambiguousEncounterCount > 0) && <p>Billing source review: {rawBillingEvidence.conflictingHashCount} fee conflicts; {rawBillingEvidence.ambiguousEncounterCount} ambiguous fee encounters. Review the source evidence below.</p>}
-        {rawBillingEvidence.resolvedCaseCount > 0 && <p>{rawBillingEvidence.resolvedCaseCount} exact two-charge cases accepted by owner approval.</p>}
+        {rawBillingEvidence.resolvedCaseCount > rawBillingEvidence.resolvedCodeCaseCount && <p>{rawBillingEvidence.resolvedCaseCount - rawBillingEvidence.resolvedCodeCaseCount} exact two-charge cases accepted by owner approval.</p>}
+        {rawBillingEvidence.resolvedCodeCaseCount > 0 && <p>{rawBillingEvidence.resolvedCodeCaseCount} encounter-specific code choices accepted by owner approval.</p>}
         {rawBillingEvidence.staleResolutionCount > 0 && <p role="alert">{rawBillingEvidence.staleResolutionCount} approved cases have changed or missing evidence. Their charges remain unknown pending review.</p>}
         {verifiedCoverage.attendanceStatusConflictCount > 0 && <p>{verifiedCoverage.attendanceStatusConflictCount} conflicting attendance status groups. Affected complete provider periods are withheld, not zero; review matching diagnostics below.</p>}
         <details><summary>Coverage and billing definitions</summary>
@@ -832,6 +836,8 @@ export default function LocalRetentionWorkspace({
       </details>
       </details>
       <details className="pw-data-disclosure" id="import-billing-review"><summary>Billing exceptions{rawBillingEvidence.conflictingHashCount + rawBillingEvidence.ambiguousEncounterCount + rawBillingEvidence.staleResolutionCount > 0 ? " · review needed" : ""}</summary>
+        <BillingCodeReview revision={billingResolutionRevision} sourceKey={`${declarations?.revision ?? 0}:${snapshots.map(source => source.id + ":" + source.sourceHash).sort().join(",")}`}
+          onSaved={(resolutions, revision) => { setBillingResolutions(resolutions); setBillingResolutionRevision(revision); }} />
         <BillingResolutionReview revision={billingResolutionRevision} sourceKey={`${declarations?.revision ?? 0}:${snapshots.map((source) => source.id).sort().join(",")}`}
           onSaved={(resolutions, revision) => { setBillingResolutions(resolutions); setBillingResolutionRevision(revision); }} />
       </details>

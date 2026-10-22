@@ -96,7 +96,7 @@ const server=http.createServer(async(req,res)=>{try{
       send(state);return;
     }
     if(req.method!=='GET'){send({error:'Forbidden synthetic write'},405);return;}
-    send(u.pathname==='/api/hub'?{revision:1,data:fixture.workspace,updatedAt:now}:u.pathname==='/api/hub/context'?fixture.context:u.pathname==='/api/practice-imports'?state:u.pathname==='/api/practice-imports/billing-resolution-candidates'?{revision:0,candidates:[]}:u.pathname==='/api/business-goals'?fixture.goals:u.pathname==='/api/practice-imports/capabilities'?{}:[]);return;
+    send(u.pathname==='/api/hub'?{revision:1,data:fixture.workspace,updatedAt:now}:u.pathname==='/api/hub/context'?fixture.context:u.pathname==='/api/practice-imports'?state:['/api/practice-imports/billing-resolution-candidates','/api/practice-imports/billing-code-candidates'].includes(u.pathname)?{revision:0,candidates:[]}:u.pathname==='/api/business-goals'?fixture.goals:u.pathname==='/api/practice-imports/capabilities'?{}:[]);return;
   }
   if(u.pathname==='/app.js'){res.setHeader('Content-Type','text/javascript');res.end(js);return;}
   if(u.pathname==='/style.css'){res.setHeader('Content-Type','text/css');res.end(css);return;}

@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { RefreshCw, Save } from "lucide-react";
 import { customFetch } from "@workspace/api-client-react";
-import type { BillingChargeResolution } from "@workspace/practice/hub";
+import type { BillingResolution } from "@workspace/practice/hub";
 
 type Candidate = {
   caseToken: string; clinicianLabel: string; serviceDate: string; billingCode: string;
@@ -13,7 +13,7 @@ const money = (value: number) => value.toLocaleString("en-US", { style: "currenc
 
 export function BillingResolutionReview({ revision, sourceKey, onSaved }: {
   revision: number; sourceKey: string;
-  onSaved: (resolutions: BillingChargeResolution[], revision: number) => void;
+  onSaved: (resolutions: BillingResolution[], revision: number) => void;
 }) {
   const [data, setData] = useState<Candidates | null>(null);
   const [error, setError] = useState("");
@@ -34,7 +34,7 @@ export function BillingResolutionReview({ revision, sourceKey, onSaved }: {
     if (!candidate.amounts || !data) return;
     setBusy(true); setError("");
     try {
-      const result = await customFetch<{ billingResolutions: BillingChargeResolution[]; billingResolutionRevision: number }>("/api/practice-imports/billing-resolutions", {
+      const result = await customFetch<{ billingResolutions: BillingResolution[]; billingResolutionRevision: number }>("/api/practice-imports/billing-resolutions", {
         method: "POST", body: JSON.stringify({ caseToken: candidate.caseToken, expectedRevision: data.revision,
           clinicianLabel: candidate.clinicianLabel, serviceDate: candidate.serviceDate, amounts: candidate.amounts,
           approvalNote, confirmed: true }),

@@ -37,6 +37,16 @@ const monthLabel = (month: string) => new Date(month + "-01T12:00:00Z")
   .toLocaleDateString("en-US", { month: "long", year: "numeric", timeZone: "UTC" });
 const normalizedLabel = (label: string) => label.trim().replace(/\s+/g, " ").toLowerCase();
 
+/** Recover original references after coverage/scope views clone snapshots and rows. */
+export function billingRowsInSnapshots(original: readonly LocalSnapshot[], admitted: readonly LocalSnapshot[]) {
+  const key = (sourceId: string, row: BillingRow) => JSON.stringify([sourceId, row.sourceRowHash, row.clientId,
+    row.clinician, row.serviceDate, row.billingCode ?? null, row.visitKind ?? null, row.totalFeeCharged]);
+  const allowed = new Set(admitted.flatMap(source => source.kind === "billing"
+    ? source.rows.map(row => key(source.sourceSnapshotId ?? source.id, row)) : []));
+  return new Set(original.flatMap(source => source.kind === "billing"
+    ? source.rows.filter(row => allowed.has(key(source.sourceSnapshotId ?? source.id, row))) : []));
+}
+
 /** Selection extent only; neither elapsed time nor report coverage is inferred here. */
 export function billingMonthSelectionLabel(month: string, range: { start: string; end: string } | null) {
   if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(month) || !range || !validDate(range.start) || !validDate(range.end) || range.start > range.end) return "selection unverified";
@@ -71,6 +81,7 @@ export function summarizeReportedBilling(
     conflictingHashCount: 0,
     ambiguousEncounterCount: 0,
     resolvedCaseCount: 0,
+    resolvedCodeCaseCount: 0,
     staleResolutionCount: 0,
     originalConflictingCaseCount: 0,
     originalAmbiguousCaseCount: 0,
@@ -103,6 +114,7 @@ export function summarizeReportedBilling(
     if (conflicting) evidence.conflictingHashCount++;
     if (ambiguous) evidence.ambiguousEncounterCount++;
     if (group.resolutionId) evidence.resolvedCaseCount++;
+    if (group.codeResolution) evidence.resolvedCodeCaseCount++;
     if (group.resolutionStale) evidence.staleResolutionCount++;
     if (group.conflicting) evidence.originalConflictingCaseCount++;
     if (group.ambiguous) evidence.originalAmbiguousCaseCount++;
@@ -148,7 +160,8 @@ export function summarizeReportedBilling(
   }
   if (evidence.conflictingHashCount) evidence.warnings.push("Conflicting encounter/source identities make affected monthly charges unknown; no payload was selected as authoritative.");
   if (evidence.ambiguousEncounterCount) evidence.warnings.push("Indistinguishable repeated encounters cannot establish separate charges; affected totals remain unknown.");
-  if (evidence.resolvedCaseCount) evidence.warnings.push("Explicit owner-approved billing exceptions retain two pinned charges each, not two treatment visits. Original source signals and records remain unchanged.");
+  if (evidence.resolvedCaseCount > evidence.resolvedCodeCaseCount) evidence.warnings.push("Explicit owner-approved billing exceptions retain two pinned charges each, not two treatment visits. Original source signals and records remain unchanged.");
+  if (evidence.resolvedCodeCaseCount) evidence.warnings.push("Explicit owner-approved code choices retain one source-backed billed charge per case. Original source records, attendance and coverage are unchanged.");
   if (evidence.staleResolutionCount) evidence.warnings.push("A billing exception no longer matches its pinned evidence; affected charges require review and remain unknown.");
   if (evidence.invalidFeeRowCount) evidence.warnings.push("Nonfinite charged fees make affected monthly charges unknown.");
   if (evidence.missingHashRowCount) evidence.warnings.push("Rows without a stable source hash cannot be safely deduplicated; affected monthly charges are unknown.");

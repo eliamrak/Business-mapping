@@ -13,7 +13,8 @@ import { parseBillingResolutionJournal, parseStoredImportDeclarations } from "..
 import { assessAutomaticOverlap, overlapReviewMessage, sameSourceCoverageChanged } from "../lib/import-overlap-reconciliation";
 import { importDeclarationsSchema, normalizeProviderLabel, prepareBillingChargeResolution, reconcileBillingEvidence,
   resolveImportedProvider, bindBillingResolutions, resolveHistoricalBillingProvider,
-  validateHistoricalBillingProviders, restoreHistoricalBillingProviders, unverifiedDeletionMarker, deletionMarkerGuidance, legacyServiceCodes, planNextReportPeriod, type StoredImportDeclarations } from "@workspace/practice/hub";
+  prepareBillingCodeResolution, acceptedBillingCodeRow, billingCodeHashConflicts, billingEncounterKey, isBillingCodeResolution, billingCodeResolutionSchema,
+  validateHistoricalBillingProviders, restoreHistoricalBillingProviders, unverifiedDeletionMarker, deletionMarkerGuidance, legacyServiceCodes, planNextReportPeriod, type StoredImportDeclarations, type BillingChargeResolution } from "@workspace/practice/hub";
 
 const router = Router();
 
@@ -424,7 +425,7 @@ async function readDeclarations(connection: Pick<typeof db, "execute">, practice
 
 async function readBillingResolutionJournal(connection: Pick<typeof db, "execute">, practiceId: string, accountId: string) {
   const result = await connection.execute(sql`SELECT detail FROM practice_import_audit
-    WHERE practice_id = ${practiceId} AND account_id = ${accountId} AND action = 'accept-billing-charge-exception' LIMIT 1001`);
+    WHERE practice_id = ${practiceId} AND account_id = ${accountId} AND action IN ('accept-billing-charge-exception', 'accept-billing-code-exception', 'revoke-billing-code-exception') LIMIT 1001`);
   return parseBillingResolutionJournal(result.rows.map(row => row.detail));
 }
 
@@ -446,9 +447,11 @@ router.get("/practice-imports/billing-resolution-candidates", async (_req, res) 
   const data = history.declarations?.data;
   const effective = reconcileBillingEvidence(history.snapshots.flatMap((source) => source.kind === "billing"
     ? (source.rows as BillingRow[]).map((row) => ({ row, snapshotId: source.id })) : []), bindBillingResolutions(history.billingResolutions, roster, data));
-  const states = new Map(effective.map((group) => [group.row, group]));
+  const states = new Map(effective.flatMap((group) => group.rows.map(row => [row, group] as const)));
   const candidates = billingApprovalCases(history.snapshots, practiceId, accountId).flatMap(({ group, members, caseToken, draft }) => {
     const state = states.get(group.row)!;
+    if (state.codeResolution || history.billingResolutions.some(resolution => isBillingCodeResolution(resolution)
+      && billingEncounterKey(group.row) === JSON.stringify([resolution.clientId, normalizeProviderLabel(resolution.clinicianLabel), resolution.serviceDate]))) return [];
     if (!group.conflicting && !group.ambiguous && !state.resolutionId && !state.resolutionStale) return [];
     const mapping = draft && data?.mappings.find((row) => normalizeProviderLabel(row.sourceLabel) === normalizeProviderLabel(draft.clinicianLabel));
     const clinicianId = mapping ? resolveImportedProvider(draft!.clinicianLabel, roster, mapping.teamId, data) : null;
@@ -460,6 +463,122 @@ router.get("/practice-imports/billing-resolution-candidates", async (_req, res) 
       stale: !!state.resolutionStale, canAccept: !!draft && (clinicianId !== null || historicalProviderId !== null) && !state.resolutionId && !state.resolutionStale }];
   });
   return res.json({ revision: history.billingResolutionRevision, candidates });
+});
+
+function billingCodeCases(snapshots: Snapshot[], practiceId: string, accountId: string, declarationRevision: number, includeKeys = new Set<string>()) {
+  const encounters = new Map<string, { snapshotId: string; row: BillingRow }[]>();
+  for (const source of snapshots.filter(source => source.kind === "billing")) for (const row of source.rows as BillingRow[]) {
+    const key = billingEncounterKey(row);
+    encounters.set(key, [...(encounters.get(key) ?? []), { snapshotId: source.id, row }]);
+  }
+  const all = [...encounters.values()].flat();
+  return [...encounters.values()].filter(members => includeKeys.has(billingEncounterKey(members[0].row)) || new Set(members.map(entry => normalizeProviderLabel(entry.row.billingCode ?? ""))).size > 1)
+    .map(members => {
+      const pinned = members.map(entry => ({ snapshotId: entry.snapshotId, row: entry.row })).sort((a, b) => stableJson(a).localeCompare(stableJson(b)));
+      const caseToken = sha256(["billing-code", practiceId, accountId, declarationRevision, pinned]);
+      return { members, caseToken, draft: billingCodeHashConflicts(all, members) ? null : prepareBillingCodeResolution(members),
+        choices: members.map(entry => ({ entry, choiceToken: sha256([caseToken, entry.snapshotId, entry.row.sourceRowHash]) })) };
+    });
+}
+
+router.get("/practice-imports/billing-code-candidates", async (_req, res) => {
+  if (res.locals.role !== "owner") return res.sendStatus(403);
+  res.set("Cache-Control", "no-store");
+  const { practiceId, accountId } = scope(res);
+  const history = await historyFor(practiceId, accountId), roster = await db.select().from(cliniciansTable);
+  const bound = bindBillingResolutions(history.billingResolutions, roster, history.declarations?.data);
+  const activeChoices = bound.filter(isBillingCodeResolution);
+  const resolutionKey = (resolution: { clientId: string; clinicianLabel: string; serviceDate: string }) => JSON.stringify([resolution.clientId, normalizeProviderLabel(resolution.clinicianLabel), resolution.serviceDate]);
+  const candidates = billingCodeCases(history.snapshots, practiceId, accountId, history.declarations?.revision ?? 0, new Set(activeChoices.map(resolutionKey))).map(item => {
+    const first = item.members[0].row, key = billingEncounterKey(first);
+    const related = bound.filter(resolution => JSON.stringify([resolution.clientId, normalizeProviderLabel(resolution.clinicianLabel), resolution.serviceDate]) === key);
+    const current = related.find(isBillingCodeResolution);
+    const accepted = current && item.draft && !("mappingInvalid" in current && current.mappingInvalid) && acceptedBillingCodeRow(item.members, current);
+    const mapped = history.declarations?.data.mappings.find(row => normalizeProviderLabel(row.sourceLabel) === normalizeProviderLabel(first.clinician));
+    const identity = mapped && resolveImportedProvider(first.clinician, roster, mapped.teamId, history.declarations!.data)
+      || resolveHistoricalBillingProvider(first.clinician, roster, history.declarations?.data);
+    const reason = !item.draft ? "Multiple same-day rows or other differing facts need investigation; a code choice alone cannot resolve this case."
+      : !identity ? "Confirm the provider mapping before choosing a code."
+      : related.length && !accepted ? "An existing approval needs review or undo before a new code choice." : null;
+    return { caseToken: item.caseToken, clientReference: first.clientId, clinicianLabel: first.clinician, serviceDate: first.serviceDate,
+      totalFeeCharged: first.totalFeeCharged, canResolve: !!item.draft && !!identity && !related.length, reason,
+      resolutionId: current?.id ?? null, stale: !!current && !accepted,
+      selectedChoiceToken: accepted ? item.choices.find(choice => choice.entry.row === accepted)?.choiceToken ?? null : null,
+      sources: item.choices.map(({ entry, choiceToken }) => {
+        const source = history.snapshots.find(source => source.id === entry.snapshotId)!;
+        return { choiceToken, snapshotId: source.id, sourceHash: source.sourceHash, importedAt: source.importedAt, billingCode: entry.row.billingCode };
+      }) };
+  });
+  for (const resolution of activeChoices.filter(resolution => !candidates.some(candidate => candidate.resolutionId === resolution.id))) {
+    candidates.push({ caseToken: resolution.approvalToken, clientReference: resolution.clientId, clinicianLabel: resolution.clinicianLabel,
+      serviceDate: resolution.serviceDate, totalFeeCharged: resolution.evidence[0].totalFeeCharged, canResolve: false,
+      reason: "The pinned sources are no longer active. Undo this stale code choice before reviewing replacement evidence.",
+      resolutionId: resolution.id, stale: true, selectedChoiceToken: null, sources: [] });
+  }
+  return res.json({ revision: history.billingResolutionRevision, candidates });
+});
+
+const codeChoiceSchema = z.object({ caseToken: z.string().regex(/^[0-9a-f]{64}$/), choiceToken: z.string().regex(/^[0-9a-f]{64}$/),
+  expectedRevision: z.number().int().nonnegative(), approvalNote: z.string().trim().min(1).max(2000), confirmed: z.literal(true) }).strict();
+router.post("/practice-imports/billing-code-resolutions", async (req, res) => {
+  if (res.locals.role !== "owner") return res.sendStatus(403);
+  res.set("Cache-Control", "no-store");
+  const body = codeChoiceSchema.safeParse(req.body);
+  if (!body.success) return res.status(400).json({ error: "Review the exact appointment and source code, add a note and explicitly confirm the choice." });
+  const { practiceId, accountId, actor } = scope(res);
+  const result = await db.transaction(async tx => {
+    await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtext(${practiceId}), hashtext(${accountId}))`);
+    const declarations = await readDeclarations(tx, practiceId, accountId);
+    if (!declarations) return "mapping";
+    const journal = await readBillingResolutionJournal(tx, practiceId, accountId);
+    const snapshots = (await tx.select(snapshotColumns).from(practiceImportSnapshotsTable).where(and(
+      eq(practiceImportSnapshotsTable.practiceId, practiceId), eq(practiceImportSnapshotsTable.accountId, accountId), eq(practiceImportSnapshotsTable.active, 1),
+    ))).map(snapshotFromRow);
+    const exact = billingCodeCases(snapshots, practiceId, accountId, declarations.revision).find(item => item.caseToken === body.data.caseToken);
+    if (journal.billingResolutionRevision !== body.data.expectedRevision || !exact) return "stale";
+    const choice = exact.choices.find(choice => choice.choiceToken === body.data.choiceToken);
+    if (!exact.draft || !choice) return "invalid";
+    const draft = exact.draft;
+    if (journal.billingResolutions.some(resolution => resolution.clientId === draft.clientId
+      && normalizeProviderLabel(resolution.clinicianLabel) === normalizeProviderLabel(draft.clinicianLabel) && resolution.serviceDate === draft.serviceDate)) return "stale";
+    const roster = await tx.select().from(cliniciansTable);
+    const mapping = declarations.data.mappings.find(row => normalizeProviderLabel(row.sourceLabel) === normalizeProviderLabel(draft.clinicianLabel));
+    const clinicianId = mapping ? resolveImportedProvider(draft.clinicianLabel, roster, mapping.teamId, declarations.data) : null;
+    const historicalProviderId = resolveHistoricalBillingProvider(draft.clinicianLabel, roster, declarations.data);
+    if (clinicianId === null && historicalProviderId === null) return "mapping";
+    const resolution = billingCodeResolutionSchema.parse({ ...draft, kind: "billing-code", id: randomUUID(), approvalToken: body.data.caseToken,
+      selected: { snapshotId: choice.entry.snapshotId, sourceRowHash: choice.entry.row.sourceRowHash },
+      ...(clinicianId !== null ? { clinicianId } : { historicalProviderId }),
+      confirmedAt: new Date().toISOString(), approvalNote: body.data.approvalNote });
+    await tx.insert(practiceImportAuditTable).values({ id: randomUUID(), practiceId, accountId, packageId: "billing-code-resolution:" + resolution.id,
+      action: "accept-billing-code-exception", actor, detail: { resolution, oldRevision: journal.billingResolutionRevision,
+        revision: journal.billingResolutionRevision + 1, basis: "owner-confirmation", affectsAttendance: false, affectsCoverage: false } });
+    return "saved";
+  });
+  if (result === "stale") return res.status(409).json({ error: "The source evidence, mapping or journal changed. Reload and review; no code choice was saved." });
+  if (result === "mapping") return res.status(409).json({ error: "An existing confirmed provider mapping is required." });
+  if (result === "invalid") return res.status(400).json({ error: "This case cannot be resolved by choosing one code. No source facts changed." });
+  return res.json({ ...(await historyFor(practiceId, accountId)), resolutionStatus: result });
+});
+
+router.post("/practice-imports/billing-code-resolutions/:id/revoke", async (req, res) => {
+  if (res.locals.role !== "owner") return res.sendStatus(403);
+  res.set("Cache-Control", "no-store");
+  const body = z.object({ expectedRevision: z.number().int().nonnegative(), approvalNote: z.string().trim().min(1).max(2000), confirmed: z.literal(true) }).strict().safeParse(req.body);
+  const id = z.uuid().safeParse(req.params.id);
+  if (!body.success || !id.success) return res.status(400).json({ error: "Select the saved choice and explicitly confirm undo with a note." });
+  const { practiceId, accountId, actor } = scope(res);
+  const result = await db.transaction(async tx => {
+    await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtext(${practiceId}), hashtext(${accountId}))`);
+    const journal = await readBillingResolutionJournal(tx, practiceId, accountId);
+    if (journal.billingResolutionRevision !== body.data.expectedRevision || !journal.billingResolutions.some(row => row.id === id.data && isBillingCodeResolution(row))) return "stale";
+    await tx.insert(practiceImportAuditTable).values({ id: randomUUID(), practiceId, accountId, packageId: "billing-code-reversal:" + id.data,
+      action: "revoke-billing-code-exception", actor, detail: { revokedResolutionId: id.data, approvalNote: body.data.approvalNote,
+        revokedAt: new Date().toISOString(), oldRevision: journal.billingResolutionRevision, revision: journal.billingResolutionRevision + 1 } });
+    return "saved";
+  });
+  if (result === "stale") return res.status(409).json({ error: "This choice or journal changed. Reload before undo; nothing was changed." });
+  return res.json({ ...(await historyFor(practiceId, accountId)), resolutionStatus: result });
 });
 
 const billingAcceptanceSchema = z.object({
@@ -481,9 +600,11 @@ router.post("/practice-imports/billing-resolutions", async (req, res) => {
     const snapshots = active.map(snapshotFromRow);
     const cases = billingApprovalCases(snapshots, practiceId, accountId);
     const journal = await readBillingResolutionJournal(tx, practiceId, accountId);
-    const stored = journal.billingResolutions;
+    const stored = journal.billingResolutions.filter((resolution): resolution is BillingChargeResolution => !isBillingCodeResolution(resolution));
     const roster = await tx.select().from(cliniciansTable);
     const exact = cases.find((row) => row.caseToken === body.data.caseToken);
+    if (exact && journal.billingResolutions.some(resolution => isBillingCodeResolution(resolution)
+      && billingEncounterKey(exact.group.row) === JSON.stringify([resolution.clientId, normalizeProviderLabel(resolution.clinicianLabel), resolution.serviceDate]))) return "stale";
     const previous = stored.find((row) => row.approvalToken === body.data.caseToken);
     const effective = reconcileBillingEvidence(snapshots.flatMap((source) => source.kind === "billing"
       ? (source.rows as BillingRow[]).map((row) => ({ row, snapshotId: source.id })) : []), bindBillingResolutions(stored, roster, old.data));
