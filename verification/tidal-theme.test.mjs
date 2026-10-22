@@ -66,7 +66,7 @@ test("workspace bytes differ only by declared presentation import, attribute and
   assert.equal(read(file), expected);
 });
 
-test("all changed/new files stay within declared presentation and verification scope", () => {
+test("all changed/new files stay within reviewed theme, PDF and mobile scope", () => {
   const allowed = new Set([...sheets.map(s => src + s), src + "pages/practice-workspace.tsx",
     src + "pages/practice-tokens.css", src + "components/practice/tidal-material.tsx",
     src + "components/practice/tidal-material.css", src + "assets/practice-tidal-art.png", src + "assets/practice-tidal-art.jpg",
@@ -83,8 +83,18 @@ test("all changed/new files stay within declared presentation and verification s
     "verification/lazy-pdf-build.mjs", "verification/lazy-pdf-build-results.json",
     "verification/lazy-pdf-export-acceptance.mjs", "verification/lazy-pdf-export-results.json",
     "verification/lazy-pdf-export.test.mjs", "verification/OCTOBER22-LAZY-PDF-RECEIPT.md"]);
+  // Accepted mobile readiness e30725e5 is a separate runtime change, not part of
+  // the theme. Permit its exact reviewed bytes, never a mobile-directory waiver.
+  const reviewedMobileReadiness = new Map([
+    ["artifacts/comp-mobile/server/serve.js", "d0161767d8de2ed7320e982faa5e484ad455bbe3cc2a18dea591567320c78be4"],
+    ["verification/OCTOBER22-MOBILE-READINESS-RECEIPT.md", "1ffa0d30c418575dfff1a8b001bf731df1b57781b9d13f95145db872d0d189ae"],
+    ["verification/mobile-readiness.test.cjs", "794a0f9fa5b8a8e18fae4270b712d312e449c4c74a0bb123c2ee42669d42aab1"],
+  ]);
   const changes = [...git("diff", base, "--name-only", "-z").split("\0"), ...git("ls-files", "--others", "--exclude-standard", "-z").split("\0")].filter(Boolean);
-  assert.deepEqual(changes.filter(file => !allowed.has(file) && !publisherHistory.has(file) && !reviewedPdfFollowup.has(file)), [], "Unexpected edits (including schema/API/dependencies) require separate review");
+  for (const file of changes.filter(file => reviewedMobileReadiness.has(file))) {
+    assert.equal(createHash("sha256").update(fs.readFileSync(path.join(root, file))).digest("hex"), reviewedMobileReadiness.get(file), `Reviewed mobile bytes changed: ${file}`);
+  }
+  assert.deepEqual(changes.filter(file => !allowed.has(file) && !publisherHistory.has(file) && !reviewedPdfFollowup.has(file) && !reviewedMobileReadiness.has(file)), [], "Unexpected edits (including schema/API/dependencies) require separate review");
 });
 
 test("token defaults are statically imported by the eagerly loaded workspace", () => {
