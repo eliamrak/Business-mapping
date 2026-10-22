@@ -1,4 +1,4 @@
-import { isConsultationService, isDocumentationService, isTreatmentService, isFreePhoneService, legacyServiceDefinition, unverifiedDeletionMarker, deletionMarkerGuidance } from "@workspace/practice/hub";
+import { isConsultationService, isDocumentationService, isTreatmentService, isFreePhoneService, legacyServiceDefinition, reconcileBillingEvidence, unverifiedDeletionMarker, deletionMarkerGuidance } from "@workspace/practice/hub";
 
 export type LocalFactKind = "attendance" | "billing";
 export type ReportCoverage = { start: string; end: string; complete: true };
@@ -482,6 +482,32 @@ function factGroupKey(
     normalizeClinician(row.clinician),
     row.serviceDate,
   ].join("\u0000");
+}
+
+type SourceFact<T> = { row: T; snapshotId: string };
+const billingFact = (row: BillingRow) => JSON.stringify([
+  factGroupKey(row), row.billingCode ?? null, row.visitKind ?? null, row.totalFeeCharged,
+]);
+function exactCrossSourceCopies(entries: SourceFact<BillingRow>[], fact: (row: BillingRow) => string) {
+  return entries.length > 1 && new Set(entries.map(entry => entry.snapshotId)).size === entries.length
+    && entries.every(({ row }) => row.clientId.trim() && normalizeClinician(row.clinician) && row.sourceRowHash.trim()
+      && fact(row) === fact(entries[0].row));
+}
+
+/** Derived amounts/counts only. Keep raw snapshots, row arrays, coverage and review evidence intact. */
+function derivedExactBillingRows(snapshots: readonly LocalSnapshot[]): BillingRow[] {
+  const entries = snapshots.flatMap(snapshot => snapshot.kind === "billing"
+    ? snapshot.rows.map(row => ({ row, snapshotId: snapshot.sourceSnapshotId ?? snapshot.id })) : []);
+  const sourcesByRow = new Map<BillingRow, SourceFact<BillingRow>[]>();
+  for (const entry of entries) {
+    const sources = sourcesByRow.get(entry.row) ?? [];
+    sources.push(entry);
+    sourcesByRow.set(entry.row, sources);
+  }
+  return reconcileBillingEvidence(entries).flatMap(group => {
+    const members = [...new Set(group.rows)].flatMap(row => sourcesByRow.get(row)!);
+    return group.known && exactCrossSourceCopies(members, billingFact) ? [group.row] : group.rows;
+  });
 }
 
 function phoneOnlyConsultKeys(snapshots: readonly LocalSnapshot[]) {
@@ -1141,14 +1167,22 @@ export function buildLocalVisitReconciliation(
   let ambiguousBillingRows = 0;
   let totalMatchedFeesCharged = 0;
   const conflictingStatusRows = new Set(attendanceStatusConflicts(snapshots).flatMap((group) => group.rows));
+  const effectiveBillingByEncounter = new Map<string, BillingRow[]>();
+  for (const row of derivedExactBillingRows(snapshots)) {
+    if (row.serviceDate > asOfDate) continue;
+    const entries = effectiveBillingByEncounter.get(factGroupKey(row)) ?? [];
+    entries.push(row);
+    effectiveBillingByEncounter.set(factGroupKey(row), entries);
+  }
   for (const group of groups.values()) {
     const attendanceCount = group.attendanceRows.length;
-    const treatmentBillingRows = group.billingRows.filter(
+    const effectiveBillingRows = effectiveBillingByEncounter.get(factGroupKey(group)) ?? [];
+    const treatmentBillingRows = effectiveBillingRows.filter(
       isTreatmentService,
     );
     const billingCount = treatmentBillingRows.length;
     const isPhoneOnlyConsult =
-      group.billingRows.length > 0 && treatmentBillingRows.length === 0;
+      effectiveBillingRows.length > 0 && treatmentBillingRows.length === 0;
     const treatmentAttendanceRowsForGroup = isPhoneOnlyConsult
       ? []
       : group.attendanceRows.filter(isTreatmentService);
@@ -1172,7 +1206,7 @@ export function buildLocalVisitReconciliation(
       (sum, row) => sum + row.totalFeeCharged,
       0,
     );
-    const rawTotalFeeCharged = group.billingRows.reduce(
+    const effectiveTotalFeeCharged = effectiveBillingRows.reduce(
       (sum, row) => sum + row.totalFeeCharged,
       0,
     );
@@ -1200,7 +1234,7 @@ export function buildLocalVisitReconciliation(
       rows.push({
         ...base,
         status: "matched",
-        totalFeeCharged: rawTotalFeeCharged,
+        totalFeeCharged: effectiveTotalFeeCharged,
         reviewReason: null,
       });
     } else if (
@@ -2429,7 +2463,8 @@ export function buildLocalRetentionMetrics(
     if (!displayLabels.has(key)) displayLabels.set(key, row.clinician.trim().replace(/\s+/g, " "));
   }
   const billingByClinician = new Map<string, ClinicianBillingMetric>();
-  for (const row of billing.filter((row) => !isConsultationService(row) || legacyServiceDefinition(row.billingCode)?.kind === "consultation")) {
+  for (const row of derivedExactBillingRows(snapshots).filter((row) => row.serviceDate <= asOfDate
+    && (!isConsultationService(row) || legacyServiceDefinition(row.billingCode)?.kind === "consultation"))) {
     const clinicianKey = normalizeClinician(row.clinician);
     const metric = billingByClinician.get(clinicianKey) ?? {
       clinician: displayLabels.get(clinicianKey)!,

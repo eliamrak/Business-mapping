@@ -7,13 +7,14 @@ import {
   useState,
 } from "react";
 import { ApiError, customFetch } from "@workspace/api-client-react";
-import { Download, Save, ShieldCheck, Upload } from "lucide-react";
+import { Download, Save, RefreshCw, Upload } from "lucide-react";
 import type { StoredImportDeclarations, BillingChargeResolution } from "@workspace/practice/hub";
 import { bindBillingResolutions } from "@workspace/practice/hub";
 import { ImportDeclarationReview } from "./import-declaration-review";
 import { BillingResolutionReview } from "./billing-resolution-review";
 import { ReaderStatus } from "./reader-status";
 import { readPracticePackageFile } from "@/lib/practice-package-file";
+import { importFailureStage, importFeedbackTitle, importReceipt, type ImportFeedback } from "@/lib/import-feedback";
 import { completeReportCoverage, type CompleteReportCoverage } from "@/lib/complete-report-coverage";
 import { summarizeReportedBilling } from "@/lib/reported-billing";
 import {
@@ -73,6 +74,7 @@ const localDownload = (value: unknown, name: string) => {
 type CodeDraft = { code: string; minutes: string };
 
 type PendingLocalSnapshot = {
+  reason?: string;
   incoming: LocalSnapshot[];
   existing: LocalSnapshot[];
   billingCodeMinutes: BillingCodeMinutes;
@@ -121,7 +123,7 @@ function SnapshotCoverageConfirmation({ snapshot, today, disabled, onSave }: {
   const [expectedReportCoverage] = useState(() => structuredClone(snapshot.reportCoverage ?? null));
   const ready = !!start && !!end && start <= end && end <= today && !!sourceBasis && confirmed;
   return <details className="pw-import-source">
-    <summary>{snapshot.kind} · {snapshot.sourceHash.slice(0, 12)} · {snapshot.reportCoverage ? "coverage declaration recorded" : "coverage unverified"}</summary>
+    <summary>{snapshot.kind === "attendance" ? "Attendance" : "Billing"} · observed {snapshot.coverageStart} to {snapshot.coverageEnd} · {snapshot.reportCoverage ? "coverage declaration recorded" : "complete dates needed"}</summary>
     <p>Observed rows: {snapshot.coverageStart} through {snapshot.coverageEnd}. Observed bounds do not establish complete reporting.</p>
     {snapshot.reportCoverage && <p>Current declaration: {snapshot.reportCoverage.start} through {snapshot.reportCoverage.end}.</p>}
     <form aria-label={`Report coverage for ${snapshot.id}`} onSubmit={(event) => {
@@ -144,11 +146,14 @@ function SnapshotCoverageConfirmation({ snapshot, today, disabled, onSave }: {
 
 class ImportConflict extends Error {
   code?: string;
+  reason?: string;
   existing?: PendingLocalSnapshot["existing"];
   incoming?: PendingLocalSnapshot["incoming"];
 }
 
 export type LocalRetentionWorkspaceState = {
+  importFeedback?: ImportFeedback;
+  setImportFeedback?: Dispatch<SetStateAction<ImportFeedback>>;
   billingResolutions: BillingChargeResolution[];
   setBillingResolutions: Dispatch<SetStateAction<BillingChargeResolution[]>>;
   billingResolutionRevision: number;
@@ -193,11 +198,13 @@ export function useLocalRetentionWorkspaceState(enabled = true): LocalRetentionW
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   const [pending, setPending] = useState<PendingLocalSnapshot | null>(null);
+  const [importFeedback, setImportFeedback] = useState<ImportFeedback>({ stage: "idle" });
 
   useEffect(() => {
     if (!enabled) return;
     let cancelled = false;
     setBusy(true);
+    setImportFeedback({ stage: "loading" });
     getStoredHistory()
       .then((history) => {
         if (cancelled) return;
@@ -211,15 +218,20 @@ export function useLocalRetentionWorkspaceState(enabled = true): LocalRetentionW
         setStatus(history.snapshots.length
           ? `Loaded ${history.snapshots.length} saved converted snapshots from practice storage.`
           : "No converted packages imported yet.");
+        setImportFeedback({ stage: "loaded", detail: `${history.snapshots.length} saved sources loaded from practice storage.` });
       })
       .catch((cause) => {
-        if (!cancelled) setError(cause instanceof Error ? cause.message : "Saved converted history could not be loaded.");
+        if (!cancelled) {
+          setError(cause instanceof Error ? cause.message : "Saved converted history could not be loaded.");
+          setImportFeedback({ stage: "unconfirmed", detail: "Saved history could not be loaded. Reload before retrying an upload." });
+        }
       })
       .finally(() => { if (!cancelled) setBusy(false); });
     return () => { cancelled = true; };
   }, [enabled]);
 
   return {
+    importFeedback, setImportFeedback,
     billingResolutions, setBillingResolutions, billingResolutionRevision, setBillingResolutionRevision,
     declarations, setDeclarations,
     packages,
@@ -251,6 +263,7 @@ function readImportConflict(apiError: ApiError) {
       : "The package could not be imported.",
   );
   conflict.code = typeof data?.code === "string" ? data.code : undefined;
+  conflict.reason = typeof data?.reason === "string" ? data.reason : undefined;
   conflict.existing = Array.isArray(data?.existing)
     ? (data.existing as PendingLocalSnapshot["existing"])
     : undefined;
@@ -324,6 +337,9 @@ export default function LocalRetentionWorkspace({
   today?: string;
 }) {
   const ownedState = useLocalRetentionWorkspaceState(!workspaceState);
+  const [fallbackFeedback, setFallbackFeedback] = useState<ImportFeedback>({ stage: "idle" });
+  const feedback = workspaceState?.importFeedback ?? ownedState.importFeedback ?? fallbackFeedback;
+  const setFeedback = workspaceState?.setImportFeedback ?? (!workspaceState ? ownedState.setImportFeedback : undefined) ?? setFallbackFeedback;
   const {
     billingResolutions: storedBillingResolutions, setBillingResolutions, billingResolutionRevision, setBillingResolutionRevision,
     declarations, setDeclarations,
@@ -368,6 +384,11 @@ export default function LocalRetentionWorkspace({
     .sort((a, b) => b.end!.localeCompare(a.end!) || b.start!.localeCompare(a.start!))
     .slice(0, 3);
   const remainingCoverageGaps = verifiedCoverage.incompletePeriods.length - recentCoverageGaps.length;
+  const missingProofIds = new Set(verifiedCoverage.incompletePeriods.filter(period => period.snapshotId && /Missing or invalid explicit complete report proof/.test(period.reason)).map(period => period.snapshotId));
+  const sourcesNeedingProof = snapshots.filter(source => missingProofIds.has(source.id));
+  const actionableCoverage = verifiedCoverage.incompletePeriods.filter(period => !/has not ended/.test(period.reason));
+  const billingNeedsReview = rawBillingEvidence.conflictingHashCount > 0 || rawBillingEvidence.ambiguousEncounterCount > 0 || rawBillingEvidence.staleResolutionCount > 0 || phoneChargeAnomalies(snapshots).length > 0;
+  const openReview = (id: string) => { const element = document.getElementById(id); if (element instanceof HTMLDetailsElement) element.open = true; };
   const gapDescription = (period: CompleteReportCoverage["incompletePeriods"][number]) =>
     `${period.kind} · ${period.snapshotId ? "unverified report span " : ""}${dateLabel(period.start)} through ${dateLabel(period.end)}${period.clinicianLabel ? ` · ${period.clinicianLabel}` : period.clinicianId === undefined ? "" : ` · clinician ${period.clinicianId}`}: ${period.reason}`;
   const packageInput = useRef<HTMLInputElement>(null);
@@ -417,20 +438,29 @@ export default function LocalRetentionWorkspace({
     () => sourceCoverage(snapshots, "billing"),
     [snapshots],
   );
+  const lastPackageImport = packages.map(item => item.importedAt).sort().at(-1);
 
   async function importPackage(file: File | undefined) {
-    if (!file) return;
+    if (!file || busy || feedback.stage === "unconfirmed") return;
     setBusy(true);
     setError("");
     setPending(null);
+    setFeedback({ stage: "validating", detail: file.name });
+    let saveStarted = false;
     try {
       const packageData = await readPracticePackageFile(file);
       const parsed = importLocalPackage(packageData);
+      setFeedback({ stage: "saving", detail: "File checked. Waiting for the server to confirm saved history." });
+      saveStarted = true;
       const saved = await importStoredPackage(packageData);
       setSnapshots(saved.snapshots);
       setPackages(saved.packages ?? []);
       setBillingCodeMinutes(saved.billingCodeMinutes);
       setSameDayVisitOverrides(saved.sameDayVisitOverrides ?? {});
+      setFeedback({ stage: saved.status === "duplicate" ? "duplicate" : "saved", detail: importReceipt({
+        attendance: parsed.snapshots.find(source => source.kind === "attendance")?.rows.length ?? 0,
+        billing: parsed.snapshots.find(source => source.kind === "billing")?.rows.length ?? 0,
+      }, saved.status) });
       if (saved.status === "duplicate") {
         setStatus(
           `Package ${parsed.packageId} is already loaded. Nothing was added.`,
@@ -454,6 +484,7 @@ export default function LocalRetentionWorkspace({
           const packageData = await readPracticePackageFile(file);
           const parsed = importLocalPackage(packageData);
           setPending({
+            reason: cause.message,
             incoming: cause.incoming ?? parsed.snapshots,
             existing: cause.existing ?? [],
             billingCodeMinutes: parsed.billingCodeMinutes,
@@ -461,6 +492,7 @@ export default function LocalRetentionWorkspace({
             packageData,
             warnings: parsed.warnings,
           });
+          setFeedback({ stage: "review", detail: cause.message });
           setStatus(
             "This package overlaps saved converted history. Keep both sources for reconciliation, or explicitly replace overlapping snapshots.",
           );
@@ -470,6 +502,8 @@ export default function LocalRetentionWorkspace({
           // Fall through to the original import error.
         }
       }
+      const stage = importFailureStage(saveStarted, cause instanceof ApiError ? cause.status : cause instanceof ImportConflict ? 409 : undefined);
+      setFeedback({ stage, detail: stage === "unconfirmed" ? "The server did not confirm the result. Reload saved history before retrying; the save may have completed." : "No import was accepted by this request. Check the error below." });
       setError(
         cause instanceof Error
           ? cause.message
@@ -482,14 +516,16 @@ export default function LocalRetentionWorkspace({
   }
 
   function savePending(mode: "retain" | "replace") {
-    if (!pending || busy) return;
+    if (!pending || busy || feedback.stage === "unconfirmed") return;
     setBusy(true);
+    setFeedback({ stage: "saving", detail: "Waiting for the server to confirm saved history." });
     importStoredPackage(pending.packageData, mode === "replace", mode === "retain")
       .then((saved) => {
         setSnapshots(saved.snapshots);
         setPackages(saved.packages ?? []);
         setBillingCodeMinutes(saved.billingCodeMinutes);
         setSameDayVisitOverrides(saved.sameDayVisitOverrides ?? {});
+        setFeedback({ stage: saved.status === "duplicate" ? "duplicate" : "saved", detail: "Server acknowledged the saved source history. Coverage and any unresolved conflicts are shown below." });
         setStatus(
           saved.status === "duplicate"
             ? `Package ${pending.packageId} is already loaded. Nothing was added.`
@@ -500,23 +536,46 @@ export default function LocalRetentionWorkspace({
         setError(pending.warnings.length ? pending.warnings.join(" ") : "");
         setPending(null);
       })
-      .catch((cause) =>
+      .catch((cause) => {
+        setFeedback({ stage: importFailureStage(true, cause instanceof ApiError ? cause.status : cause instanceof ImportConflict ? 409 : undefined), detail: "Reload saved history before retrying if the save was not confirmed." });
         setError(
           cause instanceof Error
             ? cause.message
             : "The overlapping package could not be saved.",
-        ),
-      )
+        );
+      })
       .finally(() => setBusy(false));
   }
 
   function keepExisting() {
+    if (busy || feedback.stage === "unconfirmed") return;
     setStatus("Kept existing local snapshot. Incoming overlap was not loaded.");
     setPending(null);
+    setFeedback({ stage: "loaded", detail: "Import cancelled. Previously saved history is unchanged." });
+  }
+
+  async function reloadHistory() {
+    if (busy) return;
+    setBusy(true); setError(""); setFeedback({ stage: "loading" });
+    try {
+      const saved = await getStoredHistory();
+      setSnapshots(saved.snapshots); setPackages(saved.packages ?? []);
+      setDeclarations(saved.declarations ?? null);
+      setBillingResolutions(saved.billingResolutions ?? []);
+      setBillingResolutionRevision(saved.billingResolutionRevision ?? 0);
+      setBillingCodeMinutes(saved.billingCodeMinutes);
+      setSameDayVisitOverrides(saved.sameDayVisitOverrides ?? {});
+      setPending(null);
+      setFeedback({ stage: "loaded", detail: `${saved.snapshots.length} saved sources loaded from practice storage.` });
+      setStatus("Saved history reloaded from practice storage.");
+    } catch (cause) {
+      setFeedback({ stage: "unconfirmed", detail: "Saved history could not be loaded. Do not assume an earlier upload failed." });
+      setError(cause instanceof Error ? cause.message : "Saved history could not be loaded.");
+    } finally { setBusy(false); }
   }
 
   async function confirmSnapshotCoverage(confirmation: CoverageConfirmation) {
-    if (busy) return;
+    if (busy || feedback.stage === "unconfirmed") return;
     setBusy(true);
     setError("");
     try {
@@ -528,6 +587,7 @@ export default function LocalRetentionWorkspace({
       setBillingCodeMinutes(saved.billingCodeMinutes);
       setSameDayVisitOverrides(saved.sameDayVisitOverrides);
       setStatus("Saved report coverage confirmation. Original rows, hashes and observed bounds are unchanged.");
+      setFeedback({ stage: "loaded", detail: "Report coverage confirmation saved. Metric eligibility is recalculated from the saved proof and provider identities." });
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "Report coverage could not be confirmed. Reload history if another confirmation changed it.");
     } finally {
@@ -595,21 +655,58 @@ export default function LocalRetentionWorkspace({
       className="pw-local-retention"
       aria-label="Local retention workspace"
     >
-      <div className="pw-local-retention-hero">
-        <div>
-          <p className="pw-eyebrow">Saved import history</p>
-          <h2>Imported clinical history</h2>
-          <details><summary>Import format and storage</summary><p>
-            Import the converter package prepared with permanent random client
-            IDs and no direct client names. Converted attendance and billing
-            facts are saved to authenticated practice storage so biweekly
-            imports accumulate across reloads and sign-ins.
-          </p></details>
+      <section className="pw-import-start" aria-label="Upload and saved status" aria-busy={busy}>
+        <div className="pw-import-heading"><h2>Upload reports</h2>
+          <button className="pw-button" disabled={busy} onClick={() => void reloadHistory()}><RefreshCw size={16} />Reload saved history</button>
         </div>
-        <ShieldCheck aria-hidden="true" />
-      </div>
-      <ReaderStatus />
-      <section className="pw-import-provenance" aria-label="Verified complete report coverage">
+        <label className="pw-import-picker"><span><Upload size={18} aria-hidden="true" />Upload converter package</span>
+          <small id="converter-package-help">JSON · up to 10 MB</small>
+          <input ref={packageInput} type="file" aria-label="Upload converter package" aria-describedby="converter-package-help" disabled={busy || feedback.stage === "unconfirmed"} onChange={event => void importPackage(event.target.files?.[0])} />
+        </label>
+        <div className="pw-import-feedback" role="status" aria-live="polite" aria-atomic="true" data-stage={feedback.stage}>
+          <strong>{importFeedbackTitle(feedback)}</strong>
+          {feedback.detail && <p>{feedback.detail}</p>}
+          {lastPackageImport && <p>Last package saved: {lastPackageImport.replace("T", " ").replace(/\.\d+Z$/, " UTC")}</p>}
+          {["loading", "validating", "saving"].includes(feedback.stage) && <progress aria-label={importFeedbackTitle(feedback)} />}
+        </div>
+        {error && <p className="pw-error" role="alert">{error}</p>}
+        <div className="pw-import-coverage" aria-label="Saved data and metric coverage">
+          <div><span>Saved sources</span><strong>{snapshots.length}</strong></div>
+          <div><span>Observed attendance through</span><strong>{dateLabel(attendanceCoverage.end)}</strong></div>
+          <div><span>Observed billing through</span><strong>{dateLabel(billingCoverage.end)}</strong></div>
+          <div><span>Verified metric coverage through</span><strong>{dateLabel(verifiedCoverage.dataThrough)}</strong></div>
+        </div>
+        {(actionableCoverage.length > 0 || rawBillingEvidence.conflictingHashCount > 0 || rawBillingEvidence.ambiguousEncounterCount > 0 || verifiedCoverage.attendanceStatusConflictCount > 0 || rawBillingEvidence.staleResolutionCount > 0 || phoneChargeAnomalies(snapshots).length > 0) &&
+          <div className="pw-import-attention" aria-label="Import attention items">
+            <strong>Needs attention</strong>
+            {sourcesNeedingProof.length > 0 ? <p>{sourcesNeedingProof.length} saved sources lack complete report dates. Confirm the full report period, including days with no activity, before those sources can extend verified metrics.</p> : actionableCoverage.length > 0 && <p>Some report periods or provider identities remain unverified. Saved rows are retained; affected metrics remain unknown.</p>}
+            {(rawBillingEvidence.conflictingHashCount > 0 || rawBillingEvidence.ambiguousEncounterCount > 0 || rawBillingEvidence.staleResolutionCount > 0 || verifiedCoverage.attendanceStatusConflictCount > 0 || phoneChargeAnomalies(snapshots).length > 0) && <p>Some source facts conflict or need a specific billing review. Affected values remain unknown.</p>}
+            {(actionableCoverage.length > 0 || verifiedCoverage.attendanceStatusConflictCount > 0) && <a href="#import-coverage-review" onClick={() => openReview("import-coverage-review")}>Review coverage and identities</a>}
+            {billingNeedsReview && <a href="#import-billing-review" onClick={() => openReview("import-billing-review")}>Review billing exceptions</a>}
+          </div>}
+      </section>
+      {pending && (
+        <div className="pw-overlap-review pw-import-conflict" role="alert">
+          <div><strong>Source conflict needs review</strong>
+            <p>{pending.reason ?? "The incoming package overlaps source evidence that cannot be reconciled safely without review."}</p>
+            <p>Keeping history preserves both sources and existing settings; unresolved values remain unknown. Replacing archives entire overlapping sources, including their other dates.</p>
+          </div>
+          <div>
+            <button className="pw-button pw-primary" disabled={busy || feedback.stage === "unconfirmed"} onClick={() => savePending("retain")}>Keep history and reconcile overlap</button>
+            <button className="pw-button" disabled={busy || feedback.stage === "unconfirmed"} onClick={keepExisting}>Cancel import</button>
+            <details><summary>Advanced replacement</summary><button className="pw-button" disabled={busy || feedback.stage === "unconfirmed"} onClick={() => savePending("replace")}>Replace overlapping data</button></details>
+          </div>
+        </div>
+      )}
+      <details className="pw-data-disclosure" id="import-coverage-review">
+        <summary>Coverage and provider identities{actionableCoverage.length > 0 ? " · review needed" : ""}</summary>
+        {sourcesNeedingProof.length > 0 && <section aria-label="Missing complete report dates">
+          <h3>Confirm complete report dates</h3>
+          <p>These files were saved, but only contain observed service dates. Enter the full period shown on each source report; do not use the first and last appointment as proof.</p>
+          {sourcesNeedingProof.map(snapshot => <SnapshotCoverageConfirmation key={`${snapshot.id}:${JSON.stringify(snapshot.reportCoverage ?? null)}`} snapshot={snapshot} today={today} disabled={busy || feedback.stage === "unconfirmed" || snapshots.filter(source => source.id === snapshot.id).length !== 1} onSave={confirmSnapshotCoverage} />)}
+        </section>}
+        <details><summary>Existing provider mappings and advanced source declarations</summary>
+        <section className="pw-import-provenance" aria-label="Verified complete report coverage">
         <h3>Data covers through {dateLabel(verifiedCoverage.dataThrough)}</h3>
         <p>Attendance: {dateLabel(verifiedCoverage.attendanceThrough)} · Billing: {dateLabel(verifiedCoverage.billingThrough)}</p>
         <p>{verifiedCoverage.excludedRowsCount} raw rows excluded from eligible metrics.</p>
@@ -636,16 +733,22 @@ export default function LocalRetentionWorkspace({
       </section>
       <ImportDeclarationReview key={`${teamId}:${declarations?.revision ?? 0}:${snapshots.map((source) => source.id).sort().join(",")}`}
         snapshots={snapshots} roster={roster} teamId={teamId} stored={declarations} onSaved={setDeclarations} />
-      <BillingResolutionReview revision={billingResolutionRevision} sourceKey={`${declarations?.revision ?? 0}:${snapshots.map((source) => source.id).sort().join(",")}`}
-        onSaved={(resolutions, revision) => { setBillingResolutions(resolutions); setBillingResolutionRevision(revision); }} />
       <section className="pw-import-provenance" aria-label="Confirm individual import coverage">
         <h3>Confirm report coverage</h3>
         <p>Enter dates from the source report or an explicit owner confirmation. Dates are never filled from occupied service dates. This saves coverage metadata only; it does not alter source facts or establish a provider roster.</p>
         {snapshots.map((snapshot) => <SnapshotCoverageConfirmation key={`${snapshot.id}:${JSON.stringify(snapshot.reportCoverage ?? null)}`} snapshot={snapshot} today={today}
-          disabled={busy || snapshots.filter((item) => item.id === snapshot.id).length !== 1} onSave={confirmSnapshotCoverage} />)}
+          disabled={busy || feedback.stage === "unconfirmed" || snapshots.filter((item) => item.id === snapshot.id).length !== 1} onSave={confirmSnapshotCoverage} />)}
         {snapshots.some((snapshot) => snapshots.filter((item) => item.id === snapshot.id).length !== 1) && <p>Duplicate import identities must be resolved before coverage can be confirmed.</p>}
         {!snapshots.length && <p>No saved imports to confirm.</p>}
       </section>
+      </details>
+      </details>
+      <details className="pw-data-disclosure" id="import-billing-review"><summary>Billing exceptions{rawBillingEvidence.conflictingHashCount + rawBillingEvidence.ambiguousEncounterCount + rawBillingEvidence.staleResolutionCount > 0 ? " · review needed" : ""}</summary>
+        <BillingResolutionReview revision={billingResolutionRevision} sourceKey={`${declarations?.revision ?? 0}:${snapshots.map((source) => source.id).sort().join(",")}`}
+          onSaved={(resolutions, revision) => { setBillingResolutions(resolutions); setBillingResolutionRevision(revision); }} />
+      </details>
+      <details className="pw-data-disclosure"><summary>More data tools</summary>
+      <details className="pw-data-disclosure"><summary>Saved packages and source history</summary>
       <details className="pw-import-provenance" aria-label="Saved import provenance">
         <summary>Saved packages and observed service dates ({snapshots.length} snapshots)</summary>
         <p>Service-date spans describe rows present in the export. They do not prove complete reporting for missing days.</p>
@@ -668,21 +771,6 @@ export default function LocalRetentionWorkspace({
       <div className="pw-local-import-grid">
         <section>
           <Upload aria-hidden="true" />
-          <h3>Complete package</h3>
-          <p id="converter-package-help">
-            Converter package · JSON · up to 10 MB. Private stable IDs only.
-          </p>
-          <input
-            ref={packageInput}
-            type="file"
-            aria-label="Upload converter package"
-            aria-describedby="converter-package-help"
-            disabled={busy}
-            onChange={(event) => void importPackage(event.target.files?.[0])}
-          />
-        </section>
-        <section>
-          <Upload aria-hidden="true" />
           <h3>Converted history backup</h3>
           <p>
             Downloads unencrypted JSON with de-identified converted facts from
@@ -700,38 +788,9 @@ export default function LocalRetentionWorkspace({
           </div>
         </section>
       </div>
+      </details>
 
-      {pending && (
-        <div className="pw-overlap-review" role="alert">
-          <div>
-            <strong>Overlapping local data</strong>
-            <p>
-              Incoming package {pending.packageId} overlaps{" "}
-              {pending.existing.length} saved snapshot
-              {pending.existing.length === 1 ? "" : "s"}. Keeping history preserves both sources and existing settings. Matching facts are reconciled independently; changed fees or other conflicting facts remain reviewable, not silently overwritten. Replacing archives the entire overlapping snapshots, including their non-overlapping dates; unrelated snapshots stay in place.
-            </p>
-          </div>
-          <div>
-            <button className="pw-button pw-primary" disabled={busy} onClick={() => savePending("retain")}>
-              Keep history and reconcile overlap
-            </button>
-            <button className="pw-button" disabled={busy} onClick={() => savePending("replace")}>
-              Replace overlapping data
-            </button>
-            <button className="pw-button" disabled={busy} onClick={keepExisting}>
-              Cancel import
-            </button>
-          </div>
-        </div>
-      )}
-
-      {error && (
-        <p className="pw-error" role="alert">
-          {error}
-        </p>
-      )}
-      <p className="pw-note">{status}</p>
-
+      <details className="pw-data-disclosure"><summary>Billing-code minutes</summary>
       <section className="pw-billing-codes">
         <div>
           <h3>Billing-code minutes</h3>
@@ -797,7 +856,8 @@ export default function LocalRetentionWorkspace({
           </div>
         )}
       </section>
-
+      </details>
+      <details className="pw-data-disclosure"><summary>Source analysis and matching details</summary>
       <div className="pw-retention-summary">
         <div title="Dates present in converted attendance rows. This range does not imply that every date has an attendance record.">
           <span>Attendance coverage</span>
@@ -1123,6 +1183,14 @@ export default function LocalRetentionWorkspace({
           </table>
         </section>
       </div>
+      </details>
+      <details className="pw-data-disclosure"><summary>Storage and reader status</summary>
+        <ReaderStatus />
+        <p className="pw-note">{status}</p>
+        <p>Saved import history is saved to authenticated practice storage and loaded again after sign-in or refresh.</p>
+        <p>Original converted facts are retained. Billing is charged fees, not collected payments. Observed service dates alone do not establish complete reporting.</p>
+      </details>
+      </details>
     </section>
   );
 }

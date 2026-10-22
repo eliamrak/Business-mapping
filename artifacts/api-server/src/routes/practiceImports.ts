@@ -10,6 +10,7 @@ import {
 } from "@workspace/db";
 import { z } from "@workspace/practice";
 import { parseBillingResolutionJournal, parseStoredImportDeclarations } from "../lib/import-backup-validation";
+import { assessAutomaticOverlap, overlapReviewMessage, sameSourceCoverageChanged } from "../lib/import-overlap-reconciliation";
 import { importDeclarationsSchema, normalizeProviderLabel, prepareBillingChargeResolution, reconcileBillingEvidence,
   resolveImportedProvider, bindBillingResolutions, resolveHistoricalBillingProvider,
   validateHistoricalBillingProviders, restoreHistoricalBillingProviders, unverifiedDeletionMarker, deletionMarkerGuidance, legacyServiceCodes, type StoredImportDeclarations } from "@workspace/practice/hub";
@@ -648,10 +649,9 @@ router.post("/practice-imports/package", async (req, res) => {
           eq(practiceImportSnapshotsTable.active, 1),
         ),
       );
-    if (body.data.retainOverlaps && snapshots.some((snapshot) => active.some((row) =>
-      snapshot.kind === row.kind && snapshot.sourceHash === row.sourceHash
-      && stableJson(snapshot.reportCoverage ?? null) !== stableJson(row.reportCoverage ?? null),
-    ))) return { status: "coverage-review" as const };
+    const activeSnapshots = active.map(snapshotFromRow);
+    if (sameSourceCoverageChanged(activeSnapshots, snapshots))
+      return { status: "coverage-review" as const };
     const activePackages = await tx
       .select()
       .from(practiceImportPackagesTable)
@@ -684,10 +684,47 @@ router.post("/practice-imports/package", async (req, res) => {
     const overlapping = active.filter((row) =>
       snapshotsToInsert.some((snapshot) => overlaps(row, snapshot)),
     );
-    if (overlapping.length && !body.data.replaceOverlaps && !body.data.retainOverlaps)
+    // Declared bounds select evidence to review; they do not grant completeness.
+    // Keep replacement's observed-overlap scope unchanged.
+    const admissionBounds = (snapshot: Snapshot) => {
+      const proof = reportCoverageSchema.safeParse(snapshot.reportCoverage);
+      return proof.success && proof.data.start <= snapshot.coverageStart && proof.data.end >= snapshot.coverageEnd
+        ? { ...snapshot, coverageStart: proof.data.start, coverageEnd: proof.data.end } : snapshot;
+    };
+    const reviewOverlapping = active.filter((row) => snapshotsToInsert.some(snapshot =>
+      overlaps(admissionBounds(snapshotFromRow(row)), admissionBounds(snapshot))));
+    let automaticRetention = false;
+    let automaticReviewRequired = false;
+    let overlapReason: string | undefined;
+    // Complete-report omissions and saved aliases can conflict outside observed row spans.
+    if (reviewOverlapping.length && !body.data.replaceOverlaps && !body.data.retainOverlaps) {
+      // requireAccess restricts this route to this installation's configured owner.
+      // Clinicians are installation-wide (no tenant columns), as in /clinicians and existing identity routes.
+      // Import sources/declarations remain scoped by practiceId + accountId; never infer a tenant from goalId.
+      const roster = await tx.select({ id: cliniciansTable.id, label: cliniciansTable.label, goalId: cliniciansTable.goalId }).from(cliniciansTable);
+      const declarations = await readDeclarations(tx, practiceId, accountId);
+      const savedVisitOverrides = mergeSameDayVisitOverrides(activePackages);
+      const assessment = assessAutomaticOverlap(activeSnapshots, snapshotsToInsert, (label) => {
+        const matches = roster.filter(person => normalizeProviderLabel(person.label) === normalizeProviderLabel(label));
+        // Alias migration and historical billing-only source sets require explicit identity review.
+        return matches.length === 1 && resolveImportedProvider(label, roster, matches[0].goalId ?? null, declarations?.data) === matches[0].id;
+      }, row => savedVisitOverrides[sameDayVisitKey(row)] !== undefined, (label) => {
+        const key = normalizeProviderLabel(label);
+        const mappings = declarations?.data.mappings.filter(mapping => normalizeProviderLabel(mapping.sourceLabel) === key) ?? [];
+        // Even a stale saved alias is related evidence, not permission to select its facts.
+        if (mappings.length === 1) return mappings[0].clinicianId;
+        const matches = roster.filter(person => normalizeProviderLabel(person.label) === key);
+        return matches.length === 1 ? matches[0].id : null;
+      });
+      automaticRetention = assessment.safe;
+      automaticReviewRequired = !assessment.safe;
+      overlapReason = assessment.reason;
+    }
+    if (automaticReviewRequired)
       return {
         status: "overlap" as const,
-        existing: overlapping.map((row) => ({
+        reason: overlapReason,
+        existing: reviewOverlapping.map((row) => ({
           kind: row.kind,
           coverageStart: row.coverageStart,
           coverageEnd: row.coverageEnd,
@@ -702,7 +739,7 @@ router.post("/practice-imports/package", async (req, res) => {
       };
     const packageImportId = randomUUID();
     const replacing = overlapping.length > 0 && body.data.replaceOverlaps;
-    const retaining = overlapping.length > 0 && body.data.retainOverlaps;
+    const retaining = automaticRetention || (overlapping.length > 0 && body.data.retainOverlaps);
     const replacementOverrides = replacing
       ? reconcileSameDayVisitOverrides(
           mergeSameDayVisitOverrides(activePackages),
@@ -769,7 +806,7 @@ router.post("/practice-imports/package", async (req, res) => {
       contentHash,
       exportedAt: new Date(input.exportedAt),
       importedBy: actor,
-      billingCodeMinutes: body.data.retainOverlaps ? {} : input.billingCodeMinutes ?? {},
+      billingCodeMinutes: retaining || body.data.retainOverlaps ? {} : input.billingCodeMinutes ?? {},
       sameDayVisitOverrides: replacementOverrides,
     });
     for (const snapshot of snapshotsToInsert) {
@@ -794,7 +831,8 @@ router.post("/practice-imports/package", async (req, res) => {
       actor,
       detail: {
         replacedSnapshotCount: replacing ? overlapping.length : 0,
-        retainedOverlapSnapshotCount: retaining ? overlapping.length : 0,
+        retainedOverlapSnapshotCount: retaining ? (automaticRetention ? reviewOverlapping.length : overlapping.length) : 0,
+        automaticOverlapReconciliation: automaticRetention,
         skippedDuplicateSnapshotCount:
           snapshots.length - snapshotsToInsert.length,
         attendanceRows:
@@ -828,7 +866,8 @@ router.post("/practice-imports/package", async (req, res) => {
   if (result.status === "overlap")
     return res.status(409).json({
       code: "OVERLAP_REVIEW_REQUIRED",
-      error: "This package overlaps existing converted history.",
+      error: overlapReviewMessage(result.reason),
+      reason: result.reason,
       existing: result.existing,
       incoming: result.incoming,
     });

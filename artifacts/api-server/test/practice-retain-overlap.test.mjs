@@ -11,6 +11,8 @@ const bundled = await build({
   stdin: { contents: readFileSync(new URL("../src/routes/practiceImports.ts", import.meta.url), "utf8") + "\nexport { mockState } from '@workspace/db';",
     loader: "ts", sourcefile: "practiceImports.ts", resolveDir: fileURLToPath(new URL("../src/routes/", import.meta.url)) },
   bundle: true, write: false, platform: "node", format: "cjs",
+  alias: { "@workspace/practice/hub": fileURLToPath(new URL("../../../lib/practice/src/hub/index.ts", import.meta.url)),
+    "@workspace/practice": fileURLToPath(new URL("../../../lib/practice/src/index.ts", import.meta.url)) },
   plugins: [{ name: "no-database", setup(builder) {
     builder.onResolve({ filter: /^@workspace\/db$/ }, () => ({ path: "mock", namespace: "no-database" }));
     builder.onLoad({ filter: /.*/, namespace: "no-database" }, () => ({ resolveDir: fileURLToPath(new URL("../", import.meta.url)), contents: `
@@ -18,14 +20,17 @@ const bundled = await build({
       export * from ${JSON.stringify(fileURLToPath(new URL("../../../lib/db/src/schema/clinicians.ts", import.meta.url)))};
       import { PgDialect } from "drizzle-orm/pg-core";
       import { getTableName } from "drizzle-orm";
-      export const mockState = { snapshots: [], packages: [], audits: [], updates: [], failAudit: false };
+      export const mockState = { snapshots: [], packages: [], audits: [], updates: [], roster: [], declarations: null, failAudit: false };
       const dialect = new PgDialect();
-      const rowsFor = table => getTableName(table) === "practice_import_snapshots" ? mockState.snapshots : mockState.packages;
+      const rowsFor = table => getTableName(table) === "practice_import_snapshots" ? mockState.snapshots
+        : getTableName(table) === "clinicians" ? mockState.roster : mockState.packages;
       const tx = {
         async execute(statement) {
           const query = dialect.sqlToQuery(statement);
           if (query.sql.startsWith("SELECT detail FROM practice_import_audit")) return { rows: [] };
-          if (query.sql.includes("practice_import_declarations")) return { rows: [{ available: false }] };
+          if (query.sql.startsWith("SELECT revision, data")) return { rows: mockState.declarations
+            ? [{ revision: 1, data: mockState.declarations, confirmed_at: "2026-10-15T00:00:00Z" }] : [] };
+          if (query.sql.includes("practice_import_declarations")) return { rows: [{ available: !!mockState.declarations }] };
           if (/INSERT INTO practice_import_snapshots/.test(query.sql)) {
             const [id, packageImportId, practiceId, accountId, kind, coverageStart, coverageEnd, sourceHash, rowCount, rows, proof] = query.params;
             mockState.snapshots.push({ id, packageImportId, practiceId, accountId, kind, coverageStart, coverageEnd, sourceHash, rowCount,
@@ -33,7 +38,7 @@ const bundled = await build({
           }
           return { rows: [{ available: true }] };
         },
-        select() { return { from(table) { this.table = table; return this; }, async where(condition) {
+        select() { return { from(table) { this.table = table; return this; }, then(resolve, reject) { return Promise.resolve(rowsFor(this.table)).then(resolve, reject); }, async where(condition) {
           const query = dialect.sqlToQuery(condition), params = query.params;
           const rows = rowsFor(this.table);
           if (/package_import_id/.test(query.sql)) return rows.filter(row => row.active === 1 && params.includes(row.packageImportId));
@@ -76,20 +81,77 @@ async function call(input, flags = {}) {
   const res = { locals: { actor: "synthetic-owner" }, statusCode: 200, status(code) { this.statusCode = code; return this; }, json(body) { this.body = body; return this; } };
   await handler({ body: { package: input, ...flags } }, res); return res;
 }
-async function reset() {
+async function reset(initial = originalPackage()) {
   process.env.EMC_PRACTICE_ID = practice;
-  Object.assign(mockState, { snapshots: [], packages: [], audits: [], updates: [], failAudit: false });
-  assert.equal((await call(originalPackage())).statusCode, 200);
+  Object.assign(mockState, { snapshots: [], packages: [], audits: [], updates: [],
+    roster: [{ id: 1, label: "Synthetic", goalId: null }], declarations: null, failAudit: false });
+  assert.equal((await call(initial)).statusCode, 200);
 }
 
-test("overlap still requires explicit review; retain and replace are mutually exclusive", async () => {
+test("ordinary exact overlap retains automatically; retain and replace remain mutually exclusive", async () => {
   await reset(); const before = structuredClone(mockState);
   const input = packageFor("partial", ["2026-10-10", "2026-10-14"]);
   const res = await call(input);
-  assert.equal(res.statusCode, 409); assert.equal(res.body.code, "OVERLAP_REVIEW_REQUIRED");
-  assert.deepEqual(mockState, before);
+  assert.equal(res.statusCode, 200); assert.equal(res.body.status, "retained");
+  assert.deepEqual(mockState.snapshots.slice(0, 2), before.snapshots);
+  assert.equal(mockState.audits.at(-1).detail.automaticOverlapReconciliation, true);
+  assert.deepEqual(res.body.billingCodeMinutes, { "90837": 50 });
+  const after = structuredClone(mockState);
   assert.equal((await call(input, { retainOverlaps: true, replaceOverlaps: true })).statusCode, 400);
+  assert.deepEqual(mockState, after);
+});
+
+test("changed overlap facts still return actionable review without writes", async () => {
+  await reset();
+  const before = structuredClone(mockState);
+  const res = await call(packageFor("changed", ["2026-10-10", "2026-10-14"], 125));
+  assert.equal(res.statusCode, 409);
+  assert.equal(res.body.reason, "billing-evidence-review");
+  assert.match(res.body.error, /Review the original charges/);
   assert.deepEqual(mockState, before);
+});
+
+test("handler checks complete-report bounds beyond observed rows, in both import orders", async () => {
+  const complete = packageFor("complete", ["2026-10-01"]);
+  for (const collection of Object.values(complete.collections)) collection.reportCoverage = { start: "2026-10-01", end: "2026-10-31", complete: true };
+  const partial = packageFor("partial", ["2026-10-15"]);
+  for (const [first, next] of [[complete, partial], [partial, complete]]) {
+    await reset(first);
+    const before = structuredClone(mockState);
+    const res = await call(next);
+    assert.equal(res.statusCode, 409);
+    assert.equal(res.body.reason, "complete-coverage-conflict");
+    assert.match(res.body.error, /complete report omits facts/);
+    assert.equal(res.body.existing.length, 2);
+    assert.deepEqual(mockState, before);
+  }
+});
+
+test("handler defers saved alias/canonical conflicts before raw-label filtering", async () => {
+  const alias = packageFor("alias", ["2026-10-01"]);
+  for (const collection of Object.values(alias.collections)) collection.rows[0].clinician = "Saved Alias";
+  const canonical = packageFor("canonical", ["2026-10-01"]);
+  canonical.collections.attendance.rows[0].status = "cancelled";
+  for (const [first, next] of [[alias, canonical], [canonical, alias]]) {
+    await reset(first);
+    mockState.declarations = { version: 1, mappings: [{ sourceLabel: "Saved Alias", clinicianId: 1, clinicianLabel: "Synthetic", teamId: null }], sourceSets: [] };
+    const before = structuredClone(mockState);
+    const res = await call(next);
+    assert.equal(res.statusCode, 409);
+    assert.equal(res.body.reason, "identity-review");
+    assert.match(res.body.error, /Resolve.*aliased/);
+    assert.deepEqual(mockState, before);
+  }
+});
+
+test("handler avoids proactive identity review for unrelated observed spans with no proof", async () => {
+  await reset(packageFor("old", ["2026-10-01"]));
+  const next = packageFor("new", ["2026-10-15"]);
+  for (const collection of Object.values(next.collections)) collection.rows[0].clinician = "Unmapped New Provider";
+  const res = await call(next);
+  assert.equal(res.statusCode, 200);
+  assert.equal(res.body.status, "added");
+  assert.ok(mockState.snapshots.every(row => row.reportCoverage === null));
 });
 
 test("retaining a partial upload preserves all existing provenance, active packages, rows and settings", async () => {

@@ -1284,7 +1284,6 @@ export default function PracticeWorkspace() {
       ),
     }));
     setReviewStaged(true);
-    setSection("rooms");
     setMessage(
       `Found ${result.addedRooms.length} imported attendance ${result.addedRooms.length === 1 ? "location" : "locations"} to review as Rooms.`,
     );
@@ -4919,7 +4918,7 @@ export default function PracticeWorkspace() {
                     excludedFollowUpEvidence={excludedFollowUpEvidence}
                     metricSnapshots={historicalClinicalSnapshots}
                   />
-                  <div id="retention-calculations">
+                  <details id="retention-calculations" className="pw-data-disclosure"><summary>Calculations and assumptions</summary>
                     <WorkspaceCalculations
                       workspace={workingWorkspace}
                       context={modelContext ?? context}
@@ -4928,7 +4927,7 @@ export default function PracticeWorkspace() {
                         stageSettings({ [key]: value }, "Session calculations")
                       }
                     />
-                  </div>
+                  </details>
                 </>
               )}
               {section === "marketing" && (

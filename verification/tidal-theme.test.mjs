@@ -56,14 +56,17 @@ test("retained app PNG has exact immutable selected-artwork SHA-256", () => {
   assert.equal(createHash("sha256").update(fs.readFileSync(path.join(root, file))).digest("hex"), expected, file);
 });
 
-test("workspace bytes differ only by declared presentation import, attribute and child", () => {
+test("workspace bytes differ only by declared presentation and collapsed Data calculations", () => {
   const file = src + "pages/practice-workspace.tsx";
   const original = git("show", `${base}:${file}`);
-  const expected = original
+  const themed = original
     .replace('import "@/components/practice/historical-period-values.css";\n', 'import "@/components/practice/historical-period-values.css";\nimport { TidalMaterial } from "@/components/practice/tidal-material";\n')
-    .replace('    <div className="practice-theme pw-app" data-appearance="dark">', '    <div className="practice-theme pw-app" data-appearance="dark" data-material="tidal">\n      <TidalMaterial section={`${mode}:${section}:${visibleTool ?? ""}`} />');
-  assert.notEqual(expected, original, "Presentation anchors must exist");
-  assert.equal(read(file), expected);
+    .replace('    <div className="practice-theme pw-app" data-appearance="dark">', '    <div className="practice-theme pw-app" data-appearance="dark" data-material="tidal">\n      <TidalMaterial section={`${mode}:${section}:${visibleTool ?? ""}`} />')
+    .replace('<div id="retention-calculations">', '<details id="retention-calculations" className="pw-data-disclosure"><summary>Calculations and assumptions</summary>')
+    .replace('                    />\n                  </div>\n                </>\n              )}\n              {section === "marketing"', '                    />\n                  </details>\n                </>\n              )}\n              {section === "marketing"');
+  const importSafe = themed.replace('    setReviewStaged(true);\n    setSection("rooms");\n    setMessage(\n      `Found ${result.addedRooms.length} imported attendance', '    setReviewStaged(true);\n    setMessage(\n      `Found ${result.addedRooms.length} imported attendance');
+  assert.notEqual(themed, original, "Presentation anchors must exist");
+  assert.equal(read(file), importSafe);
 });
 
 test("all changed/new files stay within reviewed theme, PDF and mobile scope", () => {
@@ -96,6 +99,16 @@ test("all changed/new files stay within reviewed theme, PDF and mobile scope", (
     src + "lib/practice-package-file.ts", src + "lib/practice-package-file.test.ts",
     "verification/data-import-readability.mjs", "verification/data-import-readability-results.json",
     "verification/OCTOBER22-DATA-READABILITY-RECEIPT.md",
+    src + "lib/import-feedback.ts", src + "lib/import-feedback.test.ts",
+    src + "lib/retention-local.ts", src + "lib/retention-exact-source-facts.test.ts",
+    "artifacts/api-server/src/routes/practiceImports.ts",
+    "artifacts/api-server/src/lib/import-overlap-reconciliation.ts",
+    "artifacts/api-server/test/import-overlap-reconciliation.test.mjs",
+    "artifacts/api-server/test/practice-retain-overlap.test.mjs",
+    "verification/OCTOBER22-MINIMAL-IMPORT-RECEIPT.md",
+    "verification/MINIMAL-IMPORT-INDEPENDENT-REVIEW.md",
+    "verification/MINIMAL-IMPORT-RECONCILIATION-REVIEW.md",
+    "verification/minimal-import-results.json",
   ]);
   const reviewedIconFollowup = new Set([
     "artifacts/comp-dashboard/index.html",

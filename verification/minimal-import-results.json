@@ -1,0 +1,363 @@
+{
+  "base": "1f510976220a3c11b978555891e95c6d6d11b79f",
+  "syntheticOnly": true,
+  "noBusinessWrites": true,
+  "functional": {
+    "tests": 1182,
+    "pass": 1182,
+    "fail": 0
+  },
+  "pureApi": {
+    "tests": 58,
+    "pass": 58,
+    "fail": 0
+  },
+  "themePdfIconsLocal": {
+    "tests": 35,
+    "pass": 35,
+    "fail": 0
+  },
+  "browser": {
+    "phase": "candidate",
+    "syntheticOnly": true,
+    "noOwnerFiles": true,
+    "checks": [
+      {
+        "name": "default-collapsed-1440",
+        "pass": true
+      },
+      {
+        "name": "four-default-review-rows-1440",
+        "pass": true
+      },
+      {
+        "name": "upload-first-no-checkbox-wall-1440",
+        "pass": true
+      },
+      {
+        "name": "collapsed-contrast-1440",
+        "pass": true,
+        "sampled": 24,
+        "findings": []
+      },
+      {
+        "name": "keyboard-expand-collapse-1440",
+        "pass": true
+      },
+      {
+        "name": "attention-links-open-review-1440",
+        "pass": true,
+        "reviewPaths": [
+          {
+            "id": "import-coverage-review",
+            "via": "attention-link"
+          },
+          {
+            "id": "import-billing-review",
+            "via": "disclosure-summary"
+          }
+        ]
+      },
+      {
+        "name": "expanded-contrast-1440",
+        "pass": true,
+        "sampled": 722,
+        "findings": []
+      },
+      {
+        "name": "expanded-page-fit-1440",
+        "pass": true,
+        "width": 1440,
+        "scrollWidth": 1440
+      },
+      {
+        "name": "collapsed-page-fit-1440",
+        "pass": true
+      },
+      {
+        "name": "default-collapsed-1280",
+        "pass": true
+      },
+      {
+        "name": "four-default-review-rows-1280",
+        "pass": true
+      },
+      {
+        "name": "upload-first-no-checkbox-wall-1280",
+        "pass": true
+      },
+      {
+        "name": "collapsed-contrast-1280",
+        "pass": true,
+        "sampled": 24,
+        "findings": []
+      },
+      {
+        "name": "keyboard-expand-collapse-1280",
+        "pass": true
+      },
+      {
+        "name": "attention-links-open-review-1280",
+        "pass": true,
+        "reviewPaths": [
+          {
+            "id": "import-coverage-review",
+            "via": "attention-link"
+          },
+          {
+            "id": "import-billing-review",
+            "via": "disclosure-summary"
+          }
+        ]
+      },
+      {
+        "name": "expanded-contrast-1280",
+        "pass": true,
+        "sampled": 722,
+        "findings": []
+      },
+      {
+        "name": "expanded-page-fit-1280",
+        "pass": true,
+        "width": 1280,
+        "scrollWidth": 1280
+      },
+      {
+        "name": "collapsed-page-fit-1280",
+        "pass": true
+      },
+      {
+        "name": "default-collapsed-390",
+        "pass": true
+      },
+      {
+        "name": "four-default-review-rows-390",
+        "pass": true
+      },
+      {
+        "name": "upload-first-no-checkbox-wall-390",
+        "pass": true
+      },
+      {
+        "name": "collapsed-contrast-390",
+        "pass": true,
+        "sampled": 24,
+        "findings": []
+      },
+      {
+        "name": "keyboard-expand-collapse-390",
+        "pass": true
+      },
+      {
+        "name": "attention-links-open-review-390",
+        "pass": true,
+        "reviewPaths": [
+          {
+            "id": "import-coverage-review",
+            "via": "attention-link"
+          },
+          {
+            "id": "import-billing-review",
+            "via": "disclosure-summary"
+          }
+        ]
+      },
+      {
+        "name": "expanded-contrast-390",
+        "pass": true,
+        "sampled": 722,
+        "findings": []
+      },
+      {
+        "name": "expanded-page-fit-390",
+        "pass": true,
+        "width": 390,
+        "scrollWidth": 390
+      },
+      {
+        "name": "collapsed-page-fit-390",
+        "pass": true
+      },
+      {
+        "name": "default-collapsed-320",
+        "pass": true
+      },
+      {
+        "name": "four-default-review-rows-320",
+        "pass": true
+      },
+      {
+        "name": "upload-first-no-checkbox-wall-320",
+        "pass": true
+      },
+      {
+        "name": "collapsed-contrast-320",
+        "pass": true,
+        "sampled": 24,
+        "findings": []
+      },
+      {
+        "name": "keyboard-expand-collapse-320",
+        "pass": true
+      },
+      {
+        "name": "attention-links-open-review-320",
+        "pass": true,
+        "reviewPaths": [
+          {
+            "id": "import-coverage-review",
+            "via": "attention-link"
+          },
+          {
+            "id": "import-billing-review",
+            "via": "disclosure-summary"
+          }
+        ]
+      },
+      {
+        "name": "expanded-contrast-320",
+        "pass": true,
+        "sampled": 722,
+        "findings": []
+      },
+      {
+        "name": "expanded-page-fit-320",
+        "pass": true,
+        "width": 320,
+        "scrollWidth": 320
+      },
+      {
+        "name": "collapsed-page-fit-320",
+        "pass": true
+      },
+      {
+        "name": "invalid-json-rejected-before-api",
+        "pass": true
+      },
+      {
+        "name": "wrong-schema-rejected-before-api",
+        "pass": true
+      },
+      {
+        "name": "extensionless-picker",
+        "pass": true
+      },
+      {
+        "name": "upload-keeps-data-receipt-visible",
+        "pass": true
+      },
+      {
+        "name": "saved-receipt-incoming-4-plus-4-not-new-sessions",
+        "pass": true,
+        "receipt": "Saved to practice storage\n\nPackage contains 4 attendance rows and 4 billing rows. Server acknowledged the saved history. Package rows are not new-session totals.\n\nLast package saved: 2026-10-22 12:00:00Z"
+      },
+      {
+        "name": "mock-persists-exact-package-rows",
+        "pass": true
+      },
+      {
+        "name": "duplicate-no-additional-sources-or-rows",
+        "pass": true
+      },
+      {
+        "name": "reload-gets-persisted-history",
+        "pass": true
+      },
+      {
+        "name": "page-refresh-keeps-saved-counts",
+        "pass": true
+      },
+      {
+        "name": "409-review-visible-without-disclosure-interaction",
+        "pass": true
+      },
+      {
+        "name": "409-opens-visible-review-without-saving",
+        "pass": true
+      },
+      {
+        "name": "upload-keeps-data-receipt-visible",
+        "pass": true
+      },
+      {
+        "name": "retain-overlap-preserves-prior-sources",
+        "pass": true
+      },
+      {
+        "name": "500-unconfirmed-does-not-claim-nothing-saved",
+        "pass": true,
+        "message": "Save not confirmed\n\nThe server did not confirm the result. Reload saved history before retrying; the save may have completed.\n\nLast package saved: 2026-10-14 12:00:00Z"
+      },
+      {
+        "name": "unconfirmed-upload-disabled",
+        "pass": true
+      },
+      {
+        "name": "unconfirmed-no-automatic-resubmit",
+        "pass": true
+      },
+      {
+        "name": "visible-error-contrast",
+        "pass": true,
+        "sampled": 24,
+        "findings": []
+      },
+      {
+        "name": "uncertain-reload-keeps-data-visible",
+        "pass": true
+      },
+      {
+        "name": "reload-recovers-committed-save-after-500",
+        "pass": true
+      },
+      {
+        "name": "successful-reload-enables-upload",
+        "pass": true
+      },
+      {
+        "name": "overlap-retain-committed-before-500",
+        "pass": true
+      },
+      {
+        "name": "unconfirmed-overlap-all-actions-and-upload-disabled",
+        "pass": true
+      },
+      {
+        "name": "unconfirmed-overlap-no-resubmit-or-cancel",
+        "pass": true,
+        "feedback": "Save not confirmed\n\nReload saved history before retrying if the save was not confirmed.\n\nLast package saved: 2026-10-14 12:00:00Z"
+      },
+      {
+        "name": "overlap-unconfirmed-get-recovers-and-clears-pending",
+        "pass": true
+      },
+      {
+        "name": "progress-stages-observed",
+        "pass": true,
+        "stages": [
+          "loaded",
+          "validating",
+          "invalid",
+          "saving",
+          "saved",
+          "duplicate",
+          "loading",
+          "review",
+          "unconfirmed"
+        ]
+      },
+      {
+        "name": "only-isolated-mock-api",
+        "pass": true,
+        "posts": 7,
+        "gets": 12,
+        "blockedExternalRequests": []
+      },
+      {
+        "name": "no-runtime-errors",
+        "pass": true
+      }
+    ],
+    "errors": []
+  }
+}
