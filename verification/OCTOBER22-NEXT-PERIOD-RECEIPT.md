@@ -36,6 +36,14 @@ This follow-up does not infer membership from equal import timestamps, change se
 
 Follow-up evidence: 23 mounted checks (the original 14 plus missing, empty and invalid saved membership at 1440/390/320), 1,211 functional tests, 35 local compatibility checks, dashboard typecheck and production build pass. Independent review is clear for visibility and action safety, not live membership correctness. Manual coverage tools remain reachable but are additionally collapsed and are not presented as the current saved-report repair. No API or planner runtime change is included in this follow-up.
 
+## Deterministic duration follow-up
+
+The publisher's strict legacy-service-code gate exposed pre-existing addition-order noise: the converter fixture creates fresh synthetic client UUIDs, billing reconciliation sorts by client identity, and adding each row's minutes divided by 60 could yield either `7.666666666666666` or `7.666666666666667` for the same 460 minutes. Forward/reverse identity ordering deterministically reproduced both outputs with unchanged $650 fees.
+
+The minimal correction accumulates configured minutes per normalized clinician, then divides the total by 60 once. It does not round, clamp, change service definitions, relax assertions or alter raw records. Missing duration remains null; explicitly configured zero remains zero. Four added strict tests verify forward/reverse `460 / 60`, fees and configured-row count, plus null/zero controls. The existing converter-through-validation test remains strict and unchanged.
+
+The full functional suite now passes 1,215 tests; the 77 database-free API checks, 35 local compatibility checks, library build, both artifact typechecks and both production builds pass. See the independent review for the separately reproduced baseline failure and bounded numerical findings. No database or import/declaration change is involved; this follows the held saved-review candidate and requires no duplicate publication.
+
 ## Publisher gates
 
 Use only the base-to-reviewed-candidate delta. Re-read the actual clean publisher HEAD/tree, check touched-file preimages against the base, retain a rollback ref, apply with `git apply --check --index` followed by `git apply --index`, and create a normal descendant commit. Preserve all publisher memory/history, `.replit`, artifact contracts and accepted mobile-readiness changes. Do not reset history or copy a development database.

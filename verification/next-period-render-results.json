@@ -231,11 +231,11 @@
         },
         {
           "method": "GET",
-          "path": "/api/scenarios"
+          "path": "/api/business-goals"
         },
         {
           "method": "GET",
-          "path": "/api/business-goals"
+          "path": "/api/scenarios"
         },
         {
           "method": "GET",

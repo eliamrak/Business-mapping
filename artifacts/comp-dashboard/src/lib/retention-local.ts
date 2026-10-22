@@ -2463,6 +2463,7 @@ export function buildLocalRetentionMetrics(
     if (!displayLabels.has(key)) displayLabels.set(key, row.clinician.trim().replace(/\s+/g, " "));
   }
   const billingByClinician = new Map<string, ClinicianBillingMetric>();
+  const configuredMinutesByClinician = new Map<string, number>();
   for (const row of derivedExactBillingRows(snapshots).filter((row) => row.serviceDate <= asOfDate
     && (!isConsultationService(row) || legacyServiceDefinition(row.billingCode)?.kind === "consultation"))) {
     const clinicianKey = normalizeClinician(row.clinician);
@@ -2481,10 +2482,13 @@ export function buildLocalRetentionMetrics(
     );
     if (configuredMinutes !== null) {
       metric.configuredMinuteRows++;
-      metric.estimatedBillingHours =
-        (metric.estimatedBillingHours ?? 0) + configuredMinutes / 60;
+      configuredMinutesByClinician.set(clinicianKey,
+        (configuredMinutesByClinician.get(clinicianKey) ?? 0) + configuredMinutes);
     }
     billingByClinician.set(clinicianKey, metric);
+  }
+  for (const [clinicianKey, minutes] of configuredMinutesByClinician) {
+    billingByClinician.get(clinicianKey)!.estimatedBillingHours = minutes / 60;
   }
   const attendanceByClinician = new Map<string, ClinicianAttendanceMetric>();
   const showDatesByClinicianClient = new Map<string, string[]>();

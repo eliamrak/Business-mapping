@@ -71,6 +71,29 @@ test("synthetic files flow through converter, strict Practice package validation
   assert.equal(restored.snapshots.find(s => s.kind === "attendance")!.rows[7].cancellationSubtype, "late_cancelled");
 });
 
+for (const reverse of [false, true]) test(`configured billing minutes convert once after ${reverse ? "reverse" : "forward"} identity ordering`, () => {
+  const imported = importLocalPackage(legacyConverterFixture(), "2026-10-16T12:00:00Z");
+  for (const source of imported.snapshots) for (const [index, row] of source.rows.entries()) {
+    row.clientId = `synthetic-order-${String(reverse ? source.rows.length - index : index).padStart(2, "0")}`;
+  }
+  const metric = buildLocalRetentionMetrics(imported.snapshots, imported.billingCodeMinutes).billingByClinician[0];
+  assert.equal(metric.estimatedBillingHours, 460 / 60);
+  assert.equal(metric.configuredMinuteRows, 9);
+  assert.equal(metric.totalFeesCharged, 650);
+});
+
+for (const minutes of [null, 0]) test(`billing hours preserve ${minutes === null ? "unknown" : "configured zero"} duration`, () => {
+  const imported = importLocalPackage(legacyConverterFixture(), "2026-10-16T12:00:00Z");
+  const billing = imported.snapshots.find(source => source.kind === "billing")!;
+  billing.rows = [{ ...billing.rows[0], billingCode: "SYNTHETIC-CUSTOM-DURATION" }];
+  const configured = minutes === null ? {} : { "SYNTHETIC-CUSTOM-DURATION": minutes };
+  const metric = buildLocalRetentionMetrics([billing], configured).billingByClinician[0];
+  assert.equal(metric.estimatedBillingHours, minutes);
+  assert.equal(metric.configuredMinuteRows, minutes === null ? 0 : 1);
+  assert.equal(metric.billedRows, 1);
+  assert.equal(metric.totalFeesCharged, 125);
+});
+
 test("old consultation flags cannot turn billing code 4 into a free consultation or fee conflict", () => {
   const imported = importLocalPackage(legacyConverterFixture());
   const attendance = imported.snapshots.find(s => s.kind === "attendance")!;
