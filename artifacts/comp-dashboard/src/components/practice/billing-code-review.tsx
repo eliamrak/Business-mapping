@@ -129,6 +129,9 @@ function BillingCodeCase({ candidate, busy, onSave }: {
         <strong>{undo ? "Undo impact" : "Preview impact"}</strong>
         <p>{undo ? "Undo returns this case to an unresolved billing code conflict. It does not delete any source records." : `One billed charge of ${money(candidate.totalFeeCharged)} using ${code(selected!.billingCode)}.`}</p>
         <p>This does not certify attendance or report coverage. Raw sources are retained.</p>
+        {!undo && candidate.sources.some(source => source.billingCode?.trim().toLowerCase() === "phone")
+          && candidate.sources.some(source => source.billingCode?.trim() === "0")
+          && <p>PHONE identifies a consultation; code 0 does not establish an appointment type. This billing choice does not rewrite attendance or confirm treatment.</p>}
       </div>
       <fieldset disabled={busy} style={{ border: 0, padding: 0, margin: 0, minWidth: 0 }}>
         <label style={{ display: "grid", gap: 6 }}>Owner approval note<textarea required rows={2} maxLength={2000} value={note} onChange={event => { setNote(event.target.value); setConfirmed(false); }} style={{ width: "100%", minWidth: 0, boxSizing: "border-box", background: "var(--pw-tone-input)", color: "var(--pw-tone-text)", border: "1px solid var(--pw-tone-border-input)", borderRadius: 4, padding: 8 }} /></label>

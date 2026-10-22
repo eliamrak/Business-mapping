@@ -232,6 +232,26 @@ try {
   assert.equal(await item.locator('input[type="radio"]:checked').count(), 0);
   assert.deepEqual(candidate.sources, originalSources);
   assert.doesNotMatch(await panel.innerText(), /sourceRowHash|synthetic-choice|synthetic-case-token/);
+  candidate.serviceDate = "2026-10-08";
+  candidate.totalFeeCharged = 0;
+  candidate.sources.splice(0, candidate.sources.length, ...["PHONE", "0", "0"].map((billingCode, index) => ({
+    choiceToken: `synthetic-free-choice-${index}`, snapshotId: `billing-synthetic-free-${index}`,
+    sourceHash: String(index + 1).repeat(64), importedAt: ["2026-10-13", "2026-10-16", "2026-10-22"][index] + "T12:00:00Z", billingCode,
+  })));
+  const freeSources = structuredClone(candidate.sources), writesBeforeFreePreview = writes.length;
+  for (const selected of [0, 1, 2]) {
+    await panel.getByRole("button", { name: "Reload billing code conflicts", exact: true }).click();
+    await item.locator(":scope > summary").click();
+    assert.equal(await item.getByRole("radio").count(), 3);
+    assert.equal(await item.locator('input[type="radio"]:checked').count(), 0);
+    await item.getByRole("radio").nth(selected).check();
+    await item.getByRole("button", { name: "Preview impact", exact: true }).click();
+    await item.getByText(`One billed charge of $0.00 using ${candidate.sources[selected].billingCode}.`, { exact: true }).waitFor();
+    await item.getByText("PHONE identifies a consultation; code 0 does not establish an appointment type. This billing choice does not rewrite attendance or confirm treatment.", { exact: true }).waitFor();
+    await capture(`free-phone-zero-preview-${selected}`, selected === 0 ? 320 : selected === 1 ? 390 : 1440);
+  }
+  assert.equal(writes.length, writesBeforeFreePreview);
+  assert.deepEqual(candidate.sources, freeSources);
   assert.deepEqual(errors, []);
   const results = { syntheticOnly: true, externalAccess: false, actualMountedComponent: true, automaticWrites: 0, explicitWrites: writes.length, candidateReads: gets, callbacks: await page.evaluate(() => window.saved), sourceFactsUnchanged: true, captures, browserErrors: errors };
   await fs.writeFile(path.join(outDir, "results.json"), JSON.stringify(results, null, 2));

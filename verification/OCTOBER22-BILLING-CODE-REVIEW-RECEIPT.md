@@ -24,7 +24,7 @@ Independent review reproduced singleton revalidation in the engine, stale approv
 
 ## Verification
 
-- Functional suite: 1,303 passed, including 43 new adversarial core cases and 20 new downstream integration cases.
+- Frozen original candidate functional suite: 1,309 cases, including 43 new adversarial core cases and 26 downstream integration cases. The earlier local 1,303 run preceded six final integration regressions; the publisher independently passed all 1,309 on the frozen candidate.
 - Existing database-free API suite: 83 passed.
 - New actual-route owner/code-choice/Undo suite: 58 passed.
 - Backup contract: 95 passed, including mixed charge/code journal and reversal roundtrips. Its virtual reader now models the previously added package-membership query and all three billing journal actions; production backup routing was not changed.
@@ -44,3 +44,13 @@ Before any owner uses the new actions, rolling back this code delta is data-neut
 ## Remaining Acceptance
 
 Publisher integration, publication identity, fresh authenticated owner UI, production database behavior and public asset provenance for this candidate are not established by local tests. Verify them separately. Do not select or apply the real October 8 conflict during release QA. No original report code was inferred, no patient names/crosswalk were added to app storage, and no real records were changed.
+
+## Bounded PHONE / Zero Follow-up
+
+Base `1840c5659fbd506db02a70edeaaa071f24769606` was published and independently reproduced using served public configuration. The actual owner card then exposed PHONE / 0 / 0, one row per source. The initial eligibility guard compared visit classifications inferred from the disputed codes and incorrectly presented that interpretation as an additional exported-fact conflict.
+
+The follow-up permits only the specific free PHONE / literal-zero alternative when both codes occur, every reported fee is zero, and every raw exported visit kind is absent. Independent exported visit-kind differences, nonzero or differing fees, cancellation differences, same-source multiplicity, hash conflicts, and stale source membership remain blocked. Zero and missing remain distinct. No default code is chosen and original rows remain unchanged.
+
+The preview states that PHONE identifies consultation, zero does not establish an appointment type, and the billing choice does not rewrite attendance or confirm treatment. This is not permission to turn code zero into a completed treatment session. The synthetic three sources use October 8 service date and October 13/16/22 import dates; repeated zero rows may share their identical row hash across independent sources.
+
+Final follow-up verification: 1,316 functional, 246 database-free API/backup, 35 local compatibility tests; library declarations, both typechecks/builds; actual component rendered at 320/390/1440 with each PHONE/0/0 preview, zero extra writes, retained classification warning, plus prior stale/Undo/keyboard/zoom checks. Independent review ran 76 core/integration and 68 actual-route checks and found no actionable issue. No real choice or admission was applied. The actual live fee/raw-kind condition must be verified through the owner card before claiming that this encounter is now selectable.

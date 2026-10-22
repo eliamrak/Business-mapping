@@ -54,6 +54,31 @@ function freeze(value: unknown) {
   }
 }
 
+for (const selectedIndex of [0, 1, 2]) test(`free October 8 PHONE/0/0 dispute permits explicit source ${selectedIndex} without inventing visit kind`, () => {
+  const source = threeSources().map((entry, index) => ({ ...entry, row: { ...entry.row,
+    serviceDate: "2026-10-08", billingCode: index === 0 ? "PHONE" : "0", visitKind: undefined, totalFeeCharged: 0 } }));
+  const before = structuredClone(source), resolution = approve(source, selectedIndex);
+  const [group] = reconcileBillingEvidence(source, [resolution]);
+  assert.equal(group.known, true); assert.equal(group.codeResolution, true);
+  assert.equal(group.rows.length, 3); assert.equal(group.acceptedRows?.length, 1);
+  assert.equal(group.row.billingCode, source[selectedIndex].row.billingCode);
+  assert.equal(group.row.visitKind, undefined);
+  assert.equal(group.acceptedRows?.reduce((sum, row) => sum + row.totalFeeCharged, 0), 0);
+  assert.deepEqual(source, before);
+  assertStale([...source, { snapshotId: "billing-added-source", row: { ...source[1].row } }], resolution);
+});
+
+for (const [name, change] of [
+  ["nonzero fee", (source: BillingCodeEntry[]) => source.forEach(entry => { entry.row.totalFeeCharged = 100; })],
+  ["explicit visit-kind difference", (source: BillingCodeEntry[]) => { source[0].row.visitKind = "consultation"; }],
+  ["same-source duplicate", (source: BillingCodeEntry[]) => source.push({ ...source[0], row: { ...source[0].row } })],
+  ["third distinct code", (source: BillingCodeEntry[]) => { source[2].row.billingCode = "90837"; source[2].row.sourceRowHash = "third-distinct"; }],
+] as const) test(`free PHONE/0 exception still rejects ${name}`, () => {
+  const source = threeSources().map((entry, index) => ({ ...entry, row: { ...entry.row,
+    billingCode: index === 0 ? "PHONE" : "0", visitKind: undefined, totalFeeCharged: 0 } }));
+  change(source); assert.equal(prepareBillingCodeResolution(source), null);
+});
+
 test("draft preserves each exact raw code, fee and anchor without a default selection", () => {
   const source = threeSources(), before = structuredClone(source);
   freeze(source);

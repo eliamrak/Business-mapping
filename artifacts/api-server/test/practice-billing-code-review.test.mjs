@@ -329,6 +329,84 @@ test("source changes at advisory-lock acquisition are rederived inside the trans
   assert.deepEqual(state.writes, []); assert.deepEqual(state.audits, []);
 });
 
+function freePhoneZeroSources() {
+  reset();
+  state.snapshots = ["13", "16", "22"].map((day, i) => source(`0000000${i + 1}`,
+    [row(i === 0 ? "PHONE" : "0", i === 0 ? "synthetic-phone-row" : "synthetic-zero-reexport-row",
+      { serviceDate: "2026-10-08", totalFeeCharged: 0 })],
+    { coverageStart: "2026-10-08", coverageEnd: "2026-10-08", createdAt: new Date(`2026-10-${day}T12:00:00.000Z`) }));
+}
+
+for (const index of [0, 1, 2]) {
+  test(`PHONE/0/0 zero-fee October 8 dispute accepts source ${index + 1} with audit-only writes`, async () => {
+    freePhoneZeroSources();
+    const before = durable(), response = await call(candidates);
+    assert.equal(response.statusCode, 200, JSON.stringify(response.body));
+    assert.equal(response.headers["cache-control"], "no-store");
+    const [candidate] = response.body.candidates;
+    assert.equal(response.body.candidates.length, 1);
+    assert.equal(candidate.canResolve, true, candidate.reason);
+    assert.equal(candidate.serviceDate, "2026-10-08");
+    assert.equal(candidate.totalFeeCharged, 0);
+    assert.deepEqual(candidate.sources.map(source => source.billingCode), ["PHONE", "0", "0"]);
+    assert.deepEqual(candidate.sources.map(source => source.importedAt),
+      ["13", "16", "22"].map(day => `2026-10-${day}T12:00:00.000Z`));
+    assert.equal(new Set(candidate.sources.map(source => source.choiceToken)).size, 3,
+      "Identical B/incoming row hashes still have distinct source choices");
+    assert.ok(state.snapshots.every(source => !Object.hasOwn(source.rows[0], "visitKind")));
+    assert.equal(state.snapshots[1].rows[0].sourceRowHash, state.snapshots[2].rows[0].sourceRowHash);
+    assert.deepEqual(durable(), before); assert.deepEqual(state.writes, []);
+    const selected = candidate.sources[index];
+    const saved = await call(accept, { caseToken: candidate.caseToken, choiceToken: selected.choiceToken,
+      expectedRevision: response.body.revision, confirmed: true, approvalNote: "Synthetic free PHONE/zero source review" });
+    assert.equal(saved.statusCode, 200, JSON.stringify(saved.body));
+    assert.equal(saved.body.billingResolutionRevision, 1);
+    assert.equal(saved.body.resolutionStatus, "saved");
+    const [resolution] = saved.body.billingResolutions;
+    assert.equal(resolution.kind, "billing-code");
+    assert.deepEqual(resolution.selected, { snapshotId: selected.snapshotId,
+      sourceRowHash: before.snapshots[index].rows[0].sourceRowHash });
+    assert.deepEqual(resolution.evidence.map(entry => entry.billingCode), ["PHONE", "0", "0"]);
+    assert.ok(resolution.evidence.every(entry => entry.totalFeeCharged === 0 && entry.visitKind === null));
+    assert.deepEqual(state.writes, ["audit"]);
+    assert.deepEqual(raw(), { saved: before.saved, snapshots: before.snapshots,
+      packages: before.packages, roster: before.roster });
+    assert.equal(state.audits.length, 1);
+    assert.equal(state.audits[0].action, "accept-billing-code-exception");
+    assert.equal(state.audits[0].detail.affectsAttendance, false);
+    assert.equal(state.audits[0].detail.affectsCoverage, false);
+    const reloaded = (await preview()).candidates[0];
+    assert.equal(reloaded.stale, false); assert.equal(reloaded.canResolve, false);
+    assert.equal(reloaded.resolutionId, resolution.id);
+    assert.equal(reloaded.selectedChoiceToken, selected.choiceToken);
+  });
+}
+
+for (const [label, mutate] of [
+  ["positive fees", () => { state.snapshots.forEach(source => { source.rows[0].totalFeeCharged = 25; }); }],
+  ["differing fee", () => { state.snapshots[0].rows[0].totalFeeCharged = 25; }],
+  ["explicit raw visit-kind difference", () => { state.snapshots[0].rows[0].visitKind = "consultation"; }],
+  ["same-source two rows", () => {
+    state.snapshots[0].rows.push({ ...state.snapshots[0].rows[0], sourceRowHash: "synthetic-second-phone-row" });
+    state.snapshots[0].rowCount = 2;
+  }],
+  ["cancellation subtype difference", () => { state.snapshots[0].rows[0].cancellationSubtype = "late_cancelled"; }],
+  ["conflicting reused row hash", () => { state.snapshots[0].rows[0].sourceRowHash = state.snapshots[1].rows[0].sourceRowHash; }],
+  ["code outside PHONE and zero", () => { state.snapshots[2].rows[0].billingCode = "90837";
+    state.snapshots[2].rows[0].sourceRowHash = "synthetic-other-code-row"; }],
+]) {
+  test(`PHONE/0/0 exception refuses ${label} at GET and POST with zero writes`, async () => {
+    freePhoneZeroSources(); mutate();
+    const before = durable(), value = await preview(), candidate = value.candidates[0];
+    assert.equal(candidate.canResolve, false); assert.ok(candidate.reason);
+    for (const selected of candidate.sources) {
+      await rejected(accept, { caseToken: candidate.caseToken, choiceToken: selected.choiceToken,
+        expectedRevision: value.revision, confirmed: true, approvalNote: "Synthetic guarded PHONE/zero review" }, 400);
+    }
+    assert.deepEqual(durable(), before); assert.deepEqual(state.writes, []);
+  });
+}
+
 for (const [label, mutate] of [
   ["same-source multiplicity", () => { state.snapshots[0].rows.push(row("90837", "synthetic-extra-row")); }],
   ["different fees", () => { state.snapshots[1].rows[0].totalFeeCharged = 101; }],
