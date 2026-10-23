@@ -29,10 +29,18 @@ const originalFixture = JSON.stringify(fixture);
 const fixtureHash = createHash("sha256").update(originalFixture).digest("hex");
 const head = execFileSync("git", ["rev-parse", "HEAD"], { cwd: root, encoding: "utf8" }).trim();
 
-const index = await fs.readFile(path.join(root, "artifacts/comp-dashboard/dist/public/index.html"), "utf8");
-const cssRef = index.match(/href="(\/assets\/index-[^"]+\.css)"/)[1];
-const compiledCss = await fs.readFile(path.join(root, "artifacts/comp-dashboard/dist/public", cssRef));
+// Retain the released CSS before a candidate build overwrites ignored dist files.
+const baselineCss = process.env.MOBILE_ACCEPTANCE_BASELINE_CSS ?? path.join(evidence, "baseline.css");
+let compiledCss;
+try { compiledCss = await fs.readFile(baselineCss); }
+catch (error) {
+  if (error.code !== "ENOENT") throw error;
+  const index = await fs.readFile(path.join(root, "artifacts/comp-dashboard/dist/public/index.html"), "utf8");
+  const cssRef = index.match(/href="(\/assets\/index-[^"]+\.css)"/)[1];
+  compiledCss = await fs.readFile(path.join(root, "artifacts/comp-dashboard/dist/public", cssRef));
+}
 if (createHash("sha256").update(compiledCss).digest("hex") !== "3cf76297b1569d37d39d0cf8b1b186638ce4d1535bed48c97bc78f1e8819cf3d") throw Error("CSS does not match reviewed live style");
+await fs.writeFile(baselineCss, compiledCss);
 const entry = `import React from'react';import{createRoot}from'react-dom/client';import{QueryClient,QueryClientProvider}from'@tanstack/react-query';import{TooltipProvider}from'@/components/ui/tooltip';import PracticeWorkspace from'@/pages/practice-workspace';createRoot(document.getElementById('root')).render(<QueryClientProvider client={new QueryClient({defaultOptions:{queries:{retry:false,refetchOnWindowFocus:false}}})}><TooltipProvider><PracticeWorkspace/></TooltipProvider></QueryClientProvider>);`;
 const snapshot = path.join(evidence, "baseline-inputs.json");
 if (phase === "before") {

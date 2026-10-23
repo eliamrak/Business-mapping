@@ -67,3 +67,10 @@ export const mobileAllowedFiles = new Set([
   "verification/MOBILE-SHELL-INDEPENDENT-REVIEW.md",
   "verification/OCTOBER23-MOBILE-SHELL-RECEIPT.md",
 ]);
+
+// Existing publisher history outside runtime scope, not mobile deliverables.
+// Contents remain protected by the publisher's separate pre/post hash guard.
+export const publisherHistoryFiles = new Set([
+  ".agents/memory/MEMORY.md",
+  ".agents/memory/release-evidence-temp-files.md",
+]);

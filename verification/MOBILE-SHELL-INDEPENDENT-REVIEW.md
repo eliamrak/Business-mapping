@@ -151,6 +151,38 @@ directory exemption. New API, business-domain, existing CSS, shared UI, package,
 lockfile, fixture or raw-data changes fail the mobile gate. Synthetic browser
 artifacts remain outside the repository under `/tmp` and are not waived paths.
 
+Publisher portability follow-up after candidate `c688ec3`: the mobile cumulative
+gate separately recognizes exactly `.agents/memory/MEMORY.md` and
+`.agents/memory/release-evidence-temp-files.md`, matching the existing Tidal gate's
+established publisher-history exception. These are outside-runtime history, not
+mobile deliverables or permission to edit their contents. The publisher's separate
+pre/post hash guard must preserve both files. This filename-only gate does not
+certify their contents or replace that preservation guard. No memory file was
+read or written for this follow-up. The existing cumulative test now also probes
+both accepted names and rejects another memory path, a same-prefix suffix, a
+descendant path and an API source path. There is no directory or prefix waiver.
+Only the contract helper, its test and this report changed in this follow-up;
+application bytes and the independent acceptance verdict are unchanged.
+Follow-up verification: mobile/Tidal/unsaved-navigation suites **33/33 passed**;
+`git diff --check` clean. Publisher-host pre/post preservation remains separately
+owned and was not simulated by editing protected history files locally.
+
+The owner also added the verification-only frozen-CSS fallback in
+`mobile-shell-acceptance.mjs`. Independently reviewed and accepted: it first reads
+`MOBILE_ACCEPTANCE_BASELINE_CSS` or `/tmp/practice-mobile-shell-acceptance/baseline.css`,
+falls back to the existing dist index/CSS only on `ENOENT`, propagates other read
+errors, and applies the unchanged exact SHA-256 check before retaining the bytes.
+A present but incorrect baseline fails validation; it does not fall back or become
+accepted after a candidate build. The retained baseline independently hashes to
+`3cf76297b1569d37d39d0cf8b1b186638ce4d1535bed48c97bc78f1e8819cf3d`.
+The change removes reliance on overwritten ignored build output without weakening
+the released-style identity check. It adds no application, auth or business-data
+access. `node --check verification/mobile-shell-acceptance.mjs` passes, and the
+independent suites remain **33/33 passed**. The browser suite was not rerun for
+this fallback review; its earlier accepted evidence remains identified above.
+No blocking finding was introduced. The follow-up now comprises four verification
+files, including this owner-authored harness edit, and is accepted for freezing.
+
 ## CSS And Interaction Review
 
 PostCSS requires the only desktop declarations to be the four new controls hidden

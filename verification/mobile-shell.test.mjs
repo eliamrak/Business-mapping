@@ -4,7 +4,7 @@ import fs from "node:fs";
 import path from "node:path";
 import vm from "node:vm";
 import { createRequire } from "node:module";
-import { root, git, mobileBase, workspaceFile, mobileComponentFile, mobileCssFile, assertMobileWorkspace, mobileAllowedFiles } from "./mobile-shell-source-contract.mjs";
+import { root, git, mobileBase, workspaceFile, mobileComponentFile, mobileCssFile, assertMobileWorkspace, mobileAllowedFiles, publisherHistoryFiles } from "./mobile-shell-source-contract.mjs";
 
 const read = file => fs.readFileSync(path.join(root, file), "utf8");
 const require = createRequire(path.join(root, "artifacts/comp-dashboard/package.json"));
@@ -26,7 +26,12 @@ test("source contract rejects existing logic mutations and duplicate mobile frag
 
 test("all cumulative changes since approved mobile base use exact reviewed paths", () => {
   const changes = [...git("diff", mobileBase, "--name-only", "-z").split("\0"), ...git("ls-files", "--others", "--exclude-standard", "-z").split("\0")].filter(Boolean);
-  assert.deepEqual(changes.filter(file => !mobileAllowedFiles.has(file)), [], "No API, domain, dependency, data, shared UI, existing CSS or other source changes are authorized");
+  const unexpected = files => files.filter(file => !mobileAllowedFiles.has(file) && !publisherHistoryFiles.has(file));
+  assert.deepEqual([...publisherHistoryFiles].sort(), [".agents/memory/MEMORY.md", ".agents/memory/release-evidence-temp-files.md"].sort());
+  assert.deepEqual(unexpected([...publisherHistoryFiles]), [], "Only the two established publisher-history paths are exempt");
+  const rejected = [".agents/memory/OTHER.md", ".agents/memory/MEMORY.md.extra", ".agents/memory/release-evidence-temp-files.md/child", "artifacts/api-server/src/routes/practiceImports.ts"];
+  assert.deepEqual(unexpected(rejected), rejected, "No memory directory, prefix or runtime exemption");
+  assert.deepEqual(unexpected(changes), [], "No API, domain, dependency, data, shared UI, existing CSS or other source changes are authorized");
 });
 
 test("only hidden mobile controls and display-contents wrappers affect desktop CSS", () => {

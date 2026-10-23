@@ -77,6 +77,15 @@ Vite source-map/chunk-size warnings did not fail the build.
 synthetic fixture plus six synthetic clinicians. It rejects writes and external
 requests. Capture inputs freeze the clock, timezone, locale and reduced motion.
 Before/after PNGs and checks are retained in `/tmp/practice-mobile-shell-acceptance`.
+The harness retains the exact released CSS there as `baseline.css` (optional
+`MOBILE_ACCEPTANCE_BASELINE_CSS` override); its strict hash must still match before
+use. A post-build 390/430px preview rerun passed with no errors. This keeps the
+comparison reproducible after ignored dist output is replaced by a candidate build.
+
+Publisher integration must preserve the two established publisher-only memory
+files byte-for-byte. The mobile cumulative gate names only those exact two files
+separately from mobile deliverables; a pre/post hash guard remains mandatory.
+No directory waiver, protected-file modification or history replacement is allowed.
 
 This is isolated Chromium viewport/touch emulation, not physical iPhone Safari,
 VoiceOver or native WKWebView acceptance. No permission was granted or bypassed.
