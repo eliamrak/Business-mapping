@@ -4,7 +4,7 @@ import fs from "node:fs";
 import path from "node:path";
 import vm from "node:vm";
 import { createRequire } from "node:module";
-import { root, git, mobileBase, workspaceFile, mobileComponentFile, mobileCssFile, assertMobileWorkspace, mobileAllowedFiles, publisherHistoryFiles } from "./mobile-shell-source-contract.mjs";
+import { root, git, mobileBase, workspaceFile, mobileComponentFile, mobileCssFile, assertMobileWorkspace, mobileAllowedFiles, publisherHistoryFiles, reviewedMobileReadiness, assertReviewedMobileReadiness } from "./mobile-shell-source-contract.mjs";
 
 const read = file => fs.readFileSync(path.join(root, file), "utf8");
 const require = createRequire(path.join(root, "artifacts/comp-dashboard/package.json"));
@@ -26,12 +26,27 @@ test("source contract rejects existing logic mutations and duplicate mobile frag
 
 test("all cumulative changes since approved mobile base use exact reviewed paths", () => {
   const changes = [...git("diff", mobileBase, "--name-only", "-z").split("\0"), ...git("ls-files", "--others", "--exclude-standard", "-z").split("\0")].filter(Boolean);
-  const unexpected = files => files.filter(file => !mobileAllowedFiles.has(file) && !publisherHistoryFiles.has(file));
+  const unexpected = files => files.filter(file => !mobileAllowedFiles.has(file) && !publisherHistoryFiles.has(file) && !reviewedMobileReadiness.has(file));
+  for (const file of changes.filter(file => reviewedMobileReadiness.has(file))) {
+    assertReviewedMobileReadiness(file, fs.readFileSync(path.join(root, file)));
+  }
   assert.deepEqual([...publisherHistoryFiles].sort(), [".agents/memory/MEMORY.md", ".agents/memory/release-evidence-temp-files.md"].sort());
   assert.deepEqual(unexpected([...publisherHistoryFiles]), [], "Only the two established publisher-history paths are exempt");
-  const rejected = [".agents/memory/OTHER.md", ".agents/memory/MEMORY.md.extra", ".agents/memory/release-evidence-temp-files.md/child", "artifacts/api-server/src/routes/practiceImports.ts"];
+  const rejected = [".agents/memory/OTHER.md", ".agents/memory/MEMORY.md.extra", ".agents/memory/release-evidence-temp-files.md/child", "artifacts/api-server/src/routes/practiceImports.ts", "artifacts/comp-mobile/server/serve.js.extra", "verification/mobile-readiness-other.test.cjs"];
   assert.deepEqual(unexpected(rejected), rejected, "No memory directory, prefix or runtime exemption");
   assert.deepEqual(unexpected(changes), [], "No API, domain, dependency, data, shared UI, existing CSS or other source changes are authorized");
+});
+
+test("prior mobile readiness exception is exact-path and exact-hash only", () => {
+  assert.deepEqual([...reviewedMobileReadiness], [
+    ["artifacts/comp-mobile/server/serve.js", "d0161767d8de2ed7320e982faa5e484ad455bbe3cc2a18dea591567320c78be4"],
+    ["verification/OCTOBER22-MOBILE-READINESS-RECEIPT.md", "1ffa0d30c418575dfff1a8b001bf731df1b57781b9d13f95145db872d0d189ae"],
+    ["verification/mobile-readiness.test.cjs", "794a0f9fa5b8a8e18fae4270b712d312e449c4c74a0bb123c2ee42669d42aab1"],
+  ]);
+  for (const file of reviewedMobileReadiness.keys()) {
+    assert.throws(() => assertReviewedMobileReadiness(file, Buffer.from("unapproved readiness bytes")), /Reviewed mobile readiness bytes changed/);
+  }
+  assert.throws(() => assertReviewedMobileReadiness("artifacts/comp-mobile/server/other.js", Buffer.from("unapproved")), /Unreviewed readiness path/);
 });
 
 test("only hidden mobile controls and display-contents wrappers affect desktop CSS", () => {

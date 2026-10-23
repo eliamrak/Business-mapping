@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
+import { createHash } from "node:crypto";
 import path from "node:path";
 
 export const root = path.resolve(import.meta.dirname, "..");
@@ -74,3 +75,16 @@ export const publisherHistoryFiles = new Set([
   ".agents/memory/MEMORY.md",
   ".agents/memory/release-evidence-temp-files.md",
 ]);
+
+// Prior accepted readiness follow-up, not permission for new runtime changes.
+// Publisher pre/post preservation must retain these exact bytes as well.
+export const reviewedMobileReadiness = new Map([
+  ["artifacts/comp-mobile/server/serve.js", "d0161767d8de2ed7320e982faa5e484ad455bbe3cc2a18dea591567320c78be4"],
+  ["verification/OCTOBER22-MOBILE-READINESS-RECEIPT.md", "1ffa0d30c418575dfff1a8b001bf731df1b57781b9d13f95145db872d0d189ae"],
+  ["verification/mobile-readiness.test.cjs", "794a0f9fa5b8a8e18fae4270b712d312e449c4c74a0bb123c2ee42669d42aab1"],
+]);
+
+export function assertReviewedMobileReadiness(file, bytes) {
+  assert.ok(reviewedMobileReadiness.has(file), `Unreviewed readiness path: ${file}`);
+  assert.equal(createHash("sha256").update(bytes).digest("hex"), reviewedMobileReadiness.get(file), `Reviewed mobile readiness bytes changed: ${file}`);
+}

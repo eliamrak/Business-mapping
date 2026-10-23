@@ -32,10 +32,10 @@ No real-record writes or new native permissions.
 
 ## Evidence recorded so far
 
-- 1,344 canonical functional/mobile tests passed (1,335 existing plus nine new).
+- 1,345 canonical functional/mobile tests passed (1,335 existing plus ten new).
 - 251 database-free API tests passed.
 - Library declarations, dashboard and API typechecks, and both production builds passed.
-- Nine independent mobile source/component tests passed. The strict workspace
+- Ten independent mobile source/component tests passed. The strict workspace
   contract strips only literal reviewed mobile additions and reconstructs exact
   approved base bytes. Existing calculation/command bodies cannot drift.
 - Existing theme/PDF/icon contracts pass with the exact new mobile paths declared.
@@ -83,9 +83,12 @@ use. A post-build 390/430px preview rerun passed with no errors. This keeps the
 comparison reproducible after ignored dist output is replaced by a candidate build.
 
 Publisher integration must preserve the two established publisher-only memory
-files byte-for-byte. The mobile cumulative gate names only those exact two files
-separately from mobile deliverables; a pre/post hash guard remains mandatory.
-No directory waiver, protected-file modification or history replacement is allowed.
+files and the three previously accepted mobile-readiness files byte-for-byte.
+The cumulative gate permits only those exact history paths plus the exact
+previously reviewed readiness SHA-256 values; a pre/post hash guard remains
+mandatory. No directory waiver, new mobile-runtime edit or history replacement
+is allowed. This source branch intentionally does not overwrite the publisher's
+separately accepted readiness correction.
 
 This is isolated Chromium viewport/touch emulation, not physical iPhone Safari,
 VoiceOver or native WKWebView acceptance. No permission was granted or bypassed.

@@ -183,6 +183,35 @@ this fallback review; its earlier accepted evidence remains identified above.
 No blocking finding was introduced. The follow-up now comprises four verification
 files, including this owner-authored harness edit, and is accepted for freezing.
 
+Publisher readiness portability follow-up after `cf541f5`: this checkout's approved
+base does not contain the separately accepted readiness follow-up present on the
+publisher. The mobile gate now mirrors the existing Tidal gate's exact map:
+
+```text
+artifacts/comp-mobile/server/serve.js                   d0161767d8de2ed7320e982faa5e484ad455bbe3cc2a18dea591567320c78be4
+verification/OCTOBER22-MOBILE-READINESS-RECEIPT.md       1ffa0d30c418575dfff1a8b001bf731df1b57781b9d13f95145db872d0d189ae
+verification/mobile-readiness.test.cjs                 794a0f9fa5b8a8e18fae4270b712d312e449c4c74a0bb123c2ee42669d42aab1
+```
+
+Every such path changed since `72dc5fb`, including an untracked addition, must
+match its accepted SHA-256 or fail the cumulative gate. An unchanged base file is
+not required to adopt publisher-only history locally; no readiness runtime file
+was edited. The new regression rejects unknown bytes for each mapped path and an
+unknown readiness path; cumulative probes also reject same-prefix/neighbor files.
+There is no mobile-directory waiver, optional hash, or alternate accepted digest.
+
+The publisher's pre/post preservation guard must protect **five existing files**:
+the two exact memory paths above and these three exact readiness paths. Memory
+exceptions remain filename-only and require separate content preservation;
+readiness exceptions additionally enforce the accepted bytes inside the mobile
+gate. This reviewer did not modify or simulate publisher history, so publisher-side
+pre/post preservation remains a required separate check. Application source bytes
+and the scoped acceptance verdict are unchanged; this portability adjustment is
+accepted with no blocking finding.
+Readiness portability verification: **34/34 mobile/Tidal/unsaved-navigation tests
+passed**, including all three unknown-byte rejection probes; `git diff --check`
+clean. Only this report and the mobile contract/helper test changed.
+
 ## CSS And Interaction Review
 
 PostCSS requires the only desktop declarations to be the four new controls hidden
