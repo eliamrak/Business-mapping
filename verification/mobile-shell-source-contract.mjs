@@ -54,8 +54,11 @@ export function stripMobileWorkspace(source) {
 }
 
 export function assertMobileWorkspace(source) {
+  // Two reviewed Today Money/Goals props, separately bounded from the mobile JSX.
+  source = replaceOnce(source, '                    costSource="budget"\n                    estimatedBudgetMonth={currentMoneyPlanning?.budgetEstimate}\n', '                    costSource="budget"\n');
+  source = replaceOnce(source, '                  <ProfitFirstPlanning renderMode="funding" costSource="budget" workspace={planningWorkspace} context={modelContext ?? context}\n                    estimatedBudgetMonth={currentMoneyPlanning?.budgetEstimate}\n', '                  <ProfitFirstPlanning renderMode="funding" costSource="budget" workspace={planningWorkspace} context={modelContext ?? context}\n');
   const restored = stripMobileWorkspace(source);
-  assert.equal(restored, git("show", `${mobileBase}:${workspaceFile}`), "Only literal mobile JSX/import and guard-marker relocations may differ from approved workspace bytes");
+  assert.equal(restored, git("show", `${mobileBase}:${workspaceFile}`), "Only literal mobile JSX/import, guard-marker relocations and the two reviewed financial props may differ from approved workspace bytes");
   return restored;
 }
 
@@ -67,6 +70,16 @@ export const mobileAllowedFiles = new Set([
   "verification/tidal-theme.test.mjs",
   "verification/MOBILE-SHELL-INDEPENDENT-REVIEW.md",
   "verification/OCTOBER23-MOBILE-SHELL-RECEIPT.md",
+]);
+
+// Financial repair is independently reviewed; no API/core directory exemption.
+export const financialAllowedFiles = new Set([
+  workspaceFile,
+  "artifacts/comp-dashboard/src/lib/profit-first-planning.ts",
+  "artifacts/comp-dashboard/src/lib/money-planning-forecast.ts",
+  "artifacts/comp-dashboard/src/lib/financial-fixed-date.test.ts",
+  "verification/FINANCIAL-BUDGET-INDEPENDENT-REVIEW.md",
+  "verification/OCTOBER23-FINANCIAL-BASELINE-RECEIPT.md",
 ]);
 
 // Existing publisher history outside runtime scope, not mobile deliverables.

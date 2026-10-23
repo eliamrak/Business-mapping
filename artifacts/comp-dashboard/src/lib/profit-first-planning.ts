@@ -1,6 +1,6 @@
 import {
   budgetAmount, clinicianModelAt, clinicianTermsAt, monthEnd, staffMemberAt,
-  type Context, type Values, type Workspace,
+  type Context, type ForecastMonth, type Values, type Workspace,
 } from "@workspace/practice/hub";
 import { calculateStaffMemberCost, staffCompensationKnown } from "@workspace/practice/compensation";
 import { currentPracticeClinicians } from "./practice-scope.ts";
@@ -44,6 +44,12 @@ export type ProfitFirstPlanningInput = {
   /** Monthly billed estimates, never collections. Explicit null overrides derived assumptions. */
   estimatedMonthlyValues?: Values;
   estimateSourcePeriod?: string;
+  /** Dated per-line forecast amounts with their original, unpersisted Budget basis. */
+  estimatedBudgetMonth?: {
+    month: Pick<ForecastMonth, "date" | "periodStart" | "periodEnd" | "values" | "budgetLines">;
+    budgets: Workspace["budgets"];
+    events: Workspace["events"];
+  };
   overhead?: PlanningOverhead;
   legacyGoal?: CompensationGoal | null;
   /** Optional scenario floors. Percentages may exceed 100; costs are never reduced to fit. */
@@ -93,6 +99,28 @@ export function profitFirstPlanning(input: ProfitFirstPlanningInput) {
     return sum(lines.map(b => {
       if (b.start > end || b.end && b.end < start) return 0;
       if (b.cadence === "per_session" && !known(values.sessions) || b.cadence === "percent_revenue" && !known(revenue)) return null;
+      if (budgetCosts) {
+        const basis = input.estimatedBudgetMonth;
+        const month = basis?.month;
+        const source = basis?.budgets.find(line => line.id === b.id);
+        const fields = (line: typeof b) => [line.amount, line.cadence, line.start, line.end, line.categoryId, line.archived, line.planningOnly];
+        const events = (all: Workspace["events"]) => all.filter(event => event.enabled && event.field === "budget.amount" && event.targetId === b.id);
+        const matching = month?.date === start && (month.periodStart ?? month.date) === start && (month.periodEnd ?? monthEnd(month.date)) === end
+          && source && JSON.stringify(fields(source)) === JSON.stringify(fields(b))
+          && JSON.stringify(events(basis!.events)) === JSON.stringify(events(w.events))
+          && (b.cadence !== "per_session" || month.values.sessions === values.sessions)
+          && (b.cadence !== "percent_revenue" || month.values.revenue === revenue);
+        if (matching && Object.hasOwn(month.budgetLines ?? {}, b.id)) {
+          const amount = month.budgetLines![b.id];
+          return known(amount) ? amount : null;
+        }
+        // Monthly totals do not locate sessions/revenue inside a partial active
+        // range or a dated amount change. Do not prorate those totals twice.
+        if (events(w.events).length || ["per_session", "percent_revenue"].includes(b.cadence) && (b.start > start || !!b.end && b.end < end)) {
+          reasons.push(`${b.name}: the dated Budget estimate is unavailable for the selected month and assumptions.`);
+          return null;
+        }
+      }
       return budgetAmount(b, start, end, values.sessions ?? 0, revenue ?? 0);
     }));
   }

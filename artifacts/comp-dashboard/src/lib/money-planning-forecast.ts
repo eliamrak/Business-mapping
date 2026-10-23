@@ -29,6 +29,7 @@ export function moneyPlanningForecast(workspace: Workspace, context: Context, to
     baselineWeeklyByClinician: Object.fromEntries(projection.clinicianPace.map(person => [person.id, person.usedWeekly!])),
   });
   return { months, basis, selectedMonth: month, start, end, observedAsOf,
+    budgetEstimate: months[0] ? { month: months[0], budgets: structuredClone(baselineWorkspace.budgets), events: structuredClone(baselineWorkspace.events) } : undefined,
     historicalAssumptionsAvailable: !historical,
     clinicianPace: projection.clinicianPace, unavailableReasons: projection.unavailableReasons,
     warnings: [...new Set([...assumptionWarnings, ...projection.unavailableReasons, ...months.flatMap(month => month.warnings)])] };

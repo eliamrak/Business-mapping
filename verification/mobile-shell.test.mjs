@@ -4,14 +4,14 @@ import fs from "node:fs";
 import path from "node:path";
 import vm from "node:vm";
 import { createRequire } from "node:module";
-import { root, git, mobileBase, workspaceFile, mobileComponentFile, mobileCssFile, assertMobileWorkspace, mobileAllowedFiles, publisherHistoryFiles, reviewedMobileReadiness, assertReviewedMobileReadiness } from "./mobile-shell-source-contract.mjs";
+import { root, git, mobileBase, workspaceFile, mobileComponentFile, mobileCssFile, assertMobileWorkspace, mobileAllowedFiles, financialAllowedFiles, publisherHistoryFiles, reviewedMobileReadiness, assertReviewedMobileReadiness } from "./mobile-shell-source-contract.mjs";
 
 const read = file => fs.readFileSync(path.join(root, file), "utf8");
 const require = createRequire(path.join(root, "artifacts/comp-dashboard/package.json"));
 const ts = require("typescript");
 const postcss = createRequire(require.resolve("vite/package.json"))("postcss");
 
-test("stripping literal mobile shell additions restores exact approved 72dc5fb workspace bytes", () => {
+test("stripping literal mobile shell additions and two financial props restores exact approved 72dc5fb workspace bytes", () => {
   assertMobileWorkspace(read(workspaceFile));
 });
 
@@ -22,17 +22,19 @@ test("source contract rejects existing logic mutations and duplicate mobile frag
   const importLine = source.split("\n").find(line => line.includes('from "@/components/practice/mobile-workspace-controls"'));
   assert.ok(importLine);
   assert.throws(() => assertMobileWorkspace(importLine + "\n" + source));
+  assert.throws(() => assertMobileWorkspace(source.replace("estimatedBudgetMonth={currentMoneyPlanning?.budgetEstimate}", "estimatedBudgetMonth={undefined}")));
+  assert.throws(() => assertMobileWorkspace(source + '\nconst unrelatedFinancialChange = true;\n'));
 });
 
 test("all cumulative changes since approved mobile base use exact reviewed paths", () => {
   const changes = [...git("diff", mobileBase, "--name-only", "-z").split("\0"), ...git("ls-files", "--others", "--exclude-standard", "-z").split("\0")].filter(Boolean);
-  const unexpected = files => files.filter(file => !mobileAllowedFiles.has(file) && !publisherHistoryFiles.has(file) && !reviewedMobileReadiness.has(file));
+  const unexpected = files => files.filter(file => !mobileAllowedFiles.has(file) && !financialAllowedFiles.has(file) && !publisherHistoryFiles.has(file) && !reviewedMobileReadiness.has(file));
   for (const file of changes.filter(file => reviewedMobileReadiness.has(file))) {
     assertReviewedMobileReadiness(file, fs.readFileSync(path.join(root, file)));
   }
   assert.deepEqual([...publisherHistoryFiles].sort(), [".agents/memory/MEMORY.md", ".agents/memory/release-evidence-temp-files.md"].sort());
   assert.deepEqual(unexpected([...publisherHistoryFiles]), [], "Only the two established publisher-history paths are exempt");
-  const rejected = [".agents/memory/OTHER.md", ".agents/memory/MEMORY.md.extra", ".agents/memory/release-evidence-temp-files.md/child", "artifacts/api-server/src/routes/practiceImports.ts", "artifacts/comp-mobile/server/serve.js.extra", "verification/mobile-readiness-other.test.cjs"];
+  const rejected = [".agents/memory/OTHER.md", ".agents/memory/MEMORY.md.extra", ".agents/memory/release-evidence-temp-files.md/child", "artifacts/api-server/src/routes/practiceImports.ts", "artifacts/comp-mobile/server/serve.js.extra", "verification/mobile-readiness-other.test.cjs", "artifacts/comp-dashboard/src/lib/unreviewed-financial.ts", "lib/practice/src/hub/engine.ts"];
   assert.deepEqual(unexpected(rejected), rejected, "No memory directory, prefix or runtime exemption");
   assert.deepEqual(unexpected(changes), [], "No API, domain, dependency, data, shared UI, existing CSS or other source changes are authorized");
 });
@@ -47,6 +49,55 @@ test("prior mobile readiness exception is exact-path and exact-hash only", () =>
     assert.throws(() => assertReviewedMobileReadiness(file, Buffer.from("unapproved readiness bytes")), /Reviewed mobile readiness bytes changed/);
   }
   assert.throws(() => assertReviewedMobileReadiness("artifacts/comp-mobile/server/other.js", Buffer.from("unapproved")), /Unreviewed readiness path/);
+});
+
+test("independent financial probe reconciles daily costs, isolates cloned source basis and leaves unrelated events/payroll intact", async () => {
+  const { emptyWorkspace, budgetSchema, categorySchema, clinicianSettingSchema, eventSchema } = await import(require.resolve("@workspace/practice/hub"));
+  const { moneyPlanningForecast } = await import("../artifacts/comp-dashboard/src/lib/money-planning-forecast.ts");
+  const { profitFirstPlanning } = await import("../artifacts/comp-dashboard/src/lib/profit-first-planning.ts");
+  const workspace = emptyWorkspace("2026-10-01");
+  Object.assign(workspace.settings, { teamId: 7, defaultInPersonPct: 0, collectionPct: 100, processingPct: 0,
+    processingFixedPerTransaction: 0, overheadFloorMonthly: 0 });
+  const clinician = { id: 1, goalId: 7, label: "Independent synthetic clinician", classification: "1099", sessionRate: 100,
+    sessionsPerWeek: 7, weeksWorkedPerYear: 52.1786, capEnabled: false, capAmount: 0,
+    preCapClinicianSplit: 60, preCapPracticeSplit: 40, postCapClinicianSplit: 60, postCapPracticeSplit: 40,
+    w2EmployerFicaPct: 0, futaSutaPct: 0, workersCompPct: 0, otherEmployerBurdenPct: 0 };
+  const context = { staff: [], clinicians: [clinician], sessions: [{ id: -1, clinicianId: 1, start: "2026-10-21", end: "2026-10-21",
+    completed: 14, desired: 0, scheduled: null, cancelled: null, noShow: null, inPerson: null, telehealth: null, sourceAttachmentId: null }] };
+  workspace.clinicians.push(clinicianSettingSchema.parse({ id: crypto.randomUUID(), clinicianId: 1, start: "2026-10-16", desiredWeeklySessions: 7, inPersonPct: 0 }));
+  const category = categorySchema.parse({ id: crypto.randomUUID(), name: "Independent costs", kind: "expense" });
+  workspace.categories.push(category);
+  workspace.budgets.push(
+    budgetSchema.parse({ id: crypto.randomUUID(), categoryId: category.id, name: "Independent session cost", amount: 15, cadence: "per_session", start: "2026-10-16" }),
+    budgetSchema.parse({ id: crypto.randomUUID(), categoryId: category.id, name: "Independent revenue cost", amount: 12.5, cadence: "percent_revenue", start: "2026-10-16" }));
+  workspace.events.push(eventSchema.parse({ id: crypto.randomUUID(), name: "Unrelated note", field: "custom", date: "2026-10-01", value: 0 }));
+  const coverage = [{ clinicianId: 1, start: "2026-10-08", end: "2026-10-21" }];
+  const original = structuredClone({ workspace, context, coverage });
+  const report = moneyPlanningForecast(workspace, context, "2026-10-23", coverage);
+  const basis = report.budgetEstimate;
+  assert.ok(basis);
+  assert.notEqual(basis.budgets, workspace.budgets);
+  assert.notEqual(basis.budgets[0], workspace.budgets[0]);
+  assert.notEqual(basis.events, workspace.events);
+  assert.notEqual(basis.events[0], workspace.events[0]);
+  const input = { workspace, context, asOf: "2026-10-01", costSource: "budget", estimatedBudgetMonth: basis, estimatedMonthlyValues: { ...report.months[0].values } };
+  const close = (actual, expected) => assert.ok(actual != null && Math.abs(actual - expected) < 1e-8, `${actual} != ${expected}`);
+  const cost = result => result.costs.find(item => item.key === "overhead").monthly;
+  close(report.months[0].values.sessions, 16);
+  close(report.months[0].values.revenue, 1600);
+  close(cost(profitFirstPlanning(input)), 440); // 16 * 15 + 1600 * 12.5%.
+  const payroll = profitFirstPlanning(input).costs.filter(item => /Pay|Burden|staffCost/.test(item.key));
+  assert.deepEqual({ workspace, context, coverage }, original);
+  workspace.budgets[0].amount = 99;
+  assert.equal(basis.budgets[0].amount, 15);
+  assert.equal(cost(profitFirstPlanning(input)), null);
+  workspace.budgets[0].amount = 15;
+  workspace.events[0].notes = "Changed unrelated metadata";
+  assert.notEqual(basis.events[0].notes, workspace.events[0].notes);
+  close(cost(profitFirstPlanning(input)), 440);
+  assert.deepEqual(profitFirstPlanning(input).costs.filter(item => /Pay|Burden|staffCost/.test(item.key)), payroll);
+  input.estimatedBudgetMonth = undefined;
+  assert.equal(cost(profitFirstPlanning(input)), null);
 });
 
 test("only hidden mobile controls and display-contents wrappers affect desktop CSS", () => {

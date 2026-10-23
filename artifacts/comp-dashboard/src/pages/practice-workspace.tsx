@@ -6283,6 +6283,7 @@ export default function PracticeWorkspace() {
                     workspace={planningWorkspace}
                     context={modelContext ?? context}
                     costSource="budget"
+                    estimatedBudgetMonth={currentMoneyPlanning?.budgetEstimate}
                     onOpenBudget={() => setMoneyTab("budget")}
                     asOf={(moneyPlanningMonth || today.slice(0, 7)) + "-01"}
                     estimatedMonthlyValues={planningMonthlyValues}
@@ -8180,6 +8181,7 @@ export default function PracticeWorkspace() {
                   )}
                   {namedGoalEditor}
                   <ProfitFirstPlanning renderMode="funding" costSource="budget" workspace={planningWorkspace} context={modelContext ?? context}
+                    estimatedBudgetMonth={currentMoneyPlanning?.budgetEstimate}
                     asOf={(moneyPlanningMonth || today.slice(0, 7)) + "-01"} estimatedMonthlyValues={planningMonthlyValues}
                     estimateSourcePeriod={currentMoneyPlanning?.basis ?? "Monthly planning inputs unavailable"}
                     legacyGoal={resolved?.goal} onPlanningChange={stageMoneyPlanning} />
