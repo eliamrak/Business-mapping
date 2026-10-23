@@ -197,6 +197,7 @@ import "@/pages/practice-workspace.css";
 import "@/pages/practice-approved.css";
 import "@/components/practice/historical-period-values.css";
 import { TidalMaterial } from "@/components/practice/tidal-material";
+import { MobileWorkspaceNavigation, MobilePageActions, MobileContributorSelect } from "@/components/practice/mobile-workspace-controls";
 
 type Mode = "practice" | "sandbox" | "goals";
 type IntegratedTool =
@@ -3697,7 +3698,21 @@ export default function PracticeWorkspace() {
   return (
     <div className="practice-theme pw-app" data-appearance="dark" data-material="tidal">
       <TidalMaterial section={`${mode}:${section}:${visibleTool ?? ""}`} />
-      <header className="pw-rail pw-top-navigation" aria-label="Practice navigation" data-unsaved-navigation>
+      <header className="pw-rail pw-top-navigation" aria-label="Practice navigation">
+        <MobileWorkspaceNavigation name={workspace.settings.practiceName} disabled={saving || sessionEditing}
+          modes={([
+            { id: "practice", label: "Today" },
+            { id: "goals", label: "Long Term Goals" },
+            { id: "sandbox", label: "Sandbox" },
+          ] as const).map(item => ({ ...item, selected: mode === item.id, onSelect: () => navigate(item.id) }))}
+          sections={sections.map(item => ({ id: item.id, label: item.label,
+            selected: mode === "practice" && (section === item.id || item.active?.includes(section)),
+            onSelect: () => { if (mode !== "practice") navigate("practice"); if (integratedTool) showTool(null); setSection(item.id); } }))}
+          utilities={[
+            { id: "imports", label: "Data & imports", selected: mode === "practice" && section === "retention", onSelect: () => { if (mode !== "practice") navigate("practice"); if (integratedTool) showTool(null); setSection("retention"); } },
+            { id: "settings", label: "Settings", selected: mode === "practice" && section === "settings", onSelect: () => { setMode("practice"); setSection("settings"); } },
+          ]}
+          referenceHref={!sandbox ? `${import.meta.env.BASE_URL}reference` : undefined} />
         <div className="pw-brand">
           <span className="pw-brand-mark">EMC</span>
           <span>
@@ -3706,6 +3721,7 @@ export default function PracticeWorkspace() {
           </span>
           <button
             className="pw-mobile-settings"
+            data-unsaved-navigation
             title="Settings"
             aria-label="Open practice settings"
             disabled={saving || sessionEditing}
@@ -3717,7 +3733,7 @@ export default function PracticeWorkspace() {
             <Settings2 />
           </button>
         </div>
-        <nav className="pw-workspace-navigation" aria-label="Main navigation">
+        <nav className="pw-workspace-navigation" aria-label="Main navigation" data-unsaved-navigation>
           {([
             { id: "practice", label: "Today", icon: Building2 },
             { id: "goals", label: "Long Term Goals", icon: Flag },
@@ -3725,10 +3741,10 @@ export default function PracticeWorkspace() {
           ] as const).map((item) => <button key={item.id} disabled={saving || sessionEditing} aria-current={mode === item.id ? "page" : undefined} onClick={() => navigate(item.id)}><item.icon /><span>{item.label}</span>{item.id === "goals" && goals.length > 0 && <small>{goals.length}</small>}</button>)}
         </nav>
         <div className="pw-nav-group-label">Today</div>
-        <nav className="pw-today-navigation" aria-label="Practice sections">
+        <nav className="pw-today-navigation" aria-label="Practice sections" data-unsaved-navigation>
           {sections.map((s, index) => <button key={s.id} aria-current={mode === "practice" && (section === s.id || s.active?.includes(section)) ? "page" : undefined} disabled={saving || sessionEditing} onClick={() => { if (mode !== "practice") navigate("practice"); if (integratedTool) showTool(null); setSection(s.id); }}><span className="pw-nav-number">{String(index + 1).padStart(2, "0")}</span><span>{s.label}</span></button>)}
         </nav>
-        <div className="pw-rail-bottom">
+        <div className="pw-rail-bottom" data-unsaved-navigation>
           <button disabled={saving || sessionEditing} aria-current={mode === "practice" && section === "retention" ? "page" : undefined} onClick={() => { if (mode !== "practice") navigate("practice"); if (integratedTool) showTool(null); setSection("retention"); }}><Upload />Data &amp; imports</button>
           <button
             disabled={saving || sessionEditing}
@@ -3773,6 +3789,7 @@ export default function PracticeWorkspace() {
                   : sections.find((item) => item.id === section)?.label ?? (section === "rooms" ? "Rooms" : section === "retention" ? "Data & imports" : section === "documents" ? "Reporting documents" : "Settings")}
             </h1>
           </div>
+          <MobilePageActions viewControl={toolTabs.length > 0 ? <label>View<select aria-label="Page view" value={visibleTool ?? "overview"} disabled={saving || sessionEditing} onChange={event => showTool(event.target.value === "overview" ? null : event.target.value as IntegratedTool)}>{toolTabs.map(tab => <option key={tab.id ?? "overview"} value={tab.id ?? "overview"}>{tab.label}</option>)}</select></label> : undefined}>
           <div className="pw-actions">
             {mode === "practice" && (
               <button
@@ -3875,6 +3892,7 @@ export default function PracticeWorkspace() {
               </button>
             )}
           </div>
+          </MobilePageActions>
         </header>
         {error && (
           <div className="pw-error" role="alert">
@@ -4616,6 +4634,7 @@ export default function PracticeWorkspace() {
                     onCustom={setCustomPeriod}
                     note=""
                   />
+                  <MobileContributorSelect label="Sessions clinician" names={contributorNames} value={selectedContributorName} compare={compareWholePractice} onCompare={() => setCompareWholePractice(true)} onChange={name => { setSharedContributor(name); setCompareWholePractice(false); }} />
                   <div className="pw-contributor-tabs" role="group" aria-label="Sessions contributor">
                     {contributorNames.map((name, index) => <button key={index === 0 ? "practice" : people[index - 1].id} aria-pressed={selectedContributorName === name && !compareWholePractice} onClick={() => { setSharedContributor(name); setCompareWholePractice(false); }}>{name}</button>)}
                     <button aria-pressed={compareWholePractice} onClick={() => setCompareWholePractice((value) => !value)}>Compare</button>
@@ -7397,6 +7416,7 @@ export default function PracticeWorkspace() {
                     </div>
                   ))}
                   {achievedFunds.map(({ goal, result }) => <div className="pw-achievement-alert" role="status" key={"fund:" + goal.name}><strong>{goal.name} goal met</strong><p>{result.message}</p></div>)}
+                  <MobileContributorSelect label="Overview clinician" names={contributorNames} value={selectedContributorName} onChange={setSharedContributor} />
                   <div className="pw-contributor-tabs" role="group" aria-label="Overview contributor">
                     {contributorNames.map((name, index) => <button type="button" key={index === 0 ? "practice" : people[index - 1].id} aria-pressed={selectedContributorName === name} onClick={() => setSharedContributor(name)}>{name}</button>)}
                   </div>

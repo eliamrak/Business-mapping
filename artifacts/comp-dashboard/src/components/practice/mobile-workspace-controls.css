@@ -1,0 +1,45 @@
+.pw-mobile-toolbar,
+.pw-mobile-actions-trigger,
+.pw-mobile-contributor,
+.pw-mobile-view-control { display: none; }
+.pw-page-actions-shell,
+.pw-page-actions-content { display: contents; }
+
+@media (max-width: 760px) {
+  .pw-app .pw-top-navigation { padding: max(8px, env(safe-area-inset-top)) max(16px, env(safe-area-inset-right)) 8px max(16px, env(safe-area-inset-left)); gap: 0; }
+  .pw-app .pw-top-navigation > .pw-brand,
+  .pw-app .pw-top-navigation > nav,
+  .pw-app .pw-top-navigation > .pw-nav-group-label,
+  .pw-app .pw-top-navigation > .pw-rail-bottom { display: none; }
+  .pw-app .pw-top-navigation > .pw-mobile-toolbar { display: flex; align-items: center; justify-content: space-between; min-width: 0; gap: 12px; }
+  .pw-mobile-brand { display: flex; align-items: center; min-width: 0; gap: 9px; color: #10354c; }
+  .pw-mobile-brand > span { display: grid; place-items: center; flex: 0 0 32px; height: 32px; border: 1px solid #a1c2d1; border-radius: 6px; font-size: 10px; }
+  .pw-mobile-brand strong { font-size: 15px; overflow-wrap: anywhere; line-height: 1.25; }
+  .pw-app .pw-mobile-control { display: inline-flex; align-items: center; justify-content: center; flex: 0 0 44px; min-width: 44px; min-height: 44px; padding: 10px; border: 1px solid #9bbecf; border-radius: 6px; background: #f0f8fcd9; color: #10354c; }
+  .pw-mobile-control svg { width: 20px; height: 20px; }
+  .pw-mobile-control:focus-visible,
+  .pw-mobile-navigation-sheet :is(button,a):focus-visible { outline: 3px solid #006a69; outline-offset: 2px; }
+  .pw-app .pw-header { flex-direction: row; align-items: center; position: relative; padding: 16px 18px 12px; gap: 12px; }
+  .pw-app .pw-header > div:first-child { min-width: 0; }
+  .pw-app .pw-header h1 { overflow-wrap: anywhere; margin: 0; }
+  .pw-page-actions-shell { display: block; flex: 0 0 44px; margin-left: auto; }
+  .pw-page-actions-content { display: none; }
+  .pw-page-actions-content--open { display: block; position: absolute; top: calc(100% - 8px); right: 18px; left: 18px; z-index: 30; padding: 12px; background: #edf6fb; border: 1px solid #9bbecf; border-radius: 8px; box-shadow: 0 12px 24px #08263a33; }
+  .pw-app .pw-header .pw-actions { display: flex; flex-direction: column; align-items: stretch; gap: 8px; }
+  .pw-app .pw-header .pw-actions :is(button,a) { min-height: 44px; font-size: 14px; }
+  .pw-mobile-view-control { display: block; margin-bottom: 8px; }
+  .pw-mobile-view-control label { display: block; color: #10354c; font-size: 13px; margin-bottom: 4px; }
+  .pw-mobile-view-control select,
+  .pw-mobile-contributor select { width: 100%; min-height: 44px; min-width: 0; font-size: 16px; color: #10354c; background: #f0f8fc; border: 1px solid #9bbecf; border-radius: 6px; padding: 8px 30px 8px 12px; }
+  .pw-app .pw-tool-tabs,
+  .pw-app .pw-contributor-tabs { display: none; }
+  .pw-mobile-contributor { display: block; margin: 0 0 12px; min-width: 0; }
+  .pw-mobile-navigation-overlay { position: fixed; inset: 0; z-index: 60; background: #052a44a6; }
+  .pw-mobile-navigation-sheet { position: fixed; z-index: 61; top: 0; left: 0; width: min(340px, calc(100vw - 24px)); max-width: none; height: 100dvh; overflow-y: auto; padding: max(24px, env(safe-area-inset-top)) 18px max(24px, env(safe-area-inset-bottom)); background: #e4f1f7; color: #10354c; border-right: 1px solid #a1c2d1; box-shadow: 10px 0 30px #052a4433; }
+  .pw-mobile-navigation-sheet h2 { margin: 0 44px 18px 0; font-size: 20px; }
+  .pw-mobile-navigation-sheet nav { display: grid; gap: 4px; padding: 12px 0; border-top: 1px solid #aac6d4; }
+  .pw-mobile-navigation-sheet nav :is(button,a) { display: flex; align-items: center; width: 100%; min-height: 44px; padding: 10px 12px; font-size: 16px; line-height: 1.3; color: #10354c; text-align: left; border: 1px solid transparent; border-radius: 6px; overflow-wrap: anywhere; }
+  .pw-mobile-navigation-sheet nav button[aria-current="page"] { background: #fff; border-color: #9bbecf; color: #005f57; font-weight: 600; }
+  .pw-mobile-navigation-sheet > button { position: absolute; top: max(12px, env(safe-area-inset-top)); right: 12px; min-width: 44px; min-height: 44px; display: grid; place-items: center; opacity: 1; }
+  .pw-mobile-navigation-sheet button:disabled { opacity: .5; }
+}

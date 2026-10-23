@@ -6,6 +6,7 @@ import vm from "node:vm";
 import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { createRequire } from "node:module";
+import { assertMobileWorkspace, mobileAllowedFiles } from "./mobile-shell-source-contract.mjs";
 
 const root = path.resolve(import.meta.dirname, "..");
 const src = "artifacts/comp-dashboard/src/";
@@ -68,11 +69,13 @@ test("workspace bytes differ only by declared presentation and scoped all-source
   assert.notEqual(themed, original, "Presentation anchors must exist");
   const codeEvidenceSafe = importSafe.replace('classificationSnapshots: localRetentionState.snapshots });',
     'classificationSnapshots: localRetentionState.snapshots, billingEvidenceSnapshots: localRetentionState.snapshots });');
-  assert.equal(read(file), codeEvidenceSafe);
+  // Strip only independently enumerated mobile fragments and restore the exact
+  // approved 72dc5fb workspace before applying the original theme-history chain.
+  assert.equal(assertMobileWorkspace(read(file)), codeEvidenceSafe);
 });
 
 test("all changed/new files stay within reviewed theme, PDF and mobile scope", () => {
-  const allowed = new Set([...sheets.map(s => src + s), src + "pages/practice-workspace.tsx",
+  const allowed = new Set([...mobileAllowedFiles, ...sheets.map(s => src + s), src + "pages/practice-workspace.tsx",
     src + "pages/practice-tokens.css", src + "components/practice/tidal-material.tsx",
     src + "components/practice/tidal-material.css", src + "assets/practice-tidal-art.png", src + "assets/practice-tidal-art.jpg",
     "verification/tidal-theme.test.mjs", "verification/TIDAL-INDEPENDENT-REVIEW.md",
