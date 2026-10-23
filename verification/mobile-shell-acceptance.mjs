@@ -275,4 +275,3 @@ try {
   assert.equal(checks.filter(item => !item.pass).length, 0, JSON.stringify(checks.filter(item => !item.pass)));
   console.log(JSON.stringify({ complete: phase, output: out, captures: captures.length }));
 } finally { await browser.close(); server.closeAllConnections(); await new Promise(resolve => server.close(resolve)); }
-
