@@ -43,6 +43,8 @@ export const manifestSchema = knowledgeScopeSchema.extend({
 });
 export const pipelineConfigSchema = knowledgeScopeSchema.omit({ principalId: true }).extend({
   enabled: z.boolean().default(false),
+  /** No live freshness SLA is selected. Null withholds runtime reads; one day is a validation ceiling, not a default. */
+  permissionMaxAgeMs: z.number().int().min(1).max(86400000).nullable().default(null),
   /** Server-approved immutable manifest bytes; never obtained from the source itself. */
   approvedManifestHash: hash.nullable().default(null),
   sources: z.array(z.object({ resourceId: z.uuid(), fileId: id, parentId: id, sourceOwnerId: id, readerPrincipalId: id,

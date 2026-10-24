@@ -24,14 +24,15 @@ test('authoritative runtime publishes transactionally and all five Knowledge tab
   const migration=await fs.readFile(new URL('../lib/db/migrations/20261024_knowledge_foundation.sql',import.meta.url),'utf8');await a.query(migration);await b.query(migration);
   const schema=await compile('../lib/db/src/schema/knowledge.ts');
   async function store(pool){return (await compile('../artifacts/api-server/src/knowledge/pipeline-store.ts',name=>name==='@workspace/db'?{db:drizzle(pool),...schema}:apiRequire(name))).postgresKnowledgePipelineStore;}
-  const {createKnowledgeRuntime}=await compile('../artifacts/api-server/src/knowledge/runtime.ts');
+  const {createKnowledgeRuntime:runtimeFactory}=await compile('../artifacts/api-server/src/knowledge/runtime.ts');
+  let readClock=Date.parse(at);const createKnowledgeRuntime=(store,configuration)=>runtimeFactory(store,configuration,()=>readClock);
   const {sourceHash}=await compile('../artifacts/api-server/src/knowledge/import-pipeline.ts');
   const {knowledgeContentHash,knowledgePublicationHash}=await compile('../artifacts/api-server/src/knowledge/service.ts');
   function fixture(version,binding=scope){
    const master={...binding,schemaVersion:1,resourceId:id,version,title:'Synthetic source with draft examples',category:'voice',audience:'owner',approval:'approved',approvedBy:binding.principalId,approvedAt:at,semantic:{kind:'document',paragraphs:['DRAFT AD EXAMPLE — Not approved for campaign use.','Fictional example version '+version]},displayText:[],links:[]};
    const bytes=JSON.stringify(master),grant={resourceId:id,fileId:'synthetic_file',parentId:'synthetic_folder',sourceOwnerId:'synthetic_author',readerPrincipalId:'synthetic_viewer',approvalEpoch:1,approvedForImport:true};
    const manifest=JSON.stringify({...binding,schemaVersion:1,bundleId:'synthetic_bundle',revision:version,audience:'owner',approval:'approved',approvedBy:binding.principalId,approvedAt:at,entries:[{resourceId:id,fileId:grant.fileId,sourceRevision:'rev_'+version,version,masterHash:sourceHash(bytes)}]});
-   return {manifest,config:{practiceId:scope.practiceId,enabled:true,approvedManifestHash:sourceHash(manifest),sources:[grant]},adapter:{readFile:async fileId=>{assert.equal(fileId,grant.fileId);return {status:'available',bytes,metadata:{fileId,parentId:grant.parentId,sourceOwnerId:grant.sourceOwnerId,readerPrincipalId:grant.readerPrincipalId,permission:'viewer',visibility:'restricted',revision:'rev_'+version}}}}};
+   return {manifest,config:{practiceId:scope.practiceId,enabled:true,permissionMaxAgeMs:3600000,approvedManifestHash:sourceHash(manifest),sources:[grant]},adapter:{readFile:async fileId=>{assert.equal(fileId,grant.fileId);return {status:'available',bytes,metadata:{fileId,parentId:grant.parentId,sourceOwnerId:grant.sourceOwnerId,readerPrincipalId:grant.readerPrincipalId,permission:'viewer',visibility:'restricted',revision:'rev_'+version}}}}};
   }
   const first=fixture(1),second=fixture(2);let config=null;const sourceStore=await store(a),runtime=createKnowledgeRuntime(sourceStore,()=>config);
   assert.deepEqual(await runtime.read(scope,context),[]);assert.equal((await runtime.stage(scope,context,first.manifest,first.adapter,at)).status,'disabled');assert.equal((await a.query('SELECT * FROM knowledge_pipeline_states')).rowCount,0);
@@ -43,6 +44,17 @@ test('authoritative runtime publishes transactionally and all five Knowledge tab
   await runtime.stage(scope,context,first.manifest,first.adapter,at);assert.deepEqual(await runtime.read(scope,context),[]);
   await runtime.activate(scope,context,at);const before=await runtime.read(scope,context);assert.equal(before.length,1);assert.match(before[0].content.blocks.map(x=>x.text).join('\n'),/DRAFT AD EXAMPLE.*Not approved for campaign use/);
   await runtime.stage(scope,context,first.manifest,{readFile:async()=>({status:'network-error'})},at);assert.deepEqual(await runtime.read(scope,context),[]);
+  await runtime.stage(scope,context,first.manifest,first.adapter,at);assert.deepEqual(await runtime.read(scope,context),before);
+  assert.deepEqual(await createKnowledgeRuntime(sourceStore,()=>({...config,permissionMaxAgeMs:null})).read(scope,context),[]);
+  const delayed=createKnowledgeRuntime({...sourceStore,read:async binding=>{const value=await sourceStore.read(binding);readClock+=3600000;return value}},()=>config);
+  assert.deepEqual(await delayed.read(scope,context),[]);readClock=Date.parse(at);
+  readClock+=3600000;assert.deepEqual(await runtime.read(scope,context),[]);
+  await runtime.stage(scope,context,first.manifest,first.adapter,new Date(readClock).toISOString());assert.deepEqual(await runtime.read(scope,context),before);
+  readClock=Date.parse(at);assert.deepEqual(await runtime.read(scope,context),[]); // Future verification timestamp.
+  readClock=NaN;assert.deepEqual(await runtime.read(scope,context),[]);
+  readClock=Date.parse(at);await runtime.stage(scope,context,first.manifest,first.adapter,at);
+  const saved=await sourceStore.read(scope);const missing=structuredClone(saved);missing.generation++;missing.sources.synthetic_file.lastVerifiedAt=null;
+  assert.equal(await sourceStore.compareAndSwap(scope,saved.generation,missing),true);assert.deepEqual(await runtime.read(scope,context),[]);
   await runtime.stage(scope,context,first.manifest,first.adapter,at);assert.deepEqual(await runtime.read(scope,context),before);
   const {createKnowledgeReadRouter}=await compile('../artifacts/api-server/src/knowledge/router.ts');
   const app=apiRequire('express')();app.use((req,res,next)=>{res.locals.role=req.headers['x-synthetic-role'];res.locals.principalId=req.headers['x-synthetic-principal'];next()});app.use('/api',createKnowledgeReadRouter((binding,auth)=>runtime.read(binding,auth),()=>scope.practiceId));
@@ -80,15 +92,15 @@ test('authoritative runtime publishes transactionally and all five Knowledge tab
   await run(path.join(bin,'pg_dump'),['--dbname',source.connectionString,'--data-only','--column-inserts','--no-owner','--no-privileges',...tables.flatMap(t=>['--table','public.'+t]),'--file',dump],{env,timeout:30000});
   // Restore failures roll back all prior inserts: no partially recovered publication.
   const bad=path.join(evidence,'invalid.sql');await fs.writeFile(bad,(await fs.readFile(dump,'utf8'))+'\nSELECT 1/0;\n');
-  await assert.rejects(run(path.join(bin,'psql'),['--dbname',restored.connectionString,'--single-transaction','--set','ON_ERROR_STOP=1','--file',bad],{env,timeout:30000}));
+  await assert.rejects(run(path.join(bin,'psql'),['--no-psqlrc','--dbname',restored.connectionString,'--single-transaction','--set','ON_ERROR_STOP=1','--file',bad],{env,timeout:30000}));
   for(const t of tables)assert.equal((await b.query('SELECT * FROM '+t)).rowCount,0);
-  await run(path.join(bin,'psql'),['--dbname',restored.connectionString,'--single-transaction','--set','ON_ERROR_STOP=1','--file',dump],{env,timeout:30000});
+  await run(path.join(bin,'psql'),['--no-psqlrc','--dbname',restored.connectionString,'--single-transaction','--set','ON_ERROR_STOP=1','--file',dump],{env,timeout:30000});
   const counts={};for(const t of tables){const rows=async pool=>(await pool.query('SELECT to_jsonb(t) AS value FROM '+t+' t ORDER BY to_jsonb(t)::text')).rows;assert.deepEqual(await rows(b),await rows(a));counts[t]=(await rows(b)).length;assert.ok(counts[t]>0);}
   const recoveredStore=await store(b),recovered=createKnowledgeRuntime(recoveredStore,()=>config);
   assert.deepEqual(await createKnowledgeRuntime(recoveredStore,()=>null).read(otherScope,otherContext),[]);
   const recoveredOther=createKnowledgeRuntime(recoveredStore,()=>otherFixture.config);assert.deepEqual(await recoveredOther.read(otherScope,otherContext),otherBefore);assert.deepEqual(await recoveredOther.read(scope,context),[]);
   assert.deepEqual(await recovered.read(scope,context),[]);const state=await recoveredStore.read(scope);assert.ok(state.tombstones[id]);assert.deepEqual(state.cache,{});assert.equal(Object.keys(state.masters).length,2);
   assert.equal((await recovered.stage(scope,context,second.manifest,second.adapter,at)).status,'rejected');assert.deepEqual(await recovered.read(scope,context),[]);
-  const report={status:'passed',scope:'Two disposable loopback PostgreSQL clusters, synthetic data only',tables:counts,checks:['disabled runtime no database writes','owner/practice isolation','real HTTP read router with synthetic server locals: owner read, role/anonymous rejection, no caller scope or writes, disabled empty response','draft marketing examples remain explicitly labeled','whole publication activation and failed transaction rollback','idempotent replay','runtime withholds network-stale data until successful revalidation','all five table rows restored exactly','second owner approved publication remains readable after recovery without leaking revoked first-owner content','failed restore rolls back all five tables','revocation/tombstones/cache removal and immutable history survive recovery','replay cannot resurrect revoked source'],dumpSha256:sourceHash(await fs.readFile(dump,'utf8')),evidence};await fs.writeFile(path.join(evidence,'report.json'),JSON.stringify(report,null,2));console.log(JSON.stringify(report,null,2));
+  const report={status:'passed',scope:'Two disposable loopback PostgreSQL clusters, synthetic data only',tables:counts,checks:['disabled runtime no database writes','owner/practice isolation','real HTTP read router with synthetic server locals: owner read, role/anonymous rejection, no caller scope or writes, disabled empty response','draft marketing examples remain explicitly labeled','whole publication activation and failed transaction rollback','idempotent replay','explicit freshness lease required; expiry/future/missing/invalid-clock reads withheld and revalidation restores access','runtime withholds network-stale data until successful revalidation','all five table rows restored exactly','second owner approved publication remains readable after recovery without leaking revoked first-owner content','failed restore rolls back all five tables','revocation/tombstones/cache removal and immutable history survive recovery','replay cannot resurrect revoked source'],dumpSha256:sourceHash(await fs.readFile(dump,'utf8')),evidence};await fs.writeFile(path.join(evidence,'report.json'),JSON.stringify(report,null,2));console.log(JSON.stringify(report,null,2));
  } finally{if(a)await a.end();if(b)await b.end();await source.stop('fast',{cleanup:true});await restored.stop('fast',{cleanup:true});}
 });

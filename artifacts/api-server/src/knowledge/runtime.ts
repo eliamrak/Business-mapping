@@ -4,7 +4,7 @@ import { activateKnowledgeBundle, readPipelineKnowledge, stageKnowledgeBundle, t
 import { KnowledgeError, knowledgeScope } from "./service";
 
 /** Server-only configuration capability. Never populate from query/body/source bytes. Null means disabled. */
-export function createKnowledgeRuntime(store: KnowledgePipelineStore, configuration: () => unknown) {
+export function createKnowledgeRuntime(store: KnowledgePipelineStore, configuration: () => unknown, now: () => number = Date.now) {
   function config(scope: KnowledgeScope) {
     const raw = configuration();
     const value = pipelineConfigSchema.parse(raw ?? { practiceId: scope.practiceId, enabled: false });
@@ -19,9 +19,17 @@ export function createKnowledgeRuntime(store: KnowledgePipelineStore, configurat
     /** The route supplies a scope derived exclusively from verified Clerk locals + deployment configuration. */
     async read(scope: KnowledgeScope, context: ImportContext): Promise<KnowledgeDocument[]> {
       authorize(scope, context);
-      const documents = await readPipelineKnowledge(context, config(scope), store);
+      const settings = config(scope);
+      if (!settings.enabled || settings.permissionMaxAgeMs === null) return [];
+      const documents = await readPipelineKnowledge(context, settings, store);
+      // Evaluate at response time, after potentially delayed storage I/O.
+      const checkedNow = now();
+      if (!Number.isFinite(checkedNow)) return [];
       // Until a stale-display policy/UI is reviewed, the app withholds stale snapshots.
-      return documents.filter(document => !document.stale).map(document => ({ id: document.resourceId,
+      return documents.filter(document => {
+        const verifiedAt = document.lastPermissionCheckAt === null ? NaN : Date.parse(document.lastPermissionCheckAt);
+        return !document.stale && Number.isFinite(verifiedAt) && verifiedAt <= checkedNow && checkedNow - verifiedAt < settings.permissionMaxAgeMs!;
+      }).map(document => ({ id: document.resourceId,
         title: document.title, category: document.category, version: document.version, contentHash: document.contentHash,
         approvedAt: document.approvedAt, content: document.projection }));
     },

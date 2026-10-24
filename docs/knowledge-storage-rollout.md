@@ -20,7 +20,7 @@ Run with an existing supported PostgreSQL installation:
 PRACTICE_NATIVE_POSTGRES_BIN=/path/to/postgres/bin node --test verification/knowledge-storage.test.mjs verification/knowledge-recovery.test.mjs
 ```
 
-These scripts erase inherited database connection variables in the test process and create fresh owned loopback clusters. Recovery uses `pg_dump --data-only --column-inserts` with an explicit five-table allowlist, then `psql --single-transaction --set ON_ERROR_STOP=1` into the second migrated disposable cluster. They stop both clusters afterward. Synthetic dump/report files remain under `/tmp/knowledge-recovery-evidence-*`; stopped synthetic cluster directories also remain under `/tmp/knowledge-source-*` and `/tmp/knowledge-restored-*` for inspection.
+These scripts erase inherited database connection variables in the test process and create fresh owned loopback clusters. Recovery uses `pg_dump --data-only --column-inserts` with an explicit five-table allowlist, then `psql --no-psqlrc --single-transaction --set ON_ERROR_STOP=1` into the second migrated disposable cluster. They stop both clusters afterward. Synthetic dump/report files remain under `/tmp/knowledge-recovery-evidence-*`; stopped synthetic cluster directories also remain under `/tmp/knowledge-source-*` and `/tmp/knowledge-restored-*` for inspection.
 
 The proof covers owner/practice isolation; the real HTTP read router with synthetic server locals (Clerk transport itself is covered separately by the foundation tests); no caller-owned scope or HTTP mutation; default-disabled behavior; actual staged publication and transaction rollback; duplicate notification; exact recovery of every row in all five tables; a failed restore rolling back every inserted row; retained immutable masters, tombstones and cache removal; denied replay after recovery; and a second owner's valid restored publication without first-owner leakage. It is not a production recovery drill or live provider verification.
 
@@ -41,15 +41,15 @@ pg_dump --dbname "$KNOWLEDGE_BACKUP_CONNECTION" --data-only --column-inserts \
 4. Verify artifact integrity and restore to a **fresh isolated approved recovery target** first. Apply the exact migration there, then restore with errors aborting the entire transaction:
 
 ```
-psql --dbname "$KNOWLEDGE_RECOVERY_CONNECTION" --set ON_ERROR_STOP=1 \
+psql --no-psqlrc --dbname "$KNOWLEDGE_RECOVERY_CONNECTION" --set ON_ERROR_STOP=1 \
   --file lib/db/migrations/20261024_knowledge_foundation.sql
-psql --dbname "$KNOWLEDGE_RECOVERY_CONNECTION" --single-transaction \
+psql --no-psqlrc --dbname "$KNOWLEDGE_RECOVERY_CONNECTION" --single-transaction \
   --set ON_ERROR_STOP=1 --file "$KNOWLEDGE_BACKUP_FILE"
 ```
 
 Compare all five tables, immutable master hashes, pins, epochs, tombstones and scoped readable outputs. Confirm failure rollback and constraints. The migration installs the trigger function omitted by table-only data dumps. Legacy approved rows missing required publication metadata may fail the immutable approval trigger on restore; resolve an explicit reviewed quarantine/recovery plan before rollout, never disable integrity checks ad hoc or fabricate approvals.
 
-5. Only after successful recovery review, a separately authorized operator may apply the same migration to the confirmed production target with `psql --set ON_ERROR_STOP=1 --file ...`. The migration contains its own `BEGIN/COMMIT`; do not wrap it with an extra transaction option. Constraint validation failure rolls back the migration; do not delete malformed rows just to make it pass. The script seeds no source approval or identity.
+5. Only after successful recovery review, a separately authorized operator may apply the same migration to the confirmed production target with `psql --no-psqlrc --set ON_ERROR_STOP=1 --file ...`. The migration contains its own `BEGIN/COMMIT`; do not wrap it with an extra transaction option. Constraint validation failure rolls back the migration; do not delete malformed rows just to make it pass. The script seeds no source approval or identity.
 6. Validate the disabled read path and schema before any enablement. Current provider permissions/source approval must be freshly reconciled against restored state: an old backup can predate revocation. Never enable retrieval merely because a restored pin/approval existed historically. Missing current authority remains denied. No real-source read/import is permitted until the external-access gates below are satisfied.
 
 ## Rollback and recovery

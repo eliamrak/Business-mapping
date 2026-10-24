@@ -1,0 +1,44 @@
+# Disabled Google read-adapter boundary
+
+Checkpoint before this extension: `f71c92d5fc2841e2e3aed6b6d7c2f363d48e082c`. No live Google client, SDK, credential lookup, source registration, network call, grant, scheduler or model is constructed by this code. The existing production runtime still has null configuration. Actual pilot sources remain staged private drafts, with retrieval disabled.
+
+## Supported documented behavior
+
+Official Google documentation was read on 2026-10-24. Drive file `version` is a monotonic string representing server changes; `headRevisionId` is only available for binary files. Full `permissions` is conditional on ability to share and is absent for shared-drive items; shared-drive owners are absent too. The adapter does not assume a Viewer can enumerate ACLs or infer restricted visibility from omitted fields. [Drive files resource](https://developers.google.com/workspace/drive/api/reference/rest/v3/files).
+
+Docs `revisionId` is populated only with edit access; it is opaque and user-specific. This Viewer preparation therefore uses Drive version plus raw-content hashes, not Docs revision IDs. [Docs document resource](https://developers.google.com/workspace/docs/api/reference/rest/v1/documents).
+
+Workspace documents export through `files.export` with an output MIME type; exported content has a 10 MB provider limit. This adapter's configured limit is at most 500,000 bytes, independently enforced while consuming the stream. [Export method](https://developers.google.com/workspace/drive/api/reference/rest/v3/files/export). JSON blobs use `files.get` media content; download/export capability must be checked first. [Download guide](https://developers.google.com/workspace/drive/api/guides/manage-downloads).
+
+A change marked removed can mean deletion or lost access; it is not a deletion certificate. This code only classifies allowlisted change hints for invalidation/revalidation; it does not list or schedule changes. A future consumer must preserve pagination/removal handling and must not approve data from a change event. [Change resource](https://developers.google.com/workspace/drive/api/reference/rest/v3/changes), [changes.list](https://developers.google.com/workspace/drive/api/reference/rest/v3/changes/list).
+
+Likewise, Drive 404 can mean inaccessible or absent. The adapter reports access denial with an ambiguous reason, not confirmed deletion. Explicit trash metadata reports deletion; 401/permission 403 deny access; rate-limit 403, 429 and server errors remain transient failures. [Drive error guide](https://developers.google.com/workspace/drive/api/guides/handle-errors).
+
+## Interface and registration
+
+`google-read-adapter.ts` exports `createGoogleReadAdapter(configuration, clientFactory)` implementing the existing `KnowledgeSourceAdapter.readFile(fileId)`. Configuration is strict and disabled by default. A disabled adapter, unapproved registration or unregistered ID makes **zero factory/client calls**. No URL/request method is exposed. The injected client only offers metadata, a current authority capability, plain-text export and JSON download. No real implementation or credentials are included.
+
+Server-approved registration requires exact file/folder IDs, owner and Viewer principal IDs, source kind, Drive version, raw hash, canonical master hash and a byte limit. Allowed kinds are Google Doc prose, JSON map and JSON cycle. Shortcuts, folders as content, other MIME types and shared-drive files are deliberately unsupported. Shared-drive support would need a separately reviewed identity/ownership model. No recursive folder search or arbitrary URL following occurs.
+
+`authority(fileId)` is an explicit **unimplemented live capability**, not an assumed Google API response shape. It must establish current Viewer identity, source owner, Viewer-only permission and restricted visibility from a supported independently verified authority mechanism. Missing/unverifiable authority withholds content and yields unapproved status. `canDownload` alone does not establish this authority. No owner token copying or implicit scope escalation is an acceptable implementation.
+
+Before and after reading bytes, metadata and authority must agree with registration. Parent, owner, exact MIME, version, modified time and download capability must remain consistent. Raw UTF-8 hashes include a byte-order mark if present; invalid UTF-8 and oversized streams are rejected. The future transport must also enforce network timeouts and streaming limits before buffering and close the response when the iterator is cancelled. Before/after checks are not a provider-side transaction; changes after the last check remain possible and require the freshness/revocation policy below.
+
+Map/cycle JSON must pass the existing strict semantic schema, approved publication state, kind and deterministic projection validation. The exact original master bytes are preserved. Docs text is normalized deterministically (line endings, blank-line paragraphs, edge whitespace) into an independently approved publication envelope, then checked against the canonical master hash. Export output is prose data, not a fidelity claim for diagrams, tabs, comments, images or suggestions. Instructions embedded in text are never executed; source links are never fetched. Draft ad labels remain data: source-access/publication approval is **not** campaign approval.
+
+## Freshness and script isolation corrections
+
+The production-facing runtime now requires explicit `permissionMaxAgeMs` before returning enabled reads. Its default is null (no reads). There is no selected production SLA. The one-day upper validation bound is a ceiling, not an enabled default or an approved freshness policy; the one-hour value in tests is synthetic only. Missing, malformed or future verification timestamps, invalid server clock, explicit stale state and age at or beyond the configured lease all withhold content. Time is evaluated after storage I/O. Successful source revalidation renews the recorded timestamp; activation never invents a new check. The clock is server-supplied/injectable for tests, not caller input; clock synchronization and rollback handling must be reviewed for live operation.
+
+This lease applies at `createKnowledgeRuntime.read`, the only production-facing reader. Lower-level `readPipelineKnowledge` remains a scoped integrity-checked internal snapshot primitive that exposes timestamp/stale metadata; do not mount it directly as an API or treat it as lease authorization.
+
+Recovery test and runbook `psql` calls now include `--no-psqlrc`, preventing ambient startup scripts from altering the scripted restore. Disposable storage/recovery checks were rerun after this correction.
+
+## Exact one-time setup gates — not performed
+
+1. Select the current Practice SOP; approve the three-resource inventory and normalize canonical sources. Register exact file/folder/type/version/hash mappings and source-access/publication state separately from draft marketing-asset status. No actual IDs/content belong in source fixtures.
+2. Obtain explicit approval for the dedicated service identity, credential/secret mechanism and required Google project/API enablement. Grant Viewer access only to the approved folder/files; no owner impersonation or domain-wide delegation by inference. Neither identity nor credentials currently exists in this integration.
+3. Review the narrowest viable OAuth/API scopes for that identity/flow. `drive.file` has per-file selection semantics and write capability; `drive.readonly` is read-only but broad over files visible to the identity and classified restricted. Neither is silently selected or granted here. Determine the applicable setup/verification obligations before construction. [Google scope guide](https://developers.google.com/workspace/drive/api/guides/api-specific-auth).
+4. With the approved Viewer identity, verify actual metadata field visibility, download/export capability, folder/owner identity and revision behavior on the approved resources. Determine whether complete current restricted-access/Viewer-only authority can be proven through supported APIs. **This cannot be established before that identity exists.** If unavailable, leave retrieval disabled and request a separately reviewed authority design; do not upgrade privileges automatically or treat missing ACLs as private.
+5. Review and implement the concrete read-only transport and current authority verifier, timeout/cancellation/error normalization, configuration pin/version workflow, explicit freshness lease and revocation process. Enable neither adapter nor runtime until all gates pass. No scheduler is part of this step.
+6. Complete the existing production schema/backup/restore review, independently review this code, then separately authorize real-source read validation, migration/deployment and live synchronization. No current milestone claims those actions complete.

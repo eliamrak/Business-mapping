@@ -1,0 +1,53 @@
+{
+  "base": "f71c92d5fc2841e2e3aed6b6d7c2f363d48e082c",
+  "status": "passed; independent review pending",
+  "scope": "Disabled injected Google adapter plus runtime freshness and psql isolation corrections; synthetic clients and disposable PostgreSQL only",
+  "validation": {
+    "domainRegression": 1258,
+    "knowledgeTests": 29,
+    "adapterTests": 9,
+    "adapterRerunAfterFinalClassifierChange": true,
+    "disposableStorageRecoverySuites": 2,
+    "apiTypecheck": "passed",
+    "apiBuild": "passed"
+  },
+  "recovery": {
+    "status": "passed",
+    "scope": "Two disposable loopback PostgreSQL clusters, synthetic data only",
+    "tables": {
+      "knowledge_resources": 1,
+      "knowledge_versions": 1,
+      "knowledge_import_receipts": 1,
+      "knowledge_source_authorizations": 1,
+      "knowledge_pipeline_states": 2
+    },
+    "checks": [
+      "disabled runtime no database writes",
+      "owner/practice isolation",
+      "real HTTP read router with synthetic server locals: owner read, role/anonymous rejection, no caller scope or writes, disabled empty response",
+      "draft marketing examples remain explicitly labeled",
+      "whole publication activation and failed transaction rollback",
+      "idempotent replay",
+      "explicit freshness lease required; expiry/future/missing/invalid-clock reads withheld and revalidation restores access",
+      "runtime withholds network-stale data until successful revalidation",
+      "all five table rows restored exactly",
+      "second owner approved publication remains readable after recovery without leaking revoked first-owner content",
+      "failed restore rolls back all five tables",
+      "revocation/tombstones/cache removal and immutable history survive recovery",
+      "replay cannot resurrect revoked source"
+    ],
+    "dumpSha256": "f9d525c332ebc4b308c4f2a45308479b4ce06e06bbaec9e7663762694e6edb9d",
+    "evidence": "/tmp/knowledge-recovery-evidence-OyVshj"
+  },
+  "liveCalls": 0,
+  "credentialsOrGrantsCreated": false,
+  "liveRuntimeEnabled": false,
+  "remainingGates": [
+    "Current SOP/canonical source registration and access/publication approval; actual pilot remains private drafts",
+    "Explicit Viewer identity, narrow credential/API/scope setup",
+    "Supported current authority verifier: Viewer ACL visibility is unknown and must not be assumed",
+    "Concrete fixed-endpoint transport, timeouts, approved freshness SLA and configuration wiring",
+    "Independent review, production recovery/migration/deployment review and separately approved live validation"
+  ],
+  "docs": "docs/knowledge-google-adapter.md"
+}
