@@ -43,7 +43,7 @@
   },
   "remainingGates": [
     "Independent review",
-    "Supported separately approved dot-to-app publishing authentication/connection; no credential/cookie reuse",
+    "Separately approved down-scoped Knowledge-only dot publishing credential/OAuth audience; accepted only at registered Knowledge publication boundary, never clinical/financial routes; no full owner Clerk session/token or read-assistant publish inheritance",
     "Actual registered source/SOP approval, Google identity/project/provider and authority policy setup",
     "Concrete source reader composition from approved candidate constraints under fixed policy",
     "Reviewed policy reconciliation, retention and production recovery/migration/deployment"
