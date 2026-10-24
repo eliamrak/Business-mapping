@@ -79,3 +79,88 @@ test("coverage admission excludes partial sources without inventing missing visi
   assert.equal(result.rows[1].completions, 0);
   assert.ok(coverage.excludedRowsCount > 0);
 });
+
+const lifetimeOptions = { start: "2026-01-01", end: "2026-06-30", asOf: "2026-06-30" };
+const proven = (rows: string, start = "2026-01-01", end = "2026-06-30") => ({
+  ...attendance(rows), reportCoverage: { start, end, complete: true as const },
+});
+test("lifetime means and medians separate apparent endings from recent and short observations", () => {
+  const snapshot = proven(`ended,Lane,2026-01-01,Room,show
+ended,Lane,2026-01-02,Room,show
+ended,Lane,2026-01-11,Room,show
+ended2,Lane,2026-01-01,Room,show
+ended2,Lane,2026-01-03,Room,show
+ended2,Lane,2026-01-10,Room,show
+ended2,Lane,2026-01-21,Room,show
+recent,Lane,2026-06-30,Room,show
+short,Lane,2026-01-01,Room,show
+short,Lane,2026-01-05,Room,show`);
+  const { lifetime } = sessionProgression([snapshot], lifetimeOptions);
+  assert.deepEqual(lifetime.apparentEndings, { clients: 2, meanSessions: 3.5, medianSessions: 3.5, meanElapsedDays: 15, medianElapsedDays: 15, coverageLimitedClients: 0 });
+  assert.deepEqual(lifetime.ongoingOrCensored, { clients: 2, meanSessions: 1.5, medianSessions: 1.5, meanElapsedDays: 2, medianElapsedDays: 2, coverageLimitedClients: 0 });
+});
+test("unverified and gapped follow-up cannot produce apparent endings", () => {
+  const rows = `a,Lane,2026-01-01,Room,show\na,Lane,2026-01-02,Room,show\na,Lane,2026-01-03,Room,show`;
+  for (const snapshots of [[attendance(rows)], [proven(rows, "2026-01-01", "2026-01-14"), proven("other,Lane,2026-06-30,Room,no show", "2026-06-01", "2026-06-30")]]) {
+    const result = sessionProgression(snapshots, lifetimeOptions).lifetime;
+    assert.equal(result.apparentEndings.clients, 0);
+    assert.equal(result.ongoingOrCensored.clients, 1);
+    assert.equal(result.ongoingOrCensored.coverageLimitedClients, 1);
+    assert.equal(result.ongoingOrCensored.meanElapsedDays, 2);
+  }
+});
+test("referrals and later returns invalidate earlier endings; unresolved follow-up blocks absence claims", () => {
+  const snapshot = proven(`a,Lane,2026-01-01,Room,show
+a,Lane,2026-01-02,Room,show
+a,Lane,2026-01-03,Room,show
+a,Other,2026-06-25,Room,show`);
+  const returned = sessionProgression([snapshot], { ...lifetimeOptions, clinician: "Lane" }).lifetime;
+  assert.equal(returned.apparentEndings.clients, 0);
+  assert.equal(returned.ongoingOrCensored.meanSessions, 4);
+  assert.equal(returned.ongoingOrCensored.meanElapsedDays, 175);
+  const noReturn = { ...snapshot, rows: snapshot.rows.slice(0, 3) };
+  const unresolved = sessionProgression([noReturn], { ...lifetimeOptions, excludedFollowUpEvidence: [{ clientId: "a", serviceDate: "2026-06-25" }] }).lifetime;
+  assert.equal(unresolved.apparentEndings.clients, 0);
+  assert.equal(unresolved.ongoingOrCensored.coverageLimitedClients, 1);
+});
+test("same-day exceptions increase session count but cannot establish a three-date ending", () => {
+  const snapshot = proven(`a,Lane,2026-01-01,Room A,show
+a,Lane,2026-01-01,Room B,show
+a,Lane,2026-01-01,Room C,show`);
+  const lifetime = sessionProgression([snapshot, snapshot], { ...lifetimeOptions, sameDayVisitOverrides: { [sameDayVisitKey(snapshot.rows[0])]: 3 } }).lifetime;
+  assert.equal(lifetime.apparentEndings.clients, 0);
+  assert.equal(lifetime.ongoingOrCensored.meanSessions, 3);
+  assert.equal(lifetime.ongoingOrCensored.medianElapsedDays, 0);
+});
+test("90-day boundary remains exact; no artificial 28-day requirement for ending establishment", () => {
+  const snapshot = proven(`a,Lane,2026-01-01,Room,show
+a,Lane,2026-02-10,Room,show
+a,Lane,2026-04-01,Room,show`);
+  assert.equal(sessionProgression([snapshot], { ...lifetimeOptions, asOf: "2026-06-29" }).lifetime.apparentEndings.clients, 0);
+  assert.equal(sessionProgression([snapshot], lifetimeOptions).lifetime.apparentEndings.clients, 1);
+});
+test("empty lifetime groups use null statistics, and odd medians differ from means", () => {
+  const empty = sessionProgression([], lifetimeOptions).lifetime;
+  assert.equal(empty.apparentEndings.meanSessions, null);
+  assert.equal(empty.ongoingOrCensored.medianElapsedDays, null);
+  const snapshot = proven(`a,Lane,2026-06-30,Room,show
+b,Lane,2026-06-30,Room,show
+c,Lane,2026-06-01,Room,show
+c,Lane,2026-06-02,Room,show
+c,Lane,2026-06-30,Room,show`);
+  const group = sessionProgression([snapshot], lifetimeOptions).lifetime.ongoingOrCensored;
+  assert.equal(group.meanSessions, 5 / 3);
+  assert.equal(group.medianSessions, 1);
+  assert.equal(group.meanElapsedDays, 29 / 3);
+  assert.equal(group.medianElapsedDays, 0);
+});
+
+test("verified apparent ending remains flagged when later coverage has a gap", () => {
+  const snapshot = proven(`a,Lane,2026-01-01,Room,show
+a,Lane,2026-01-02,Room,show
+a,Lane,2026-01-03,Room,show`, "2026-01-01", "2026-04-30");
+  const lifetime = sessionProgression([snapshot], lifetimeOptions).lifetime;
+  assert.equal(lifetime.apparentEndings.clients, 1);
+  assert.equal(lifetime.apparentEndings.coverageLimitedClients, 1);
+  assert.equal(lifetime.ongoingOrCensored.clients, 0);
+});
