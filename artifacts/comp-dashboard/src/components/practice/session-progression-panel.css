@@ -79,3 +79,11 @@
   .pw-progression .pw-progression-scroll-hint { display: block; }
   .pw-progression-lifetime-grid { grid-template-columns: minmax(0, 1fr); }
 }
+/* The workspace reset must not remove the table's deliberate scroll width. */
+.pw-app .pw-progression-table { min-width: 690px; }
+/* Recharts retains off-screen coordinates after hover/resize, even while hidden. */
+.pw-progression-chart .recharts-tooltip-wrapper[style*="visibility: hidden"] { display: none; }
+.pw-app .pw-progression h3:not(.pw-integrated-tool *) { font-size: 23px; margin: 0 0 6px; }
+@media (max-width: 700px) {
+  .pw-app .pw-progression h3:not(.pw-integrated-tool *) { font-size: 21px; }
+}

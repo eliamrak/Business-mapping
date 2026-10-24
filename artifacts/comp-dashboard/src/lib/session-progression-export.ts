@@ -5,7 +5,7 @@ export function progressionCsv(result: SessionProgression): string {
   const rounded = (value: number | null) => value === null ? "" : Number(value.toFixed(1));
   const rows: Array<Array<string | number>> = [
     ["Observed session progression — not eventual lifetime or dropout"],
-    ["First observed treatment cohort start", result.start],
+    ["First observed treatment cohort start", result.start === "0000-01-01" ? "Earliest observed history" : result.start],
     ["First observed treatment cohort end", result.end],
     ["Observation cutoff (not coverage certification)", result.observedThrough],
     ["First-date clinician membership", result.clinician ?? "Whole Practice"],

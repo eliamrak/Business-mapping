@@ -24,7 +24,7 @@ export type SessionProgressionPanelProps = {
 const count = (value: number) => value.toLocaleString("en-US");
 const pct = (value: number | null) => value === null ? "—" : `${value.toFixed(1)}%`;
 const change = (value: number | null) => value === null ? "—" : `${value > 0 ? "+" : ""}${value.toFixed(1)} pp`;
-const date = (value: string) => new Date(`${value}T00:00:00Z`).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric", timeZone: "UTC" });
+const date = (value: string) => value === "0000-01-01" ? "earliest observed history" : new Date(`${value}T00:00:00Z`).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric", timeZone: "UTC" });
 
 function downloadCsv(result: SessionProgression) {
   const url = URL.createObjectURL(new Blob([progressionCsv(result)], { type: "text/csv;charset=utf-8" }));

@@ -22,3 +22,9 @@ test("empty export keeps unknown percentages empty, not zero, and escapes formul
   assert.match(csv, /"1","0","0","",""/);
   assert.match(csv, /"'=hyperlink\(""bad""\)"/);
 });
+
+test("Overall exports an observed-history label instead of the date sentinel", () => {
+  const csv = progressionCsv(sessionProgression([], { start: "0000-01-01", end: "2026-06-30", asOf: "2026-07-01" }));
+  assert.match(csv, /Earliest observed history/);
+  assert.doesNotMatch(csv, /0000-01-01/);
+});

@@ -4,7 +4,9 @@ import http from 'node:http';
 import path from 'node:path';
 import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
-import { build } from 'esbuild';
+// Resolve Vite's already-installed build dependency under strict pnpm layouts.
+const dashboardRequire = createRequire(new URL('../artifacts/comp-dashboard/package.json', import.meta.url));
+const { build } = createRequire(dashboardRequire.resolve('vite/package.json'))('esbuild');
 
 const root = fileURLToPath(new URL('../', import.meta.url));
 const out = process.env.PRACTICE_PROGRESSION_EVIDENCE ?? '/tmp/practice-progression-render';
@@ -31,18 +33,18 @@ const coverage = completeReportCoverage(sources,[{id:1,label:'Lane'},{id:2,label
 function App() {
  const [scope,setScope]=useState('practice'); const [theme,setTheme]=useState('tidal');
  const [start,setStart]=useState('2026-01-01');
- const identityVerified=scope!=='ambiguous';
+ const identityVerified=scope!=='ambiguous'; const cohortStart=scope==='overall'?'0000-01-01':start;
  const clinician=scope==='Lane'||scope==='Other'?scope:undefined;
  const snapshots=scope==='empty'?[]:coverage.eligibleSnapshots;
  const excludedFollowUpEvidence=scope==='unresolved'?[{clientId:snapshot.rows[0].clientId,serviceDate:'2026-03-01'}]:[];
- window.fixture={expected:sessionProgression(snapshots,{start,end:'2026-06-30',asOf:'2026-07-01',clinician,classificationSnapshots:sources,excludedFollowUpEvidence}),unchanged:JSON.stringify(sources)===before};
+ window.fixture={expected:sessionProgression(snapshots,{start:cohortStart,end:'2026-06-30',asOf:'2026-07-01',clinician,classificationSnapshots:sources,excludedFollowUpEvidence}),unchanged:JSON.stringify(sources)===before};
  return <main className='pw-app fixture-app' data-material={theme}>
  <div className='fixture-controls' aria-label='Synthetic fixture controls'>
- <label>Fixture scope <select aria-label='Fixture scope' value={scope} onChange={e=>setScope(e.target.value)}>{['practice','Lane','Other','empty','ambiguous','unresolved'].map(s=><option key={s}>{s}</option>)}</select></label>
+ <label>Fixture scope <select aria-label='Fixture scope' value={scope} onChange={e=>setScope(e.target.value)}>{['practice','Lane','Other','empty','ambiguous','unresolved','overall','compare'].map(s=><option key={s}>{s}</option>)}</select></label>
  <label>Fixture theme <select aria-label='Fixture theme' value={theme} onChange={e=>setTheme(e.target.value)}><option>tidal</option><option>dark</option></select></label>
  <label>Cohort start <input aria-label='Fixture cohort start' type='date' value={start} onChange={e=>setStart(e.target.value)} /></label>
  <span>Synthetic data only</span></div>
- <SessionProgressionPanel snapshots={snapshots} classificationSnapshots={sources} excludedFollowUpEvidence={excludedFollowUpEvidence} overrides={{}} start={start} end='2026-06-30' asOf='2026-07-01' clinician={clinician} identityVerified={identityVerified} coverage={coverage}/>
+ <SessionProgressionPanel snapshots={snapshots} classificationSnapshots={sources} excludedFollowUpEvidence={excludedFollowUpEvidence} overrides={{}} start={cohortStart} comparisonMode={scope==='compare'} end='2026-06-30' asOf='2026-07-01' clinician={clinician} identityVerified={identityVerified} coverage={coverage}/>
  </main>;
 }
 createRoot(document.getElementById('root')).render(<App/>);
@@ -83,6 +85,7 @@ await check('session limit changes repeatedly without stale rows',async()=>{for(
 await check('aggregate CSV export works and contains no synthetic client identifiers',async()=>{const event=page.waitForEvent('download');await page.getByRole('button',{name:'Export CSV'}).click();const download=await event;await download.saveAs(path.join(out,'aggregate.csv'));const text=await fs.readFile(path.join(out,'aggregate.csv'),'utf8');assert.match(text,/Mean elapsed days/);assert.doesNotMatch(text,/synthetic-/);});
 await check('clinician selection retains cross-clinician follow-up',async()=>{await page.getByLabel('Fixture scope').selectOption('Lane');await counts();assert.equal(await page.locator('.pw-progression-table tbody tr').nth(7).locator('td').nth(1).innerText(),'2');await page.getByLabel('Fixture scope').selectOption('Other');await counts();assert.equal(await page.locator('.pw-progression-table tbody tr').first().locator('td').first().innerText(),'1');});
 await check('cohort dates select first observation without changing source rows',async()=>{await reset();await page.getByLabel('Fixture cohort start').fill('2026-06-01');await counts();assert.equal(await page.locator('.pw-progression-table tbody tr').first().locator('td').first().innerText(),'1');await reset();});
+await check('Overall labels earliest history and Compare discloses whole-practice cohort',async()=>{await page.getByLabel('Fixture scope').selectOption('overall');await page.getByText(/earliest observed history/).waitFor();await counts();await page.getByLabel('Fixture scope').selectOption('compare');await page.getByText(/Showing the whole-practice cohort/).waitFor();await counts();await reset();});
 await check('empty cohort shows explicit unknowns, not zero percentages',async()=>{await page.getByLabel('Fixture scope').selectOption('empty');await page.getByText(/No eligible clients had/).waitFor();assert.equal(await page.locator('.recharts-line-curve').count(),0);await counts();assert.equal(await page.getByRole('button',{name:'Export CSV'}).isDisabled(),true);await page.screenshot({path:path.join(out,'empty.png'),fullPage:true});});
 await check('ambiguous clinician suppresses metrics rather than showing another cohort',async()=>{await page.getByLabel('Fixture scope').selectOption('ambiguous');await page.getByText(/This clinician name maps to multiple records/).waitFor();assert.equal(await page.getByRole('table').count(),0);});
 await check('unresolved evidence is visible and prevents unsupported lifetime certainty',async()=>{await page.getByLabel('Fixture scope').selectOption('unresolved');await page.getByText(/1 cohort clients have unresolved follow-up evidence/).waitFor();assert.match(await page.locator('.pw-progression-lifetime').innerText(),/not expected eventual lifetime/);});
@@ -90,7 +93,7 @@ await reset();
 await check('keyboard details open and close with focus preserved',async()=>{const summary=page.getByText('How to read this',{exact:true});await summary.focus();await page.keyboard.press('Enter');assert.equal(await summary.evaluate(el=>el.parentElement.open),true);await page.keyboard.press('Enter');assert.equal(await summary.evaluate(el=>el.parentElement.open),false);assert.equal(await summary.evaluate(el=>document.activeElement===el),true);});
 for(const width of [768,390,320]){
  await page.setViewportSize({width,height:900});await page.locator('.pw-progression-chart').waitFor();await page.waitForTimeout(150);
- await check(width+'px no page overflow; bounded table remains scrollable',async()=>{const g=await page.evaluate(()=>({page:document.documentElement.scrollWidth,viewport:innerWidth,table:document.querySelector('.pw-progression-table-scroll').scrollWidth,box:document.querySelector('.pw-progression-table-scroll').clientWidth}));assert.ok(g.page<=g.viewport+1,JSON.stringify(g));if(width<700)assert.ok(g.table>g.box);});
+ await check(width+'px no page overflow; bounded table remains scrollable',async()=>{const g=await page.evaluate(()=>({page:document.documentElement.scrollWidth,viewport:innerWidth,table:document.querySelector('.pw-progression-table-scroll').scrollWidth,box:document.querySelector('.pw-progression-table-scroll').clientWidth}));assert.ok(g.page<=g.viewport+1,JSON.stringify({...g,overflow:await page.evaluate(()=>[...document.querySelectorAll("body *")].filter(el=>el.getBoundingClientRect().right>innerWidth+1).map(el=>({tag:el.tagName,cls:String(el.className),right:el.getBoundingClientRect().right,visibility:getComputedStyle(el).visibility})).slice(0,15))}));if(width<700)assert.ok(g.table>g.box);});
  await page.screenshot({path:path.join(out,width+'-tidal.png'),fullPage:true});
 }
 await page.setViewportSize({width:1280,height:1000});await page.getByLabel('Fixture theme').selectOption('dark');await page.screenshot({path:path.join(out,'desktop-dark.png'),fullPage:true});

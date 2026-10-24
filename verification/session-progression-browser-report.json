@@ -1,0 +1,42 @@
+{
+  "status": "passed",
+  "checks": [
+    "real calculated counts, denominators and unrounded percentage-point display",
+    "line graph uses actual row data with full size and accessible exact-data table",
+    "chart tooltip exposes cohort counts and denominator",
+    "session limit changes repeatedly without stale rows",
+    "aggregate CSV export works and contains no synthetic client identifiers",
+    "clinician selection retains cross-clinician follow-up",
+    "cohort dates select first observation without changing source rows",
+    "Overall labels earliest history and Compare discloses whole-practice cohort",
+    "empty cohort shows explicit unknowns, not zero percentages",
+    "ambiguous clinician suppresses metrics rather than showing another cohort",
+    "unresolved evidence is visible and prevents unsupported lifetime certainty",
+    "keyboard details open and close with focus preserved",
+    "768px no page overflow; bounded table remains scrollable",
+    "390px no page overflow; bounded table remains scrollable",
+    "320px no page overflow; bounded table remains scrollable",
+    "source inputs remain unchanged; no business/API requests"
+  ],
+  "errors": [],
+  "consoleErrors": [],
+  "requests": [
+    {
+      "url": "/",
+      "method": "GET"
+    },
+    {
+      "url": "/styles.css",
+      "method": "GET"
+    },
+    {
+      "url": "/bundle.js",
+      "method": "GET"
+    },
+    {
+      "url": "/favicon.ico",
+      "method": "GET"
+    }
+  ],
+  "scope": "Actual component and domain, synthetic sources; not authenticated production or full-app acceptance"
+}

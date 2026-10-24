@@ -12,3 +12,11 @@
 - Required next step: run `verification/session-progression-render.mjs` in the authorized saved cloud with a supported browser, retain synthetic captures/report, and compare those captures with the original reference before release. Whole-app integration QA is also required.
 
 final result: blocked
+
+## Saved-cloud verification update (2026-10-24)
+
+The earlier renderer blocker is superseded for the isolated actual-component fixture. Chromium rendering completed with 16 passing interaction/layout checks and no console/page errors. Synthetic captures exist at `/tmp/practice-progression-render/` in the verification worker (not the parent filesystem). Mobile and dark-desktop pixels were inspected there. Responsive tooltip overflow and table-scroll reset issues were corrected and the entire harness rerun successfully. See `verification/session-progression-browser-report.json` and the integrated verification section of `verification/SESSION-PROGRESSION-UI.md`.
+
+Reference comparison is still pending with the parent UI worker, who owns the actual reference pixels. The supported Library upload helper failed at hosted-app discovery with a network error before any screenshots/report were saved. No cross-worker screenshot availability is assumed. Full-app integration/release acceptance and publication remain pending.
+
+Current result: isolated rendered QA passed; evidence transfer and independent reference comparison blocked/pending. Not published.
