@@ -140,6 +140,7 @@ import Settings, { SettingsEditor } from "@/components/hub/settings";
 import Updates from "@/components/hub/updates";
 import { type ViewProps, fmt, monthLabel } from "@/components/hub/views";
 import WorkspaceSessions from "@/components/practice/workspace-sessions";
+import { SessionProgressionPanel } from "@/components/practice/session-progression-panel";
 import PercentageKpi from "@/components/practice/percentage-kpi";
 import SectionWidgetGrid from "@/components/practice/section-widget-grid";
 import { sectionLayoutSettingsPatch, type SectionLayoutKey, type SectionWidgetSize } from "@/lib/section-widget-layout";
@@ -4724,6 +4725,19 @@ export default function PracticeWorkspace() {
                         <HistoricalPeriodValues dates="help" periodLabels={{ "3mo": "Last 3 mature months", year: "Last 12 mature months" }} values={historicalValuesFor("attrition", compareWholePractice ? "Whole Practice" : selectedContributorName, compareWholePractice)} difference={historicalDifferenceFor("attrition", compareWholePractice ? "Whole Practice" : selectedContributorName)} />
                         <details><summary>Source and calculation</summary><p>Established treatment relationships need 90 covered days of follow-up. A later return removes the prior ending. Unknown mature coverage stays unknown, not zero. No attrition target or replacement requirement is invented.</p></details>
                       </section>
+                      <div data-widget-id="session-progression" data-widget-title="Session progression & observed lifetime" data-widget-size="wide">
+                        <SessionProgressionPanel
+                          snapshots={historicalClinicalSnapshots}
+                          classificationSnapshots={localRetentionState.snapshots}
+                          excludedFollowUpEvidence={excludedFollowUpEvidence}
+                          overrides={localRetentionState.sameDayVisitOverrides}
+                          start={periodRange.start} end={periodRange.end} asOf={today}
+                          clinician={compareWholePractice || selectedContributorName === "Whole Practice" ? undefined : selectedContributorName}
+                          identityVerified={compareWholePractice || selectedContributorName === "Whole Practice" || hasUniqueClinicianIdentity(context.clinicians, selectedContributorName, workspace.settings.teamId)}
+                          comparisonMode={compareWholePractice}
+                          coverage={completeClinicalReports}
+                        />
+                      </div>
                       <section className="pw-metric-panel pw-consult-summary" data-widget-id="current-consultations" data-widget-title="Selected-period consultations" data-widget-size="wide">
                         <div className="pw-section-heading">
                           <div>

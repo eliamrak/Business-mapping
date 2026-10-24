@@ -1,0 +1,81 @@
+.pw-progression {
+  color: var(--pw-tone-text, #243638);
+  background: var(--pw-tone-panel, #fff);
+  border: 1px solid var(--pw-tone-border, #dce4e5);
+  border-radius: 12px;
+  padding: 28px;
+  min-width: 0;
+  font-variant-numeric: tabular-nums;
+}
+.pw-progression-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 18px; }
+.pw-progression .pw-progression-kicker { display: block; margin-bottom: 8px; color: var(--pw-tone-positive, #276d65); font-size: 11px; font-weight: 650; letter-spacing: .08em; text-transform: uppercase; }
+.pw-progression h3, .pw-app .pw-progression h3 { margin: 0 0 6px; font-size: 23px; font-weight: 600; line-height: 1.25; }
+.pw-progression p { margin: 0; line-height: 1.6; color: var(--pw-tone-text-muted, #59676a); font-size: 13px; }
+.pw-progression-scope { flex-shrink: 0; max-width: 40%; border: 1px solid var(--pw-tone-border, #dce4e5); border-radius: 20px; padding: 7px 12px; color: var(--pw-tone-text-secondary, #3f5457); font-size: 12px; overflow-wrap: anywhere; }
+.pw-progression .pw-progression-context { margin-top: 18px; }
+.pw-progression-context strong { color: var(--pw-tone-text-secondary, #3f5457); font-weight: 500; }
+.pw-progression-overview { display: flex; align-items: center; gap: 28px; padding: 22px 0; }
+.pw-progression-overview > div { flex-shrink: 0; }
+.pw-progression-overview > div > span { display: block; color: var(--pw-tone-text-muted, #59676a); font-size: 12px; margin-bottom: 5px; }
+.pw-progression-overview strong { font-size: 34px; font-weight: 550; line-height: 1.2; }
+.pw-progression-overview strong small { font-size: 14px; font-weight: 400; color: var(--pw-tone-text-muted, #59676a); }
+.pw-progression-overview p { max-width: 500px; padding-left: 24px; border-left: 1px solid var(--pw-tone-border, #dce4e5); }
+.pw-progression-coverage { border-left: 3px solid var(--pw-tone-border-action, #b6ccca); padding: 2px 0 2px 12px; color: var(--pw-tone-text-muted, #59676a); font-size: 12px; line-height: 1.65; }
+.pw-progression-coverage strong { font-weight: 550; color: var(--pw-tone-text-secondary, #3f5457); }
+.pw-progression-figure { margin: 26px 0 24px; }
+.pw-progression-figure figcaption { font-size: 13px; font-weight: 600; margin: 0 0 12px; }
+.pw-progression-chart { height: 260px; min-width: 0; }
+.pw-app .pw-progression-chart svg.recharts-surface { width: 100%; height: 100%; }
+.pw-progression-tooltip { display: grid; gap: 5px; border: 1px solid var(--pw-tone-border, #dce4e5); background: var(--pw-tone-panel, #fff); color: var(--pw-tone-text, #243638); border-radius: 8px; padding: 12px 14px; font-size: 12px; box-shadow: 0 4px 16px #0002; }
+.pw-progression-tooltip strong { font-size: 13px; }
+.pw-progression-data-heading { display: flex; align-items: center; justify-content: space-between; gap: 18px; margin: 26px 0 14px; }
+.pw-progression-data-heading h4 { margin: 0; font-size: 18px; font-weight: 600; }
+.pw-progression-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; }
+.pw-progression-actions label { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--pw-tone-text-muted, #59676a); }
+.pw-progression-actions select { min-height: 40px; border: 1px solid var(--pw-tone-border, #dce4e5); border-radius: 6px; padding: 8px; background: var(--pw-tone-input, #f6f8f8); color: var(--pw-tone-text, #243638); font: inherit; }
+.pw-progression-actions button { display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-height: 40px; padding: 9px 13px; border: 1px solid var(--pw-tone-border, #dce4e5); border-radius: 6px; background: var(--pw-tone-action, #f6f8f8); color: inherit; font: inherit; font-size: 12px; cursor: pointer; }
+.pw-progression-actions button:disabled { cursor: not-allowed; opacity: .55; }
+.pw-progression-actions button svg { width: 16px; height: 16px; }
+.pw-progression-table-scroll { width: 100%; max-width: 100%; overflow-x: auto; overscroll-behavior-x: contain; border-radius: 4px; }
+.pw-progression-table { width: 100%; min-width: 690px; border-collapse: collapse; font-size: 14px; }
+.pw-progression-table th, .pw-progression-table td { padding: 17px 14px; text-align: right; border-bottom: 1px solid var(--pw-tone-border, #e7ecec); white-space: nowrap; }
+.pw-progression-table thead th { padding-top: 14px; padding-bottom: 16px; font-size: 12px; font-weight: 650; color: var(--pw-tone-text-secondary, #3f5457); border-bottom: 3px solid var(--pw-tone-border, #e7ecec); vertical-align: bottom; }
+.pw-progression-table th:first-child { padding-left: 12px; text-align: left; }
+.pw-progression-table thead th:last-child { white-space: normal; width: 26%; }
+.pw-progression-table thead span { display: block; margin-top: 4px; font-size: 11px; font-weight: 400; color: var(--pw-tone-text-muted, #59676a); }
+.pw-progression-table tbody th { font-weight: 400; }
+.pw-progression-table tbody tr:last-child th, .pw-progression-table tbody tr:last-child td { border-bottom: 0; }
+.pw-progression-table tbody tr:hover { background: var(--pw-tone-input, #f6f8f8); }
+.pw-progression .pw-progression-scroll-hint { display: none; font-size: 11px; margin-bottom: 10px; }
+.pw-progression .pw-progression-empty { padding: 28px 0; font-size: 14px; }
+.pw-progression-method { margin-top: 24px; padding-top: 18px; border-top: 1px solid var(--pw-tone-border, #dce4e5); }
+.pw-progression-method summary { cursor: pointer; font-size: 13px; font-weight: 550; }
+.pw-progression-method p { margin-top: 12px; }
+.pw-progression-lifetime { margin-top: 28px; padding-top: 24px; border-top: 1px solid var(--pw-tone-border, #dce4e5); }
+.pw-progression-lifetime > h4 { margin: 0 0 6px; font-size: 18px; font-weight: 600; }
+.pw-progression-lifetime-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; margin-top: 18px; }
+.pw-progression-lifetime-group { min-width: 0; border: 1px solid var(--pw-tone-border, #dce4e5); border-radius: 8px; padding: 18px; }
+.pw-progression-lifetime-group header { display: flex; justify-content: space-between; align-items: start; gap: 12px; margin-bottom: 8px; }
+.pw-progression-lifetime-group h5 { margin: 0; font-size: 14px; font-weight: 600; line-height: 1.4; }
+.pw-progression-lifetime-group header span { flex-shrink: 0; font-size: 12px; line-height: 1.6; color: var(--pw-tone-text-muted, #59676a); }
+.pw-progression-lifetime-group > p { font-size: 12px; }
+.pw-progression-lifetime-group dl { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 20px 14px; margin: 22px 0 18px; }
+.pw-progression-lifetime-group dt { color: var(--pw-tone-text-muted, #59676a); font-size: 11px; margin-bottom: 5px; }
+.pw-progression-lifetime-group dd { margin: 0; font-size: 18px; font-weight: 500; line-height: 1.35; }
+.pw-progression .pw-progression-lifetime-note { margin-top: 14px; font-size: 12px; }
+.pw-progression :is(button, select, summary, [tabindex]):focus-visible { outline: 2px solid var(--pw-tone-positive, #276d65); outline-offset: 3px; }
+@media (max-width: 700px) {
+  .pw-progression { padding: 18px 14px; }
+  .pw-progression-heading { flex-direction: column; gap: 12px; }
+  .pw-progression-scope { max-width: 100%; }
+  .pw-progression h3, .pw-app .pw-progression h3 { font-size: 21px; }
+  .pw-progression-overview { align-items: flex-start; gap: 16px; }
+  .pw-progression-overview p { padding-left: 16px; font-size: 12px; }
+  .pw-progression-overview strong { font-size: 29px; }
+  .pw-progression-overview strong small { display: block; margin-top: 3px; }
+  .pw-progression-chart { height: 235px; }
+  .pw-progression-data-heading { flex-wrap: wrap; gap: 12px; }
+  .pw-progression-actions { width: 100%; justify-content: space-between; gap: 8px; }
+  .pw-progression .pw-progression-scroll-hint { display: block; }
+  .pw-progression-lifetime-grid { grid-template-columns: minmax(0, 1fr); }
+}
