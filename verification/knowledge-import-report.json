@@ -1,0 +1,84 @@
+{
+  "status": "passed",
+  "scope": "Disabled Knowledge importer, synthetic-only domain/browser fixtures and disposable PostgreSQL; no production data/provider/migration/deployment",
+  "base": "0e6e19389d1abcc99c31e3f7e5d0232dba7bbc6f",
+  "checks": {
+    "domainRegression": 1258,
+    "knowledgeFoundationAndPipeline": 19,
+    "disposablePostgres": {
+      "passed": true,
+      "checks": [
+        "composite practice/principal foreign keys for versions and receipts",
+        "approved version immutability",
+        "actual PostgreSQL store concurrent insert and update single winner",
+        "scoped reads and state binding",
+        "whole publication/cache rollback"
+      ]
+    },
+    "typechecks": [
+      "shared libraries",
+      "API",
+      "dashboard"
+    ],
+    "builds": [
+      "API",
+      "dashboard"
+    ],
+    "browser": {
+      "layout": {
+        "status": "passed",
+        "scope": "Isolated real KnowledgeView with synthetic or empty data. No live app/database/provider connection.",
+        "checks": [
+          "empty SOP slot, private audience and disconnected sync are explicit",
+          "all tabs open; planned sources contain no imported content",
+          "tab keyboard navigation wraps and controls focus",
+          "synthetic approved reference displays version and validated plain-text content",
+          "768px layout has no horizontal page overflow",
+          "390px layout has no horizontal page overflow",
+          "320px layout has no horizontal page overflow",
+          "loading and unavailable states with retry never show stale content",
+          "no API/provider/business requests or runtime errors"
+        ],
+        "errors": [],
+        "requests": [
+          "/",
+          "/style.css",
+          "/bundle.js",
+          "/favicon.ico"
+        ]
+      },
+      "session": {
+        "status": "passed",
+        "scope": "Synthetic delayed transport; real KnowledgeReader and React Query; no app/provider/DB connection",
+        "checks": [
+          "delayed owner A response cannot appear in owner B context; abandoned request is cancelled",
+          "owner B sees only its own resolved data",
+          "sign-out hides resolved and delayed private data and disables refetch",
+          "returning owner starts a fresh request without prior account content"
+        ],
+        "errors": [],
+        "requests": [
+          "/",
+          "/style.css",
+          "/bundle.js",
+          "/favicon.ico"
+        ]
+      }
+    }
+  },
+  "visualInspection": [
+    "desktop populated 1280px",
+    "mobile populated 320px",
+    "signed-out late-response state"
+  ],
+  "limitations": [
+    "Session harness intentionally lacks full app global typography; layout harness includes Practice styles.",
+    "Existing dashboard large-chunk build warning. No workspace-wide mobile build claim.",
+    "Independent parent review pending; real provider/read-path integration and backup/restore/live setup gates remain open."
+  ],
+  "evidencePaths": [
+    "/tmp/practice-knowledge-render",
+    "/tmp/practice-knowledge-session",
+    "/tmp/knowledge-storage-final.log"
+  ]
+}

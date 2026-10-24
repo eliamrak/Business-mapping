@@ -45,9 +45,14 @@ export function KnowledgeView({ documents, loading = false, error, retry }: {
 }
 export default function KnowledgePanel() {
   const { userId } = useAuth();
-  const query = useQuery({ queryKey: ["knowledge", "approved", userId], enabled: !!userId, queryFn: async () => knowledgeResponseSchema.parse(await customFetch("/api/knowledge")), retry: false, staleTime: 0, gcTime: 0 });
+  return <KnowledgeReader principalId={userId ?? null} />;
+}
+/** Identity partitions browser cache only; the server independently verifies every request. */
+export function KnowledgeReader({ principalId }: { principalId: string | null }) {
+  const userId = principalId;
+  const query = useQuery({ queryKey: ["knowledge", "approved", userId], enabled: !!userId, queryFn: async ({ signal }) => knowledgeResponseSchema.parse(await customFetch("/api/knowledge", { signal })), retry: false, staleTime: 0, gcTime: 0 });
   const unavailable = query.error instanceof ApiError && query.error.status === 403
     ? "Owner access is required. No resources have been loaded."
     : "The private Knowledge store has not been configured or cannot be reached. No resources have been loaded.";
-  return <KnowledgeView documents={query.isError ? [] : query.data?.resources ?? []} loading={query.isPending} error={query.isError ? unavailable : undefined} retry={() => { void query.refetch(); }} />;
+  return <KnowledgeView documents={!userId || query.isError ? [] : query.data?.resources ?? []} loading={!!userId && query.isPending} error={!userId ? "Sign in as the owner to read Knowledge." : query.isError ? unavailable : undefined} retry={userId ? () => { void query.refetch(); } : undefined} />;
 }

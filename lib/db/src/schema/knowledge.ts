@@ -10,6 +10,7 @@ export const knowledgeResourcesTable = pgTable("knowledge_resources", {
 export const knowledgeVersionsTable = pgTable("knowledge_versions", {
   practiceId: text("practice_id").notNull(), principalId: text("principal_id").notNull(), resourceId: uuid("resource_id").notNull(),
   schemaVersion: integer("schema_version").notNull().default(1), derivedViewVersion: integer("derived_view_version").notNull().default(1),
+  title: text("title").notNull(), category: text("category").notNull(), publicationHash: text("publication_hash").notNull(),
   version: integer("version").notNull(), content: jsonb("content").notNull(), contentHash: text("content_hash").notNull(),
   approval: text("approval").notNull().default("draft"), approvedBy: text("approved_by"), approvedAt: timestamp("approved_at", { withTimezone: true }),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(), source: jsonb("source").notNull(),
@@ -21,3 +22,14 @@ export const knowledgeImportReceiptsTable = pgTable("knowledge_import_receipts",
   status: text("status").notNull(), reason: text("reason").notNull(), receivedAt: timestamp("received_at", { withTimezone: true }).notNull().defaultNow(),
 }, t => [primaryKey({ columns: [t.practiceId, t.principalId, t.id] }),
   foreignKey({ columns: [t.practiceId, t.principalId, t.resourceId], foreignColumns: [knowledgeResourcesTable.practiceId, knowledgeResourcesTable.principalId, knowledgeResourcesTable.id] })]);
+
+export const knowledgeSourceAuthorizationsTable = pgTable("knowledge_source_authorizations", {
+  practiceId: text("practice_id").notNull(), principalId: text("principal_id").notNull(), fileId: text("file_id").notNull(),
+  epoch: integer("epoch").notNull(), state: text("state").notNull().default("unapproved"),
+  approvedBy: text("approved_by"), approvedAt: timestamp("approved_at", { withTimezone: true }),
+}, t => [primaryKey({ columns: [t.practiceId, t.principalId, t.fileId] })]);
+// One generation-checked row is the atomic manifest boundary, including tombstones and projection cache.
+export const knowledgePipelineStatesTable = pgTable("knowledge_pipeline_states", {
+  practiceId: text("practice_id").notNull(), principalId: text("principal_id").notNull(), generation: integer("generation").notNull(),
+  state: jsonb("state").notNull(), updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+}, t => [primaryKey({ columns: [t.practiceId, t.principalId] })]);

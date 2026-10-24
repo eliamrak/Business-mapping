@@ -47,3 +47,7 @@ Foundation source and synthetic checks do not complete the three-source pilot or
 Rendered inspection: desktop empty-state and 390px synthetic-reference screenshots were viewed directly. No clipping or overflow was observed. Nine browser assertions passed, including keyboard tabs, mobile widths, unavailable/retry states and GET-only fixture assets. Report: `verification/knowledge-foundation-browser-report.json`. These are component-level checks, not live deployment or real-source acceptance.
 
 Final foundation gate: 1,258 existing domain regressions passed; four isolated Knowledge contract/service/HTTP security tests passed; nine synthetic browser checks passed. Shared-library, API and dashboard typechecks passed; API and dashboard builds passed (dashboard retains the existing large-chunk warning). No database-backed integration suite or production/live-source verification is claimed.
+
+## Disabled importer extension
+
+The later [import preparation](knowledge-import-pipeline.md) supersedes the initial storage/normalization limitations above: it adds approval-bound display metadata, current source authorization, synthetic manifest processing, a review-only migration and disposable PostgreSQL/browser session tests. None of those changes enables live sync, applies production migrations or completes the pilot. See that document for the remaining backup/restore and authoritative publication integration gates.

@@ -16,14 +16,21 @@ export const knowledgeResourceSchema = knowledgeScopeSchema.extend({
   publishedVersion: z.number().int().positive().nullable().default(null),
   archived: z.boolean().default(false),
 }).strict();
+export const knowledgeSourceAuthorizationSchema = knowledgeScopeSchema.extend({
+  fileId: identifier, epoch: z.number().int().positive(), state: z.enum(["approved", "revoked", "deleted", "unapproved"]),
+  approvedBy: identifier.nullable(), approvedAt: z.iso.datetime().nullable(),
+}).strict().refine(value => value.state === "approved" ? value.approvedBy === value.principalId && value.approvedAt !== null
+  : value.approvedBy === null && value.approvedAt === null, "Current source authority must be explicit");
+export const knowledgePublicationSchema = z.object({ title: plainText.pipe(z.string().max(160)), category: knowledgeCategorySchema, content: knowledgeContentSchema }).strict();
 export const knowledgeVersionSchema = knowledgeScopeSchema.extend({
   resourceId: z.uuid(), schemaVersion: z.literal(1).default(1), derivedViewVersion: z.literal(1).default(1), version: z.number().int().positive(),
+  title: plainText.pipe(z.string().max(160)), category: knowledgeCategorySchema, publicationHash: z.string().regex(/^[a-f0-9]{64}$/),
   content: knowledgeContentSchema, contentHash: z.string().regex(/^[a-f0-9]{64}$/),
   approval: z.enum(["draft", "approved"]).default("draft"),
   approvedBy: identifier.nullable().default(null), approvedAt: z.iso.datetime().nullable().default(null),
   createdAt: z.iso.datetime(),
   // Provenance is an opaque ID, never a URL to fetch. Google is reserved, not connected.
-  source: z.object({ provider: z.enum(["manual", "google-drive"]), fileId: identifier, revision: identifier, approvedForImport: z.boolean().default(false) }).strict(),
+  source: z.object({ provider: z.enum(["manual", "google-drive"]), fileId: identifier, revision: identifier, authorizationEpoch: z.number().int().positive(), approvedForImport: z.boolean().default(false) }).strict(),
 }).strict().superRefine((value, ctx) => {
   if (value.approval === "approved" ? value.approvedBy !== value.principalId || !value.approvedAt : value.approvedBy !== null || value.approvedAt !== null)
     ctx.addIssue({ code: "custom", message: "Approval must explicitly identify the bound owner and timestamp; drafts cannot contain approval metadata." });

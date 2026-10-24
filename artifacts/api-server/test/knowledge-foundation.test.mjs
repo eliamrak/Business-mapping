@@ -13,16 +13,16 @@ const bundle = await build({ stdin: { contents: `export * from './knowledge/serv
     : `export const hubUsersTable={email:'email'}; export const db={select:()=>({from:()=>({where:async()=>[{email:'reader@example.test',role:'data_entry',disabled:0}]})})};` }));
 } }] });
 const compiled={exports:{}}; new Function('module','exports','require',bundle.outputFiles[0].text)(compiled,compiled.exports,require);
-const { createKnowledgeRouter, requireAccess, knowledgeScope, knowledgeContentHash, listKnowledge }=compiled.exports;
+const { createKnowledgeRouter, requireAccess, knowledgeScope, knowledgeContentHash, knowledgePublicationHash, listKnowledge }=compiled.exports;
 const id='10000000-0000-4000-8000-000000000001';
 const scope={practiceId:'practice_test',principalId:'user_owner'};
 const content={blocks:[{kind:'heading',text:'Synthetic resource'},{kind:'paragraph',text:'Fictional reference only.'}]};
-function pair() { return {resource:knowledgeResourceSchema.parse({...scope,id,title:'Synthetic resource',category:'resources',publishedVersion:1}),version:knowledgeVersionSchema.parse({...scope,resourceId:id,version:1,content,contentHash:knowledgeContentHash(content),approval:'approved',approvedBy:scope.principalId,approvedAt:'2026-01-01T00:00:00Z',createdAt:'2026-01-01T00:00:00Z',source:{provider:'manual',fileId:'synthetic',revision:'one',approvedForImport:true}})}; }
+function pair() { return {resource:knowledgeResourceSchema.parse({...scope,id,title:'Synthetic resource',category:'resources',publishedVersion:1}),version:knowledgeVersionSchema.parse({...scope,resourceId:id,version:1,title:'Synthetic resource',category:'resources',publicationHash:knowledgePublicationHash({title:'Synthetic resource',category:'resources',content}),content,contentHash:knowledgeContentHash(content),approval:'approved',approvedBy:scope.principalId,approvedAt:'2026-01-01T00:00:00Z',createdAt:'2026-01-01T00:00:00Z',source:{provider:'manual',fileId:'synthetic',revision:'one',authorizationEpoch:1,approvedForImport:true}}),authorization:{...scope,fileId:'synthetic',epoch:1,state:'approved',approvedBy:scope.principalId,approvedAt:'2026-01-01T00:00:00Z'}}; }
 
 test('contracts default private/draft and reject public, ownership extras, URLs and unsafe content',()=>{
   const resource=knowledgeResourceSchema.parse({...scope,id,title:'Draft',category:'operations'});
   assert.equal(resource.audience,'owner'); assert.equal(resource.publishedVersion,null);
-  const draft=knowledgeVersionSchema.parse({...scope,resourceId:id,version:1,content,contentHash:knowledgeContentHash(content),createdAt:'2026-01-01T00:00:00Z',source:{provider:'manual',fileId:'synthetic',revision:'one'}});
+  const draft=knowledgeVersionSchema.parse({...scope,resourceId:id,version:1,title:'Synthetic resource',category:'resources',publicationHash:knowledgePublicationHash({title:'Synthetic resource',category:'resources',content}),content,contentHash:knowledgeContentHash(content),createdAt:'2026-01-01T00:00:00Z',source:{provider:'manual',fileId:'synthetic',revision:'one',authorizationEpoch:1}});
   assert.equal(draft.source.approvedForImport,false);assert.equal(draft.approval,'draft');assert.equal(draft.approvedBy,null);
   for(const patch of [{audience:'public'},{owner:'another'},{publishedVersion:0}]) assert.equal(knowledgeResourceSchema.safeParse({...resource,...patch}).success,false);
   for(const value of ['<script>alert(1)</script>','<img src=x onerror=alert(1)>','text\u0000']) assert.equal(knowledgeContentSchema.safeParse({blocks:[{kind:'paragraph',text:value}]}).success,false);
@@ -37,7 +37,7 @@ test('contracts default private/draft and reject public, ownership extras, URLs 
 });
 
 test('service double-checks owner/practice, published pointer, approval, content hash and archive state',async()=>{
-  for(const mutate of [row=>row.version.source.approvedForImport=false,row=>row.resource.practiceId='other',row=>row.resource.principalId='other',row=>row.version.principalId='other',row=>row.resource.publishedVersion=null,row=>row.resource.publishedVersion=2,row=>row.resource.archived=true,row=>row.version.approval='draft',row=>row.version.approvedBy='other',row=>row.version.content.blocks[1].text='Tampered',row=>row.version.resourceId='10000000-0000-4000-8000-000000000002']) {
+  for(const mutate of [row=>row.authorization.state='revoked',row=>row.authorization.epoch=2,row=>row.version.title='Unapproved title',row=>row.version.source.approvedForImport=false,row=>row.resource.practiceId='other',row=>row.resource.principalId='other',row=>row.version.principalId='other',row=>row.resource.publishedVersion=null,row=>row.resource.publishedVersion=2,row=>row.resource.archived=true,row=>row.version.approval='draft',row=>row.version.approvedBy='other',row=>row.version.content.blocks[1].text='Tampered',row=>row.version.resourceId='10000000-0000-4000-8000-000000000002']) {
     const row=pair();mutate(row);assert.deepEqual(await listKnowledge({readPublished:async()=>[row]},scope),[]);
   }
   const row=pair();const before=structuredClone(row);const docs=await listKnowledge({readPublished:async received=>{assert.deepEqual(received,scope);return [row];}},scope);
@@ -69,4 +69,15 @@ test('unconfigured store fails closed without returning backend details',async()
   const handler=router.stack[0].route.stack[0].handle;
   const res={locals:{role:'owner',principalId:scope.principalId},statusCode:200,setHeader(){return this},status(n){this.statusCode=n;return this},json(body){this.body=body;return this}};
   await handler({method:'GET',query:{}},res);assert.equal(res.statusCode,503);assert.deepEqual(res.body,{code:'KNOWLEDGE_UNAVAILABLE'});
+});
+
+
+test('draft resource metadata does not change approved version display and one source revocation hides all versions',async()=>{
+  const first=pair(); first.resource.title='Unapproved draft title';first.resource.category='voice';
+  const second=structuredClone(first);second.resource.id='10000000-0000-4000-8000-000000000002';second.version.resourceId=second.resource.id;
+  const rows=[first,second];const repository={readPublished:async()=>rows};
+  const published=await listKnowledge(repository,scope);assert.equal(published.length,2);
+  assert.ok(published.every(row=>row.title==='Synthetic resource'&&row.category==='resources'));
+  rows.forEach(row=>{row.authorization={...row.authorization,state:'revoked',approvedBy:null,approvedAt:null,epoch:2}});
+  assert.deepEqual(await listKnowledge(repository,scope),[]);
 });
