@@ -1,7 +1,7 @@
 import { and, eq } from "drizzle-orm";
 import { db, knowledgePipelineStatesTable as states } from "@workspace/db";
 import type { KnowledgePipelineStore, PipelineState } from "./import-pipeline";
-/** Prepared persistence only; NOT wired to routes, provider adapters, jobs or the live read repository. */
+/** Authoritative atomic publication/read store. Production runtime configuration remains disabled. */
 export const postgresKnowledgePipelineStore: KnowledgePipelineStore = {
   async read(scope) {
     const [row] = await db.select().from(states).where(and(eq(states.practiceId, scope.practiceId), eq(states.principalId, scope.principalId)));

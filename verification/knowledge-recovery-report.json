@@ -1,0 +1,42 @@
+{
+  "status": "passed",
+  "scope": "Two disposable loopback PostgreSQL clusters, synthetic data only",
+  "tables": {
+    "knowledge_resources": 1,
+    "knowledge_versions": 1,
+    "knowledge_import_receipts": 1,
+    "knowledge_source_authorizations": 1,
+    "knowledge_pipeline_states": 2
+  },
+  "checks": [
+    "disabled runtime no database writes",
+    "owner/practice isolation",
+    "real HTTP read router with synthetic server locals: owner read, role/anonymous rejection, no caller scope or writes, disabled empty response",
+    "draft marketing examples remain explicitly labeled",
+    "whole publication activation and failed transaction rollback",
+    "idempotent replay",
+    "runtime withholds network-stale data until successful revalidation",
+    "all five table rows restored exactly",
+    "second owner approved publication remains readable after recovery without leaking revoked first-owner content",
+    "failed restore rolls back all five tables",
+    "revocation/tombstones/cache removal and immutable history survive recovery",
+    "replay cannot resurrect revoked source"
+  ],
+  "dumpSha256": "72c2c89d338f289bc27d4d794f3016d59663e5fc03926545c6c264caf45eb157",
+  "evidence": "/tmp/knowledge-recovery-evidence-YAnOK4",
+  "base": "7d5e77a6db5481355558d81ed433113f165c5f3b",
+  "validation": {
+    "domainRegression": 1258,
+    "knowledgeServicePipelineTests": 20,
+    "disposableStorageRecoverySuites": 2,
+    "apiTypecheck": "passed",
+    "apiBuild": "passed",
+    "independentReview": "pending"
+  },
+  "remainingGates": [
+    "Actual SOP and source-access/publication approval; actual pilot remains private draft and retrieval disabled",
+    "Explicit Viewer-only identity/allowlist setup and provider adapter; no owner token copying",
+    "Reviewed server configuration wiring; production schema/recovery drill/cutover approval",
+    "Operational retention and size limits; real-source rendering/isolation verification"
+  ]
+}

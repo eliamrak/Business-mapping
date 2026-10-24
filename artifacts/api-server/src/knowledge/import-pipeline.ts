@@ -1,3 +1,4 @@
+import { isDeepStrictEqual } from "node:util";
 import { createHash } from "node:crypto";
 import { knowledgeContentSchema, type KnowledgeScope } from "@workspace/practice/knowledge";
 import { KnowledgeError, knowledgeScope, knowledgeContentHash } from "./service";
@@ -84,16 +85,16 @@ export function projectMaster(input: unknown): Projection {
 function validBundle(bundle: Bundle, scope: KnowledgeScope, config: PipelineConfig, state: PipelineState) {
   const manifest = manifestSchema.parse(JSON.parse(bundle.manifestBytes));
   if (!sameScope(manifest, scope) || sourceHash(bundle.manifestBytes) !== bundle.manifestHash || config.approvedManifestHash !== bundle.manifestHash ||
-    JSON.stringify(manifest) !== JSON.stringify(bundle.manifest) || bundle.resources.length !== manifest.entries.length) fail("KNOWLEDGE_INVALID_BUNDLE");
+    !isDeepStrictEqual(manifest, bundle.manifest) || bundle.resources.length !== manifest.entries.length) fail("KNOWLEDGE_INVALID_BUNDLE");
   for (const entry of manifest.entries) {
     const item = bundle.resources.find(resource => resource.master.resourceId === entry.resourceId);
     const grant = allowed(config, entry.resourceId, entry.fileId);
-    if (!item || !grant || JSON.stringify(grant) !== JSON.stringify(item.grant)) fail("KNOWLEDGE_SOURCE_NOT_APPROVED");
+    if (!item || !grant || !isDeepStrictEqual(grant, item.grant)) fail("KNOWLEDGE_SOURCE_NOT_APPROVED");
     const master = semanticMasterSchema.parse(JSON.parse(item.masterBytes));
     const prior = state.active[entry.resourceId]; const revoked = state.tombstones[entry.resourceId];
     if (!sameScope(master, scope) || master.resourceId !== entry.resourceId || master.version !== entry.version || master.approval !== "approved" ||
       item.fileId !== entry.fileId || item.sourceRevision !== entry.sourceRevision || sourceHash(item.masterBytes) !== entry.masterHash ||
-      item.masterHash !== entry.masterHash || JSON.stringify(master) !== JSON.stringify(item.master) ||
+      item.masterHash !== entry.masterHash || !isDeepStrictEqual(master, item.master) ||
       knowledgeContentHash(projectMaster(master)) !== item.projectionHash || knowledgeContentHash(item.projection) !== item.projectionHash)
       fail("KNOWLEDGE_CONTENT_MISMATCH");
     if (revoked && (grant.approvalEpoch <= revoked.approvalEpoch || master.version <= revoked.blockedVersion)) fail("KNOWLEDGE_REAPPROVAL_REQUIRED");
@@ -206,12 +207,13 @@ export async function readPipelineKnowledge(context: ImportContext, configInput:
       retained.bytes !== item.masterBytes || sourceHash(retained.bytes) !== entry.masterHash) return [];
     let rawMaster: SemanticMaster;
     try { rawMaster = semanticMasterSchema.parse(JSON.parse(item.masterBytes)); } catch { return []; }
-    if (JSON.stringify(rawMaster) !== JSON.stringify(parsed.data)) return [];
+    if (!isDeepStrictEqual(rawMaster, parsed.data)) return [];
     const grant = allowed(config, item.master.resourceId, item.fileId); const source = state.sources[item.fileId];
-    if (!grant || JSON.stringify(grant) !== JSON.stringify(item.grant) || state.tombstones[item.master.resourceId] || !source || source.status === "tombstoned" ||
+    if (!grant || !isDeepStrictEqual(grant, item.grant) || state.tombstones[item.master.resourceId] || !source || source.status === "tombstoned" ||
       !sameScope(item.master, scope) || item.master.approval !== "approved" || item.master.approvedBy !== scope.principalId ||
       sourceHash(item.masterBytes) !== item.masterHash || knowledgeContentHash(projectMaster(item.master)) !== item.projectionHash) return [];
-    return [{ resourceId: item.master.resourceId, title: item.master.title, version: item.master.version,
+    return [{ resourceId: item.master.resourceId, title: item.master.title, category: item.master.category, version: item.master.version,
+      approvedAt: item.master.approvedAt!, contentHash: item.projectionHash,
       projection: projectMaster(item.master), stale: source.status === "stale", lastPermissionCheckAt: source.lastVerifiedAt }];
   });
 }

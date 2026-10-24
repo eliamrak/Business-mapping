@@ -44,3 +44,7 @@ The storage test explicitly skips without the native binaries; a skip is not sto
 - Review migration against the actual deployed schema, privileges and recovery plan. Existing financial backups exclude Knowledge. **Add all five Knowledge tables and immutable master/source-authority state to backup/export and demonstrate restore on disposable storage before any real writes.** Set retention/size limits for histories, receipts and tombstones without resurrecting revoked data.
 - Wire one authoritative atomic publication/read path; add real-adapter permission-change handling, bounded stale-read policy, audit/operational recovery and revocation invalidation across any future shared caches. No live scheduler or sharing is enabled here.
 - Independent review, approved migration/deployment, and real-source owner-isolation/render verification remain separate gates. No production-ready, live-import or deployment claim is made.
+
+## Authoritative runtime/recovery follow-up
+
+The later [storage rollout and recovery runbook](knowledge-storage-rollout.md) supersedes the earlier unwired-read-path limitation: the route now uses the same atomic pipeline store through a server-only configuration capability that remains `null` (disabled). No legacy-reader fallback or dual write exists. Synthetic PostgreSQL recovery now covers all five tables and transactional restore failure. The production recovery, provider/configuration, source approval and external-access gates remain open.
