@@ -16,7 +16,7 @@ export type PreparedResource = { fileId: string; sourceRevision: string; masterB
 export type Bundle = { verifiedAt: string; manifestBytes: string; manifest: Manifest; manifestHash: string; resources: PreparedResource[] };
 type SourceState = { resourceId: string; status: "available" | "stale" | "tombstoned"; checkedAt: string; lastVerifiedAt: string | null; approvalEpoch: number; reason?: string };
 export type PipelineState = KnowledgeScope & {
-  generation: number; activeRevision: number; activeManifestHash: string | null; staged: Bundle | null;
+  generation: number; activeRevision: number; activeManifestHash: string | null; activeManifestBytes: string | null; staged: Bundle | null;
   active: Record<string, PreparedResource>; masters: Record<string, { bytes: string; hash: string }>;
   sources: Record<string, SourceState>; tombstones: Record<string, { approvalEpoch: number; blockedVersion: number; reason: string }>;
   /** Owner-scoped projection cache; atomically evicted with active pointers. No embeddings/AI. */
@@ -28,7 +28,7 @@ export interface KnowledgePipelineStore {
   read(scope: KnowledgeScope): Promise<PipelineState | null>;
   compareAndSwap(scope: KnowledgeScope, expectedGeneration: number, next: PipelineState): Promise<boolean>;
 }
-const blank = (scope: KnowledgeScope): PipelineState => ({ ...scope, generation: 0, activeRevision: 0, activeManifestHash: null,
+const blank = (scope: KnowledgeScope): PipelineState => ({ ...scope, generation: 0, activeRevision: 0, activeManifestHash: null, activeManifestBytes: null,
   staged: null, active: {}, masters: {}, sources: {}, tombstones: {}, cache: {}, receipts: [] });
 function fail(code: string): never { throw new KnowledgeError(409, code); }
 function bind(context: ImportContext, input: unknown) {
@@ -182,7 +182,7 @@ export async function activateKnowledgeBundle(context: ImportContext, configInpu
     state.sources[item.fileId] = { resourceId: id, status: "available", checkedAt: bundle.verifiedAt, lastVerifiedAt: bundle.verifiedAt, approvalEpoch: item.grant.approvalEpoch };
     delete state.tombstones[id];
   }
-  state.active = active; state.cache = cache; state.activeRevision = bundle.manifest.revision; state.activeManifestHash = bundle.manifestHash; state.staged = null;
+  state.active = active; state.cache = cache; state.activeRevision = bundle.manifest.revision; state.activeManifestHash = bundle.manifestHash; state.activeManifestBytes = bundle.manifestBytes; state.staged = null;
   receipt(state, bundle.manifestHash, "activated", "atomic-manifest", at); await save(store, scope, state);
   return { status: "activated" as const };
 }
@@ -191,10 +191,19 @@ export async function readPipelineKnowledge(context: ImportContext, configInput:
   const { config, scope } = bind(context, configInput);
   if (!config.enabled) return [];
   const state = await load(store, scope);
-  if (state.activeManifestHash !== config.approvedManifestHash) return [];
-  return Object.values(state.active).flatMap(item => {
+  if (!state.activeManifestBytes || !config.approvedManifestHash || state.activeManifestHash !== config.approvedManifestHash ||
+    sourceHash(state.activeManifestBytes) !== config.approvedManifestHash) return [];
+  let manifest: Manifest;
+  try { manifest = manifestSchema.parse(JSON.parse(state.activeManifestBytes)); } catch { return []; }
+  if (!sameScope(manifest, scope) || manifest.revision !== state.activeRevision) return [];
+  return Object.entries(state.active).flatMap(([resourceId, item]) => {
     const parsed = semanticMasterSchema.safeParse(item.master);
-    if (!parsed.success) return [];
+    if (!parsed.success || parsed.data.resourceId !== resourceId) return [];
+    const entry = manifest.entries.find(value => value.resourceId === resourceId);
+    const retained = state.masters[`${resourceId}:${parsed.data.version}`];
+    if (!entry || entry.version !== parsed.data.version || entry.fileId !== item.fileId || entry.sourceRevision !== item.sourceRevision ||
+      entry.masterHash !== item.masterHash || !retained || retained.hash !== entry.masterHash ||
+      retained.bytes !== item.masterBytes || sourceHash(retained.bytes) !== entry.masterHash) return [];
     let rawMaster: SemanticMaster;
     try { rawMaster = semanticMasterSchema.parse(JSON.parse(item.masterBytes)); } catch { return []; }
     if (JSON.stringify(rawMaster) !== JSON.stringify(parsed.data)) return [];

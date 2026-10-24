@@ -4,7 +4,7 @@
   "base": "0e6e19389d1abcc99c31e3f7e5d0232dba7bbc6f",
   "checks": {
     "domainRegression": 1258,
-    "knowledgeFoundationAndPipeline": 19,
+    "knowledgeFoundationAndPipeline": 20,
     "disposablePostgres": {
       "passed": true,
       "checks": [
@@ -80,5 +80,28 @@
     "/tmp/practice-knowledge-render",
     "/tmp/practice-knowledge-session",
     "/tmp/knowledge-storage-final.log"
-  ]
+  ],
+  "integrityFollowup": {
+    "base": "8c3595e1cbbab52b489057602dd87b3c2443bf54",
+    "status": "passed; independent review of follow-up pending",
+    "changes": [
+      "Retain active manifest bytes and verify against server-approved pin on every read",
+      "Bind each returned resource/file/revision/version/hash to exact manifest entry and immutable retained master bytes",
+      "Require expected JSON binding types and CHECK predicate IS TRUE"
+    ],
+    "regressions": [
+      "Self-consistent active title/body/bytes/hash/projection replacement withheld",
+      "Replacing retained history and manifest together cannot bypass unchanged config pin",
+      "Missing or tampered manifest/history, wrong revision/file/map key withheld; valid original still readable",
+      "Engine-reproduced original all-null and three individually-null bindings; corrected SQLSTATE 23514 for all plus missing/type errors"
+    ],
+    "rerun": [
+      "1258 domain regressions",
+      "20 Knowledge tests",
+      "disposable PostgreSQL FK/isolation/concurrent CAS/rollback including null binding regressions",
+      "API typecheck",
+      "API build"
+    ],
+    "unchangedEvidence": "Earlier browser captures and dashboard/library checks remain applicable; no UI or shared contracts changed in this follow-up."
+  }
 }

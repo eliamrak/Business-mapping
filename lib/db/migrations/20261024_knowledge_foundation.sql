@@ -38,10 +38,17 @@ CREATE TABLE IF NOT EXISTS knowledge_source_authorizations (
 CREATE TABLE IF NOT EXISTS knowledge_pipeline_states (
  practice_id text NOT NULL, principal_id text NOT NULL, generation integer NOT NULL CHECK(generation>0),
  state jsonb NOT NULL, updated_at timestamptz NOT NULL DEFAULT now(),
- PRIMARY KEY(practice_id,principal_id),
- CHECK (state ?& ARRAY['practiceId','principalId','generation'] AND state->>'practiceId'=practice_id
- AND state->>'principalId'=principal_id AND (state->>'generation')::integer=generation)
+ PRIMARY KEY(practice_id,principal_id)
 );
+-- CHECK accepts SQL NULL unless the whole predicate is explicitly required to be true.
+-- JSON comparison avoids casts accepting numeric strings or throwing before the CHECK.
+ALTER TABLE knowledge_pipeline_states DROP CONSTRAINT IF EXISTS knowledge_pipeline_state_binding;
+ALTER TABLE knowledge_pipeline_states ADD CONSTRAINT knowledge_pipeline_state_binding CHECK ((
+ jsonb_typeof(state)='object' AND jsonb_typeof(state->'practiceId')='string'
+ AND jsonb_typeof(state->'principalId')='string' AND jsonb_typeof(state->'generation')='number'
+ AND state->>'practiceId'=practice_id AND state->>'principalId'=principal_id
+ AND state->'generation'=to_jsonb(generation)
+) IS TRUE);
 CREATE OR REPLACE FUNCTION knowledge_guard_version() RETURNS trigger LANGUAGE plpgsql AS $$
 BEGIN
  IF TG_OP<>'INSERT' AND OLD.approval='approved' THEN

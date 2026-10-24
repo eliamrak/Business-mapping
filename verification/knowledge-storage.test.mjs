@@ -17,6 +17,10 @@ test('Knowledge additive migration: scoped FKs, immutable publication, concurren
  try {
   await fixture.start(true); pool=new Pool({connectionString:fixture.connectionString});
   await pool.query(await fs.readFile(new URL('../lib/db/migrations/20261024_knowledge_foundation.sql',import.meta.url),'utf8'));
+  const validBinding={practiceId:'synthetic_p',principalId:'synthetic_a',generation:1};
+  for(const invalid of [{practiceId:null,principalId:null,generation:null},...Object.keys(validBinding).map(key=>({...validBinding,[key]:null})),{},[],{...validBinding,generation:'1'},{...validBinding,generation:1.5},{...validBinding,practiceId:1},{...validBinding,principalId:[]}]) {
+   await assert.rejects(pool.query("INSERT INTO knowledge_pipeline_states(practice_id,principal_id,generation,state) VALUES('synthetic_p','synthetic_a',1,$1)",[JSON.stringify(invalid)]),e=>e.code==='23514');
+  }
   const id='10000000-0000-4000-8000-000000000001';
   await pool.query("INSERT INTO knowledge_resources(practice_id,principal_id,id,title,category) VALUES('synthetic_p','synthetic_a',$1,'Fixture','resources')",[id]);
   const insert=`INSERT INTO knowledge_versions(practice_id,principal_id,resource_id,version,content,content_hash,source,title,category,publication_hash,approval,approved_by,approved_at) VALUES($1,$2,$3,1,'{}',$4,'{}','Fixture','resources',$4,'approved',$2,now())`;

@@ -115,3 +115,23 @@ test('activation rejects expired stages and preserves the actual source verifica
  await assert.rejects(activate(context,f.config,f.store,later),/KNOWLEDGE_STAGE_EXPIRED/);assert.deepEqual(f.store.state.active,{});
  await activate(context,f.config,f.store,'2026-01-01T00:01:00Z');assert.equal((await read(context,f.config,f.store))[0].lastPermissionCheckAt,at);
 });
+
+test('retrieval anchors self-consistent active corruption to pinned manifest and immutable master bytes',async()=>{
+ const f=fixture();f.sources.splice(1);f.config.sources=f.sources;f.manifest.entries.splice(1);f.pin();await publish(f);
+ assert.equal(f.store.state.activeManifestBytes,f.bytes);
+ const original=structuredClone(f.store.state);const item=f.store.state.active[resourceIds[0]];
+ item.master.title='Unapproved replacement';item.master.semantic.nodes[0].description='Unapproved body';
+ item.masterBytes=JSON.stringify(item.master);item.masterHash=sourceHash(item.masterBytes);
+ item.projection=projectMaster(item.master);item.projectionHash=sourceHash(JSON.stringify(item.projection));
+ assert.deepEqual(await read(context,f.config,f.store),[]);
+ // Even replacing retained history cannot replace the externally pinned manifest authority.
+ f.store.state.masters[resourceIds[0]+':1']={bytes:item.masterBytes,hash:item.masterHash};
+ assert.deepEqual(await read(context,f.config,f.store),[]);
+ const corruptManifest=JSON.parse(f.store.state.activeManifestBytes);corruptManifest.entries[0].masterHash=item.masterHash;
+ f.store.state.activeManifestBytes=JSON.stringify(corruptManifest);f.store.state.activeManifestHash=sourceHash(f.store.state.activeManifestBytes);
+ assert.deepEqual(await read(context,f.config,f.store),[]);
+ for(const mutate of [s=>delete s.activeManifestBytes,s=>s.activeManifestBytes+=' ',s=>s.activeRevision++,s=>delete s.masters[resourceIds[0]+':1'],s=>s.masters[resourceIds[0]+':1'].bytes+=' ',s=>s.active[resourceIds[0]].sourceRevision='wrong',s=>s.active[resourceIds[0]].fileId='wrong',s=>{s.active[resourceIds[1]]=s.active[resourceIds[0]];delete s.active[resourceIds[0]]}]){
+  f.store.state=structuredClone(original);mutate(f.store.state);assert.deepEqual(await read(context,f.config,f.store),[]);
+ }
+ f.store.state=original;assert.equal((await read(context,f.config,f.store)).length,1);
+});
