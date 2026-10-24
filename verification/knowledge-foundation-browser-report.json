@@ -1,0 +1,22 @@
+{
+  "status": "passed",
+  "scope": "Isolated real KnowledgeView with synthetic or empty data. No live app/database/provider connection.",
+  "checks": [
+    "empty SOP slot, private audience and disconnected sync are explicit",
+    "all tabs open; planned sources contain no imported content",
+    "tab keyboard navigation wraps and controls focus",
+    "synthetic approved reference displays version and validated plain-text content",
+    "768px layout has no horizontal page overflow",
+    "390px layout has no horizontal page overflow",
+    "320px layout has no horizontal page overflow",
+    "loading and unavailable states with retry never show stale content",
+    "no API/provider/business requests or runtime errors"
+  ],
+  "errors": [],
+  "requests": [
+    "/",
+    "/style.css",
+    "/bundle.js",
+    "/favicon.ico"
+  ]
+}

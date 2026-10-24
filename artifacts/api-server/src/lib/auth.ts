@@ -87,6 +87,7 @@ export const requireAccess: RequestHandler = async (req, res, next) => {
       });
   }
   res.locals.actor = actor;
+  res.locals.principalId = auth.userId;
   res.locals.role = role;
   if (
     role !== "owner" &&

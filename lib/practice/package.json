@@ -3,6 +3,6 @@
   "version": "0.0.0",
   "private": true,
   "type": "module",
-  "exports": { ".": "./src/index.ts", "./hub": "./src/hub/index.ts", "./compensation": "./src/compensation.ts" },
+  "exports": { ".": "./src/index.ts", "./hub": "./src/hub/index.ts", "./compensation": "./src/compensation.ts", "./knowledge": "./src/knowledge.ts" },
   "dependencies": { "zod": "catalog:" }
 }

@@ -140,6 +140,7 @@ import Settings, { SettingsEditor } from "@/components/hub/settings";
 import Updates from "@/components/hub/updates";
 import { type ViewProps, fmt, monthLabel } from "@/components/hub/views";
 import WorkspaceSessions from "@/components/practice/workspace-sessions";
+import KnowledgePanel from "@/components/knowledge/knowledge-panel";
 import { SessionProgressionPanel } from "@/components/practice/session-progression-panel";
 import PercentageKpi from "@/components/practice/percentage-kpi";
 import SectionWidgetGrid from "@/components/practice/section-widget-grid";
@@ -255,7 +256,8 @@ type Section =
   | "summary"
   | "current-goals"
   | "settings"
-  | "documents";
+  | "documents"
+  | "knowledge";
 type SharedPeriod =
   | "30d"
   | "60d"
@@ -281,6 +283,7 @@ const sections: { id: Section; label: string; active?: Section[] }[] = [
   { id: "money", label: "Money" },
   { id: "marketing", label: "Growth", active: ["marketing", "rooms"] },
   { id: "current-goals", label: "Goals" },
+  { id: "knowledge", label: "Knowledge" },
 ];
 const sharedPeriodOptions: { id: SharedPeriod; label: string }[] = [
   { id: "30d", label: "30 days" },
@@ -8222,6 +8225,7 @@ export default function PracticeWorkspace() {
                   </a>
                 </>
               )}
+              {section === "knowledge" && !sandbox && <KnowledgePanel />}
               {section === "documents" && !sandbox && (
                 <>
                   <button

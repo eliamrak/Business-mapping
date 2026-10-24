@@ -10,9 +10,12 @@ import hubRouter from "./hub";
 import practiceImportsRouter from "./practiceImports";
 import backupRouter from "./backup";
 
+import knowledgeRouter from "./knowledge";
+
 const router: IRouter = Router();
 
 router.use(healthRouter);
+router.use(knowledgeRouter);
 router.use(businessGoalsRouter);
 router.use(currentRealityRouter);
 router.use(cliniciansRouter);

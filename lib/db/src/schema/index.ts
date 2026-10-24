@@ -8,3 +8,4 @@ export * from "./scenarioStaffMembers";
 export * from "./sessionRecords";
 export * from "./sessionGoalYears";
 export * from "./hub";
+export * from "./knowledge";
