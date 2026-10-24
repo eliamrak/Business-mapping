@@ -17,6 +17,8 @@ export type PreparedResource = { fileId: string; sourceRevision: string; masterB
 export type Bundle = { verifiedAt: string; manifestBytes: string; manifest: Manifest; manifestHash: string; resources: PreparedResource[] };
 type SourceState = { resourceId: string; status: "available" | "stale" | "tombstoned"; checkedAt: string; lastVerifiedAt: string | null; approvalEpoch: number; reason?: string };
 export type PipelineState = KnowledgeScope & {
+  publication?: { policyVersion: string; policyHash: string; approvedBy: string; approvedAt: string; revision: number; manifestHash: string;
+    requests: Record<string, { digest: string; revision: number; manifestHash: string }> };
   generation: number; activeRevision: number; activeManifestHash: string | null; activeManifestBytes: string | null; staged: Bundle | null;
   active: Record<string, PreparedResource>; masters: Record<string, { bytes: string; hash: string }>;
   sources: Record<string, SourceState>; tombstones: Record<string, { approvalEpoch: number; blockedVersion: number; reason: string }>;
@@ -213,7 +215,7 @@ export async function readPipelineKnowledge(context: ImportContext, configInput:
       !sameScope(item.master, scope) || item.master.approval !== "approved" || item.master.approvedBy !== scope.principalId ||
       sourceHash(item.masterBytes) !== item.masterHash || knowledgeContentHash(projectMaster(item.master)) !== item.projectionHash) return [];
     return [{ resourceId: item.master.resourceId, title: item.master.title, category: item.master.category, version: item.master.version,
-      approvedAt: item.master.approvedAt!, contentHash: item.projectionHash,
+      approvedAt: manifest.approvedAt, contentHash: item.projectionHash,
       projection: projectMaster(item.master), stale: source.status === "stale", lastPermissionCheckAt: source.lastVerifiedAt }];
   });
 }

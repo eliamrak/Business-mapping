@@ -76,3 +76,7 @@ Those connector/transaction tests are **future acceptance requirements**, not cl
 - Resolve the authority-policy decision above without automatically requesting broader access; select an explicit freshness SLA and operational revalidation mechanism.
 - Authorize/design the authenticated publication connector so ordinary chat edits advance approved releases automatically, with no user-managed pin changes.
 - Complete independent review, protected configuration wiring, production recovery/migration review and separately approved live validation/deployment. Current code remains disabled until these gates are satisfied.
+
+## App-side publication bridge follow-up
+
+The later [disabled owner publication bridge](knowledge-publication-bridge.md) implements the app-side approval/pin/content CAS and idempotency requirements described above, with owner-authenticated synthetic HTTP and PostgreSQL recovery tests. That supersedes only the app-side protocol implementation gap. A supported authenticated dot connection, actual source/provider composition, identity/access setup and live enablement are still pending; no user-managed per-edit environment pin is the intended workflow.

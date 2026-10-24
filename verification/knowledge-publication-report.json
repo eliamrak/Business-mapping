@@ -1,0 +1,52 @@
+{
+  "base": "e1d4fd8fefa1cbc583a3307c3b8a6c66cc68e4c9",
+  "status": "passed; independent review pending",
+  "scope": "Disabled owner publication bridge, synthetic Clerk/provider fixtures and disposable PostgreSQL only",
+  "tests": {
+    "knowledge": 46,
+    "publicationBridge": 9,
+    "domainRegressions": 1258,
+    "disposablePostgresSuites": 2,
+    "apiTypecheck": "passed",
+    "apiBuild": "passed"
+  },
+  "atomicBoundary": "One generation-checked knowledge_pipeline_states write contains approval policy/hash, pin, manifest, active data, immutable masters, cache and idempotency receipts",
+  "productionEndpoint": "POST /api/knowledge/releases remains null-bridge 503 after owner authorization; no provider/mock fallback",
+  "recovery": {
+    "status": "passed",
+    "scope": "Two disposable loopback PostgreSQL clusters, synthetic data only",
+    "tables": {
+      "knowledge_resources": 1,
+      "knowledge_versions": 1,
+      "knowledge_import_receipts": 1,
+      "knowledge_source_authorizations": 1,
+      "knowledge_pipeline_states": 3
+    },
+    "checks": [
+      "disabled runtime no database writes",
+      "owner/practice isolation",
+      "real HTTP read router with synthetic server locals: owner read, role/anonymous rejection, no caller scope or writes, disabled empty response",
+      "draft marketing examples remain explicitly labeled",
+      "whole publication activation and failed transaction rollback",
+      "idempotent replay",
+      "explicit freshness lease required; expiry/future/missing/invalid-clock reads withheld and revalidation restores access",
+      "runtime withholds network-stale data until successful revalidation",
+      "all five table rows restored exactly",
+      "owner bridge approval/pin/content transaction rollback and exact recovery; idempotent request survives restore",
+      "second owner approved publication remains readable after recovery without leaking revoked first-owner content",
+      "failed restore rolls back all five tables",
+      "revocation/tombstones/cache removal and immutable history survive recovery",
+      "replay cannot resurrect revoked source"
+    ],
+    "dumpSha256": "4fb19d7f1f173ee316b04cb17ce71726b10b7abe1e8bb80b131899db3ae1841c",
+    "evidence": "/tmp/knowledge-recovery-evidence-5Ld9Vt"
+  },
+  "remainingGates": [
+    "Independent review",
+    "Supported separately approved dot-to-app publishing authentication/connection; no credential/cookie reuse",
+    "Actual registered source/SOP approval, Google identity/project/provider and authority policy setup",
+    "Concrete source reader composition from approved candidate constraints under fixed policy",
+    "Reviewed policy reconciliation, retention and production recovery/migration/deployment"
+  ],
+  "docs": "docs/knowledge-publication-bridge.md"
+}

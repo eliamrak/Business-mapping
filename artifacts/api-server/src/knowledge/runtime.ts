@@ -1,3 +1,4 @@
+import { publicationPolicyHash } from "./publication-policy";
 import type { KnowledgeDocument, KnowledgeScope } from "@workspace/practice/knowledge";
 import { pipelineConfigSchema } from "./import-contracts";
 import { activateKnowledgeBundle, readPipelineKnowledge, stageKnowledgeBundle, type ImportContext, type KnowledgePipelineStore, type KnowledgeSourceAdapter } from "./import-pipeline";
@@ -21,7 +22,16 @@ export function createKnowledgeRuntime(store: KnowledgePipelineStore, configurat
       authorize(scope, context);
       const settings = config(scope);
       if (!settings.enabled || settings.permissionMaxAgeMs === null) return [];
-      const documents = await readPipelineKnowledge(context, settings, store);
+      let readStore = store;
+      if (settings.publicationMode === "owner-bridge") {
+        const snapshot = await store.read(scope), approval = snapshot?.publication;
+        if (!snapshot || !approval || !settings.publicationPolicyVersion || approval.policyVersion !== settings.publicationPolicyVersion || approval.policyHash !== publicationPolicyHash(settings) ||
+          approval.approvedBy !== scope.principalId || approval.revision !== snapshot.activeRevision || approval.manifestHash !== snapshot.activeManifestHash) return [];
+        settings.approvedManifestHash = approval.manifestHash;
+        // Approval pin and publication are read from one atomic snapshot, never separate stores/config updates.
+        readStore = { read: async () => structuredClone(snapshot), compareAndSwap: async () => { throw new Error("Read-only snapshot"); } };
+      }
+      const documents = await readPipelineKnowledge(context, settings, readStore);
       // Evaluate at response time, after potentially delayed storage I/O.
       const checkedNow = now();
       if (!Number.isFinite(checkedNow)) return [];
@@ -36,11 +46,15 @@ export function createKnowledgeRuntime(store: KnowledgePipelineStore, configurat
     // Internal runner only: no import/activation HTTP endpoints or provider implementation.
     async stage(scope: KnowledgeScope, context: ImportContext, manifest: string, adapter: KnowledgeSourceAdapter, at: string) {
       authorize(scope, context);
-      return stageKnowledgeBundle(context, config(scope), manifest, adapter, store, at);
+      const settings = config(scope);
+      if (settings.publicationMode === "owner-bridge") throw new KnowledgeError(403, "KNOWLEDGE_USE_PUBLICATION_BRIDGE");
+      return stageKnowledgeBundle(context, settings, manifest, adapter, store, at);
     },
     async activate(scope: KnowledgeScope, context: ImportContext, at: string) {
       authorize(scope, context);
-      return activateKnowledgeBundle(context, config(scope), store, at);
+      const settings = config(scope);
+      if (settings.publicationMode === "owner-bridge") throw new KnowledgeError(403, "KNOWLEDGE_USE_PUBLICATION_BRIDGE");
+      return activateKnowledgeBundle(context, settings, store, at);
     },
   };
 }

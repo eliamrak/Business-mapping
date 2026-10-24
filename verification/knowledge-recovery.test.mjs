@@ -87,6 +87,21 @@ test('authoritative runtime publishes transactionally and all five Knowledge tab
   const otherFixture=fixture(1,otherScope),otherRuntime=createKnowledgeRuntime(sourceStore,()=>otherFixture.config);
   await otherRuntime.stage(otherScope,otherContext,otherFixture.manifest,otherFixture.adapter,at);await otherRuntime.activate(otherScope,otherContext,at);
   const otherBefore=await otherRuntime.read(otherScope,otherContext);assert.equal(otherBefore.length,1);
+  // Owner publication bridge uses the SAME atomic state; approval/pin must recover with content.
+  const {createKnowledgePublicationBridge}=await compile('../artifacts/api-server/src/knowledge/publication.ts');
+  const bridgeScope={...scope,principalId:'synthetic_bridge_owner'},bridgeContext={role:'owner',principalId:bridgeScope.principalId};
+  let bridgeFixture=fixture(1,bridgeScope);
+  const bridgeConfig={...bridgeFixture.config,approvedManifestHash:null,publicationMode:'owner-bridge',publicationPolicyVersion:'synthetic_policy_1'};
+  const bridgeAdapter={readFile:id=>bridgeFixture.adapter.readFile(id)};
+  const bridge=createKnowledgePublicationBridge(sourceStore,()=>bridgeConfig,bridgeAdapter,()=>readClock);
+  const bridgeRuntime=createKnowledgeRuntime(sourceStore,()=>bridgeConfig);
+  const release={requestId:randomUUID(),expectedRevision:0,entries:JSON.parse(bridgeFixture.manifest).entries};
+  await bridge.publish(bridgeScope,bridgeContext,release);assert.equal((await bridgeRuntime.read(bridgeScope,bridgeContext))[0].version,1);
+  const oldPublication=await sourceStore.read(bridgeScope);bridgeFixture=fixture(2,bridgeScope);
+  const successor={requestId:randomUUID(),expectedRevision:1,entries:JSON.parse(bridgeFixture.manifest).entries};
+  const bridgeClient=await a.connect();try{await bridgeClient.query('BEGIN');const txStore=await store(bridgeClient);const txBridge=createKnowledgePublicationBridge(txStore,()=>bridgeConfig,bridgeAdapter,()=>readClock);await txBridge.publish(bridgeScope,bridgeContext,successor);assert.equal((await txStore.read(bridgeScope)).publication.revision,2);assert.equal((await bridgeRuntime.read(bridgeScope,bridgeContext))[0].version,1);await assert.rejects(bridgeClient.query('SELECT 1/0'));await bridgeClient.query('ROLLBACK');}finally{bridgeClient.release();}
+  assert.deepEqual(await sourceStore.read(bridgeScope),oldPublication);
+  await bridge.publish(bridgeScope,bridgeContext,successor);const bridgeBefore=await bridgeRuntime.read(bridgeScope,bridgeContext);assert.equal(bridgeBefore[0].version,2);
   const dump=path.join(evidence,'knowledge.sql'),bin=process.env.PRACTICE_NATIVE_POSTGRES_BIN;
   const env={PATH:process.env.PATH,LANG:'C',PGPASSFILE:'/dev/null',PGCONNECT_TIMEOUT:'5'};
   await run(path.join(bin,'pg_dump'),['--dbname',source.connectionString,'--data-only','--column-inserts','--no-owner','--no-privileges',...tables.flatMap(t=>['--table','public.'+t]),'--file',dump],{env,timeout:30000});
@@ -98,9 +113,13 @@ test('authoritative runtime publishes transactionally and all five Knowledge tab
   const counts={};for(const t of tables){const rows=async pool=>(await pool.query('SELECT to_jsonb(t) AS value FROM '+t+' t ORDER BY to_jsonb(t)::text')).rows;assert.deepEqual(await rows(b),await rows(a));counts[t]=(await rows(b)).length;assert.ok(counts[t]>0);}
   const recoveredStore=await store(b),recovered=createKnowledgeRuntime(recoveredStore,()=>config);
   assert.deepEqual(await createKnowledgeRuntime(recoveredStore,()=>null).read(otherScope,otherContext),[]);
+  const recoveredBridge=createKnowledgePublicationBridge(recoveredStore,()=>bridgeConfig,bridgeAdapter,()=>readClock);
+  const recoveredBridgeRuntime=createKnowledgeRuntime(recoveredStore,()=>bridgeConfig);assert.deepEqual(await recoveredBridgeRuntime.read(bridgeScope,bridgeContext),bridgeBefore);
+  const recoveredBridgeGeneration=(await recoveredStore.read(bridgeScope)).generation;
+  assert.equal((await recoveredBridge.publish(bridgeScope,bridgeContext,successor)).status,'already-published');assert.equal((await recoveredStore.read(bridgeScope)).generation,recoveredBridgeGeneration);
   const recoveredOther=createKnowledgeRuntime(recoveredStore,()=>otherFixture.config);assert.deepEqual(await recoveredOther.read(otherScope,otherContext),otherBefore);assert.deepEqual(await recoveredOther.read(scope,context),[]);
   assert.deepEqual(await recovered.read(scope,context),[]);const state=await recoveredStore.read(scope);assert.ok(state.tombstones[id]);assert.deepEqual(state.cache,{});assert.equal(Object.keys(state.masters).length,2);
   assert.equal((await recovered.stage(scope,context,second.manifest,second.adapter,at)).status,'rejected');assert.deepEqual(await recovered.read(scope,context),[]);
-  const report={status:'passed',scope:'Two disposable loopback PostgreSQL clusters, synthetic data only',tables:counts,checks:['disabled runtime no database writes','owner/practice isolation','real HTTP read router with synthetic server locals: owner read, role/anonymous rejection, no caller scope or writes, disabled empty response','draft marketing examples remain explicitly labeled','whole publication activation and failed transaction rollback','idempotent replay','explicit freshness lease required; expiry/future/missing/invalid-clock reads withheld and revalidation restores access','runtime withholds network-stale data until successful revalidation','all five table rows restored exactly','second owner approved publication remains readable after recovery without leaking revoked first-owner content','failed restore rolls back all five tables','revocation/tombstones/cache removal and immutable history survive recovery','replay cannot resurrect revoked source'],dumpSha256:sourceHash(await fs.readFile(dump,'utf8')),evidence};await fs.writeFile(path.join(evidence,'report.json'),JSON.stringify(report,null,2));console.log(JSON.stringify(report,null,2));
+  const report={status:'passed',scope:'Two disposable loopback PostgreSQL clusters, synthetic data only',tables:counts,checks:['disabled runtime no database writes','owner/practice isolation','real HTTP read router with synthetic server locals: owner read, role/anonymous rejection, no caller scope or writes, disabled empty response','draft marketing examples remain explicitly labeled','whole publication activation and failed transaction rollback','idempotent replay','explicit freshness lease required; expiry/future/missing/invalid-clock reads withheld and revalidation restores access','runtime withholds network-stale data until successful revalidation','all five table rows restored exactly','owner bridge approval/pin/content transaction rollback and exact recovery; idempotent request survives restore','second owner approved publication remains readable after recovery without leaking revoked first-owner content','failed restore rolls back all five tables','revocation/tombstones/cache removal and immutable history survive recovery','replay cannot resurrect revoked source'],dumpSha256:sourceHash(await fs.readFile(dump,'utf8')),evidence};await fs.writeFile(path.join(evidence,'report.json'),JSON.stringify(report,null,2));console.log(JSON.stringify(report,null,2));
  } finally{if(a)await a.end();if(b)await b.end();await source.stop('fast',{cleanup:true});await restored.stop('fast',{cleanup:true});}
 });

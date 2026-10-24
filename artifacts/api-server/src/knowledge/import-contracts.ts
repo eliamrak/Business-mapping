@@ -43,6 +43,8 @@ export const manifestSchema = knowledgeScopeSchema.extend({
 });
 export const pipelineConfigSchema = knowledgeScopeSchema.omit({ principalId: true }).extend({
   enabled: z.boolean().default(false),
+  publicationMode: z.enum(["configured-pin", "owner-bridge"]).default("configured-pin"),
+  publicationPolicyVersion: id.nullable().default(null),
   /** No live freshness SLA is selected. Null withholds runtime reads; one day is a validation ceiling, not a default. */
   permissionMaxAgeMs: z.number().int().min(1).max(86400000).nullable().default(null),
   /** Server-approved immutable manifest bytes; never obtained from the source itself. */
