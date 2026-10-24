@@ -4,14 +4,14 @@ import fs from "node:fs";
 import path from "node:path";
 import vm from "node:vm";
 import { createRequire } from "node:module";
-import { root, git, mobileBase, workspaceFile, mobileComponentFile, mobileCssFile, assertMobileWorkspace, mobileAllowedFiles, financialAllowedFiles, publisherHistoryFiles, reviewedMobileReadiness, assertReviewedMobileReadiness } from "./mobile-shell-source-contract.mjs";
+import { root, git, mobileBase, workspaceFile, mobileComponentFile, mobileCssFile, assertMobileWorkspace, mobileAllowedFiles, financialAllowedFiles, publisherHistoryFiles, reviewedMobileReadiness, assertReviewedMobileReadiness, reviewedSessionProgression, assertReviewedSessionProgression } from "./mobile-shell-source-contract.mjs";
 
 const read = file => fs.readFileSync(path.join(root, file), "utf8");
 const require = createRequire(path.join(root, "artifacts/comp-dashboard/package.json"));
 const ts = require("typescript");
 const postcss = createRequire(require.resolve("vite/package.json"))("postcss");
 
-test("stripping literal mobile shell additions and two financial props restores exact approved 72dc5fb workspace bytes", () => {
+test("stripping literal mobile, progression additions and two financial props restores exact approved 72dc5fb workspace bytes", () => {
   assertMobileWorkspace(read(workspaceFile));
 });
 
@@ -28,15 +28,18 @@ test("source contract rejects existing logic mutations and duplicate mobile frag
 
 test("all cumulative changes since approved mobile base use exact reviewed paths", () => {
   const changes = [...git("diff", mobileBase, "--name-only", "-z").split("\0"), ...git("ls-files", "--others", "--exclude-standard", "-z").split("\0")].filter(Boolean);
-  const unexpected = files => files.filter(file => !mobileAllowedFiles.has(file) && !financialAllowedFiles.has(file) && !publisherHistoryFiles.has(file) && !reviewedMobileReadiness.has(file));
+  const unexpected = files => files.filter(file => !mobileAllowedFiles.has(file) && !financialAllowedFiles.has(file) && !publisherHistoryFiles.has(file) && !reviewedMobileReadiness.has(file) && !reviewedSessionProgression.has(file));
   for (const file of changes.filter(file => reviewedMobileReadiness.has(file))) {
     assertReviewedMobileReadiness(file, fs.readFileSync(path.join(root, file)));
   }
+  for (const file of changes.filter(file => reviewedSessionProgression.has(file))) {
+    assertReviewedSessionProgression(file, fs.readFileSync(path.join(root, file)));
+  }
   assert.deepEqual([...publisherHistoryFiles].sort(), [".agents/memory/MEMORY.md", ".agents/memory/release-evidence-temp-files.md"].sort());
   assert.deepEqual(unexpected([...publisherHistoryFiles]), [], "Only the two established publisher-history paths are exempt");
-  const rejected = [".agents/memory/OTHER.md", ".agents/memory/MEMORY.md.extra", ".agents/memory/release-evidence-temp-files.md/child", "artifacts/api-server/src/routes/practiceImports.ts", "artifacts/comp-mobile/server/serve.js.extra", "verification/mobile-readiness-other.test.cjs", "artifacts/comp-dashboard/src/lib/unreviewed-financial.ts", "lib/practice/src/hub/engine.ts"];
+  const rejected = [".agents/memory/OTHER.md", ".agents/memory/MEMORY.md.extra", ".agents/memory/release-evidence-temp-files.md/child", "artifacts/api-server/src/routes/practiceImports.ts", "artifacts/comp-mobile/server/serve.js.extra", "verification/mobile-readiness-other.test.cjs", "artifacts/comp-dashboard/src/lib/unreviewed-financial.ts", "lib/practice/src/hub/engine.ts", "artifacts/comp-dashboard/src/lib/session-progression.ts.extra", "artifacts/comp-dashboard/src/lib/session-progression/unreviewed.ts", "verification/session-progression-other.mjs"];
   assert.deepEqual(unexpected(rejected), rejected, "No memory directory, prefix or runtime exemption");
-  assert.deepEqual(unexpected(changes), [], "No API, domain, dependency, data, shared UI, existing CSS or other source changes are authorized");
+  assert.deepEqual(unexpected(changes), [], "No unreviewed API, domain, dependency, data, shared UI, existing CSS or other source changes are authorized");
 });
 
 test("prior mobile readiness exception is exact-path and exact-hash only", () => {
@@ -49,6 +52,32 @@ test("prior mobile readiness exception is exact-path and exact-hash only", () =>
     assert.throws(() => assertReviewedMobileReadiness(file, Buffer.from("unapproved readiness bytes")), /Reviewed mobile readiness bytes changed/);
   }
   assert.throws(() => assertReviewedMobileReadiness("artifacts/comp-mobile/server/other.js", Buffer.from("unapproved")), /Unreviewed readiness path/);
+});
+
+test("reviewed progression exception is exact-path and exact-hash only", () => {
+  assert.deepEqual([...reviewedSessionProgression.keys()].sort(), [
+    "artifacts/comp-dashboard/src/components/practice/session-progression-panel.css",
+    "artifacts/comp-dashboard/src/components/practice/session-progression-panel.tsx",
+    "artifacts/comp-dashboard/src/lib/session-progression-export.test.ts",
+    "artifacts/comp-dashboard/src/lib/session-progression-export.ts",
+    "artifacts/comp-dashboard/src/lib/session-progression.test.ts",
+    "artifacts/comp-dashboard/src/lib/session-progression.ts",
+    "design-qa.md",
+    "docs/session-progression-contract.md",
+    "verification/SESSION-PROGRESSION-UI.md",
+    "verification/session-progression-browser-report.json",
+    "verification/session-progression-render.mjs"
+  ].sort());
+  for (const file of reviewedSessionProgression.keys()) {
+    assertReviewedSessionProgression(file, fs.readFileSync(path.join(root, file)));
+    assert.throws(() => assertReviewedSessionProgression(file, Buffer.from("unreviewed changed progression bytes")), /Reviewed progression bytes changed/);
+  }
+  assert.throws(() => assertReviewedSessionProgression("artifacts/comp-dashboard/src/lib/session-progression.ts.extra", Buffer.from("unreviewed")), /Unreviewed progression path/);
+  const source = read(workspaceFile);
+  assert.throws(() => assertMobileWorkspace(source.replace("snapshots={historicalClinicalSnapshots}", "snapshots={localRetentionState.snapshots}")));
+  assert.throws(() => assertMobileWorkspace(source.replace("comparisonMode={compareWholePractice}", "comparisonMode={false}")));
+  const importLine = 'import { SessionProgressionPanel } from "@/components/practice/session-progression-panel";';
+  assert.throws(() => assertMobileWorkspace(importLine + "\n" + source));
 });
 
 test("independent financial probe reconciles daily costs, isolates cloned source basis and leaves unrelated events/payroll intact", async () => {

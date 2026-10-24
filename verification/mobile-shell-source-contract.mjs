@@ -34,6 +34,25 @@ const additions = [
   '                  <MobileContributorSelect label="Overview clinician" names={contributorNames} value={selectedContributorName} onChange={setSharedContributor} />\n',
 ];
 
+// Reviewed observed-progression integration: exact literals keep unrelated workspace logic protected.
+const progressionAdditions = [
+  'import { SessionProgressionPanel } from "@/components/practice/session-progression-panel";\n',
+  `                      <div data-widget-id="session-progression" data-widget-title="Session progression & observed lifetime" data-widget-size="wide">
+                        <SessionProgressionPanel
+                          snapshots={historicalClinicalSnapshots}
+                          classificationSnapshots={localRetentionState.snapshots}
+                          excludedFollowUpEvidence={excludedFollowUpEvidence}
+                          overrides={localRetentionState.sameDayVisitOverrides}
+                          start={periodRange.start} end={periodRange.end} asOf={today}
+                          clinician={compareWholePractice || selectedContributorName === "Whole Practice" ? undefined : selectedContributorName}
+                          identityVerified={compareWholePractice || selectedContributorName === "Whole Practice" || hasUniqueClinicianIdentity(context.clinicians, selectedContributorName, workspace.settings.teamId)}
+                          comparisonMode={compareWholePractice}
+                          coverage={completeClinicalReports}
+                        />
+                      </div>
+`,
+];
+
 const relocations = [
   ['<header className="pw-rail pw-top-navigation" aria-label="Practice navigation">', '<header className="pw-rail pw-top-navigation" aria-label="Practice navigation" data-unsaved-navigation>'],
   ['className="pw-mobile-settings"\n            data-unsaved-navigation\n', 'className="pw-mobile-settings"\n'],
@@ -54,11 +73,12 @@ export function stripMobileWorkspace(source) {
 }
 
 export function assertMobileWorkspace(source) {
+  for (const fragment of progressionAdditions) source = replaceOnce(source, fragment, "");
   // Two reviewed Today Money/Goals props, separately bounded from the mobile JSX.
   source = replaceOnce(source, '                    costSource="budget"\n                    estimatedBudgetMonth={currentMoneyPlanning?.budgetEstimate}\n', '                    costSource="budget"\n');
   source = replaceOnce(source, '                  <ProfitFirstPlanning renderMode="funding" costSource="budget" workspace={planningWorkspace} context={modelContext ?? context}\n                    estimatedBudgetMonth={currentMoneyPlanning?.budgetEstimate}\n', '                  <ProfitFirstPlanning renderMode="funding" costSource="budget" workspace={planningWorkspace} context={modelContext ?? context}\n');
   const restored = stripMobileWorkspace(source);
-  assert.equal(restored, git("show", `${mobileBase}:${workspaceFile}`), "Only literal mobile JSX/import, guard-marker relocations and the two reviewed financial props may differ from approved workspace bytes");
+  assert.equal(restored, git("show", `${mobileBase}:${workspaceFile}`), "Only literal mobile JSX/import, guard-marker relocations, the two reviewed financial props and literal reviewed progression integration may differ from approved workspace bytes");
   return restored;
 }
 
@@ -100,4 +120,24 @@ export const reviewedMobileReadiness = new Map([
 export function assertReviewedMobileReadiness(file, bytes) {
   assert.ok(reviewedMobileReadiness.has(file), `Unreviewed readiness path: ${file}`);
   assert.equal(createHash("sha256").update(bytes).digest("hex"), reviewedMobileReadiness.get(file), `Reviewed mobile readiness bytes changed: ${file}`);
+}
+
+// Frozen reviewed progression source 19942df; no directory/prefix exemptions.
+export const reviewedSessionProgression = new Map([
+  ["artifacts/comp-dashboard/src/components/practice/session-progression-panel.css", "8739be3f61724692c4bac6444a16a137f494f53bd62b9a7b0b46a82a141dbb65"],
+  ["artifacts/comp-dashboard/src/components/practice/session-progression-panel.tsx", "09f23c328abecba1694dced7e5bcc04fb7577c920c6b1d99fad37e223e2dc53d"],
+  ["artifacts/comp-dashboard/src/lib/session-progression-export.test.ts", "8d803ca30c858723ffd87a6ed52a2d8cfcdf03109e9f1d0edd9b071cf08132c9"],
+  ["artifacts/comp-dashboard/src/lib/session-progression-export.ts", "007be5ec41ce27dfdeb5d11a0f0abf6023010c5d2455f9ab7ab8c5b2f8aa8bd3"],
+  ["artifacts/comp-dashboard/src/lib/session-progression.test.ts", "cefb49bebefb46886ebb74b5441b593cbf4c914799df5d970b684b94c064650d"],
+  ["artifacts/comp-dashboard/src/lib/session-progression.ts", "cc27b24dbfb9ef5795895351aef30306f44e7a5b7bed110977c128b9270ad062"],
+  ["design-qa.md", "b677ea28e84138185cf623153b24ec88b9de1b7147b739431babf8f229fb4e04"],
+  ["docs/session-progression-contract.md", "ac5282496da058e4105b1e5ad32bbb9a8a582e0dca4a23ee8637ef94a43eb990"],
+  ["verification/SESSION-PROGRESSION-UI.md", "0cd46622ccf1295962702e8ac94b3a18488915d03b5a4c595c6930af5f55f03c"],
+  ["verification/session-progression-browser-report.json", "e2268fb63d4a372a5d6460a824ef198e6d46aad1623936e80aa8618c43b005d1"],
+  ["verification/session-progression-render.mjs", "f4ae6fc92594aedad653842e199ee4cf9bffe2aa19258aba8f1fa03fe9269764"],
+]);
+
+export function assertReviewedSessionProgression(file, bytes) {
+  assert.ok(reviewedSessionProgression.has(file), `Unreviewed progression path: ${file}`);
+  assert.equal(createHash("sha256").update(bytes).digest("hex"), reviewedSessionProgression.get(file), `Reviewed progression bytes changed: ${file}`);
 }

@@ -6,7 +6,7 @@ import vm from "node:vm";
 import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { createRequire } from "node:module";
-import { assertMobileWorkspace, mobileAllowedFiles, financialAllowedFiles } from "./mobile-shell-source-contract.mjs";
+import { assertMobileWorkspace, mobileAllowedFiles, financialAllowedFiles, reviewedSessionProgression, assertReviewedSessionProgression } from "./mobile-shell-source-contract.mjs";
 
 const root = path.resolve(import.meta.dirname, "..");
 const src = "artifacts/comp-dashboard/src/";
@@ -74,7 +74,7 @@ test("workspace bytes differ only by declared presentation and scoped all-source
   assert.equal(assertMobileWorkspace(read(file)), codeEvidenceSafe);
 });
 
-test("all changed/new files stay within reviewed theme, PDF and mobile scope", () => {
+test("all changed/new files stay within exact reviewed theme, PDF, mobile and progression scope", () => {
   const allowed = new Set([...mobileAllowedFiles, ...financialAllowedFiles, ...sheets.map(s => src + s), src + "pages/practice-workspace.tsx",
     src + "pages/practice-tokens.css", src + "components/practice/tidal-material.tsx",
     src + "components/practice/tidal-material.css", src + "assets/practice-tidal-art.png", src + "assets/practice-tidal-art.jpg",
@@ -152,7 +152,15 @@ test("all changed/new files stay within reviewed theme, PDF and mobile scope", (
   for (const file of changes.filter(file => reviewedMobileReadiness.has(file))) {
     assert.equal(createHash("sha256").update(fs.readFileSync(path.join(root, file))).digest("hex"), reviewedMobileReadiness.get(file), `Reviewed mobile bytes changed: ${file}`);
   }
-  assert.deepEqual(changes.filter(file => !allowed.has(file) && !publisherHistory.has(file) && !reviewedPdfFollowup.has(file) && !reviewedMobileReadiness.has(file) && !reviewedDataFollowup.has(file) && !reviewedIconFollowup.has(file) && !reviewedBillingCodeFollowup.has(file)), [], "Unexpected edits (including schema/API/dependencies) require separate review");
+  for (const file of changes.filter(file => reviewedSessionProgression.has(file))) {
+    assertReviewedSessionProgression(file, fs.readFileSync(path.join(root, file)));
+    assert.throws(() => assertReviewedSessionProgression(file, Buffer.from("unreviewed changed progression bytes")), /Reviewed progression bytes changed/);
+  }
+  const unexpected = files => files.filter(file => !allowed.has(file) && !publisherHistory.has(file) && !reviewedPdfFollowup.has(file) && !reviewedMobileReadiness.has(file) && !reviewedDataFollowup.has(file) && !reviewedIconFollowup.has(file) && !reviewedBillingCodeFollowup.has(file) && !reviewedSessionProgression.has(file));
+  const rejected = [src + "lib/session-progression.ts.extra", src + "lib/session-progression/unreviewed.ts", "verification/session-progression-other.mjs", "artifacts/api-server/src/routes/unreviewed-progression.ts", "lib/practice/src/hub/unreviewed-progression.ts", "package.json"];
+  assert.deepEqual(unexpected(rejected), rejected, "No progression directory, prefix, API/core or dependency exemption");
+  assert.throws(() => assertReviewedSessionProgression(rejected[0], Buffer.from("unreviewed")), /Unreviewed progression path/);
+  assert.deepEqual(unexpected(changes), [], "Unexpected edits (including schema/API/dependencies) require separate review");
 });
 
 test("token defaults are statically imported by the eagerly loaded workspace", () => {
