@@ -43,7 +43,7 @@
 .pw-progression-table th:first-child { padding-left: 12px; text-align: left; }
 .pw-progression-table thead th:last-child { white-space: normal; width: 26%; }
 .pw-progression-table thead span { display: block; margin-top: 4px; font-size: 11px; font-weight: 400; color: var(--pw-tone-text-muted, #59676a); }
-.pw-progression-table tbody th { font-weight: 400; }
+.pw-progression-table tbody th { font-weight: 400; color: var(--pw-tone-text, #243638); }
 .pw-progression-table tbody tr:last-child th, .pw-progression-table tbody tr:last-child td { border-bottom: 0; }
 .pw-progression-table tbody tr:hover { background: var(--pw-tone-input, #f6f8f8); }
 .pw-progression .pw-progression-scroll-hint { display: none; font-size: 11px; margin-bottom: 10px; }

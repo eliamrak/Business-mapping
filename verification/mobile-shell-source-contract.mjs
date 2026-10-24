@@ -122,9 +122,10 @@ export function assertReviewedMobileReadiness(file, bytes) {
   assert.equal(createHash("sha256").update(bytes).digest("hex"), reviewedMobileReadiness.get(file), `Reviewed mobile readiness bytes changed: ${file}`);
 }
 
-// Frozen reviewed progression source 19942df; no directory/prefix exemptions.
+// Frozen reviewed progression source 19942df, plus reviewed contrast-only CSS/harness follow-up.
+// Exact hashes remain required; no directory/prefix exemptions.
 export const reviewedSessionProgression = new Map([
-  ["artifacts/comp-dashboard/src/components/practice/session-progression-panel.css", "8739be3f61724692c4bac6444a16a137f494f53bd62b9a7b0b46a82a141dbb65"],
+  ["artifacts/comp-dashboard/src/components/practice/session-progression-panel.css", "249474170d77c401228356f9adb17b5c21ac84627deb7685d7216cbbbcc9350d"],
   ["artifacts/comp-dashboard/src/components/practice/session-progression-panel.tsx", "09f23c328abecba1694dced7e5bcc04fb7577c920c6b1d99fad37e223e2dc53d"],
   ["artifacts/comp-dashboard/src/lib/session-progression-export.test.ts", "8d803ca30c858723ffd87a6ed52a2d8cfcdf03109e9f1d0edd9b071cf08132c9"],
   ["artifacts/comp-dashboard/src/lib/session-progression-export.ts", "007be5ec41ce27dfdeb5d11a0f0abf6023010c5d2455f9ab7ab8c5b2f8aa8bd3"],
@@ -134,7 +135,7 @@ export const reviewedSessionProgression = new Map([
   ["docs/session-progression-contract.md", "ac5282496da058e4105b1e5ad32bbb9a8a582e0dca4a23ee8637ef94a43eb990"],
   ["verification/SESSION-PROGRESSION-UI.md", "0cd46622ccf1295962702e8ac94b3a18488915d03b5a4c595c6930af5f55f03c"],
   ["verification/session-progression-browser-report.json", "e2268fb63d4a372a5d6460a824ef198e6d46aad1623936e80aa8618c43b005d1"],
-  ["verification/session-progression-render.mjs", "f4ae6fc92594aedad653842e199ee4cf9bffe2aa19258aba8f1fa03fe9269764"],
+  ["verification/session-progression-render.mjs", "c40c9086e923b1c69cda892e1725037aecce42987a83fb409186f944b2823958"],
 ]);
 
 export function assertReviewedSessionProgression(file, bytes) {

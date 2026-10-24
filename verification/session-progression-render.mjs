@@ -19,6 +19,8 @@ import {importAttendanceCsv} from './src/lib/retention-local';
 import {completeReportCoverage} from './src/lib/complete-report-coverage';
 import {sessionProgression} from './src/lib/session-progression';
 import './src/pages/practice-tokens.css';
+import './src/pages/practice.css';
+import './src/pages/hub.css';
 import './src/pages/practice-workspace.css';
 import './src/pages/practice-approved.css';
 const rows = [];
@@ -38,7 +40,7 @@ function App() {
  const snapshots=scope==='empty'?[]:coverage.eligibleSnapshots;
  const excludedFollowUpEvidence=scope==='unresolved'?[{clientId:snapshot.rows[0].clientId,serviceDate:'2026-03-01'}]:[];
  window.fixture={expected:sessionProgression(snapshots,{start:cohortStart,end:'2026-06-30',asOf:'2026-07-01',clinician,classificationSnapshots:sources,excludedFollowUpEvidence}),unchanged:JSON.stringify(sources)===before};
- return <main className='pw-app fixture-app' data-material={theme}>
+ return <main className='practice-theme pw-app fixture-app' data-appearance='dark' data-material={theme}>
  <div className='fixture-controls' aria-label='Synthetic fixture controls'>
  <label>Fixture scope <select aria-label='Fixture scope' value={scope} onChange={e=>setScope(e.target.value)}>{['practice','Lane','Other','empty','ambiguous','unresolved','overall','compare'].map(s=><option key={s}>{s}</option>)}</select></label>
  <label>Fixture theme <select aria-label='Fixture theme' value={theme} onChange={e=>setTheme(e.target.value)}><option>tidal</option><option>dark</option></select></label>
@@ -50,13 +52,15 @@ function App() {
 createRoot(document.getElementById('root')).render(<App/>);
 `}, bundle:true, write:false, format:'esm', platform:'browser', jsx:'automatic', outdir:out, define:{'process.env.NODE_ENV':'"development"'}, nodePaths:process.env.PRACTICE_UI_NODE_PATH ? [process.env.PRACTICE_UI_NODE_PATH] : [] });
 const js = result.outputFiles.find(x=>x.path.endsWith('.js')).contents;
-const css = result.outputFiles.find(x=>x.path.endsWith('.css')).contents;
+// For release QA, pass the actual production build stylesheet to exercise its full cascade.
+const appCssFile = process.env.PRACTICE_PROGRESSION_APP_CSS;
+const css = appCssFile ? await fs.readFile(appCssFile) : result.outputFiles.find(x=>x.path.endsWith('.css')).contents;
 const html = `<!doctype html><html><head><meta name="viewport" content="width=device-width,initial-scale=1"><link rel="stylesheet" href="/styles.css"><style>body{margin:0}.fixture-app{box-sizing:border-box;display:block;padding:28px;max-width:1280px;margin:auto;overflow:visible}.fixture-controls{display:flex;flex-wrap:wrap;gap:16px;padding:0 0 20px;font-size:12px;align-items:center}.fixture-controls label{display:flex;align-items:center;gap:6px}.fixture-controls select,.fixture-controls input{font-size:12px;padding:6px}@media(max-width:700px){.fixture-app{padding:12px}.fixture-controls{gap:10px}}</style></head><body><div id="root"></div><script type="module" src="/bundle.js"></script></body></html>`;
 await fs.writeFile(path.join(out, 'index.html'), html);
 await fs.writeFile(path.join(out, 'bundle.js'), js);
 await fs.writeFile(path.join(out, 'styles.css'), css);
 if (process.argv.includes('--build-only')) { console.log(JSON.stringify({status:'built-not-rendered',out,jsBytes:js.length,cssBytes:css.length})); process.exit(0); }
-const requests=[]; const errors=[]; const consoleErrors=[]; const checks=[];
+const requests=[]; const errors=[]; const consoleErrors=[]; const checks=[]; const contrastEvidence=[];
 const server=http.createServer((req,res)=>{requests.push({url:req.url,method:req.method});const item=req.url==='/'?[html,'text/html']:req.url==='/bundle.js'?[js,'text/javascript']:req.url==='/styles.css'?[css,'text/css']:req.url==='/favicon.ico'?['','image/x-icon']:null;if(!item){res.writeHead(404);res.end();return;}res.writeHead(200,{'content-type':item[1]});res.end(item[0]);});
 await new Promise(resolve=>server.listen(Number(process.env.PORT??4173),'0.0.0.0',resolve));
 const port=server.address().port;
@@ -75,6 +79,35 @@ await page.getByRole('heading',{name:'Observed session progression',exact:true})
 async function check(name,fn){await fn();checks.push(name);}
 async function reset(){await page.getByLabel('Fixture scope').selectOption('practice');await page.getByLabel('Fixture theme').selectOption('tidal');await page.getByLabel('Fixture cohort start').fill('2026-01-01');await page.getByLabel('Session milestones').selectOption('8');}
 async function counts(){const expected=await page.evaluate(()=>window.fixture.expected);const trs=page.locator('.pw-progression-table tbody tr');assert.equal(await trs.count(),8);for(let i=0;i<8;i++){const row=expected.rows[i];assert.deepEqual(await trs.nth(i).locator('th,td').allTextContents(),['Session '+row.session,String(row.eligibleClients),String(row.completions),row.reachedPct===null?'—':row.reachedPct.toFixed(1)+'%',row.changePercentagePoints===null?'—':row.changePercentagePoints.toFixed(1)+' pp']);}}
+async function rowLabelContrast() {
+ return page.locator('.pw-progression-table tbody th').evaluateAll(elements => {
+  const rgb = value => value.match(/[\d.]+/g).map(Number);
+  const luminance = color => {const c=color.slice(0,3).map(v=>{v/=255;return v<=.04045?v/12.92:((v+.055)/1.055)**2.4;});return .2126*c[0]+.7152*c[1]+.0722*c[2];};
+  return elements.map(el => {
+   let parent=el; let background;
+   while(parent) {const color=rgb(getComputedStyle(parent).backgroundColor);if(color.length===3||color[3]===1){background=color;break;}parent=parent.parentElement;}
+   if(!background) throw new Error('No opaque row-label background');
+   const foreground=rgb(getComputedStyle(el).color);const a=luminance(foreground),b=luminance(background);
+   return {foreground,background,ratio:(Math.max(a,b)+.05)/(Math.min(a,b)+.05)};
+  });
+ });
+}
+async function assertRowLabelContrast() {
+ const colors=await rowLabelContrast();assert.ok(colors.length>0,'Contrast assertion requires visible session labels');
+ for(const color of colors) assert.ok(color.ratio>=4.5,JSON.stringify(color));
+ contrastEvidence.push({theme:await page.getByLabel('Fixture theme').inputValue(),viewport:page.viewportSize(),minimumRatio:Math.min(...colors.map(c=>c.ratio)),sample:colors[0]});
+}
+await check('session row labels pass contrast in actual practice-theme cascade; legacy-color negative control fails',async()=>{
+ await assertRowLabelContrast();
+ const first=page.locator('.pw-progression-table tbody th').first();
+ try {
+  await first.evaluate(el=>el.style.color='var(--pr-muted)');
+  const legacy=(await rowLabelContrast())[0];
+  contrastEvidence.push({negativeControl:'legacy --pr-muted',...legacy});
+  assert.ok(legacy.ratio<4.5,'Negative control must catch the legacy pale-on-pale label: '+JSON.stringify(legacy));
+ } finally {await first.evaluate(el=>el.style.removeProperty('color'));}
+ await assertRowLabelContrast();
+});
 await check('real calculated counts, denominators and unrounded percentage-point display',counts);
 await check('line graph uses actual row data with full size and accessible exact-data table',async()=>{assert.equal(await page.locator('.recharts-line-curve').count(),1);assert.equal(await page.locator('.recharts-line-dot').count(),8);const box=await page.locator('.recharts-surface').boundingBox();assert.ok(box.width>900&&box.height>200);assert.equal(await page.getByRole('table').count(),1);});
 await check('chart tooltip exposes cohort counts and denominator',async()=>{await page.locator('.recharts-line-dot').nth(1).hover();await page.locator('.pw-progression-tooltip').waitFor();assert.match(await page.locator('.pw-progression-tooltip').innerText(),/of 14 clients/);});
@@ -94,11 +127,12 @@ await check('keyboard details open and close with focus preserved',async()=>{con
 for(const width of [768,390,320]){
  await page.setViewportSize({width,height:900});await page.locator('.pw-progression-chart').waitFor();await page.waitForTimeout(150);
  await check(width+'px no page overflow; bounded table remains scrollable',async()=>{const g=await page.evaluate(()=>({page:document.documentElement.scrollWidth,viewport:innerWidth,table:document.querySelector('.pw-progression-table-scroll').scrollWidth,box:document.querySelector('.pw-progression-table-scroll').clientWidth}));assert.ok(g.page<=g.viewport+1,JSON.stringify({...g,overflow:await page.evaluate(()=>[...document.querySelectorAll("body *")].filter(el=>el.getBoundingClientRect().right>innerWidth+1).map(el=>({tag:el.tagName,cls:String(el.className),right:el.getBoundingClientRect().right,visibility:getComputedStyle(el).visibility})).slice(0,15))}));if(width<700)assert.ok(g.table>g.box);});
+ await check(width+'px session row labels retain contrast',assertRowLabelContrast);
  await page.screenshot({path:path.join(out,width+'-tidal.png'),fullPage:true});
 }
-await page.setViewportSize({width:1280,height:1000});await page.getByLabel('Fixture theme').selectOption('dark');await page.screenshot({path:path.join(out,'desktop-dark.png'),fullPage:true});
+await page.setViewportSize({width:1280,height:1000});await page.getByLabel('Fixture theme').selectOption('dark');await check('dark theme session row labels retain contrast',assertRowLabelContrast);await page.screenshot({path:path.join(out,'desktop-dark.png'),fullPage:true});
 await check('source inputs remain unchanged; no business/API requests',async()=>{assert.equal(await page.evaluate(()=>window.fixture.unchanged),true);assert.ok(requests.every(r=>r.method==='GET'&&['/','/bundle.js','/styles.css','/favicon.ico'].includes(r.url)));assert.deepEqual(errors,[]);assert.deepEqual(consoleErrors,[]);});
-const report={status:'passed',checks,errors,consoleErrors,requests,scope:'Actual component and domain, synthetic sources; not authenticated production or full-app acceptance'};
+const report={status:'passed',checks,errors,consoleErrors,requests,contrastEvidence,stylesheetScope:appCssFile?'Full production build stylesheet':'Source fixture including legacy practice theme',scope:'Actual component and domain, synthetic sources; not authenticated production or full-app acceptance'};
 await fs.writeFile(path.join(out,'report.json'),JSON.stringify(report,null,2));console.log(JSON.stringify(report,null,2));
 } catch (error) {
   await fs.writeFile(path.join(out,'report.json'),JSON.stringify({status:'failed',checks,errors,consoleErrors,error:String(error),scope:'Synthetic fixture only'},null,2));
