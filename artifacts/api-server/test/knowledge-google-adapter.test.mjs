@@ -1,7 +1,7 @@
 import test from 'node:test';import assert from 'node:assert/strict';import {createRequire} from 'node:module';import {fileURLToPath} from 'node:url';
 const require=createRequire(new URL('../package.json',import.meta.url));const {build}=require('esbuild');
-const result=await build({stdin:{contents:"export * from './knowledge/google-read-adapter';export * from './knowledge/import-contracts';export * from './knowledge/import-pipeline';",loader:'ts',resolveDir:fileURLToPath(new URL('../src/',import.meta.url))},bundle:true,write:false,format:'cjs',platform:'node',packages:'external'});const module={exports:{}};new Function('module','exports','require',result.outputFiles[0].text)(module,module.exports,require);
-const {createGoogleReadAdapter,GoogleReadFailure,DRIVE_METADATA_FIELDS,classifyGoogleChange,sourceHash,semanticMasterSchema,projectMaster,stageKnowledgeBundle,activateKnowledgeBundle,readPipelineKnowledge}=module.exports;
+const result=await build({stdin:{contents:"export * from './knowledge/google-read-adapter';export * from './knowledge/import-contracts';export * from './knowledge/import-pipeline';export * from './knowledge/runtime';",loader:'ts',resolveDir:fileURLToPath(new URL('../src/',import.meta.url))},bundle:true,write:false,format:'cjs',platform:'node',packages:'external'});const module={exports:{}};new Function('module','exports','require',result.outputFiles[0].text)(module,module.exports,require);
+const {createGoogleReadAdapter,GoogleReadFailure,DRIVE_METADATA_FIELDS,classifyGoogleChange,sourceHash,semanticMasterSchema,projectMaster,stageKnowledgeBundle,activateKnowledgeBundle,readPipelineKnowledge,createKnowledgeRuntime}=module.exports;
 function fixture(kind='map-json'){
  const scope={practiceId:'synthetic_practice',principalId:'synthetic_owner'},at='2026-01-01T00:00:00Z';
  const envelope={...scope,schemaVersion:1,resourceId:'30000000-0000-4000-8000-000000000001',version:1,title:'Synthetic reference',category:'resources',audience:'owner',approval:'approved',approvedBy:scope.principalId,approvedAt:at};
@@ -46,7 +46,7 @@ test('hash, byte limits, invalid UTF8, unsafe markup and wrong semantic kind fai
  const g=fixture();g.client.downloadJson=async()=> (async function*(){yield new Uint8Array([255])})();assert.equal((await g.adapter.readFile(g.file.fileId)).status,'unapproved');
 });
 test('404/removals do not claim confirmed deletion; denial versus transient failure remains distinct',async()=>{
- for(const [status,reason,expected] of [[404,'notFound','permission-denied'],[403,'insufficientFilePermissions','permission-denied'],[401,'authError','permission-denied'],[403,'rateLimitExceeded','network-error'],[429,'rateLimitExceeded','network-error'],[503,'backendError','network-error']]){const f=fixture();f.client.metadata=async()=>{throw new GoogleReadFailure(status,reason)};assert.equal((await f.adapter.readFile(f.file.fileId)).status,expected);}
+ for(const [status,reason,expected] of [[404,'notFound','network-error'],[403,'insufficientFilePermissions','network-error'],[401,'authError','network-error'],[403,'accessNotConfigured','network-error'],[403,'domainPolicy','network-error'],[403,'rateLimitExceeded','network-error'],[429,'rateLimitExceeded','network-error'],[503,'backendError','network-error']]){const f=fixture();f.client.metadata=async()=>{throw new GoogleReadFailure(status,reason)};assert.equal((await f.adapter.readFile(f.file.fileId)).status,expected);}
  const f=fixture();f.metadata.trashed=true;assert.equal((await f.adapter.readFile(f.file.fileId)).status,'deleted');
  assert.equal(classifyGoogleChange({fileId:'synthetic_file',removed:true},['synthetic_file']),'access-lost-or-deleted');assert.equal(classifyGoogleChange({fileId:'synthetic_file',removed:true,file:{trashed:true}},['synthetic_file']),'deleted');assert.equal(classifyGoogleChange({fileId:'synthetic_file',removed:false},['synthetic_file']),'revalidate');assert.equal(classifyGoogleChange({fileId:'synthetic_file'},['synthetic_file']),'revalidate');assert.equal(classifyGoogleChange({fileId:'unregistered',removed:true},['synthetic_file']),'ignore');
 });
@@ -57,4 +57,22 @@ test('adapter output stages/activates through existing owner-only manifest enfor
  const config={practiceId:f.scope.practiceId,enabled:true,approvedManifestHash:sourceHash(manifest),sources:[{resourceId:f.master.resourceId,fileId:f.file.fileId,parentId:f.file.parentId,sourceOwnerId:f.file.sourceOwnerId,readerPrincipalId:f.file.readerPrincipalId,approvalEpoch:1,approvedForImport:true}]};
  assert.equal((await stageKnowledgeBundle(context,config,manifest,f.adapter,store,f.at)).status,'staged');await activateKnowledgeBundle(context,config,store,f.at);assert.equal((await readPipelineKnowledge(context,config,store)).length,1);
  f.client.authority=async()=>({status:'unknown'});await stageKnowledgeBundle(context,config,manifest,f.adapter,store,f.at);assert.deepEqual(await readPipelineKnowledge(context,config,store),[]);assert.deepEqual(state.cache,{});
+});
+
+test('healthy publication survives metadata/download/stream TypeErrors and recoverable auth/service outages without reapproval',async()=>{
+ for(const part of ['metadata','downloadJson','stream','auth401','api403','permission403','missing404']){
+  const f=fixture(),context={role:'owner',principalId:f.scope.principalId};let state=null;
+  const store={read:async()=>structuredClone(state),compareAndSwap:async(scope,generation,next)=>{if(generation!==(state?.generation??0))return false;state=structuredClone(next);return true}};
+  const manifest=JSON.stringify({...f.scope,schemaVersion:1,bundleId:'synthetic_bundle',revision:1,audience:'owner',approval:'approved',approvedBy:f.scope.principalId,approvedAt:f.at,entries:[{resourceId:f.master.resourceId,fileId:f.file.fileId,sourceRevision:'12',version:1,masterHash:f.file.masterHash}]});
+  const config={practiceId:f.scope.practiceId,enabled:true,permissionMaxAgeMs:1000,approvedManifestHash:sourceHash(manifest),sources:[{resourceId:f.master.resourceId,fileId:f.file.fileId,parentId:f.file.parentId,sourceOwnerId:f.file.sourceOwnerId,readerPrincipalId:f.file.readerPrincipalId,approvalEpoch:1,approvedForImport:true}]};
+  const runtime=createKnowledgeRuntime(store,()=>config,()=>Date.parse(f.at));
+  await runtime.stage(f.scope,context,manifest,f.adapter,f.at);await runtime.activate(f.scope,context,f.at);const original=await runtime.read(f.scope,context);assert.equal(original.length,1);
+  const healthy={...f.client};
+  if(part==='metadata'||part==='downloadJson')f.client[part]=async()=>{throw new TypeError('fetch failed')};
+  if(part==='stream')f.client.downloadJson=async()=> (async function*(){throw new TypeError('fetch failed')})();
+  if(part==='auth401'||part==='api403'||part==='permission403'||part==='missing404')f.client.metadata=async()=>{throw new GoogleReadFailure(part==='auth401'?401:part==='missing404'?404:403,part==='api403'?'accessNotConfigured':part==='permission403'?'insufficientFilePermissions':'authError')};
+  assert.equal((await f.adapter.readFile(f.file.fileId)).status,'network-error');
+  assert.equal((await runtime.stage(f.scope,context,manifest,f.adapter,f.at)).status,'rejected');assert.deepEqual(await runtime.read(f.scope,context),[]);assert.deepEqual(state.tombstones,{});assert.equal(state.active[f.master.resourceId].master.version,1);
+  Object.assign(f.client,healthy);assert.equal((await runtime.stage(f.scope,context,manifest,f.adapter,f.at)).status,'unchanged');assert.deepEqual(await runtime.read(f.scope,context),original);assert.deepEqual(state.tombstones,{});assert.equal(config.sources[0].approvalEpoch,1);
+ }
 });

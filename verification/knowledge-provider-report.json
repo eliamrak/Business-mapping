@@ -1,0 +1,39 @@
+{
+  "status": "passed; independent review pending",
+  "base": "c691d35b06504b974b31055b6664289d60318058",
+  "scope": "Offline concrete Google REST transport, synthetic token/client tests, outage recovery correction; production remains hard-disabled",
+  "tests": {
+    "knowledge": 37,
+    "googleAdapter": 10,
+    "googleTransport": 7,
+    "disposablePostgresSuites": 2,
+    "domainRegressions": 1258,
+    "apiTypes": "passed",
+    "apiBuild": "passed"
+  },
+  "checks": [
+    "fixed registered-file GET endpoints with redirect refusal",
+    "zero token/HTTP calls when disabled/unregistered",
+    "dedicated token issuer identity/scope/expiry contract with no ADC fallback",
+    "timeouts include token issuance, request and body; byte limits enforced",
+    "secret-bearing upstream errors and provider body fields redacted",
+    "conservative unknown-sharing authority gate preserved",
+    "healthy version1 to metadata/download/stream TypeError outage to same approved version recovery",
+    "401/403/404 uncertainty fails closed without inventing owner revocation or forcing new content approval"
+  ],
+  "liveActions": {
+    "googleCalls": 0,
+    "credentialsCreated": false,
+    "grantsChanged": false,
+    "productionMigration": false,
+    "deployment": false
+  },
+  "pending": [
+    "Google Cloud/project availability and explicitly approved dedicated identity/credential issuer/API setup",
+    "actual source/SOP registration and publication approval",
+    "reviewed distinction between effective service read access, owner-only app audience and unknown external sharing visibility",
+    "authenticated dot-to-app publication connector with atomic per-release approval/pin advancement; static pins are fixture-only workflow",
+    "independent review and later approved live validation/production rollout"
+  ],
+  "setupContract": "docs/knowledge-provider-setup.md"
+}

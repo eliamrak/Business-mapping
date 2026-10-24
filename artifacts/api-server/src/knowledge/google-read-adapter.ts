@@ -41,18 +41,29 @@ function failure(error: unknown): ReadResult {
   if (error instanceof GoogleReadFailure) {
     if (error.status === 429 || error.status >= 500 || error.status === 403 && ["rateLimitExceeded", "userRateLimitExceeded", "dailyLimitExceeded"].includes(error.reason))
       return { status: "network-error", reason: "transient-provider-failure" };
-    if (error.status === 404) return { status: "permission-denied", reason: "not-found-or-inaccessible" };
-    if (error.status === 401 || error.status === 403) return { status: "permission-denied", reason: "access-denied" };
+    if (error.status === 404) return { status: "network-error", reason: "not-found-or-inaccessible" };
+    if (error.status === 401) return { status: "network-error", reason: "authentication-unavailable" };
+    if (error.status === 403) return { status: "network-error", reason: "access-or-service-unverified" };
     return { status: "unapproved", reason: "unsupported-provider-response" };
   }
   // Transport implementations must wrap known access failures above; unknown exceptions certify nothing.
   return { status: "network-error", reason: "transport-failure" };
 }
+/** Client failures must never be mistaken for parser/decoder failures merely because both use TypeError. */
+async function sourceCall<T>(operation: () => Promise<T>): Promise<T> {
+  try { return await operation(); } catch (error) {
+    if (error instanceof GoogleReadFailure) throw error;
+    throw new GoogleReadFailure(503, "transport-failure");
+  }
+}
 async function boundedText(stream: AsyncIterable<Uint8Array>, maxBytes: number) {
   const chunks: Uint8Array[] = []; let length = 0;
-  for await (const chunk of stream) {
+  try { for await (const chunk of stream) {
     if (!(chunk instanceof Uint8Array) || (length += chunk.byteLength) > maxBytes) throw new GoogleReadFailure(400, "size-limit");
     chunks.push(chunk);
+  } } catch (error) {
+    if (error instanceof GoogleReadFailure) throw error;
+    throw new GoogleReadFailure(503, "stream-transport-failure");
   }
   return new TextDecoder("utf-8", { fatal: true, ignoreBOM: true }).decode(Buffer.concat(chunks));
 }
@@ -64,11 +75,11 @@ export function createGoogleReadAdapter(configuration: () => unknown, clientFact
     const file = config.files.find(value => value.fileId === fileId && value.approvedForImport);
     if (!file) return { status: "unapproved", reason: "file-not-approved" };
     try {
-      const client = await clientFactory();
-      const authority = authoritySchema.safeParse(await client.authority(fileId));
+      const client = await sourceCall(clientFactory);
+      const authority = authoritySchema.safeParse(await sourceCall(() => client.authority(fileId)));
       if (!authority.success || authority.data.fileId !== fileId || authority.data.readerPrincipalId !== file.readerPrincipalId || authority.data.sourceOwnerId !== file.sourceOwnerId)
         return { status: "unapproved", reason: "current-authority-unverifiable" };
-      const before = metadataSchema.safeParse(await client.metadata(fileId, DRIVE_METADATA_FIELDS));
+      const before = metadataSchema.safeParse(await sourceCall(() => client.metadata(fileId, DRIVE_METADATA_FIELDS)));
       if (!before.success) return { status: "unapproved", reason: "metadata-incomplete" };
       if (before.data.trashed) return { status: "deleted", reason: "trashed" };
       const expectedMime = file.kind === "google-doc" ? "application/vnd.google-apps.document" : "application/json";
@@ -76,10 +87,10 @@ export function createGoogleReadAdapter(configuration: () => unknown, clientFact
         value.owners[0].permissionId === file.sourceOwnerId && value.mimeType === expectedMime && value.version === file.driveVersion && value.capabilities.canDownload && !value.trashed;
       if (!matches(before.data)) return { status: "unapproved", reason: "metadata-or-capability-mismatch" };
       if (before.data.size && BigInt(before.data.size) > BigInt(file.maxBytes)) return { status: "unapproved", reason: "size-limit" };
-      const raw = await boundedText(await (file.kind === "google-doc" ? client.exportText(fileId, "text/plain", file.maxBytes) : client.downloadJson(fileId, file.maxBytes)), file.maxBytes);
-      const after = metadataSchema.safeParse(await client.metadata(fileId, DRIVE_METADATA_FIELDS));
+      const raw = await boundedText(await sourceCall(() => file.kind === "google-doc" ? client.exportText(fileId, "text/plain", file.maxBytes) : client.downloadJson(fileId, file.maxBytes)), file.maxBytes);
+      const after = metadataSchema.safeParse(await sourceCall(() => client.metadata(fileId, DRIVE_METADATA_FIELDS)));
       if (after.success && after.data.trashed) return { status: "deleted", reason: "trashed-during-read" };
-      const current = authoritySchema.safeParse(await client.authority(fileId));
+      const current = authoritySchema.safeParse(await sourceCall(() => client.authority(fileId)));
       if (!current.success || !isDeepStrictEqual(current.data, authority.data)) return { status: "unapproved", reason: "authority-changed" };
       if (!after.success || !matches(after.data) || !isDeepStrictEqual(before.data, after.data)) return { status: "unapproved", reason: "metadata-changed-during-read" };
       if (sourceHash(raw) !== file.rawHash) return { status: "unapproved", reason: "raw-hash-mismatch" };
