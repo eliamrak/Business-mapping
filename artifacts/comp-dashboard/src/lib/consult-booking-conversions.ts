@@ -30,6 +30,7 @@ const observationDay = (value: string) => Number.isFinite(Date.parse(value))
 const blankMetric = (clinician: string | null): ConsultConversionMetric => ({
   clinician, rateBasis: "observable_scheduled_sessions", observedTreatmentStarts: 0,
   consultations: 0, converted: 0, candidateConversions: 0, missed: 0, pending: 0,
+  pendingReasons: {openWindow:0,unverifiedCoverage:0,other:0},
   needsAttribution: 0, internalReferralsProtected: 0, evaluated: 0, observedConversionRate: null, conversionRate: null,
 });
 
@@ -183,6 +184,12 @@ export function summarizeBookingConversions(
     clinicians.set(key, metric);
     return metric;
   };
+  const countPending = (metric: ConsultConversionMetric, journey: ConsultJourney) => {
+    metric.pending++;
+    const reason = journey.attributionIssue === "Consultation follow-up window is still open." ? "openWindow"
+      : journey.attributionIssue === "Complete observable follow-up coverage is unavailable." ? "unverifiedCoverage" : "other";
+    metric.pendingReasons![reason]++;
+  };
   for (const journey of journeys) {
     const outcome = outcomes.get(journey)!;
     const mature = asOfDate >= journey.deadline;
@@ -195,7 +202,7 @@ export function summarizeBookingConversions(
     else if (outcome === "referral") practice.internalReferralsProtected++;
     else if (outcome === "miss") practice.missed++;
     else {
-      practice.pending++;
+      countPending(practice, journey);
       if (mature) incompleteRates.add(practice);
     }
     if (journey.status === "needs_attribution" && outcome !== "referral") practice.needsAttribution++;
@@ -207,7 +214,7 @@ export function summarizeBookingConversions(
       } else if (outcome === "close") metric.converted++;
       else if (outcome === "miss" && journey.creditedClinician) metric.missed++;
       else {
-        metric.pending++;
+        countPending(metric, journey);
         if (mature || journey.status === "needs_attribution") incompleteRates.add(metric);
         if (journey.status === "needs_attribution") metric.needsAttribution++;
       }

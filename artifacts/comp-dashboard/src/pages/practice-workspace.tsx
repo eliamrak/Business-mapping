@@ -4713,11 +4713,17 @@ export default function PracticeWorkspace() {
                         <dl style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(130px, 1fr))", gap: 12, margin: 0 }}>
                           <div><dt>Consultations</dt><dd style={{ margin: 0 }}><strong>{fmt(contributorConsult?.consultations)}</strong></dd></div>
                           <div><dt>Same-clinician closes</dt><dd style={{ margin: 0 }}><strong>{(contributorConsult?.evaluated ?? 0) + (contributorConsult?.internalReferralsProtected ?? 0) > 0 ? fmt(contributorConsult?.converted) : "Unknown"}</strong></dd></div>
+                          <div><dt>Completed treatment starts</dt><dd style={{ margin: 0 }}><strong>{fmt(contributorConsult?.observedTreatmentStarts)}</strong></dd></div>
                           <div><dt className="pw-visually-hidden">Observed close rate</dt><dd style={{ margin: 0 }}><PercentageKpi label="Observed close rate" value={contributorConsult?.observedConversionRate ?? null} benchmark={selectedContributorName === "Whole Practice" ? null : consultConversionSummary.practice.observedConversionRate} /></dd></div>
                         </dl>
                         <p className="pw-note">{fmt(contributorConsult?.converted)} of {fmt(contributorConsult?.evaluated)} evaluated · {fmt(contributorConsult?.pending)} unresolved · Referrals excluded: {fmt(contributorConsult?.internalReferralsProtected)}</p>
                         {compareWholePractice ? <MetricComparison rows={consultComparisonRows.map((row) => ({ ...row, detail: undefined }))} percentage unit="%" label="Observed close-rate comparison" /> : selectedContributorName !== "Whole Practice" && <p className="pw-note">Whole Practice observed close rate: {fmt(consultConversionSummary.practice.observedConversionRate, "percent")}</p>}
-                        {(contributorConsult?.pending ?? 0) > 0 ? <p className="pw-note">Some cohort outcomes unresolved.</p> : !consultConversionSummary.coverageVerified && <p className="pw-note">Coverage unverified.</p>}
+                        {(contributorConsult?.pending ?? 0) > 0 && contributorConsult?.pendingReasons ? <dl className="pw-consult-pending-reasons" aria-label="Unresolved consultation reasons">
+                          <div><dt>Follow-up window open</dt><dd>{fmt(contributorConsult.pendingReasons.openWindow)}</dd></div>
+                          <div><dt>Follow-up coverage unverified</dt><dd>{fmt(contributorConsult.pendingReasons.unverifiedCoverage)}</dd></div>
+                          <div><dt>Other timing or attribution uncertainty</dt><dd>{fmt(contributorConsult.pendingReasons.other)}</dd></div>
+                        </dl> : (contributorConsult?.pending ?? 0) > 0 ? <p className="pw-note">Some cohort outcomes unresolved.</p> : !consultConversionSummary.coverageVerified && <p className="pw-note">Coverage unverified.</p>}
+                        {(contributorConsult?.needsAttribution ?? 0) > 0 && <a href="#session-attribution-audit">Review {fmt(contributorConsult?.needsAttribution)} attribution issues in the audit below</a>}
                         {!compareWholePractice && selectedContributorName !== "Whole Practice" && !hasUniqueClinicianIdentity(context.clinicians, selectedContributorName, workspace.settings.teamId) && <p className="pw-note">Imported clinician metrics are unknown: this name maps to multiple clinician IDs.</p>}
                         <details>
                           <summary>How these numbers are calculated</summary>
@@ -4758,13 +4764,51 @@ export default function PracticeWorkspace() {
                         <p className="pw-note">Observed close rate uses evaluated outcomes only; unresolved cases and referrals are excluded, not failures. It does not assert that the entire cohort is resolved. Current-team consultation cohorts use the selected activity dates, with all treatment follow-up retained. {consultConversionSummary.bookingLimitation}</p>
                         {compareWholePractice && consultComparisonRows.map((row) => <p className="pw-note" key={row.id}>{row.label}: {row.detail}</p>)}
                         </details>
-                        <details className="pw-consult-resolution">
+
+                      </section>
+                    </>, "pw-sessions-history-widgets", "small")}
+                  </div>
+                  {importedSessionOverlay &&
+                    (importedSessionOverlay.derivedSessions.length > 0 || importedSessionOverlay.conflictedManualSessions.length > 0 || importedSessionOverlay.diagnostic.attendanceStatusConflictCount > 0) && (
+                      <details className="pw-session-import-details"><summary>Import details</summary><p className="pw-note">Mapping exclusions retained for audit: {[...importedSessionOverlay.diagnostic.missingClinicianLabels, ...importedSessionOverlay.diagnostic.ambiguousClinicianLabels].join(", ") || "None"}.</p><p className="pw-note">
+                        Saved imports retain{" "}
+                        {importedSessionOverlay.diagnostic.rawAttendedRows.toLocaleString()}{" "}
+                        attended rows,{" "}
+                        {(
+                          importedSessionOverlay.diagnostic.rawAttendedRows -
+                          importedSessionOverlay.diagnostic
+                            .collapsedDuplicateShowRows
+                        ).toLocaleString()}{" "}
+                        derived attended visits, and{" "}
+                        {importedSessionOverlay.diagnostic.billedRows.toLocaleString()}{" "}
+                        billed rows for reconciliation. Only complete pay periods feed actuals and historical averages; future revenue uses clinician-card fees. Fully covered imported
+                        attendance replaces{" "}
+                        {importedSessionOverlay.diagnostic.manualImportOverrideCount.toLocaleString()}{" "}
+                        manual completed session
+                        {importedSessionOverlay.diagnostic
+                          .manualImportOverrideCount === 1
+                          ? ""
+                          : "s"}{" "}
+                        in this view;{" "}
+                        {importedSessionOverlay.diagnostic.manualImportConflictCount.toLocaleString()}{" "}
+                        partial-overlap imported row
+                        {importedSessionOverlay.diagnostic
+                          .manualImportConflictCount === 1
+                          ? ""
+                          : "s"}{" "}
+                        conflict with aggregate manual totals after complete-period admission. Original source evidence is retained.
+                        {importedSessionOverlay.conflictedManualSessions.length > 0 && <span className="pw-note"> The affected manual windows remain unknown because their uncovered counts cannot be independently allocated.</span>}
+                        {importedSessionOverlay.diagnostic.attendanceStatusConflictCount > 0 && <span className="pw-note"> {importedSessionOverlay.diagnostic.attendanceStatusConflictCount} attendance status conflicts retained for reconciliation. No upload-order winner is selected.</span>}
+                        {importedSessionOverlay.conflictedManualSessions.map((record) => <span key={record.id} className="pw-note">Manual source #{record.id}: {record.start} to {record.end}, {record.completed} recorded sessions. Not independently allocatable across uncovered dates.</span>)}
+                      </p></details>
+                    )}
+                        <details id="session-attribution-audit" className="pw-consult-resolution">
                           <summary>
                             {contributorConsult?.needsAttribution == null
                               ? "Review attribution: count unknown"
                               : contributorConsult.needsAttribution > 0
                                 ? `Review attribution: ${fmt(contributorConsult.needsAttribution)} need review`
-                                : "Attribution history"}
+                                : "Attribution audit"}
                             <ChevronDown />
                           </summary>
                           <div className="pw-consult-resolution-list">
@@ -4894,43 +4938,6 @@ export default function PracticeWorkspace() {
                             {consultConversionSummary.measurement != null && <p className="pw-note">Legacy confirmations are preserved; recorded consultation and full-session appointments determine closes automatically.</p>}
                           </div>
                         </details>
-                      </section>
-                    </>, "pw-sessions-history-widgets", "small")}
-                  </div>
-                  {importedSessionOverlay &&
-                    (importedSessionOverlay.derivedSessions.length > 0 || importedSessionOverlay.conflictedManualSessions.length > 0 || importedSessionOverlay.diagnostic.attendanceStatusConflictCount > 0) && (
-                      <details className="pw-session-import-details"><summary>Import details</summary><p className="pw-note">Mapping exclusions retained for audit: {[...importedSessionOverlay.diagnostic.missingClinicianLabels, ...importedSessionOverlay.diagnostic.ambiguousClinicianLabels].join(", ") || "None"}.</p><p className="pw-note">
-                        Saved imports retain{" "}
-                        {importedSessionOverlay.diagnostic.rawAttendedRows.toLocaleString()}{" "}
-                        attended rows,{" "}
-                        {(
-                          importedSessionOverlay.diagnostic.rawAttendedRows -
-                          importedSessionOverlay.diagnostic
-                            .collapsedDuplicateShowRows
-                        ).toLocaleString()}{" "}
-                        derived attended visits, and{" "}
-                        {importedSessionOverlay.diagnostic.billedRows.toLocaleString()}{" "}
-                        billed rows for reconciliation. Only complete pay periods feed actuals and historical averages; future revenue uses clinician-card fees. Fully covered imported
-                        attendance replaces{" "}
-                        {importedSessionOverlay.diagnostic.manualImportOverrideCount.toLocaleString()}{" "}
-                        manual completed session
-                        {importedSessionOverlay.diagnostic
-                          .manualImportOverrideCount === 1
-                          ? ""
-                          : "s"}{" "}
-                        in this view;{" "}
-                        {importedSessionOverlay.diagnostic.manualImportConflictCount.toLocaleString()}{" "}
-                        partial-overlap imported row
-                        {importedSessionOverlay.diagnostic
-                          .manualImportConflictCount === 1
-                          ? ""
-                          : "s"}{" "}
-                        conflict with aggregate manual totals after complete-period admission. Original source evidence is retained.
-                        {importedSessionOverlay.conflictedManualSessions.length > 0 && <span className="pw-note"> The affected manual windows remain unknown because their uncovered counts cannot be independently allocated.</span>}
-                        {importedSessionOverlay.diagnostic.attendanceStatusConflictCount > 0 && <span className="pw-note"> {importedSessionOverlay.diagnostic.attendanceStatusConflictCount} attendance status conflicts retained for reconciliation. No upload-order winner is selected.</span>}
-                        {importedSessionOverlay.conflictedManualSessions.map((record) => <span key={record.id} className="pw-note">Manual source #{record.id}: {record.start} to {record.end}, {record.completed} recorded sessions. Not independently allocatable across uncovered dates.</span>)}
-                      </p></details>
-                    )}
                   <details className="pw-panel"><summary>Financial session goal details</summary>
                     {sessionGoal.unavailableReasons.map((reason) => <p key={reason}>{reason}</p>)}
                     {sessionGoal.knownSourceAssumptions.map((assumption) => <p key={assumption}>{assumption}</p>)}
@@ -7441,6 +7448,11 @@ export default function PracticeWorkspace() {
                       <details><summary>How this is calculated</summary><p>{historicalPayBasis === "current-assumptions" ? "Current-pay scenario for historical configuration gaps." : "Configured pay dates respected."} Historical percentage compensation uses accepted discounted billed charges. Costs use configured assumptions, not paid receipts. Future revenue and percentage pay use clinician-card fee estimates. Incomplete source periods are excluded; missing inputs stay unknown. Recorded actual profit remains separate in Money.</p>{financialEstimates?.summary.reasons.map((warning) => <p key={warning}>{warning}</p>)}</details>
                     </section>
                   </div>
+                </>
+              )}
+              {((section === "settings" && mode === "practice") || (section === "summary" && mode !== "practice")) && (
+                <section className="pw-forecast-administration" aria-label="Forecast and import administration">
+                  {section === "settings" && <h2>Forecast and imports</h2>}
                   <details className="pw-overview-report-controls"><summary>Forecast controls</summary>
                   <SharedPeriodControls
                     period={sharedPeriod}
@@ -8168,7 +8180,7 @@ export default function PracticeWorkspace() {
                     {detailButton("goals", "Metric targets")}
                   </div>
                   </details>
-                </>
+                </section>
               )}
               {section === "current-goals" && (
                 <>

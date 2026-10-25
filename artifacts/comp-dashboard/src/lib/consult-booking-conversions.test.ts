@@ -466,3 +466,20 @@ test("PHONE remains excluded and retention still needs three completed full sess
     assert.equal(retention.attendanceByClinician[0].retainedClients, completed === 3 ? 1 : 0);
   }
 });
+
+test("unresolved reason counts are disjoint, clinician-scoped and exclude closes/referrals", () => {
+ const snapshot=attendance([consult,appointment(),
+  'open,Intake,2026-01-28,Phone,show',
+  'coverage,Intake,2026-01-01,Phone,show',
+  'referral,Intake,2026-01-10,Phone,show','referral,Other,2026-01-20,Room,show',
+  'ambiguous,Intake,2026-01-05,Phone,show','ambiguous,Intake,2026-01-05,Room,show',
+ ],undefined,false);
+ const result=summarize([snapshot],'2026-02-15');
+ for(const metric of [result.practice,clinician(result)]) {
+  assert.equal(metric.pending,3);
+  assert.deepEqual(metric.pendingReasons,{openWindow:1,unverifiedCoverage:1,other:1});
+  assert.equal(metric.converted,1);assert.equal(metric.internalReferralsProtected,1);assert.equal(metric.missed,0);
+ }
+ assert.equal(result.byClinician.find(row=>row.clinician==='Other')?.pending ?? 0,0);
+ assert.equal(result.practice.observedConversionRate,100);
+});

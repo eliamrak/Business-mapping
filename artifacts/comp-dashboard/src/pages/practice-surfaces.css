@@ -58,3 +58,24 @@
  .pw-app[data-material] .pw-team-history .pw-historical-period-values {grid-template-columns:minmax(0,1fr);}
  .pw-app[data-material] .pw-team-history .pw-historical-period-value + .pw-historical-period-value {border-left:0;padding-left:0;border-top:1px solid var(--pw-tone-border);padding-top:12px;}
 }
+.pw-app[data-material] .pw-overview-monthly-attrition {display:grid;gap:4px;margin:8px 0;color:var(--pw-tone-text);}
+.pw-app[data-material] .pw-overview-monthly-attrition strong {font-size:24px;line-height:1.3;}
+.pw-app[data-material] .pw-overview-monthly-attrition span {font-size:13px;}
+/* Legacy embedded Settings controls share the same material palette. */
+.pw-app[data-material] {
+ --pr-bg:var(--pw-tone-panel); --pr-soft:var(--pw-tone-input);
+ --pr-text:var(--pw-tone-text); --pr-muted:var(--pw-tone-text-muted);
+ --pr-line:var(--pw-tone-border); --pr-accent:var(--pw-tone-positive);
+ --pr-tint:var(--pw-tone-action); --pr-rose:var(--pw-tone-negative);
+}
+.pw-app[data-material="tidal"] {--pr-accent-text:#fff;--pr-warning:#714400;}
+.pw-app[data-material] .pw-text-button {color:var(--pw-tone-text);}
+.pw-app[data-material] .pw-forecast-administration {display:grid;gap:16px;margin-bottom:24px;min-width:0;}
+.pw-app[data-material] .hub-tabs button[aria-selected="true"] {color:var(--pw-tone-text);border-bottom-color:var(--pw-tone-positive);font-weight:600;}
+.pw-app[data-material] .pw-overview-historical-summary > .pw-text-button {color:var(--pw-tone-text);}
+.pw-app[data-material] .pw-consult-pending-reasons {display:flex;flex-wrap:wrap;gap:16px;margin:12px 0;}
+.pw-app[data-material] .pw-consult-pending-reasons div {min-width:0;flex:1 1 150px;}
+.pw-app[data-material] .pw-consult-pending-reasons dd {margin:4px 0;font-size:20px;font-weight:600;}
+.pw-app[data-material] .pf-payroll-breakdown dl {display:grid;gap:10px;margin:12px 0;}
+.pw-app[data-material] .pf-payroll-breakdown dd {margin:4px 0;overflow-wrap:anywhere;}
+.pw-app[data-material] .pw-import-attention .pw-tag {color:var(--pw-tone-text);}

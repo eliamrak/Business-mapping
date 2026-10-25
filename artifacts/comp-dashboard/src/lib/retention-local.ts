@@ -296,6 +296,8 @@ export type ConsultConversionMetric = {
   missed: number;
   /** Clinician pending includes unresolved credit; practice pending is follow-up maturity. */
   pending: number;
+  /** Disjoint aggregate primary reasons for unresolved observable-scheduling outcomes. */
+  pendingReasons?: { openWindow: number; unverifiedCoverage: number; other: number };
   needsAttribution: number;
   internalReferralsProtected: number;
   evaluated: number;
