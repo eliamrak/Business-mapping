@@ -639,3 +639,18 @@ test("legacy and saved salary targets use max with configured Erin salary, while
   salary.amount = 450;
   close(owner().requiredMonthly, 450);
 });
+
+test("therapist recommendation includes burden on billed income, independently of processing fees and current allocation", () => {
+  const input = setup();
+  input.asOf = "2026-09-01";
+  input.estimatedMonthlyValues = { ...input.estimatedMonthlyValues, revenue: 100000, clinicianPay: 37000, employerBurden: 4500, fees: 3000 };
+  const before = structuredClone(input);
+  const report = profitFirstPlanning(input);
+  const payroll = report.rows.find(row => row.key === "therapist-payroll")!;
+  close(payroll.requiredPercent, 41.5); close(payroll.currentPercent, 36);
+  input.estimatedMonthlyValues.fees = 6000;
+  close(profitFirstPlanning(input).rows.find(row => row.key === "therapist-payroll")!.requiredPercent, 41.5);
+  assert.deepEqual(before.estimatedMonthlyValues!.clinicianPay, input.estimatedMonthlyValues.clinicianPay);
+  input.estimatedMonthlyValues.otherIncome = 10000;
+  close(profitFirstPlanning(input).rows.find(row => row.key === "therapist-payroll")!.requiredPercent, 41500 / 110000 * 100);
+});

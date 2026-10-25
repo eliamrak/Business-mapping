@@ -152,3 +152,16 @@ test("quiet covered clinicians preserve zero while imported billing changes cann
   const second = moneyPlanningForecast(workspace, context, "2026-10-18", coverage);
   assert.deepEqual(second.months.map(m => m.values), first.months.map(m => m.values));
 });
+
+test("confirmed billed-rate split remains unchanged by collection and processor fee assumptions", () => {
+  const { workspace, context, coverage } = fixture();
+  const baseline = moneyPlanningForecast(workspace, context, "2026-10-25", coverage, "2026-10").months[0].values;
+  workspace.settings.collectionPct = 70;
+  workspace.settings.processingPct = 9;
+  workspace.settings.processingFixedPerTransaction = 0.4;
+  const adjusted = moneyPlanningForecast(workspace, context, "2026-10-25", coverage, "2026-10").months[0].values;
+  close(adjusted.revenue, baseline.revenue!);
+  close(adjusted.clinicianPay, baseline.clinicianPay!);
+  assert.notEqual(adjusted.fees, baseline.fees);
+  close(baseline.profit! - adjusted.profit!, adjusted.fees! - baseline.fees!);
+});

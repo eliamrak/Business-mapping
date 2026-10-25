@@ -94,7 +94,7 @@ export default function ProfitFirstPlanning(props: ProfitFirstPlanningProps) {
     && reason !== "Monthly billed revenue estimate is missing."
     && !["overhead", "fees", "marketing"].some(key => costValue(key) === null && reason.startsWith(report.costs.find(cost => cost.key === key)!.label + ":")));
   const month = new Date(`${props.asOf.slice(0, 7)}-01T12:00:00Z`);
-  const monthLabel = Number.isFinite(month.valueOf()) ? month.toLocaleDateString("en-US", { month: "long", timeZone: "UTC" }) : "Month unknown";
+  const monthLabel = Number.isFinite(month.valueOf()) ? month.toLocaleDateString("en-US", { month: "long", year: "numeric", timeZone: "UTC" }) : "Month unknown";
   const fundingInputs = <div className="pf-goals">
     {presetGoals.map(preset => <label key={preset.key}>{preset.name}<input aria-label={preset.name} type="number" min="0" max="10000000000" step="100" placeholder="Not configured" disabled={!props.onPlanningChange} {...errorProps(preset.key)}
       value={drafts[preset.key] ?? preset.goal?.monthlyAmount ?? ""}

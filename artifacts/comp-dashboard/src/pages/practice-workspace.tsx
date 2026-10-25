@@ -168,6 +168,7 @@ import {
 } from "@/lib/bulk-lead-flow";
 import MoneyFlowToday from "@/components/practice/money-flow-today";
 import MoneyRangeSummary from "@/components/practice/money-range-summary";
+import MoneyMonthPicker from "@/components/practice/money-month-picker";
 import ProfitFirstPlanning from "@/components/practice/profit-first-planning";
 import { moneyPlanningForecast } from "@/lib/money-planning-forecast";
 import { practiceFinancialRange, financialRangeBridge } from "@/lib/practice-financial-range";
@@ -6292,7 +6293,7 @@ export default function PracticeWorkspace() {
               )}
               {section === "money" && mode === "practice" && moneyTab === "allocations" && (
                 <>
-                  <div className="pw-money-month-control"><label className="pw-draft-field"><span>Month</span><input type="month" aria-label="Money month" value={moneyPlanningMonth || today.slice(0, 7)} onChange={event => { if (/^\d{4}-\d{2}$/.test(event.target.value)) setMoneyPlanningMonth(event.target.value); }} /></label><button type="button" className="pw-button" onClick={() => setMoneyPlanningMonth(new Date(Date.UTC(Number(today.slice(0, 4)), Number(today.slice(5, 7)) - 2, 1)).toISOString().slice(0, 7))}>Last month</button></div>
+                  <MoneyMonthPicker value={moneyPlanningMonth || today.slice(0, 7)} today={today} onChange={setMoneyPlanningMonth} />
                   <ProfitFirstPlanning
                     workspace={planningWorkspace}
                     context={modelContext ?? context}
