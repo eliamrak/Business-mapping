@@ -932,7 +932,7 @@ export default function PracticeWorkspace() {
   const currentConsultCohort = useMemo(() => context && workspace
     ? currentPracticeClinicians(workingWorkspace, context, today).map((person) => person.label) : [],
   [context, workingWorkspace?.settings.teamId, workingWorkspace?.clinicians, today]);
-  const importMappingAlerts = actionableImportLabels(importedSessionOverlay?.diagnostic.missingClinicianLabels ?? [], importedSessionOverlay?.diagnostic.ambiguousClinicianLabels ?? [], context?.clinicians ?? [], context && workingWorkspace ? currentPracticeClinicians(workingWorkspace, context, today).map(person => person.id) : []);
+  const importMappingAlerts = actionableImportLabels(importedSessionOverlay?.diagnostic.missingClinicianLabels ?? [], importedSessionOverlay?.diagnostic.ambiguousClinicianLabels ?? [], context?.clinicians ?? [], context && workingWorkspace ? currentPracticeClinicians(workingWorkspace, context, today).map(person => person.id) : [], importEvidenceDeclarations);
   const excludedFollowUpEvidence = useMemo(() => localRetentionState.snapshots.flatMap((snapshot) => snapshot.kind === "attendance" ? snapshot.rows.filter((row) => {
     if (row.status !== "show" || completeClinicalReports?.eligibleAttendanceRows.includes(row)) return false;
     const ids = context?.clinicians.filter((person) => normalizeClinicianName(person.label) === normalizeClinicianName(row.clinician)).map((person) => person.id) ?? [];
@@ -4769,8 +4769,8 @@ export default function PracticeWorkspace() {
                     </>, "pw-sessions-history-widgets", "small")}
                   </div>
                   {importedSessionOverlay &&
-                    (importedSessionOverlay.derivedSessions.length > 0 || importedSessionOverlay.conflictedManualSessions.length > 0 || importedSessionOverlay.diagnostic.attendanceStatusConflictCount > 0) && (
-                      <details className="pw-session-import-details"><summary>Import details</summary><p className="pw-note">Mapping exclusions retained for audit: {[...importedSessionOverlay.diagnostic.missingClinicianLabels, ...importedSessionOverlay.diagnostic.ambiguousClinicianLabels].join(", ") || "None"}.</p><p className="pw-note">
+                    (importedSessionOverlay.derivedSessions.length > 0 || importedSessionOverlay.conflictedManualSessions.length > 0 || importedSessionOverlay.diagnostic.attendanceStatusConflictCount > 0 || importedSessionOverlay.diagnostic.missingClinicianLabels.length > 0 || importedSessionOverlay.diagnostic.ambiguousClinicianLabels.length > 0) && (
+                      <details className="pw-session-import-details"><summary>Import details</summary><p className="pw-note">Mapping exclusions retained for audit: {[...importedSessionOverlay.diagnostic.missingClinicianLabels, ...importedSessionOverlay.diagnostic.ambiguousClinicianLabels].join(", ") || "None"}.</p>{importEvidenceDeclarations?.historicalBillingProviders?.length ? <p className="pw-note">Historical billing-only identities do not resolve attendance mapping. Unmapped attendance remains excluded; coverage limits still apply.</p> : null}<p className="pw-note">
                         Saved imports retain{" "}
                         {importedSessionOverlay.diagnostic.rawAttendedRows.toLocaleString()}{" "}
                         attended rows,{" "}
