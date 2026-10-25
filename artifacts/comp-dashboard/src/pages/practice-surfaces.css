@@ -1,0 +1,60 @@
+/* Shared, opaque-first surfaces. Transparency is enhancement, never text opacity. */
+.pw-app[data-material] {
+  --pw-surface-solid: var(--pw-tone-panel);
+  --pw-surface-glass: color-mix(in srgb, var(--pw-tone-panel) 90%, transparent);
+  --pw-surface-radius: 14px;
+  --pw-surface-space: clamp(16px, 2vw, 24px);
+}
+.pw-app[data-material="tidal"] {
+  --pw-surface-glass: rgb(241 246 248 / 75%);
+  --pw-tone-text-muted: #294958;
+  --pw-tone-text-detail: #294958;
+}
+.pw-app[data-material] .pw-content {
+  background:var(--pw-surface-solid); border-radius:var(--pw-surface-radius);
+  padding:var(--pw-surface-space); min-width:0;
+}
+.pw-app[data-material] :is(.pw-person,.pw-edit-item,.pw-metric-panel,.pw-money-bridge-panel,.pw-focused-plan,.pw-session-tracker,.pw-progression,.pw-overview-composition > section,.pw-local-import-grid > section,.pw-local-tables > section,.pw-billing-codes,.pw-section-heading,.pw-marketing-breakdown,.pw-empty) {
+  background:var(--pw-surface-solid); color:var(--pw-tone-text);
+  border:1px solid var(--pw-tone-border); border-radius:var(--pw-surface-radius);
+  padding:var(--pw-surface-space); min-width:0; box-sizing:border-box;
+  box-shadow:0 5px 18px #00000012;
+}
+@supports (backdrop-filter:blur(12px)) {
+ .pw-app[data-material] .pw-content,
+ .pw-app[data-material] :is(.pw-person,.pw-edit-item,.pw-metric-panel,.pw-money-bridge-panel,.pw-focused-plan,.pw-session-tracker,.pw-progression,.pw-overview-composition > section,.pw-section-heading,.pw-marketing-breakdown,.pw-empty) {
+  background:var(--pw-surface-glass); backdrop-filter:blur(12px); -webkit-backdrop-filter:blur(12px);
+ }
+}
+.pw-app[data-material] :is(h2,h3,h4,h5,label,th,dt,summary) {color:var(--pw-tone-text);}
+.pw-app[data-material] :is(input,select,textarea) {box-sizing:border-box;min-width:0;max-width:100%;background:var(--pw-tone-input);color:var(--pw-tone-text);border-color:var(--pw-tone-border-input);}
+.pw-app[data-material] :is(input,select,button,summary):focus-visible {outline:2px solid var(--pw-tone-text);outline-offset:3px;}
+.pw-app[data-material] :is(h2,h3,h4,h5,p,small,span,dd,label,summary) {overflow-wrap:anywhere;}
+.pw-app[data-material] :is(.pw-edit-grid,.pw-number-grid,.pw-person-meta,.pw-edit-item-heading,.pw-section-heading) > * {min-width:0;max-width:100%;}
+.pw-app[data-material] :is(.pw-edit-grid,.pw-number-grid) {grid-template-columns:repeat(auto-fit,minmax(min(100%,180px),1fr));}
+.pw-app[data-material] .pw-person {padding:var(--pw-surface-space);}
+.pw-app[data-material] .pw-person > header {flex-wrap:wrap;gap:16px;}
+.pw-app[data-material] .pw-person-meta {flex-wrap:wrap;gap:10px;}
+.pw-app[data-material] .pw-team-highlights {display:grid;gap:8px;margin:20px 0;}
+.pw-app[data-material] .pw-team-highlights strong {font-size:26px;line-height:1.35;}
+.pw-app[data-material] .pw-team-highlights small {font-size:14px;font-weight:400;}
+.pw-app[data-material] .pw-team-history {border-top:1px solid var(--pw-tone-border);padding:16px 0;}
+.pw-app[data-material] .pw-team-history > summary {font-weight:600;cursor:pointer;min-height:28px;}
+.pw-app[data-material] .pw-team-history .pw-person-kpis {display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:24px;margin-top:20px;}
+@media(max-width:600px) {
+ .pw-app[data-material] .pw-content {padding:12px;}
+ .pw-app[data-material] .pw-team-history .pw-person-kpis {grid-template-columns:minmax(0,1fr);}
+ .pw-app[data-material] .pw-person > header {align-items:flex-start;}
+ .pw-app[data-material] :is(.pw-edit-item-heading,.pw-section-heading) {flex-wrap:wrap;gap:12px;}
+}
+@media(prefers-reduced-transparency:reduce), (forced-colors:active) {
+ .pw-app[data-material] .pw-content,
+ .pw-app[data-material] :is(.pw-person,.pw-edit-item,.pw-metric-panel,.pw-money-bridge-panel,.pw-focused-plan,.pw-session-tracker,.pw-progression,.pw-overview-composition > section,.pw-section-heading,.pw-marketing-breakdown,.pw-empty) {background:var(--pw-surface-solid);backdrop-filter:none;-webkit-backdrop-filter:none;box-shadow:none;}
+}
+.pw-app[data-material] .pw-attrition-count-kpi {margin:8px 0;display:grid;gap:8px;justify-items:start;}
+.pw-app[data-material] .pw-attrition-count-ring {display:grid;place-items:center;width:88px;height:88px;border:6px solid var(--pw-tone-track);border-radius:50%;box-sizing:border-box;font-size:24px;font-weight:600;color:var(--pw-tone-text);}
+.pw-app[data-material] .pw-attrition-count-kpi figcaption {font-size:13px;color:var(--pw-tone-text);}
+@media(max-width:400px) {
+ .pw-app[data-material] .pw-team-history .pw-historical-period-values {grid-template-columns:minmax(0,1fr);}
+ .pw-app[data-material] .pw-team-history .pw-historical-period-value + .pw-historical-period-value {border-left:0;padding-left:0;border-top:1px solid var(--pw-tone-border);padding-top:12px;}
+}

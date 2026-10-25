@@ -41,13 +41,12 @@ const fixture = (): HistoricalSessionCapacityProps => {
   return { reports, capacity: { "3mo": row("3mo"), year: row("year") } };
 };
 
-test("Team session histories render actual/desired weekly pace, percent full, dates and unit-correct differences", () => {
+test("Team session histories render actual/desired weekly pace, percent full, dates without redundant arithmetic", () => {
   const props = fixture();
   const before = structuredClone(props);
   const html = renderToStaticMarkup(createElement(HistoricalSessionCapacity, props));
   for (const text of ["Trailing 3 months", "Trailing year", "2026-07-01", "2025-10-01", "2026-09-30",
-    "17 actual / week", "23 desired / week", "73.9% full", "10 actual / week", "20 desired / week", "50% full",
-    "+7 sessions / week", "+23.9 percentage points full"]) assert.ok(html.includes(text), text);
+    "17 actual / week", "23 desired / week", "73.9% full", "10 actual / week", "20 desired / week", "50% full"]) assert.ok(html.includes(text), text);
   assert.equal([...html.matchAll(/<details>/g)].length, 2);
   assert.doesNotMatch(html, /<details\s+open|<button|<select/);
   assert.match(html, /Coverage and assumptions/);
@@ -55,7 +54,7 @@ test("Team session histories render actual/desired weekly pace, percent full, da
   assert.deepEqual(props, before);
 });
 
-test("missing capacity keeps both dates and every value and difference unknown", () => {
+test("missing capacity keeps both dates and every value unknown", () => {
   const props = fixture();
   const html = renderToStaticMarkup(createElement(HistoricalSessionCapacity, { reports: props.reports, capacity: undefined }));
   assert.match(html, /2026-07-01/);
@@ -63,7 +62,7 @@ test("missing capacity keeps both dates and every value and difference unknown",
   assert.equal([...html.matchAll(/Unknown actual \/ week/g)].length, 2);
   assert.equal([...html.matchAll(/Unknown desired \/ week/g)].length, 2);
   assert.equal([...html.matchAll(/Unknown full/g)].length, 2);
-  assert.equal([...html.matchAll(/3 months - year: Unknown/g)].length, 2);
+  assert.doesNotMatch(html, /3 months - year:/);
   assert.doesNotMatch(html, /0 actual|0 desired|0% full/);
 });
 
@@ -86,5 +85,5 @@ test("capacity percentages above 100 stay visible while a missing weekly observa
   const html = renderToStaticMarkup(createElement(HistoricalSessionCapacity, props));
   assert.match(html, /150% full/);
   assert.match(html, /Unknown actual \/ week/);
-  assert.match(html, /3 months - year: Unknown/);
+  assert.doesNotMatch(html, /3 months - year:/);
 });

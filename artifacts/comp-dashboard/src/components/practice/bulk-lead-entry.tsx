@@ -101,7 +101,7 @@ export default function BulkLeadEntry({ workspace, readOnly, pending, year, onYe
       </label>
       <span className="pw-bulk-summary">{busy ? "Saving..." : `${plan.changes.length} month${plan.changes.length === 1 ? "" : "s"} ready to save`}</span>
     </div>
-    <div className="pw-bulk-table-wrap"><table className="pw-bulk-table">
+    <div className="pw-bulk-table-wrap" role="region" aria-label="Monthly lead totals; scroll horizontally for all fields" tabIndex={0}><table className="pw-bulk-table">
       <thead><tr><th>Month</th>{fields.map(({ key, label }) => <th key={key}>{label}</th>)}
         <th title="Scheduled consults divided by leads">Schedule rate</th>
         <th title="Attended consults divided by scheduled consults">Show rate</th>

@@ -127,7 +127,7 @@ test("invalid allocation choices and native badInput block grouped staging until
 
 test("missing taxes show the exact missing input, sources stay collapsed, and the heading names October", () => {
   const f = fixture(null);
-  assert.equal(text(nodes(f.tree).find(node => node.type === "h2")), "October allocations");
+  assert.equal(text(nodes(f.tree).find(node => node.type === "h2")), "October 2026 allocations");
   assert.equal(f.cells("Taxes")[2], "Unknown");
   assert.match(f.cells("Taxes").at(-1)!, /Quarterly tax planning estimate is missing\./);
   const details = nodes(f.tree).find(node => node.type === "details" && text(node).startsWith("Cost estimates and source periods"));

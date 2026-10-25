@@ -305,7 +305,7 @@ test("Team and Sessions integrate both histories while activity-date consults re
   const team = source.slice(source.indexOf('{section === "clinicians" && ('), source.indexOf('{section === "sessions" && ('));
   for (const kind of ["retention", "attrition", "consult"]) {
     assert.ok(team.includes(`values={historicalValuesFor("${kind}", person.label)}`));
-    assert.ok(team.includes(`difference={historicalDifferenceFor("${kind}", person.label)}`));
+    assert.ok(!team.includes(`difference={historicalDifferenceFor("${kind}", person.label)}`));
   }
   assert.doesNotMatch(team, /\{historicalControls\}/);
   assert.match(team, /<HistoricalSessionCapacity capacity=\{historicalCapacityById.get\(person.id\)\} reports=\{historicalReports\}/);

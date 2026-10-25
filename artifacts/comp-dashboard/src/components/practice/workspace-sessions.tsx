@@ -522,7 +522,7 @@ export default function WorkspaceSessions({
   const fullView = (
     <section aria-label="Session totals" className="pw-session-tracker" style={compact ? { padding: 0, border: "none", background: "transparent" } : undefined}>
       <div className="pw-section-heading pw-session-panel-header">
-        <h2>Sessions</h2>
+        <h2>{compact ? "Records and planning" : "Sessions"}</h2>
         {!compact && controls && <div className="pw-session-panel-controls">{controls}</div>}
         <details className="pw-session-tools">
           <summary>Session tools</summary>
@@ -572,6 +572,7 @@ export default function WorkspaceSessions({
         </details>
       </div>
 
+      {!compact && <>
       <div className="pw-session-overview-heading">
         <div>
           {!compact && <p className="pw-session-date-context">{shortDate(chartBounds.start)} - {shortDate(chartBounds.end)}; {display(selectedSummary.observedCompleted ?? null)} observed sessions</p>}
@@ -642,6 +643,7 @@ export default function WorkspaceSessions({
         </div>
         {!visibleRecords.length && !chartData.some((point) => point.completed !== null || point.observedCompleted !== null) && <p className="pw-empty">No complete recorded periods in this date range.</p>}
       </div>}
+      </>}
       {!!readPeople.length && (
         <details className="pw-session-clinician-details">
           <summary>Clinician details</summary>
@@ -1234,7 +1236,8 @@ export default function WorkspaceSessions({
     {!compareWholePractice && !chartData.some((point) => point.trailingWeeklyAverage !== null) && <p className="pw-note">4-week trailing average unavailable: four consecutive fully covered calendar weeks are required.</p>}
     {!chartData.some((point) => point.completed !== null || point.observedCompleted !== null || point.periodRate !== null) && <p className="pw-note">Eligible complete-period observations are unavailable for these dates.</p>}
     <details onToggle={(event) => setCompactDetailsOpen(event.currentTarget.open)}>
-      <summary>Session entry, history and hiring</summary>
+      <summary>Session records and planning</summary>
+      <p>Enter or inspect period totals and review hiring readiness. The chart above remains the selected-period view.</p>
       {compactDetailsOpen && fullView}
     </details>
   </section>;

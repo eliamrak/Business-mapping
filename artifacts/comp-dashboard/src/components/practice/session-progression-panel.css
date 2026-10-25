@@ -87,3 +87,9 @@
 @media (max-width: 700px) {
   .pw-app .pw-progression h3:not(.pw-integrated-tool *) { font-size: 21px; }
 }
+.pw-progression-period {display:flex;flex-wrap:wrap;gap:12px;align-items:end;margin:18px 0;}
+.pw-progression-period label {display:grid;gap:6px;min-width:0;}
+.pw-progression-period p {flex-basis:100%;margin:0;}
+.pw-progression-period input,.pw-progression-period select {min-height:44px;max-width:100%;}
+.pw-progression-data > summary {cursor:pointer;padding:16px 0;font-weight:600;}
+.pw-progression-data > summary:focus-visible {outline:2px solid var(--pw-tone-text);outline-offset:3px;}

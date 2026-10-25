@@ -39,6 +39,6 @@ export function HistoricalPeriodValues({ values, difference, className = "", dat
         {children != null && <div className="pw-historical-period-children">{children}</div>}
       </section>;
     })}
-    {difference != null && <p className="pw-historical-period-difference">{difference}</p>}
+
   </div>;
 }

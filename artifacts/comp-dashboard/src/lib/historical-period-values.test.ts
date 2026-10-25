@@ -73,10 +73,9 @@ test("unknown main values and missing children stay explicit without manufacture
   assert.doesNotMatch(html, /pw-historical-period-children|0%|50%/);
 });
 
-test("a compact recent-minus-baseline difference renders once below the two regions", () => {
+test("redundant comparison arithmetic is omitted while both labeled periods remain", () => {
   const html = renderToStaticMarkup(createElement(HistoricalPeriodValues, { values, difference: "3 months - year: -50 percentage points" }));
-  assert.equal([...html.matchAll(/3 months - year: -50 percentage points/g)].length, 1);
-  assert.match(html, /<\/section><p class="pw-historical-period-difference">3 months - year: -50 percentage points<\/p>/);
-  const unknown = renderToStaticMarkup(createElement(HistoricalPeriodValues, { values, difference: "3 months - year: Unknown" }));
-  assert.match(unknown, /3 months - year: Unknown/);
+  assert.doesNotMatch(html, /3 months - year:|pw-historical-period-difference/);
+  assert.match(html, /Trailing 3 months/);
+  assert.match(html, /Trailing year/);
 });

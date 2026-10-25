@@ -1,3 +1,4 @@
+import { actionableImportLabels } from "@/lib/import-warning-scope";
 import { Children, Fragment, isValidElement, useEffect, useId, useMemo, useRef, useState, type ReactNode } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useUnsaved } from "@/components/hub/use-unsaved";
@@ -199,6 +200,7 @@ import "@/pages/practice-workspace.css";
 import "@/pages/practice-approved.css";
 import "@/components/practice/historical-period-values.css";
 import { TidalMaterial } from "@/components/practice/tidal-material";
+import "@/pages/practice-surfaces.css";
 import { MobileWorkspaceNavigation, MobilePageActions, MobileContributorSelect } from "@/components/practice/mobile-workspace-controls";
 
 type Mode = "practice" | "sandbox" | "goals";
@@ -930,6 +932,7 @@ export default function PracticeWorkspace() {
   const currentConsultCohort = useMemo(() => context && workspace
     ? currentPracticeClinicians(workingWorkspace, context, today).map((person) => person.label) : [],
   [context, workingWorkspace?.settings.teamId, workingWorkspace?.clinicians, today]);
+  const importMappingAlerts = actionableImportLabels(importedSessionOverlay?.diagnostic.missingClinicianLabels ?? [], importedSessionOverlay?.diagnostic.ambiguousClinicianLabels ?? [], context?.clinicians ?? [], context && workingWorkspace ? currentPracticeClinicians(workingWorkspace, context, today).map(person => person.id) : []);
   const excludedFollowUpEvidence = useMemo(() => localRetentionState.snapshots.flatMap((snapshot) => snapshot.kind === "attendance" ? snapshot.rows.filter((row) => {
     if (row.status !== "show" || completeClinicalReports?.eligibleAttendanceRows.includes(row)) return false;
     const ids = context?.clinicians.filter((person) => normalizeClinicianName(person.label) === normalizeClinicianName(row.clinician)).map((person) => person.id) ?? [];
@@ -3021,7 +3024,7 @@ export default function PracticeWorkspace() {
         range: metric.range,
         value: comparisonRows
           ? <MetricComparison rows={comparisonRows.map((row) => ({ ...row, detail: undefined }))} unit={kind === "attrition" ? "endings / month" : "%"} percentage={kind !== "attrition"} label={`${period === "3mo" ? "Trailing 3 months" : "Trailing year"} ${kind} comparison`} />
-          : kind === "attrition" ? <strong>{metric.value == null ? "Unknown" : fmt(metric.value)} endings / month</strong>
+          : kind === "attrition" ? <figure className="pw-attrition-count-kpi" aria-label={`Average monthly attrition: ${metric.value == null ? "Unknown" : fmt(metric.value)} endings per month. This is a count, not a percentage.`}><div className="pw-attrition-count-ring" aria-hidden="true">{metric.value == null ? "—" : fmt(metric.value)}</div><figcaption>{metric.value == null ? "Unknown endings / month" : "endings / month"}</figcaption></figure>
           : <PercentageKpi label={kind === "retention" ? "Retention" : "Observed close rate"} value={metric.value} goal={workingWorkspace.settings.performanceTargets?.[kind === "retention" ? "retentionPct" : "closeRatePct"]} benchmark={name === "Whole Practice" ? null : metric.benchmark} period={metric.range} benchmarkPeriod={metric.range} showPeriod={false} />,
         detail: <details><summary>Counts and coverage</summary>
           {comparisonRows && <p>Available date ranges can differ by clinician. A Whole Practice marker is shown only for matching dates.</p>}
@@ -4233,8 +4236,16 @@ export default function PracticeWorkspace() {
                               </button>
                             )}
                           </header>
+                          {!uniqueIdentity && <p className="pw-note">Imported clinician metrics are unknown: this name maps to multiple clinician IDs.</p>}
+                          <div className="pw-team-highlights" aria-label={`${person.label} recent workload`}>
+                            <span>Trailing 3 months · observed workload</span>
+                            <strong>{fmt(historicalCapacityById.get(person.id)?.["3mo"].weekly)} <small>sessions / week</small></strong>
+                            <span>{fmt(historicalCapacityById.get(person.id)?.["3mo"].desiredWeekly)} desired / week · {fmt(historicalCapacityById.get(person.id)?.["3mo"].utilizationPct)}% full</span>
+                            {!historicalCapacityById.get(person.id)?.["3mo"].coverageComplete && <span className="pw-note">Coverage is incomplete; see performance history.</span>}
+                          </div>
+                          <details className="pw-team-history"><summary>Performance history and coverage</summary>
                           <div className="pw-person-kpis">
-                            {!uniqueIdentity && <p className="pw-note">Imported clinician metrics are unknown: this name maps to multiple clinician IDs.</p>}
+
                             <div>
                               <span>Sessions</span>
                               <HistoricalSessionCapacity capacity={historicalCapacityById.get(person.id)} reports={historicalReports} />
@@ -4246,17 +4257,18 @@ export default function PracticeWorkspace() {
                             </div>
                             <div>
                               <span>Retention</span>
-                              <HistoricalPeriodValues dates="help" values={historicalValuesFor("retention", person.label)} difference={historicalDifferenceFor("retention", person.label)} />
+                              <HistoricalPeriodValues dates="help" values={historicalValuesFor("retention", person.label)} />
                             </div>
                             <div>
                               <span>Average monthly attrition</span>
-                              <HistoricalPeriodValues dates="help" periodLabels={{ "3mo": "Last 3 mature months", year: "Last 12 mature months" }} values={historicalValuesFor("attrition", person.label)} difference={historicalDifferenceFor("attrition", person.label)} />
+                              <HistoricalPeriodValues dates="help" periodLabels={{ "3mo": "Last 3 mature months", year: "Last 12 mature months" }} values={historicalValuesFor("attrition", person.label)} />
                             </div>
                             <div>
                               <span>Observed close rate</span>
-                              <HistoricalPeriodValues dates="help" values={historicalValuesFor("consult", person.label)} difference={historicalDifferenceFor("consult", person.label)} />
+                              <HistoricalPeriodValues dates="help" values={historicalValuesFor("consult", person.label)} />
                             </div>
                           </div>
+                          </details>
                           <details className="pw-clinician-operating-details"><summary>Clinician details</summary>
                           <div className="pw-number-grid">
                             <NumberField
@@ -4641,57 +4653,7 @@ export default function PracticeWorkspace() {
                     {contributorNames.map((name, index) => <button key={index === 0 ? "practice" : people[index - 1].id} aria-pressed={selectedContributorName === name && !compareWholePractice} onClick={() => { setSharedContributor(name); setCompareWholePractice(false); }}>{name}</button>)}
                     <button aria-pressed={compareWholePractice} onClick={() => setCompareWholePractice((value) => !value)}>Compare</button>
                   </div>
-                  {importedSessionOverlay &&
-                    (importedSessionOverlay.derivedSessions.length > 0 || importedSessionOverlay.conflictedManualSessions.length > 0 || importedSessionOverlay.diagnostic.attendanceStatusConflictCount > 0) && (
-                      <details className="pw-session-import-details"><summary>Import details</summary><p className="pw-note">
-                        Saved imports retain{" "}
-                        {importedSessionOverlay.diagnostic.rawAttendedRows.toLocaleString()}{" "}
-                        attended rows,{" "}
-                        {(
-                          importedSessionOverlay.diagnostic.rawAttendedRows -
-                          importedSessionOverlay.diagnostic
-                            .collapsedDuplicateShowRows
-                        ).toLocaleString()}{" "}
-                        derived attended visits, and{" "}
-                        {importedSessionOverlay.diagnostic.billedRows.toLocaleString()}{" "}
-                        billed rows for reconciliation. Only complete pay periods feed actuals and historical averages; future revenue uses clinician-card fees. Fully covered imported
-                        attendance replaces{" "}
-                        {importedSessionOverlay.diagnostic.manualImportOverrideCount.toLocaleString()}{" "}
-                        manual completed session
-                        {importedSessionOverlay.diagnostic
-                          .manualImportOverrideCount === 1
-                          ? ""
-                          : "s"}{" "}
-                        in this view;{" "}
-                        {importedSessionOverlay.diagnostic.manualImportConflictCount.toLocaleString()}{" "}
-                        partial-overlap imported row
-                        {importedSessionOverlay.diagnostic
-                          .manualImportConflictCount === 1
-                          ? ""
-                          : "s"}{" "}
-                        conflict with aggregate manual totals after complete-period admission. Original source evidence is retained.
-                        {importedSessionOverlay.conflictedManualSessions.length > 0 && <span className="pw-note"> The affected manual windows remain unknown because their uncovered counts cannot be independently allocated.</span>}
-                        {importedSessionOverlay.diagnostic.attendanceStatusConflictCount > 0 && <span className="pw-note"> {importedSessionOverlay.diagnostic.attendanceStatusConflictCount} attendance status conflicts retained for reconciliation. No upload-order winner is selected.</span>}
-                        {importedSessionOverlay.conflictedManualSessions.map((record) => <span key={record.id} className="pw-note">Manual source #{record.id}: {record.start} to {record.end}, {record.completed} recorded sessions. Not independently allocatable across uncovered dates.</span>)}
-                      </p></details>
-                    )}
-                  {importedSessionOverlay &&
-                    (importedSessionOverlay.diagnostic.missingClinicianLabels
-                      .length > 0 ||
-                      importedSessionOverlay.diagnostic.ambiguousClinicianLabels
-                        .length > 0) && (
-                      <p className="pw-error" role="alert">
-                        Some imported attendance rows are excluded from
-                        projections because clinician labels do not map cleanly:{" "}
-                        {[
-                          ...importedSessionOverlay.diagnostic
-                            .missingClinicianLabels,
-                          ...importedSessionOverlay.diagnostic
-                            .ambiguousClinicianLabels,
-                        ].join(", ")}
-                        .
-                      </p>
-                    )}
+                  {importMappingAlerts.length > 0 && <p className="pw-error" role="alert">Some imported attendance rows need clinician mapping review: {importMappingAlerts.join(", ")}. See Import details below.</p>}
                   <div className="pw-clinical-metric-grid pw-sessions-clinical-grid" aria-label="Sessions, retention and attrition">
                     <section className="pw-clinical-card" aria-label="Session trends card">
                       <div className="pw-label-help"><h3>Total sessions</h3><span className="pw-period-caption">{activityPeriodCaption(sharedPeriod, periodRange)}</span></div>
@@ -4714,16 +4676,16 @@ export default function PracticeWorkspace() {
                     {widgetGrid("sessions", <>
                       <section className="pw-clinical-card" aria-label="Historical close rate card" data-widget-id="close-rate" data-widget-title="Observed close rate">
                         <div className="pw-label-help"><h3>Observed close rate</h3>{historicalHelp}</div>
-                        <HistoricalPeriodValues dates="help" values={historicalValuesFor("consult", compareWholePractice ? "Whole Practice" : selectedContributorName, compareWholePractice)} difference={historicalDifferenceFor("consult", compareWholePractice ? "Whole Practice" : selectedContributorName)} />
+                        <HistoricalPeriodValues dates="help" values={historicalValuesFor("consult", compareWholePractice ? "Whole Practice" : selectedContributorName, compareWholePractice)} />
                       </section>
                       <section className="pw-clinical-card" aria-label="Retention card" data-widget-id="retention" data-widget-title="Retention">
                         <h3>Retention</h3>
-                        <HistoricalPeriodValues dates="help" values={historicalValuesFor("retention", compareWholePractice ? "Whole Practice" : selectedContributorName, compareWholePractice)} difference={historicalDifferenceFor("retention", compareWholePractice ? "Whole Practice" : selectedContributorName)} />
+                        <HistoricalPeriodValues dates="help" values={historicalValuesFor("retention", compareWholePractice ? "Whole Practice" : selectedContributorName, compareWholePractice)} />
                         <details><summary>Source and calculation</summary><p>Imported treatment starts within each labeled calendar period. Three attended treatment sessions with no initial gap over 28 days; PHONE excluded. Pending starts are not failures. Coverage is reported separately for each period.</p></details>
                       </section>
                       <section className="pw-clinical-card" aria-label="Attrition card" data-widget-id="attrition" data-widget-title="Attrition">
                         <h3>Average monthly attrition</h3>
-                        <HistoricalPeriodValues dates="help" periodLabels={{ "3mo": "Last 3 mature months", year: "Last 12 mature months" }} values={historicalValuesFor("attrition", compareWholePractice ? "Whole Practice" : selectedContributorName, compareWholePractice)} difference={historicalDifferenceFor("attrition", compareWholePractice ? "Whole Practice" : selectedContributorName)} />
+                        <HistoricalPeriodValues dates="help" periodLabels={{ "3mo": "Last 3 mature months", year: "Last 12 mature months" }} values={historicalValuesFor("attrition", compareWholePractice ? "Whole Practice" : selectedContributorName, compareWholePractice)} />
                         <details><summary>Source and calculation</summary><p>Established treatment relationships need 90 covered days of follow-up. A later return removes the prior ending. Unknown mature coverage stays unknown, not zero. No attrition target or replacement requirement is invented.</p></details>
                       </section>
                       <div data-widget-id="session-progression" data-widget-title="Session progression & observed lifetime" data-widget-size="wide">
@@ -4935,6 +4897,40 @@ export default function PracticeWorkspace() {
                       </section>
                     </>, "pw-sessions-history-widgets", "small")}
                   </div>
+                  {importedSessionOverlay &&
+                    (importedSessionOverlay.derivedSessions.length > 0 || importedSessionOverlay.conflictedManualSessions.length > 0 || importedSessionOverlay.diagnostic.attendanceStatusConflictCount > 0) && (
+                      <details className="pw-session-import-details"><summary>Import details</summary><p className="pw-note">Mapping exclusions retained for audit: {[...importedSessionOverlay.diagnostic.missingClinicianLabels, ...importedSessionOverlay.diagnostic.ambiguousClinicianLabels].join(", ") || "None"}.</p><p className="pw-note">
+                        Saved imports retain{" "}
+                        {importedSessionOverlay.diagnostic.rawAttendedRows.toLocaleString()}{" "}
+                        attended rows,{" "}
+                        {(
+                          importedSessionOverlay.diagnostic.rawAttendedRows -
+                          importedSessionOverlay.diagnostic
+                            .collapsedDuplicateShowRows
+                        ).toLocaleString()}{" "}
+                        derived attended visits, and{" "}
+                        {importedSessionOverlay.diagnostic.billedRows.toLocaleString()}{" "}
+                        billed rows for reconciliation. Only complete pay periods feed actuals and historical averages; future revenue uses clinician-card fees. Fully covered imported
+                        attendance replaces{" "}
+                        {importedSessionOverlay.diagnostic.manualImportOverrideCount.toLocaleString()}{" "}
+                        manual completed session
+                        {importedSessionOverlay.diagnostic
+                          .manualImportOverrideCount === 1
+                          ? ""
+                          : "s"}{" "}
+                        in this view;{" "}
+                        {importedSessionOverlay.diagnostic.manualImportConflictCount.toLocaleString()}{" "}
+                        partial-overlap imported row
+                        {importedSessionOverlay.diagnostic
+                          .manualImportConflictCount === 1
+                          ? ""
+                          : "s"}{" "}
+                        conflict with aggregate manual totals after complete-period admission. Original source evidence is retained.
+                        {importedSessionOverlay.conflictedManualSessions.length > 0 && <span className="pw-note"> The affected manual windows remain unknown because their uncovered counts cannot be independently allocated.</span>}
+                        {importedSessionOverlay.diagnostic.attendanceStatusConflictCount > 0 && <span className="pw-note"> {importedSessionOverlay.diagnostic.attendanceStatusConflictCount} attendance status conflicts retained for reconciliation. No upload-order winner is selected.</span>}
+                        {importedSessionOverlay.conflictedManualSessions.map((record) => <span key={record.id} className="pw-note">Manual source #{record.id}: {record.start} to {record.end}, {record.completed} recorded sessions. Not independently allocatable across uncovered dates.</span>)}
+                      </p></details>
+                    )}
                   <details className="pw-panel"><summary>Financial session goal details</summary>
                     {sessionGoal.unavailableReasons.map((reason) => <p key={reason}>{reason}</p>)}
                     {sessionGoal.knownSourceAssumptions.map((assumption) => <p key={assumption}>{assumption}</p>)}

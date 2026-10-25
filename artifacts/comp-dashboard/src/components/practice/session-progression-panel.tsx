@@ -1,4 +1,5 @@
 import { useId, useMemo, useState } from "react";
+import { progressionPeriodRange, validProgressionRange, type ProgressionPeriod } from "../../lib/progression-period";
 import { Download } from "lucide-react";
 import { CartesianGrid, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { progressionCsv } from "../../lib/session-progression-export";
@@ -12,8 +13,9 @@ export type SessionProgressionPanelProps = {
   classificationSnapshots: LocalSnapshot[];
   excludedFollowUpEvidence: ClientActivityOptions["excludedFollowUpEvidence"];
   overrides: SameDayVisitOverrides;
-  start: string;
-  end: string;
+  /** Legacy activity-window props are deliberately ignored; cohort state is independent. */
+  start?: string;
+  end?: string;
   asOf: string;
   clinician?: string;
   identityVerified?: boolean;
@@ -52,13 +54,19 @@ function LifetimeGroup({ title, detail, group }: { title: string; detail: string
 }
 
 export function SessionProgressionPanel({ snapshots, classificationSnapshots, excludedFollowUpEvidence, overrides,
-  start, end, asOf, clinician, identityVerified = true, comparisonMode = false, coverage }: SessionProgressionPanelProps) {
+  asOf, clinician, identityVerified = true, comparisonMode = false, coverage }: SessionProgressionPanelProps) {
   const id = useId();
   const [milestones, setMilestones] = useState(8);
-  const result = useMemo(() => sessionProgression(identityVerified ? snapshots : [], {
+  const [period, setPeriod] = useState<ProgressionPeriod>("all");
+  const [custom, setCustom] = useState({start: asOf.slice(0,4) + "-01-01", end: asOf});
+  const [tableOpen, setTableOpen] = useState(false);
+  const range = progressionPeriodRange(period, asOf, custom);
+  const rangeValid = validProgressionRange(range, asOf);
+  const {start, end} = rangeValid ? range : {start: asOf, end: asOf};
+  const result = useMemo(() => sessionProgression(identityVerified && rangeValid ? snapshots : [], {
     start, end, asOf, clinician, sessions: milestones,
     sameDayVisitOverrides: overrides, classificationSnapshots, excludedFollowUpEvidence,
-  }), [snapshots, classificationSnapshots, excludedFollowUpEvidence, overrides, start, end, asOf, clinician, milestones, identityVerified]);
+  }), [snapshots, classificationSnapshots, excludedFollowUpEvidence, overrides, start, end, asOf, clinician, milestones, identityVerified, rangeValid]);
   const tableId = `${id}-table`;
   const titleId = `${id}-title`;
   const captionId = `${id}-caption`;
@@ -72,9 +80,17 @@ export function SessionProgressionPanel({ snapshots, classificationSnapshots, ex
       </div>
       <span className="pw-progression-scope">{clinician ?? "Whole Practice"}</span>
     </header>
-    <p className="pw-progression-context" id={captionId}>First observed treatment: <strong>{date(start)} – {date(end)}</strong>. Follow-up observed through <strong>{date(asOf)}</strong>, across clinicians. Clinician selection uses the first treatment date, not later referrals.</p>
+    <div className="pw-progression-period">
+      <label>Cohort starts <select aria-label="Progression cohort period" value={period} onChange={e => setPeriod(e.target.value as ProgressionPeriod)}>
+        <option value="all">All available history</option><option value="year">Last year</option><option value="six-months">Last six months</option><option value="custom">Custom dates</option>
+      </select></label>
+      {period === "custom" && <><label>From <input aria-label="Progression cohort start" type="date" max={asOf} value={custom.start} onChange={e => setCustom({...custom,start:e.target.value})}/></label><label>Through <input aria-label="Progression cohort end" type="date" max={asOf} value={custom.end} onChange={e => setCustom({...custom,end:e.target.value})}/></label></>}
+      <p>Independent of the Sessions activity period. All history means available eligible imports, not records before coverage.</p>
+    </div>
+    {!rangeValid && <p role="alert">Choose valid, ordered cohort dates no later than the observation cutoff.</p>}
+    <p className="pw-progression-context" hidden={!rangeValid} id={captionId}>First observed treatment: <strong>{date(start)} – {date(end)}</strong>. Follow-up observed through <strong>{date(asOf)}</strong>, across clinicians. Clinician selection uses the first treatment date, not later referrals.</p>
     {comparisonMode && <p className="pw-progression-note">Showing the whole-practice cohort. Clinician cohorts can overlap and must not be summed.</p>}
-    {!identityVerified ? <p className="pw-progression-empty" role="status">This clinician name maps to multiple records. Progression is unknown until the identity is resolved.</p> : <>
+    {!rangeValid ? null : !identityVerified ? <p className="pw-progression-empty" role="status">This clinician name maps to multiple records. Progression is unknown until the identity is resolved.</p> : <>
       <div className="pw-progression-overview">
         <div><span>Eligible cohort</span><strong>{count(result.eligibleClients)} <small>clients</small></strong></div>
         <p>Not yet reached does not mean dropped out. Recent and ongoing clients remain in the cohort.</p>
@@ -103,6 +119,8 @@ export function SessionProgressionPanel({ snapshots, classificationSnapshots, ex
           </ResponsiveContainer>
         </div>
       </figure>}
+      <details className="pw-progression-data" open={tableOpen} onToggle={event => setTableOpen(event.currentTarget.open)}>
+      <summary>Session progression data table</summary>
       <div className="pw-progression-data-heading">
         <h4>Data</h4>
         <div className="pw-progression-actions">
@@ -118,6 +136,7 @@ export function SessionProgressionPanel({ snapshots, classificationSnapshots, ex
           <tbody>{result.rows.map(row => <tr key={row.session}><th scope="row">Session {row.session}</th><td>{count(row.eligibleClients)}</td><td>{count(row.completions)}</td><td>{pct(row.reachedPct)}</td><td>{change(row.changePercentagePoints)}</td></tr>)}</tbody>
         </table>
       </div>
+      </details>
       <section className="pw-progression-lifetime" aria-labelledby={`${id}-lifetime-title`}>
         <h4 id={`${id}-lifetime-title`}>Observed client lifetime</h4>
         <p>Sessions and elapsed time observed in this same cohort — not expected eventual lifetime.</p>
