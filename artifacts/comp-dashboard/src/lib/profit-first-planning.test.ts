@@ -643,7 +643,7 @@ test("legacy and saved salary targets use max with configured Erin salary, while
 test("therapist recommendation includes burden on billed income, independently of processing fees and current allocation", () => {
   const input = setup();
   input.asOf = "2026-09-01";
-  input.estimatedMonthlyValues = { ...input.estimatedMonthlyValues, revenue: 100000, clinicianPay: 37000, employerBurden: 4500, fees: 3000 };
+  input.estimatedMonthlyValues = { ...input.estimatedMonthlyValues, revenue: 100000, clinicianPay: 37000, employerBurden: 4500, ownerClinicianEmployerBurden: 0, nonClinicalClinicianEmployerBurden: 0, fees: 3000 };
   const before = structuredClone(input);
   const report = profitFirstPlanning(input);
   const payroll = report.rows.find(row => row.key === "therapist-payroll")!;
@@ -653,4 +653,21 @@ test("therapist recommendation includes burden on billed income, independently o
   assert.deepEqual(before.estimatedMonthlyValues!.clinicianPay, input.estimatedMonthlyValues.clinicianPay);
   input.estimatedMonthlyValues.otherIncome = 10000;
   close(profitFirstPlanning(input).rows.find(row => row.key === "therapist-payroll")!.requiredPercent, 41500 / 110000 * 100);
+});
+
+test("missing or stale role provenance cannot silently allocate aggregate employer burden", () => {
+ const input=setup(); input.estimatedMonthlyValues!.employerBurden=500;
+ let report=profitFirstPlanning(input);
+ for(const key of ['owner-payroll','therapist-payroll','admin-payroll']) assert.equal(report.rows.find(row=>row.key===key)!.costMonthly,null);
+ assert.match(report.reasons.join(' '),/role breakdown is unavailable/);
+ Object.assign(input.estimatedMonthlyValues!,{ownerClinicianEmployerBurden:100,nonClinicalClinicianEmployerBurden:50});
+ report=profitFirstPlanning(input);
+ close(report.rows.find(row=>row.key==='therapist-payroll')!.costMonthly,3350);
+ close(report.rows.find(row=>row.key==='owner-payroll')!.costMonthly,100);
+ close(report.rows.find(row=>row.key==='admin-payroll')!.costMonthly,450);
+ input.workspace.moneyPlanning={estimatedMonthlyValues:{employerBurden:600}};
+ assert.equal(profitFirstPlanning(input).rows.find(row=>row.key==='therapist-payroll')!.costMonthly,null);
+ delete input.workspace.moneyPlanning;
+ input.estimatedMonthlyValues!.ownerClinicianEmployerBurden=600;
+ assert.equal(profitFirstPlanning(input).rows.find(row=>row.key==='therapist-payroll')!.costMonthly,null);
 });

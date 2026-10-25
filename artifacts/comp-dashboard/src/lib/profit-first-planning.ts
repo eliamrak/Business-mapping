@@ -78,7 +78,7 @@ export function profitFirstPlanning(input: ProfitFirstPlanningInput) {
   const assumptions = [
     "Planning estimates use billed income, not collections or bank balances. No spending record is required to plan configured costs.",
     "Current percentages are the user-confirmed baseline. Required percentages fund configured costs and goals; they are not normalized to 100%.",
-    "Clinical pay and configured salary allocated to Owner payroll are removed from clinician pay once. Aggregate clinician employer burden remains in Therapist payroll.",
+    "Clinical pay and configured salary allocated to Owner payroll are removed from clinician pay once. Employer costs follow verified payroll roles; nonclinical staff costs already include their employer costs in Admin payroll.",
     "Revenue needed holds monthly costs and contribution goals constant, retaining percentage floors. It is a funding estimate, not a volume forecast; rerun payroll and variable costs for a changed income or staffing scenario.",
   ];
   const planning = w.moneyPlanning ?? {};
@@ -248,6 +248,17 @@ export function profitFirstPlanning(input: ProfitFirstPlanningInput) {
   // Calendar-day accrual can leave a sub-microdollar residue when removing salary.
   if (therapistPay !== null && therapistPay < 0) therapistPay = 0;
   const burden = read("employerBurden", () => people.length ? null : 0);
+  const roleSourceMatches = ["clinicianPay", "ownerClinicalPay", "coOwnerSalaryPretax", "employerBurden"].every(key =>
+    !Object.hasOwn(planning.estimatedMonthlyValues ?? {}, key) || planning.estimatedMonthlyValues?.[key] === input.estimatedMonthlyValues?.[key]);
+  const ownerClinicianBurden = burden === 0 ? 0 : roleSourceMatches && known(input.estimatedMonthlyValues?.ownerClinicianEmployerBurden) ? input.estimatedMonthlyValues!.ownerClinicianEmployerBurden : null;
+  const nonClinicalClinicianBurden = burden === 0 ? 0 : roleSourceMatches && known(input.estimatedMonthlyValues?.nonClinicalClinicianEmployerBurden) ? input.estimatedMonthlyValues!.nonClinicalClinicianEmployerBurden : null;
+  const roleSum = sum([ownerClinicianBurden, nonClinicalClinicianBurden]);
+  const roleBasisValid = burden !== null && roleSum !== null && roleSum <= burden + 0.000001;
+  const therapistBurden = roleBasisValid ? Math.max(0, burden! - roleSum!) : null;
+  const ownerRoleBurden = roleBasisValid ? ownerClinicianBurden : null;
+  const adminRoleBurden = roleBasisValid ? nonClinicalClinicianBurden : null;
+  if (!roleBasisValid) reasons.push("Clinician employer-cost role breakdown is unavailable or does not match the payroll estimate. Owner, Therapist and Admin funding remain unknown until the same-source breakdown is available.");
+
   const ownerSeparate = read("ownerPayroll", () => sum([w.settings.ownerPayrollMonthly, budgetSum(linesFor(["owner"]), periodStart, periodEnd)]));
   const ownerBurden = read("ownerPayrollBurden", () => ownerSeparate === null ? null : ownerSeparate * w.settings.ownerPayrollBurdenPct / 100);
   const staff = context.staff.filter(s => (s.goalId ?? null) === w.settings.teamId);
@@ -274,7 +285,10 @@ export function profitFirstPlanning(input: ProfitFirstPlanningInput) {
     { key: "ownerPayroll", label: "Separate owner payroll estimate", monthly: ownerSeparate, source: sourcePeriod },
     { key: "ownerPayrollBurden", label: "Separate owner employer cost estimate", monthly: ownerBurden, source: sourcePeriod },
     { key: "therapistPay", label: "Other therapist payroll estimate", monthly: therapistPay, source: `${sourcePeriod}; clinician pay less clinical pay and configured salary allocated to Owner payroll` },
-    { key: "employerBurden", label: "Clinician employer cost estimate", monthly: burden, source: sourcePeriod },
+    { key: "employerBurden", label: "Total clinician employer cost estimate", monthly: burden, source: sourcePeriod },
+    { key: "clinicalEmployerBurden", label: "Clinical employer cost estimate (Therapist)", monthly: therapistBurden, source: `${sourcePeriod}; verified clinical portion of clinician employer costs` },
+    { key: "ownerClinicianEmployerBurden", label: "Employer costs on salary allocated to Owner payroll", monthly: ownerRoleBurden, source: sourcePeriod },
+    { key: "nonClinicalClinicianEmployerBurden", label: "Employer costs on explicit nonclinical clinician hours (Admin)", monthly: adminRoleBurden, source: sourcePeriod },
     { key: "staffCost", label: "Admin payroll estimate", monthly: staffCost, source: `${sourcePeriod}; supplied monthly total or dated staff compensation with employer burden` },
     { key: "taxObligations", label: "Configured tax obligations estimate", monthly: taxObligations, source: `${periodStart} to ${periodEnd}; dated tax budgets or explicit monthly override` },
     { key: "reserveObligations", label: "Configured reserve funding estimate", monthly: reserveObligations, source: `${periodStart} to ${periodEnd}; dated reserve budgets or explicit monthly override; included in Business profit funding` },
@@ -283,8 +297,8 @@ export function profitFirstPlanning(input: ProfitFirstPlanningInput) {
   const base: Record<PlanningBucket, number | null> = {
     "business-profit": reserveObligations === null ? null : Math.max(w.settings.targetProfitMonthly, reserveObligations),
     taxes: taxObligations, "operating-expenses": sum([overhead, marketing, fees]),
-    "owner-payroll": sum([ownerSeparate, ownerBurden, ownerClinical, erinSalary]),
-    "therapist-payroll": sum([therapistPay, burden]), "admin-payroll": sum([staffCost, payrollObligations]), distributions: 0,
+    "owner-payroll": sum([ownerSeparate, ownerBurden, ownerClinical, erinSalary, ownerRoleBurden]),
+    "therapist-payroll": sum([therapistPay, therapistBurden]), "admin-payroll": sum([staffCost, payrollObligations, adminRoleBurden]), distributions: 0,
   };
   const additions = Object.fromEntries(CURRENT_PLANNING_ALLOCATIONS.map(r => [r.key, 0])) as Record<PlanningBucket, number>;
   const goals: { id: string; label: string; monthly: number | null; tag: PlanningGoalPurpose; source: string }[] = [];

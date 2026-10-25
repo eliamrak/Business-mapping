@@ -76,7 +76,7 @@ test("October 10 salary start retains the dated $5,500 monthly result when Money
   const { overhead, ...values } = month.values;
   const planning = profitFirstPlanning({ workspace, context, asOf: month.date, estimatedMonthlyValues: values, estimateSourcePeriod: report.basis });
   close(planning.protectedErinMonthly, 5500);
-  close(planning.rows.find(row => row.key === "owner-payroll")!.costMonthly, 5500);
+  close(planning.rows.find(row => row.key === "owner-payroll")!.costMonthly, 5500 + values.ownerClinicianEmployerBurden!);
   close(planning.costs.find(cost => cost.key === "therapistPay")!.monthly, values.clinicianPay! - values.ownerClinicalPay! - 5500);
   assert.notEqual(planning.rows.find(row => row.key === "therapist-payroll")!.requiredMonthly, null);
   assert.notEqual(planning.totalMonthly, null);
@@ -164,4 +164,26 @@ test("confirmed billed-rate split remains unchanged by collection and processor 
   close(adjusted.clinicianPay, baseline.clinicianPay!);
   assert.notEqual(adjusted.fees, baseline.fees);
   close(baseline.profit! - adjusted.profit!, adjusted.fees! - baseline.fees!);
+});
+
+test("payroll employer-cost roles conserve clinical, explicit nonclinical, owner salary and staff costs", () => {
+ const {workspace,context,coverage}=fixture();
+ context.clinicians[2].nonClinicalHoursPerWeek=2;
+ context.clinicians[2].nonClinicalHourlyRate=20;
+ context.staff.push({id:91,goalId:7,label:"Synthetic administrator",role:"Administration",annualSalary:12000,hoursPerWeek:0,hourlyRate:0,weeksPerYear:52,classification:"w2",w2EmployerFicaPct:10,futaSutaPct:0,workersCompPct:0,otherEmployerBurdenPct:0});
+ const month=moneyPlanningForecast(workspace,context,"2026-10-18",coverage).months[0];
+ const values=month.values;
+ close(values.staffCost,1100); // Includes $100 staff employer costs, never in clinician burden.
+ close(values.ownerClinicianEmployerBurden,7500*.0765);
+ close(values.nonClinicalClinicianEmployerBurden,2*20/7*31*.0765);
+ close(values.employerBurden,Object.values(month.clinicians).reduce((n,row)=>n+row.employerBurden!,0));
+ const report=profitFirstPlanning({workspace,context,asOf:month.date,estimatedMonthlyValues:values});
+ const cost=(key:string)=>report.rows.find(row=>row.key===key)!.costMonthly!;
+ close(cost("owner-payroll"),7500+values.ownerClinicianEmployerBurden!);
+ close(cost("admin-payroll"),1100+values.nonClinicalClinicianEmployerBurden!);
+ close(cost("therapist-payroll"),values.clinicianPay!-7500+values.employerBurden!-values.ownerClinicianEmployerBurden!-values.nonClinicalClinicianEmployerBurden!);
+ close(cost("owner-payroll")+cost("admin-payroll")+cost("therapist-payroll"),values.clinicianPay!+values.employerBurden!+values.staffCost!);
+ assert.equal(month.clinicians['1'].employerBurden,0); // Owner classification is not automatically W2.
+ const withoutStaff=moneyPlanningForecast(workspace,{...context,staff:[]},"2026-10-18",coverage).months[0];
+ close(withoutStaff.values.employerBurden,values.employerBurden!);
 });

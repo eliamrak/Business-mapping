@@ -1386,6 +1386,8 @@ export function forecast(
     let revenue = 0,
       clinicianPay = 0,
       employerBurden = 0,
+      ownerClinicianEmployerBurden = 0,
+      nonClinicalClinicianEmployerBurden = 0,
       ownerClinicalPay = 0,
       familyGrossPay = 0;
     let coOwnerSalaryPretax: number | null = null;
@@ -1410,6 +1412,7 @@ export function forecast(
       let pay = 0,
         earned = 0;
       let personPayUnknown = false;
+      let ownerSalaryPay = 0, explicitNonClinicalPay = 0;
       for (const day of c.daily) {
         const dayCount =
           options.workingForecast ? (options.baselineWeeklyByClinician?.[c.id] ?? 0) / 7 : c.capacity > 0 ? (count * day.capacity) / c.capacity : 0;
@@ -1455,6 +1458,7 @@ export function forecast(
           capEarned[c.capKey] =
             (capEarned[c.capKey] ?? 0) +
             (calculated.preCapSessions * compensationRate * (100 - day.split)) / 100;
+        if (day.mode === "existing_split") explicitNonClinicalPay += calculated.nonClinicalComp;
         pay +=
           day.mode === "salary"
             ? day.amount / 12 / calendarDays
@@ -1470,6 +1474,7 @@ export function forecast(
           day.mode === "salary"
         ) {
           const salary = day.amount / 12 / calendarDays;
+          ownerSalaryPay += salary;
           coOwnerSalaryPretax = (coOwnerSalaryPretax ?? 0) + salary;
           goalMeasureDaily[day.date].coOwnerSalaryPretax = salary;
         }
@@ -1490,6 +1495,11 @@ export function forecast(
       revenue += earned;
       clinicianPay += pay;
       employerBurden += burden;
+      // Partition only explicit payroll components. Staff costs are already separate.
+      const ownerShare = pay > 0 ? burden * ownerSalaryPay / pay : 0;
+      const nonClinicalShare = pay > 0 ? burden * explicitNonClinicalPay / pay : 0;
+      ownerClinicianEmployerBurden += ownerShare;
+      nonClinicalClinicianEmployerBurden += nonClinicalShare;
       if (String(c.classification).toLowerCase() === "owner")
         ownerClinicalPay += pay;
       if (c.id === settings.familyW2ClinicianId && c.instance === String(c.id))
@@ -1503,6 +1513,8 @@ export function forecast(
           revenue: options.useImportedBillingActuals !== false && importedBillingSource.unknownDates.some((row) => row.clinicianId === c.id && row.date >= start && row.date <= end) ? null : earned,
           clinicianPay: personPayUnknown ? null : pay,
           employerBurden: personPayUnknown ? null : burden,
+          ownerClinicianEmployerBurden: personPayUnknown ? null : ownerShare,
+          nonClinicalClinicianEmployerBurden: personPayUnknown ? null : nonClinicalShare,
           profit: personPayUnknown || (options.useImportedBillingActuals !== false && importedBillingSource.unknownDates.some((row) => row.clinicianId === c.id && row.date >= start && row.date <= end)) ? null : earned - pay - burden,
         },
         end,
@@ -1737,6 +1749,8 @@ export function forecast(
         collections,
         clinicianPay,
         employerBurden,
+        ownerClinicianEmployerBurden,
+        nonClinicalClinicianEmployerBurden,
         ownerClinicalPay,
         staffCost,
         overhead,
@@ -1790,7 +1804,7 @@ export function forecast(
     if (unknownBilling) for (const key of ["revenue", "profit", "ltv", "roas", "contributionRoas", "netRoi", "breakEvenSessions"]) values[key] = null;
     if (unknownCompensation) {
       warnings.push("Percentage compensation or prior cap progress is unknown because matching billed charges were rejected; fixed salary/hourly/session terms remain independent.");
-      for (const key of ["clinicianPay", "employerBurden", "ownerClinicalPay", "profit", "contributionPerSession", "contributionRoas", "netRoi", "breakEvenSessions", "taxReserve", "reserves", "distributions", "retainedCash", "familyTakeHome", "ownerDistributionsPretax"]) values[key] = null;
+      for (const key of ["clinicianPay", "employerBurden", "ownerClinicianEmployerBurden", "nonClinicalClinicianEmployerBurden", "ownerClinicalPay", "profit", "contributionPerSession", "contributionRoas", "netRoi", "breakEvenSessions", "taxReserve", "reserves", "distributions", "retainedCash", "familyTakeHome", "ownerDistributionsPretax"]) values[key] = null;
     }
     if (unknownCollections) {
       values.collections = null;

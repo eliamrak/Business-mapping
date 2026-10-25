@@ -24,9 +24,9 @@ function text(tree: any): string {
 }
 
 // Execute the component's handlers with deterministic hooks; browser checks cover native inputs.
-function fixture(tax: number | null = 100, renderMode: "allocations" | "funding" | "all" = "allocations") {
+function fixture(tax: number | null = 100, renderMode: "allocations" | "funding" | "all" = "allocations", estimates: Record<string, number | null> = {}) {
   const workspace = hub.emptyWorkspace("2026-10-01");
-  workspace.moneyPlanning = { estimatedMonthlyValues: { revenue: 10000, otherIncome: 0, overhead: 1200, fees: 100, taxObligations: tax } };
+  workspace.moneyPlanning = { estimatedMonthlyValues: { revenue: 10000, otherIncome: 0, overhead: 1200, fees: 100, taxObligations: tax, ...estimates } };
   const original = structuredClone(workspace);
   const hooks: any[] = [], staged: hub.MoneyPlanningSettings[] = [];
   let cursor = 0, changed = false, tree: any, effects: (() => void)[] = [];
@@ -61,7 +61,7 @@ function fixture(tax: number | null = 100, renderMode: "allocations" | "funding"
   const props = { workspace, context: { clinicians: [], staff: [], sessions: [] }, asOf: "2026-10-15",
     renderMode, costSource: "budget" as const,
     estimateSourcePeriod: "2026-09-24 to 2026-10-07 observed sessions",
-    estimatedMonthlyValues: { clinicianPay: 0, employerBurden: 0, staffCost: 0, marketing: 0 },
+    estimatedMonthlyValues: { clinicianPay: 0, employerBurden: 0, staffCost: 0, marketing: 0, ...estimates },
     onPlanningChange(next: hub.MoneyPlanningSettings) { staged.push(structuredClone(next)); },
   };
   function render() {
@@ -80,6 +80,7 @@ function fixture(tax: number | null = 100, renderMode: "allocations" | "funding"
   render();
   return {
     staged, input, get tree() { return tree; },
+    click(label: string) { const button = nodes(tree).find(node => node.type === "button" && text(node) === label); assert.ok(button); button.props.onClick(); render(); },
     change(label: string, value: string, badInput = false) { input(label).onChange({ target: { value, validity: { badInput } } }); render(); },
     blur(label: string, value: string) { input(label).onBlur({ target: { value, validity: { badInput: false } } }); render(); },
     enter(label: string, value: string) { input(label).onKeyDown({ key: "Enter", currentTarget: { blur() { input(label).onBlur({ target: { value } }); } } }); render(); },
@@ -206,4 +207,33 @@ test("current percentage rejects blanks, out-of-range and native badInput; expli
     assert.equal(f.staged[0].currentPercents!["business-profit"], 0);
     f.unchanged();
   }
+});
+
+test("payroll disclosure separates pay from employer costs without changing allocation inputs", () => {
+  const f = fixture(100, "allocations", {revenue:100000,clinicianPay:45000,coOwnerSalaryPretax:8000,employerBurden:4500,ownerClinicianEmployerBurden:0,nonClinicalClinicianEmployerBurden:0});
+  const detail = nodes(f.tree).find(node => node.type === "details" && node.props.className === "pf-payroll-breakdown");
+  assert.ok(detail);
+  assert.match(text(detail), /Pay only, excluding owner pay\$37,000.00 · 37% of modeled income/);
+  assert.match(text(detail), /Clinical employer costs\$4,500.00 · 4.5% of modeled income/);
+  assert.match(text(detail), /Combined before floors and goals\$41,500.00 · 41.5% of modeled income/);
+  assert.match(text(detail), /Processing fees are separate Operating expenses/);
+});
+test("unknown payroll stays unknown in its pay-versus-cost disclosure", () => {
+  const f = fixture(100, "allocations", {clinicianPay:null,employerBurden:0});
+  const detail = nodes(f.tree).find(node => node.type === "details" && node.props.className === "pf-payroll-breakdown");
+  assert.match(text(detail), /Pay only, excluding owner payUnknown/);
+  assert.match(text(detail), /Combined before floors and goalsUnknown/);
+});
+
+test("calculated-payroll reset stages only payroll override removal and restores matching role basis", () => {
+ const f=fixture(100,"allocations",{revenue:100000,clinicianPay:45000,employerBurden:4500,ownerClinicianEmployerBurden:0,nonClinicalClinicianEmployerBurden:0});
+ f.change("Total clinician employer cost estimate","6000");f.blur("Total clinician employer cost estimate","6000");
+ assert.match(f.cells("Therapist payroll").join(" "),/Unknown/);
+ f.click("Use calculated clinician payroll");
+ assert.equal(f.staged.at(-1)!.estimatedMonthlyValues!.employerBurden,undefined);
+ assert.equal(f.staged.at(-1)!.estimatedMonthlyValues!.clinicianPay,undefined);
+ assert.equal(f.staged.at(-1)!.estimatedMonthlyValues!.revenue,100000);
+ assert.equal(f.staged.at(-1)!.estimatedMonthlyValues!.taxObligations,100);
+ assert.doesNotMatch(f.cells("Therapist payroll").join(" "),/Unknown/);
+ f.unchanged();
 });

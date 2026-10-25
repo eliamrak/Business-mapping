@@ -89,6 +89,13 @@ export default function ProfitFirstPlanning(props: ProfitFirstPlanningProps) {
   };
   const help = (text: string) => <Popover><PopoverTrigger asChild><button type="button" className="pf-help" aria-label={`Help: ${text}`}>?</button></PopoverTrigger><PopoverContent className="pf-help-content" collisionPadding={12} aria-label="Planning explanation">{text}</PopoverContent></Popover>;
   const costValue = (key: string) => report.costs.find(cost => cost.key === key)?.monthly ?? null;
+  const payrollOverrideKeys = ["clinicianPay", "employerBurden", "ownerClinicalPay", "coOwnerSalaryPretax", "ownerClinicianEmployerBurden", "nonClinicalClinicianEmployerBurden"];
+  const hasPayrollOverride = payrollOverrideKeys.some(key => Object.hasOwn(planning.estimatedMonthlyValues ?? {}, key));
+  const therapistPayOnly = costValue("therapistPay");
+  const therapistEmployerCost = costValue("clinicalEmployerBurden");
+  const therapistPayAndCosts = therapistPayOnly === null || therapistEmployerCost === null ? null : therapistPayOnly + therapistEmployerCost;
+  const payrollDetail = (amount: number | null) => amount === null ? "Unknown" : `${amount.toLocaleString("en-US", {style:"currency",currency:"USD",minimumFractionDigits:2,maximumFractionDigits:2})} · ${report.income !== null && report.income > 0 ? (amount / report.income * 100).toLocaleString("en-US", {maximumFractionDigits:2}) + "% of modeled income" : "income share unknown"}`;
+
   const inlineCostKeys = ["overhead", "fees", "marketing", "taxObligations"];
   const secondaryReasons = report.reasons.filter(reason => reason !== "Quarterly tax planning estimate is missing."
     && reason !== "Monthly billed revenue estimate is missing."
@@ -146,6 +153,12 @@ export default function ProfitFirstPlanning(props: ProfitFirstPlanningProps) {
             <div className="pf-cost-source"><span>Processing (calculated estimate) {help("Configured percentage and fixed processing fees applied to estimated collections and payment transactions. Billed sessions and client charges do not establish actual processor fees.")}</span><strong>{dollars(costValue("fees"))}</strong></div>
             </>}
           </>}
+          {row.key === "therapist-payroll" && <details className="pf-payroll-breakdown"><summary>Pay + employer costs</summary>
+            <dl><div><dt>Pay only, excluding owner pay</dt><dd>{payrollDetail(therapistPayOnly)}</dd></div>
+              <div><dt>Clinical employer costs</dt><dd>{payrollDetail(therapistEmployerCost)}</dd></div>
+              <div><dt>Combined before floors and goals</dt><dd>{payrollDetail(therapistPayAndCosts)}</dd></div></dl>
+            <p>Required % also includes any funding floor or goal. Only verified clinical employer costs stay in this bucket; nonclinical and owner portions fund Admin and Owner payroll. Processing fees are separate Operating expenses.</p>
+          </details>}
           {row.key === "taxes" && <label><span>Quarterly taxes $ {help("Enter the quarterly tax amount. One third funds each month; no tax rate is assumed.")}</span>{estimateInput("taxObligations", costValue("taxObligations"), "Quarterly tax planning estimate", 3)}
             {costValue("taxObligations") === null && <small>Quarterly tax planning estimate is missing.</small>}
           </label>}
@@ -155,9 +168,16 @@ export default function ProfitFirstPlanning(props: ProfitFirstPlanningProps) {
     {props.renderMode === "all" && <details><summary>Monthly funding goals</summary>{fundingInputs}</details>}
     <details open={costDetailsOpen} onToggle={event => setCostDetailsOpen(event.currentTarget.open)}><summary>Cost estimates and source periods</summary>
       <p>{report.sourcePeriod}</p>
+      {hasPayrollOverride && <button type="button" className="pw-button" disabled={!props.onPlanningChange || Object.keys(errors).length > 0} onClick={() => {
+        const estimates = {...planning.estimatedMonthlyValues};
+        for (const key of payrollOverrideKeys) delete estimates[key];
+        const next = {...planning, estimatedMonthlyValues:estimates};
+        if (commit(next, "payroll-reset")) {setPlanning(next);for (const key of payrollOverrideKeys) clearDraft(`estimate:${key}`);}
+      }}>Use calculated clinician payroll</button>}
+
       <div className="pf-estimates">
         {report.costs.map(cost => <label key={cost.key}>{cost.label}
-          {cost.key === "therapistPay" || inlineCostKeys.includes(cost.key) ? <strong>{dollars(cost.monthly)}</strong> : estimateInput(cost.key, cost.monthly, cost.label)}
+          {["therapistPay", "clinicalEmployerBurden", "ownerClinicianEmployerBurden", "nonClinicalClinicianEmployerBurden"].includes(cost.key) || inlineCostKeys.includes(cost.key) ? <strong>{dollars(cost.monthly)}</strong> : estimateInput(cost.key, cost.monthly, cost.label)}
           <small>{cost.source}</small>
         </label>)}
         <label>Total monthly clinician payroll estimate{estimateInput("clinicianPay", props.estimatedMonthlyValues?.clinicianPay ?? null, "Total monthly clinician payroll estimate")}</label>
