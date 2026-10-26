@@ -142,3 +142,21 @@
 .pw-app[data-material] .pw-attrition-starts div {display:grid;gap:3px;}
 .pw-app[data-material] .pw-attrition-starts dt {font-size:14px;}
 .pw-app[data-material] .pw-attrition-starts dd {font-size:22px;font-weight:650;margin:0;}
+.pw-app[data-material] .pw-acquisition-dashboard {margin-bottom:24px;}
+.pw-app[data-material] .pw-acquisition-dashboard header {display:flex;justify-content:space-between;align-items:start;flex-wrap:wrap;gap:16px;}
+.pw-app[data-material] .pw-acquisition-dashboard label {display:grid;gap:6px;}
+.pw-app[data-material] .pw-acquisition-metrics {display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,180px),1fr));gap:20px;margin:20px 0;}
+.pw-app[data-material] .pw-acquisition-dashboard dd {font-size:26px;font-weight:650;margin:4px 0 16px;}
+.pw-app[data-material] .pw-acquisition-planning {display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,220px),1fr));gap:24px;margin-top:20px;}
+.pw-app[data-material] .pw-acquisition-dashboard details {margin-top:20px;}
+
+.pw-app[data-material] .pw-acquisition-table-wrap {overflow-x:auto;margin:16px 0;}
+.pw-app[data-material] .pw-acquisition-table-wrap table {width:100%;table-layout:fixed;}
+.pw-app[data-material] .pw-acquisition-table-wrap th:first-child {width:46%;}
+.pw-app[data-material] .pw-acquisition-table-wrap :is(th,td) {padding:10px 4px;vertical-align:middle;overflow-wrap:anywhere;}
+.pw-app[data-material] .pw-acquisition-table-wrap tbody th {background:transparent;font-weight:600;text-align:left;}
+.pw-app[data-material] .pw-acquisition-table-wrap small {display:block;font-weight:400;margin-top:4px;}
+.pw-app[data-material] .pw-acquisition-table-wrap input {width:100%;min-width:0;padding:4px;}
+.pw-app[data-material] .pw-acquisition-circle {position:relative;width:52px;height:52px;margin:0 auto;color:var(--pw-tone-text);}
+.pw-app[data-material] .pw-acquisition-circle svg {width:100%;height:100%;}
+.pw-app[data-material] .pw-acquisition-circle span {position:absolute;inset:0;display:grid;place-items:center;font-size:14px;font-weight:650;}

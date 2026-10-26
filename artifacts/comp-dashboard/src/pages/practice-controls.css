@@ -92,3 +92,9 @@ body:has(.pw-app.practice-theme[data-material="tidal"][data-material]) [role="di
 @media(prefers-reduced-transparency:reduce),(forced-colors:active) {
  .pw-app.practice-theme[data-material="tidal"][data-material] .pw-lead-flow {background:var(--pw-control-solid);backdrop-filter:none;-webkit-backdrop-filter:none;}
 }
+/* Acquisition table overrides legacy nowrap and miniature row-header rules. */
+.pw-app.practice-theme[data-material="tidal"][data-material] .pw-acquisition-dashboard .pw-acquisition-table-wrap :is(th,td,small) {
+ white-space:normal;overflow-wrap:anywhere;font-size:14px;line-height:1.4;text-align:left;
+}
+.pw-app.practice-theme[data-material="tidal"][data-material] .pw-acquisition-dashboard .pw-acquisition-table-wrap tbody th {background:transparent;backdrop-filter:none;}
+.pw-app.practice-theme[data-material="tidal"][data-material] .pw-acquisition-dashboard .pw-acquisition-table-wrap small {font-size:14px;}

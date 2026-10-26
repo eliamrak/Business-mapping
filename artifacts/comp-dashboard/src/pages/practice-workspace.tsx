@@ -202,6 +202,7 @@ import "@/components/practice/historical-period-values.css";
 import { TidalMaterial } from "@/components/practice/tidal-material";
 import "@/pages/practice-surfaces.css";
 import "@/pages/practice-controls.css";
+import { AcquisitionDashboard } from "@/components/practice/acquisition-dashboard";
 import { MobileWorkspaceNavigation, MobilePageActions, MobileContributorSelect } from "@/components/practice/mobile-workspace-controls";
 
 type Mode = "practice" | "sandbox" | "goals";
@@ -740,6 +741,9 @@ function MetricTargetBar({
 }
 
 export default function PracticeWorkspace() {
+  const [acquisitionTarget, setAcquisitionTarget] = useState("");
+  const [acquisitionConversion, setAcquisitionConversion] = useState("");
+  const [acquisitionEndings, setAcquisitionEndings] = useState("");
   const cache = useQueryClient();
   const query = useQuery({ queryKey: hubKey, queryFn: getHub });
   const contextQuery = useQuery({
@@ -4969,6 +4973,7 @@ export default function PracticeWorkspace() {
               )}
               {section === "marketing" && (
                 <>
+                  <AcquisitionDashboard conversion={acquisitionConversion} onConversion={setAcquisitionConversion} endings={acquisitionEndings} onEndings={setAcquisitionEndings} workspace={workingWorkspace} reports={historicalReports} target={acquisitionTarget} onTarget={setAcquisitionTarget} />
                   {heading(
                     "Marketing",
                     marketingTab === "campaigns"
