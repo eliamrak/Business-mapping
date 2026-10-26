@@ -13,6 +13,24 @@ await page.route('**/*',route=>{
  return route.fallback();
 });
 const interactiveContrast=[];
+const surfaceChecks=[];
+async function checkCardSurfaces(section,width) {
+ const samples=await page.evaluate(()=>{
+  const selector=':is(.pw-section-widget--card,.pw-clinical-card,.pf-planning,.pw-money-budget,.pw-data-disclosure,.pw-import-start,.pw-import-conflict,.pw-local-retention,#retention-calculations,.pw-overview-primary-grid,.pw-overview-report-controls,.pw-money-month-control,.pw-content > details,.pw-person,.pw-edit-item,.pw-metric-panel,.pw-money-bridge-panel,.pw-focused-plan,.pw-session-tracker,.pw-progression,.pw-overview-composition > section,.pw-local-import-grid > section,.pw-local-tables > section,.pw-billing-codes,.pw-section-heading,.pw-marketing-breakdown,.pw-empty,.pw-overview-historical-summary.pw-overview-kpi-grid .sw-content > section,.pw-goal-editor .pw-section-widget-content > .pw-edit-item)';
+  return [...document.querySelectorAll('.pw-content '+selector)].filter(el=>el.getClientRects().length).map(el=>{
+   const css=getComputedStyle(el),nested=Boolean(el.parentElement.closest(selector));
+   const contentOpaque=[el,...el.querySelectorAll('h2,h3,h4,p,svg,input,select,button')].filter(node=>node.getClientRects().length&&!node.matches(':disabled')).every(node=>getComputedStyle(node).opacity==='1');
+   return {classes:el.className,nested,background:css.backgroundColor,image:css.backgroundImage,opacity:css.opacity,contentOpaque};
+  });
+ });
+ assert.ok(samples.length>0,section+' has sampled cards');
+ for(const sample of samples) {
+  assert.equal(sample.image,'none','No opaque legacy gradient');
+  assert.equal(sample.background,sample.nested?'rgba(0, 0, 0, 0)':'rgba(241, 246, 248, 0.5)',section+' card alpha');
+  assert.equal(sample.opacity,'1');assert.ok(sample.contentOpaque,'Card contents retain opacity');
+ }
+ surfaceChecks.push({section,width,samples});
+}
 async function checkInteractiveContrast(section) {
  const samples=await page.evaluate(()=>{
   const rgba=s=>{const parts=s.match(/[\d.]+/g);return parts?parts.map(Number):[0,0,0,0];};
@@ -42,6 +60,7 @@ try {
   for(const width of [1280,390,320]) {
    await capture(section.toLowerCase(),width,900);
    assert.ok(checks.at(-1).scrollWidth<=checks.at(-1).clientWidth+1,section+' page overflow at '+width);
+   await checkCardSurfaces(section,width);
   }
  }
  await clickSection('Overview');
@@ -121,7 +140,7 @@ try {
  await page.evaluate(()=>document.body.style.zoom='2');
  await capture('growth-zoom',1280,900);
  await page.evaluate(()=>document.body.style.zoom='');
- // Conservative contrast: 75% light surface against black, and actual computed text.
+ // Conservative contrast: retained 75% page backing against black, even without an extra card fill.
  const contrast=await page.evaluate(()=>{
   const rgb=s=>s.match(/[\d.]+/g).slice(0,3).map(Number);
   const luminance=c=>c.map(v=>{v/=255;return v<=.04045?v/12.92:((v+.055)/1.055)**2.4}).reduce((a,v,i)=>a+v*[.2126,.7152,.0722][i],0);
@@ -129,8 +148,15 @@ try {
   return [...document.querySelectorAll('.pw-content h3,.pw-content label,.pw-content p,.pw-content th')].filter(el=>el.getClientRects().length).map(el=>{const fg=luminance(rgb(getComputedStyle(el).color));return {tag:el.tagName,text:el.textContent.slice(0,60),ratio:(Math.max(bg,fg)+.05)/(Math.min(bg,fg)+.05)};});
  });
  assert.ok(contrast.every(item=>item.ratio>=4.5),'All sampled text passes conservative glass contrast');
+ const cdp=await page.context().newCDPSession(page);
+ await cdp.send('Emulation.setEmulatedMedia',{features:[{name:'prefers-reduced-transparency',value:'reduce'}]});
+ const fallback=await page.locator('.pw-edit-item').first().evaluate(el=>({background:getComputedStyle(el).backgroundColor,blur:getComputedStyle(el).backdropFilter}));
+ assert.ok(!fallback.background.startsWith('rgba('),'Reduced transparency uses solid card');
+ assert.equal(fallback.blur,'none');
+ await capture('growth-reduced-transparency',390,900);
+ await cdp.send('Emulation.setEmulatedMedia',{features:[]});
  assert.equal(requests.filter(r=>r.method!=='GET').length,0,'No business writes');
- await fs.writeFile(path.join(outDir,'report.json'),JSON.stringify({checks,contrast,interactiveContrast,requests,browserErrors},null,2));
+ await fs.writeFile(path.join(outDir,'report.json'),JSON.stringify({checks,contrast,interactiveContrast,surfaceChecks,requests,browserErrors},null,2));
 } finally {await browser.close();}
 `;
 await import('data:text/javascript;base64,'+Buffer.from(prefix+probe).toString('base64'));
