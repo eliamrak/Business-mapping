@@ -72,6 +72,14 @@ try {
  assert.equal(accessibleDates.length,8);assert.ok(accessibleDates.every(el=>el.width<=1&&el.height<=1&&el.text.includes(' to ')),'Date metadata retained without visual boxes');
  for(const label of ['Forecast controls','Projection basis','Forecast and historical details']) assert.equal(await page.locator('summary').filter({hasText:new RegExp('^'+label+'$')}).count(),0,label+' removed from Overview');
  assert.equal(await page.getByRole('button',{name:'Open Imports',exact:true}).count(),0);
+ const attrition=page.getByRole('region',{name:'Overview average monthly attrition'});
+ assert.equal(await attrition.locator('.pw-attrition-count-ring').count(),2);
+ assert.equal(await attrition.locator('[role="meter"]').count(),0);
+ assert.equal(await attrition.getByText('Client endings / month',{exact:true}).count(),2);
+ assert.doesNotMatch(await attrition.innerText(),/-- clients ended|Full-window percentage unavailable/);
+ await attrition.screenshot({path:path.join(outDir,'attrition-mobile.png')});
+ await page.setViewportSize({width:1280,height:900});
+ await attrition.screenshot({path:path.join(outDir,'attrition-desktop.png')});
  await checkInteractiveContrast('Overview');
  const alertColors=await page.evaluate(()=>{const host=document.querySelector('.pw-content');const alert=document.createElement('p');alert.className='pw-error';alert.textContent='Synthetic warning';host.append(alert);const bare=getComputedStyle(alert).color;const card=document.createElement('div');card.className='pw-metric-panel';host.append(card);card.append(alert);const glass=getComputedStyle(alert).color;card.remove();return {bare,glass};});
  assert.deepEqual(alertColors,{bare:'rgb(255, 224, 229)',glass:'rgb(39, 0, 10)'},'Warnings use readable ink for artwork and glass');

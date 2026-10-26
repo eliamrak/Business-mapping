@@ -205,11 +205,11 @@ test("values use percent full and percentage-point rate differences, with separa
   assert.match(card(html, labels[2]), /<h3>Observed close rate<\/h3>/);
   assert.match(periodRegion(card(html, labels[2]), "3mo"), /aria-valuetext="75%; Year baseline 25%"/);
   const attrition = card(html, labels[3]);
-  assert.equal([...attrition.matchAll(/data-state="unknown"[\s\S]*?<span>-- clients ended<\/span>/g)].length, 2);
+  assert.doesNotMatch(attrition, /-- clients ended/);
   assert.match(attrition, /The full window has not reached 90 days of follow-up\./, "September's 90-day follow-up is incomplete in October, regardless of monthly subtotal controls");
   assert.doesNotMatch(attrition, /<span>(?:9|6) clients ended<\/span>/);
-  assert.match(attrition, /4\.5 \/ mature month/);
-  assert.match(attrition, /2 \/ mature month/);
+  assert.match(attrition, /4\.5 per covered mature month/);
+  assert.match(attrition, /2 per covered mature month/);
   assert.match(attrition, /Comparison unavailable/);
   assert.doesNotMatch(attrition, /clients \/ mature month vs 12-month baseline/);
   assert.doesNotMatch(attrition, /99%|percentage points/);
@@ -235,9 +235,9 @@ test("known zero rates and counts remain visible; missing evidence is unavailabl
     assert.match(card(html, label), /class="pw-percentage-kpi-value" aria-hidden="true">0%<\/span>/);
     assert.match(card(html, label), /data-state="unknown"[^>]*><span class="pw-percentage-kpi-value" aria-hidden="true">-<\/span>/);
   }
-  assert.match(card(html, labels[3]), /class="pw-percentage-kpi-value" aria-hidden="true">0%<\/span>[\s\S]*?<span>0 clients ended<\/span>/);
+  assert.match(card(html, labels[3]), /<span>0 clients ended in the full window · 0%<\/span>/);
   assert.match(card(html, labels[3]), /0 ended \/ 1 unique observed established clients/);
-  assert.match(card(html, labels[3]), /<span>-- clients ended<\/span>/);
+  assert.doesNotMatch(card(html, labels[3]), /<span>-- clients ended<\/span>/);
   for (const label of labels) assert.match(card(html, label), /Comparison unavailable/);
 });
 
@@ -257,11 +257,11 @@ test("selected clinician uses normalized clinician-only counts, same-clinician c
   assert.match(consult, /\+10 percentage points vs 12-month baseline/);
   assert.doesNotMatch(prominent(consult), /started treatment|75%|99%/);
   assert.match(card(html, labels[0]), /5 actual \/ 10 desired sessions per week/);
-  assert.equal([...card(html, labels[3]).matchAll(/data-state="unknown"[\s\S]*?<span>-- clients ended<\/span>/g)].length, 2);
+  assert.doesNotMatch(card(html, labels[3]), /-- clients ended/);
   assert.doesNotMatch(card(html, labels[3]), /<span>(?:2|4|9) clients ended/);
   assert.match(card(html, labels[3]), /The full window has not reached 90 days of follow-up\./, "October cannot mature the selected clinician's full September window");
   assert.match(card(html, labels[3]), /Comparison unavailable/);
-  assert.doesNotMatch(card(html, labels[3]), /-1 clients \/ mature month/);
+  assert.doesNotMatch(card(html, labels[3]), /-1 clients per covered mature month/);
 });
 
 test("missing observed rates never fall back to populated complete-cohort rates", () => {
@@ -295,12 +295,12 @@ test("mature July evidence renders matching helper count, unique observed denomi
   const attrition = card(render(props), labels[3]);
   assert.match(attrition, /dateTime="2026-07-01"/);
   assert.match(attrition, /dateTime="2026-07-31"/);
-  assert.match(prominent(attrition), /class="pw-percentage-kpi-value" aria-hidden="true">100%<\/span>[\s\S]*?<span>1 clients ended<\/span>/);
+  assert.match(prominent(attrition), /<span>1 clients ended in the full window · 100%<\/span>/);
   assert.match(attrition, /1 ended \/ 1 unique observed established clients in the full labeled window/);
   assert.match(attrition, /earlier unobserved clients are not certified/);
   assert.doesNotMatch(attrition.slice(0, attrition.indexOf('data-period="year"')), /Separate mature observed portion:/, "the fully mature July result has no partial substitute; the independently immature year may have one");
   props.contributor = "  lAnE  ";
-  assert.match(card(render(props), labels[3]), /class="pw-percentage-kpi-value" aria-hidden="true">100%<\/span>[\s\S]*?<span>1 clients ended<\/span>/);
+  assert.match(card(render(props), labels[3]), /<span>1 clients ended in the full window · 100%<\/span>/);
 });
 
 test("mature July with a later return renders a covered zero ending and positive eligible 0%", () => {
@@ -310,7 +310,7 @@ test("mature July with a later return renders a covered zero ending and positive
   assert.equal(result.eligibleClients, 1);
   assert.equal(result.attritionPct, 0);
   const attrition = card(render(props), labels[3]);
-  assert.match(prominent(attrition), /class="pw-percentage-kpi-value" aria-hidden="true">0%<\/span>[\s\S]*?<span>0 clients ended<\/span>/);
+  assert.match(prominent(attrition), /<span>0 clients ended in the full window · 0%<\/span>/);
   assert.match(attrition, /0 ended \/ 1 unique observed established clients/);
 });
 
@@ -319,11 +319,11 @@ test("explicit period cohort fixtures render the selected clinician percentage r
   const period = props.reports["3mo"].periodAttrition;
   period.practice = { ...period.practice, totalEligible: 4, eligibleClientIds: ["client", "two", "three", "four"], percentage: 25 };
   const whole = card(render(props), labels[3]);
-  assert.match(prominent(whole), /class="pw-percentage-kpi-value" aria-hidden="true">25%<\/span>[\s\S]*?<span>1 clients ended<\/span>/);
+  assert.match(prominent(whole), /<span>1 clients ended in the full window · 25%<\/span>/);
   assert.match(whole, /1 ended \/ 4 unique observed established clients/);
   props.contributor = " lAnE ";
   const selected = card(render(props), labels[3]);
-  assert.match(prominent(selected), /class="pw-percentage-kpi-value" aria-hidden="true">100%<\/span>[\s\S]*?<span>1 clients ended<\/span>/);
+  assert.match(prominent(selected), /<span>1 clients ended in the full window · 100%<\/span>/);
   assert.match(selected, /1 ended \/ 1 unique observed established clients/);
   assert.doesNotMatch(prominent(selected), /25%/);
   props.contributorIdentityVerified = false;
@@ -336,11 +336,12 @@ test("immature July renders unknown full totals and a separately dated mature ob
   Object.assign(props.reports["3mo"].activity, { endingFullMonthClientEnds: 9, endingFullMonthDenominator: 2, averageClientEndingsPerFullMonth: 4.5, endingAttritionPct: 99 });
   props.reports["3mo"].attritionActivity = structuredClone(props.reports["3mo"].activity);
   const attrition = card(render(props), labels[3]);
-  assert.match(prominent(attrition), /data-state="unknown"[\s\S]*?<span>-- clients ended<\/span>/);
+  assert.match(prominent(attrition), /Average monthly client endings: 4\.5 per covered mature month/);
+  assert.doesNotMatch(prominent(attrition), /-- clients ended/);
   assert.doesNotMatch(prominent(attrition), /<span>(?:1|9) clients ended<\/span>|100%|99%/);
   assert.match(attrition, /-- ended \/ -- unique observed established clients in the full labeled window/);
   assert.match(attrition, /The full window has not reached 90 days of follow-up\./);
-  assert.match(attrition, /4\.5 \/ mature month/);
+  assert.match(attrition, /4\.5 per covered mature month/);
   assert.match(attrition, /Separate mature observed portion: 2026-07-01 to 2026-07-22: 1 ended \/ 1 eligible, 100%\. This is not the full trailing window\./);
   assert.doesNotMatch(prominent(attrition), /Separate mature observed portion/);
 });
@@ -363,14 +364,14 @@ test("attrition differences use full-window clinician percentages while monthly 
   }
   const practice = card(render(props), labels[3]);
   assert.match(practice, /0 percentage points vs 12-month baseline/);
-  assert.doesNotMatch(practice, /\+2\.5 clients \/ mature month/);
+  assert.doesNotMatch(practice, /\+2\.5 clients per covered mature month/);
   props.contributor = " lAnE ";
   const selected = card(render(props), labels[3]);
-  assert.match(selected, /class="pw-percentage-kpi-value" aria-hidden="true">20%<\/span>[\s\S]*?<span>1 clients ended<\/span>/);
-  assert.match(selected, /class="pw-percentage-kpi-value" aria-hidden="true">10%<\/span>[\s\S]*?<span>1 clients ended<\/span>/);
+  assert.match(selected, /<span>1 clients ended in the full window · 20%<\/span>/);
+  assert.match(selected, /<span>1 clients ended in the full window · 10%<\/span>/);
   assert.match(selected, /\+10 percentage points vs 12-month baseline/);
-  assert.match(selected, /1 \/ mature month/);
-  assert.match(selected, /2 \/ mature month/);
+  assert.match(selected, /1 per covered mature month/);
+  assert.match(selected, /2 per covered mature month/);
   assert.doesNotMatch(selected, /clients \/ mature month vs 12-month baseline|99%|50%/);
 });
 
@@ -396,20 +397,20 @@ test("monthly attrition uses its own activity and clinician fields without cohor
     report.attritionActivity.averageClientEndingsPerFullMonth = 7.5;
     report.attritionClinicians = [{ ...clinician(40, 13, 2), clinician: " Lane " }];
   }
-  assert.match(card(render(props), labels[3]), /7\.5 \/ mature month/);
+  assert.match(card(render(props), labels[3]), /7\.5 per covered mature month/);
   props.contributor = " lAnE ";
   let attrition = card(render(props), labels[3]);
-  assert.match(attrition, /6\.5 \/ mature month/);
-  assert.doesNotMatch(attrition, /7\.5 \/ mature month|1 \/ mature month|2 \/ mature month/);
+  assert.match(attrition, /6\.5 per covered mature month/);
+  assert.doesNotMatch(attrition, /7\.5 \/ mature month|1 \/ mature month|2 per covered mature month/);
   for (const report of Object.values(props.reports)) report.attritionClinicians = [];
-  assert.match(card(render(props), labels[3]), /-- \/ mature month/);
+  assert.match(card(render(props), labels[3]), /Average monthly client endings: unknown/);
   for (const report of Object.values(props.reports)) report.attritionClinicians = [clinician(40, 13, 2), clinician(40, 13, 2)];
-  assert.doesNotMatch(card(render(props), labels[3]), /6\.5 \/ mature month/);
+  assert.doesNotMatch(card(render(props), labels[3]), /6\.5 per covered mature month/);
   props.contributor = "Whole Practice";
   for (const report of Object.values(props.reports)) report.attritionActivity = null;
   attrition = card(render(props), labels[3]);
-  assert.match(attrition, /-- \/ mature month/);
-  assert.doesNotMatch(attrition, /4\.5 \/ mature month|2 \/ mature month/);
+  assert.match(attrition, /Average monthly client endings: unknown/);
+  assert.doesNotMatch(attrition, /4\.5 \/ mature month|2 per covered mature month/);
 });
 
 test("lagged mature attrition labels and dates remain separate from cohort dates and preserve unknown evidence", () => {
@@ -440,7 +441,7 @@ test("legacy report without periodAttrition renders unknown safely despite month
   const props = fixture();
   for (const report of Object.values(props.reports)) Reflect.deleteProperty(report, "periodAttrition");
   const attrition = card(render(props), labels[3]);
-  assert.equal([...attrition.matchAll(/data-state="unknown"[\s\S]*?<span>-- clients ended<\/span>/g)].length, 2);
+  assert.doesNotMatch(attrition, /-- clients ended/);
   assert.match(attrition, /Whole-window client evidence is unavailable\./);
   assert.doesNotMatch(attrition, /<span>(?:9|6) clients ended/);
 });
@@ -456,7 +457,7 @@ test("unverified clinician identity withholds all four metrics even if populated
     assert.doesNotMatch(section, /role="meter"|aria-valuenow=|<span>\d+ clients ended/);
   }
   assert.doesNotMatch(card(html, labels[0]), /17 actual|23 desired|73\.9%/);
-  assert.match(card(html, labels[3]), /<span>-- clients ended<\/span>/);
+  assert.doesNotMatch(card(html, labels[3]), /<span>-- clients ended<\/span>/);
 });
 
 test("observed close rate shows evaluated outcomes with unresolved counts and separate definitions", () => {
@@ -681,7 +682,7 @@ test("clinical goals have no invented defaults and configured zero goals retain 
   }
   props.targets = { retentionPct: 85, closeRatePct: 65, attritionPct: 0 };
   const html = render(props);
-  for (const [label, goal] of [[labels[1], 85], [labels[2], 65], [labels[3], 0]] as const) {
+  for (const [label, goal] of [[labels[1], 85], [labels[2], 65]] as const) {
     for (const period of ["3mo", "year"] as const) {
       const region = periodRegion(card(html, label), period);
       assert.match(region, /pw-percentage-kpi-marker-goal/);
@@ -695,7 +696,7 @@ test("clinical goals have no invented defaults and configured zero goals retain 
   const retention = periodRegion(card(html, labels[1]), "3mo");
   assert.match(retention, /aria-valuetext="80%; Goal 85%; Year baseline 60%"/);
   assert.match(retention, /pw-percentage-kpi-key-practice"><\/i>Year baseline <strong>60%<\/strong>/);
-  assert.match(periodRegion(card(html, labels[3]), "3mo"), /pw-percentage-kpi-marker-goal" style="transform:rotate\(0deg\)"/);
+  assert.doesNotMatch(card(html, labels[3]), /pw-percentage-kpi-marker-goal/, "Percentage goals never appear on the count ring");
   props.targets = { retentionPct: null, closeRatePct: null, attritionPct: null };
   for (const label of labels.slice(1)) assert.doesNotMatch(card(render(props), label), /pw-percentage-kpi-marker-goal/);
   props.targets = { retentionPct: 85, closeRatePct: 65, attritionPct: 0 };
@@ -710,6 +711,7 @@ test("a cleared clinician period remains unknown without falling back to populat
   const recent = props.reports["3mo"];
   recent.activity = null;
   recent.clinicians = [];
+  recent.attritionClinicians = [];
   recent.consults.byClinician = [];
   recent.periodAttrition = { ...julyFixture().reports["3mo"].periodAttrition, byClinician: [] };
   Object.assign(props.capacity["3mo"], {
@@ -725,7 +727,33 @@ test("a cleared clinician period remains unknown without falling back to populat
   assert.doesNotMatch(periodRegion(card(html, labels[1]), "3mo"), /80%|8 retained/);
   assert.doesNotMatch(periodRegion(card(html, labels[2]), "3mo"), /75%|8 consultations|6 same-clinician closes/);
   assert.doesNotMatch(periodRegion(card(html, labels[3]), "3mo"), /100%|<span>1 clients ended/);
-  assert.match(periodRegion(card(html, labels[3]), "3mo"), /-- clients ended/);
+  assert.match(periodRegion(card(html, labels[3]), "3mo"), /Not enough covered history/);
   assert.match(periodRegion(card(html, labels[1]), "year"), /aria-valuenow="20"/);
   assert.match(periodRegion(card(html, labels[2]), "year"), /aria-valuenow="10"/);
+});
+
+test('partial screenshot-shaped histories put 13 and 7.6 in count rings without invented percentages or ended totals', () => {
+  const props = fixture();
+  props.reports['3mo'].attritionActivity!.averageClientEndingsPerFullMonth = 13;
+  props.reports.year.attritionActivity!.averageClientEndingsPerFullMonth = 7.6;
+  const before = structuredClone(props.reports);
+  const html = prominent(card(render(props), labels[3]));
+  assert.match(html, /pw-attrition-count-ring" aria-hidden="true">13<\/div>/);
+  assert.match(html, /pw-attrition-count-ring" aria-hidden="true">7\.6<\/div>/);
+  assert.equal([...html.matchAll(/Client endings \/ month/g)].length, 2);
+  assert.doesNotMatch(html, /role="meter"|13%|7\.6%|clients ended|Full-window percentage unavailable/);
+  assert.match(html, /covered mature months/);
+  assert.deepEqual(props.reports, before);
+});
+
+test('zero monthly endings remain known while absent monthly coverage has a concise unknown state', () => {
+  const props = fixture();
+  props.reports['3mo'].attritionActivity!.averageClientEndingsPerFullMonth = 0;
+  props.reports.year.attritionActivity = null;
+  const html = prominent(card(render(props), labels[3]));
+  assert.match(html, /data-state="known"[^>]*aria-label="Average monthly client endings: 0 per covered mature month"/);
+  assert.match(html, /pw-attrition-count-ring" aria-hidden="true">0<\/div>/);
+  assert.match(html, /data-state="unknown"/);
+  assert.match(html, /Not enough covered history/);
+  assert.doesNotMatch(html, /-- clients ended|role="meter"/);
 });
