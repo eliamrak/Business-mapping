@@ -1212,8 +1212,10 @@ export default function WorkspaceSessions({
       <strong style={{ fontSize: 32 }}>{display(selectedSummary.observedCompleted ?? null)}</strong>
       <span>Observed sessions</span>
     </div>
-    <p>{selectedSummary.observedCoverageDays} complete-period calendar days · incomplete periods excluded{selectedSummary.coverageComplete ? "" : "; selected-range total is partial"}</p>
-    <p>Weekly session counts and weekly capacity · {display(selectedSummary.completedWeekly)} sessions / week across covered calendar days</p>
+    <div className="pw-session-coverage-summary">
+      <p><strong>{display(selectedSummary.completedWeekly)} sessions / week</strong> across {selectedSummary.observedCoverageDays} covered calendar days.</p>
+      <p>{selectedSummary.coverageComplete ? "Complete periods only; incomplete periods excluded." : "Partial total: incomplete periods excluded."}</p>
+    </div>
     {compareWholePractice ? <MetricComparison rows={comparisonRows} unit="sessions / week" label="Session metric comparison" />
       : <div aria-label="Selected-period calendar session trend" style={{ width: "100%", minWidth: 0, height: 300 }}>
         <ResponsiveContainer width="100%" height="100%">

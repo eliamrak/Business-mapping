@@ -42,7 +42,7 @@ async function checkInteractiveContrast(section) {
    let bg=[0,0,0];
    for(const ancestor of ancestors.reverse()){const c=rgba(getComputedStyle(ancestor).backgroundColor),a=c[3]??1;bg=bg.map((v,i)=>c[i]*a+v*(1-a));}
    const fg=luminance(rgba(getComputedStyle(el).color)),back=luminance(bg);
-   return {tag:el.tagName,text:el.textContent.trim().slice(0,70),ratio:(Math.max(fg,back)+.05)/(Math.min(fg,back)+.05)};
+   return {tag:el.tagName,classes:el.className,ancestors:ancestors.map(p=>({class:p.className,color:getComputedStyle(p).color,bg:getComputedStyle(p).backgroundColor})).slice(-5),text:el.textContent.trim().slice(0,70),ratio:(Math.max(fg,back)+.05)/(Math.min(fg,back)+.05)};
   }).filter(row=>row.text);
  });
  interactiveContrast.push({section,samples});
@@ -73,6 +73,8 @@ try {
  for(const label of ['Forecast controls','Projection basis','Forecast and historical details']) assert.equal(await page.locator('summary').filter({hasText:new RegExp('^'+label+'$')}).count(),0,label+' removed from Overview');
  assert.equal(await page.getByRole('button',{name:'Open Imports',exact:true}).count(),0);
  await checkInteractiveContrast('Overview');
+ const alertColors=await page.evaluate(()=>{const host=document.querySelector('.pw-content');const alert=document.createElement('p');alert.className='pw-error';alert.textContent='Synthetic warning';host.append(alert);const bare=getComputedStyle(alert).color;const card=document.createElement('div');card.className='pw-metric-panel';host.append(card);card.append(alert);const glass=getComputedStyle(alert).color;card.remove();return {bare,glass};});
+ assert.deepEqual(alertColors,{bare:'rgb(255, 224, 229)',glass:'rgb(39, 0, 10)'},'Warnings use readable ink for artwork and glass');
  await page.getByRole('button',{name:'Settings',exact:true}).click();
  const admin=page.getByRole('region',{name:'Forecast and import administration'});
  for(const label of ['Forecast controls','Projection basis','Forecast and historical details']) {
@@ -96,12 +98,14 @@ try {
  assert.equal(await page.locator('.pw-forecast-administration').count(),0);
  await capture('data-imports',1280,900);await capture('data-imports',320,900);
  await clickSection('Money');
+ assert.ok(await page.locator('.pf-planning td').first().evaluate(el=>parseFloat(getComputedStyle(el).fontSize)>=14));
  await page.locator('.pf-payroll-breakdown > summary').click();
  await capture('payroll-breakdown',1280,900);await capture('payroll-breakdown',320,900);
  await page.getByRole('group',{name:'Money view',exact:true}).getByRole('button',{name:'Budget',exact:true}).click();
  await capture('money-budget',1280,900);await capture('money-budget',320,900);
  await clickSection('Team');
- assert.equal(await page.locator('.pw-modeled-staff-row').first().evaluate(el=>getComputedStyle(el).backgroundColor),'rgba(241, 246, 248, 0.9)','Standalone staff text has a local reading plate');
+ assert.equal(await page.locator('.pw-modeled-staff-row').first().evaluate(el=>getComputedStyle(el).backgroundColor),'rgba(0, 0, 0, 0)','Standalone staff text is unboxed');
+ assert.ok(await page.locator('.pw-modeled-staff-row').first().evaluate(el=>[...el.querySelectorAll('span')].every(span=>getComputedStyle(span).color===getComputedStyle(el).color)));
  const history=page.locator('.pw-team-history').first();
  await history.locator('summary').first().focus();await page.keyboard.press('Enter');
  assert.equal(await history.evaluate(el=>el.open),true);
@@ -111,6 +115,7 @@ try {
  await capture('team-expanded',320,900);
  await clickSection('Sessions');
  assert.equal(await page.locator('.pw-content summary').filter({hasText:/^(Definition|Period dates|Exact changes?)$/}).count(),0);
+ assert.match(await page.locator('.pw-session-coverage-summary').innerText(),/sessions \/ week.*covered calendar days[\s\S]*incomplete periods excluded/);
  assert.equal(await page.getByLabel('Unresolved consultation reasons',{exact:true}).count(),1);
  assert.match(await page.getByLabel('Unresolved consultation reasons',{exact:true}).innerText(),/Follow-up window open\s+1/);
  assert.equal(await page.locator('#session-attribution-audit').evaluate(el=>el.open),false);
@@ -118,6 +123,12 @@ try {
  assert.ok(positions.audit>=positions.primary);
  const panel=page.locator('.pw-progression');
  assert.equal(await panel.getByLabel('Progression cohort period').inputValue(),'all');
+ assert.match(await panel.locator('.pw-progression-lifetime').innerText(),/History so far, not predicted lifetime/);
+ assert.match(await panel.locator('.pw-progression-lifetime').innerText(),/not a confirmed discharge/);
+ assert.match(await panel.locator('.pw-progression-lifetime').innerText(),/Still in treatment or not enough evidence of an ending/);
+ assert.equal(await panel.getByText('Average sessions',{exact:true}).count(),2);
+ assert.equal(await panel.getByText('Average observed span',{exact:true}).count(),2);
+ assert.ok((await panel.locator('.pw-progression-lifetime-group').evaluateAll(nodes=>nodes.map(el=>getComputedStyle(el.querySelector('dd')).fontSize)) ).every(size=>parseFloat(size)>=22));
  const cohort=await panel.locator('.pw-progression-overview strong').innerText();
  const globalPeriod=page.locator('.pw-shared-period select').first();
  const options=await globalPeriod.locator('option').evaluateAll(items=>items.map(i=>i.value));
@@ -141,6 +152,10 @@ try {
  const download=await downloadPromise;await download.saveAs(path.join(outDir,'synthetic-progression.csv'));
  assert.match(await fs.readFile(path.join(outDir,'synthetic-progression.csv'),'utf8'),/Session/);
  await capture('progression-expanded',390,900);
+ await panel.locator('.pw-progression-lifetime').screenshot({path:path.join(outDir,'lifetime-390.png')});
+ await page.setViewportSize({width:1280,height:900});
+ await panel.locator('.pw-progression-lifetime').screenshot({path:path.join(outDir,'lifetime-1280.png')});
+ await page.locator('.pw-session-coverage-summary').screenshot({path:path.join(outDir,'sessions-summary-1280.png')});
  await clickSection('Growth');
  const inputs=page.locator('.pw-edit-grid input');
  assert.ok(await inputs.count()>0);
@@ -149,10 +164,9 @@ try {
  await page.evaluate(()=>document.body.style.zoom='2');
  await capture('growth-zoom',1280,900);
  await page.evaluate(()=>document.body.style.zoom='');
- // Body ink has a local light halo, not a full-card backing. Do not claim
- // alpha-only calculations measure rendered halo contrast; capture it for review.
- const contrast=await page.evaluate(()=>[...document.querySelectorAll('.pw-content p,.pw-content h3')].filter(el=>el.getClientRects().length).map(el=>({text:el.textContent.slice(0,60),color:getComputedStyle(el).color,halo:getComputedStyle(el).textShadow,background:getComputedStyle(el).backgroundColor})));
- assert.ok(contrast.every(item=>item.halo!=='none'||item.background==='rgba(241, 246, 248, 0.9)'),'Body text retains a local reading plate or halo');
+ // Sample prose must be readable without decorative backplates.
+ const contrast=await page.evaluate(()=>[...document.querySelectorAll('.pw-content p,.pw-content small,.pw-content label,.pw-content summary')].filter(el=>el.getClientRects().length&&el.getBoundingClientRect().width>1).map(el=>({text:el.textContent.slice(0,60),color:getComputedStyle(el).color,size:parseFloat(getComputedStyle(el).fontSize),background:getComputedStyle(el).backgroundColor})));
+ assert.ok(contrast.every(item=>item.background==='rgba(0, 0, 0, 0)'&&item.size>=14),'Unboxed supporting text is at least 14px');
  const cdp=await page.context().newCDPSession(page);
  await cdp.send('Emulation.setEmulatedMedia',{features:[{name:'prefers-reduced-transparency',value:'reduce'}]});
  const fallback=await page.locator('.pw-edit-item').first().evaluate(el=>({background:getComputedStyle(el).backgroundColor,blur:getComputedStyle(el).backdropFilter}));

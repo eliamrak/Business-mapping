@@ -41,15 +41,15 @@ const observed = (value: number | null, unit: string) => value === null ? "—" 
 
 function LifetimeGroup({ title, detail, group }: { title: string; detail: string; group: ObservedLifetimeGroup }) {
   return <section className="pw-progression-lifetime-group" aria-label={title}>
-    <header><h5>{title}</h5><span>{count(group.clients)} clients</span></header>
+    <header><h5>{title}</h5><span>{count(group.clients)} {group.clients === 1 ? "client" : "clients"}</span></header>
     <p>{detail}</p>
     <dl>
-      <div><dt>Mean sessions</dt><dd>{observed(group.meanSessions, "sessions")}</dd></div>
-      <div><dt>Median sessions</dt><dd>{observed(group.medianSessions, "sessions")}</dd></div>
-      <div><dt>Mean elapsed time</dt><dd>{observed(group.meanElapsedDays, "days")}</dd></div>
-      <div><dt>Median elapsed time</dt><dd>{observed(group.medianElapsedDays, "days")}</dd></div>
+      <div><dt>Average sessions</dt><dd>{observed(group.meanSessions, "")}</dd></div>
+      <div><dt>Median sessions</dt><dd>{observed(group.medianSessions, "")}</dd></div>
+      <div><dt>Average observed span</dt><dd>{observed(group.meanElapsedDays, "days")}</dd></div>
+      <div><dt>Median observed span</dt><dd>{observed(group.medianElapsedDays, "days")}</dd></div>
     </dl>
-    <p className="pw-progression-lifetime-coverage">{count(group.coverageLimitedClients)} clients with limited continuous follow-up coverage.</p>
+    {group.coverageLimitedClients > 0 && <p className="pw-progression-lifetime-coverage">{group.coverageLimitedClients === group.clients ? "Follow-up coverage is limited." : `${count(group.coverageLimitedClients)} clients have limited follow-up coverage.`}</p>}
   </section>;
 }
 
@@ -74,9 +74,9 @@ export function SessionProgressionPanel({ snapshots, classificationSnapshots, ex
   return <section className="pw-progression" aria-labelledby={titleId}>
     <header className="pw-progression-heading">
       <div>
-        <span className="pw-progression-kicker">Retention · selected cohort</span>
+
         <h3 id={titleId}>Observed session progression</h3>
-        <p>How many clients have reached each treatment session?</p>
+
       </div>
       <span className="pw-progression-scope">{clinician ?? "Whole Practice"}</span>
     </header>
@@ -85,23 +85,23 @@ export function SessionProgressionPanel({ snapshots, classificationSnapshots, ex
         <option value="all">All available history</option><option value="year">Last year</option><option value="six-months">Last six months</option><option value="custom">Custom dates</option>
       </select></label>
       {period === "custom" && <><label>From <input aria-label="Progression cohort start" type="date" max={asOf} value={custom.start} onChange={e => setCustom({...custom,start:e.target.value})}/></label><label>Through <input aria-label="Progression cohort end" type="date" max={asOf} value={custom.end} onChange={e => setCustom({...custom,end:e.target.value})}/></label></>}
-      <p>Independent of the Sessions activity period. All history means available eligible imports, not records before coverage.</p>
+      <p>Uses its own date range and available imported history.</p>
     </div>
     {!rangeValid && <p role="alert">Choose valid, ordered cohort dates no later than the observation cutoff.</p>}
-    <p className="pw-progression-context" hidden={!rangeValid} id={captionId}>First observed treatment: <strong>{date(start)} – {date(end)}</strong>. Follow-up observed through <strong>{date(asOf)}</strong>, across clinicians. Clinician selection uses the first treatment date, not later referrals.</p>
-    {comparisonMode && <p className="pw-progression-note">Showing the whole-practice cohort. Clinician cohorts can overlap and must not be summed.</p>}
-    {!rangeValid ? null : !identityVerified ? <p className="pw-progression-empty" role="status">This clinician name maps to multiple records. Progression is unknown until the identity is resolved.</p> : <>
+    <p className="pw-progression-context" hidden={!rangeValid} id={captionId}>First visits: <strong>{date(start)} – {date(end)}</strong>. Follow-up through <strong>{date(asOf)}</strong>, including later visits with other clinicians.</p>
+    {comparisonMode && <p className="pw-progression-note">Whole practice shown; clinician groups may overlap.</p>}
+    {!rangeValid ? null : !identityVerified ? <p className="pw-progression-empty" role="status">Clinician identity is ambiguous; progression is unknown.</p> : <>
       <div className="pw-progression-overview">
-        <div><span>Eligible cohort</span><strong>{count(result.eligibleClients)} <small>clients</small></strong></div>
-        <p>Not yet reached does not mean dropped out. Recent and ongoing clients remain in the cohort.</p>
+        <div><span>Clients in this group</span><strong>{count(result.eligibleClients)} <small>clients</small></strong></div>
+        <p>Includes clients still in treatment; this is not a dropout rate.</p>
       </div>
       <div className="pw-progression-coverage" role="note">
-        <strong>Observation is not complete lifetime history.</strong>{" "}
-        Attendance report through {coverage?.attendanceThrough ? date(coverage.attendanceThrough) : "unknown"}; this is not proof of continuous coverage to the observation cutoff.
-        {coverage && coverage.excludedRowsCount > 0 && <> {count(coverage.excludedRowsCount)} source rows excluded from eligible reports.</>}
-        {result.clientsWithUnresolvedEvidence > 0 && <> {count(result.clientsWithUnresolvedEvidence)} cohort clients have unresolved follow-up evidence.</>}
+        <strong>Recorded history, not complete lifetimes.</strong>{" "}
+        Reports through {coverage?.attendanceThrough ? date(coverage.attendanceThrough) : "unknown"}; coverage may have gaps.
+        {coverage && coverage.excludedRowsCount > 0 && <> {count(coverage.excludedRowsCount)} records excluded.</>}
+        {result.clientsWithUnresolvedEvidence > 0 && <> {count(result.clientsWithUnresolvedEvidence)} clients have uncertain follow-up.</>}
       </div>
-      {result.eligibleClients === 0 ? <p className="pw-progression-empty" role="status">No eligible clients had their first observed treatment in this date range{clinician ? ` with ${clinician}` : ""}. Try another cohort period. Unknown percentages are not zero retention.</p> : <figure className="pw-progression-figure" aria-labelledby={`${id}-chart-title`} aria-describedby={`${id}-chart-description`}>
+      {result.eligibleClients === 0 ? <p className="pw-progression-empty" role="status">No eligible clients had their first observed treatment in this date range{clinician ? ` with ${clinician}` : ""}. Try another date range.</p> : <figure className="pw-progression-figure" aria-labelledby={`${id}-chart-title`} aria-describedby={`${id}-chart-description`}>
         <figcaption id={`${id}-chart-title`}>Clients reaching each session</figcaption>
         <p className="pw-visually-hidden" id={`${id}-chart-description`}>Line chart of session number versus percentage of the same {count(result.eligibleClients)}-client cohort reaching that session. Exact counts and percentage-point changes are in the data table below.</p>
         <div className="pw-progression-chart">
@@ -131,20 +131,20 @@ export function SessionProgressionPanel({ snapshots, classificationSnapshots, ex
       <p className="pw-progression-scroll-hint">On small screens, scroll the table horizontally to see all five columns.</p>
       <div className="pw-progression-table-scroll" role="region" aria-label="Session progression data; horizontally scrollable" tabIndex={0}>
         <table id={tableId} className="pw-progression-table" aria-describedby={captionId}>
-          <caption className="pw-visually-hidden">Observed session progression. Eligible cohort is constant at every milestone; changes are percentage points, not relative percentages.</caption>
-          <thead><tr><th scope="col">Session completed</th><th scope="col">Eligible cohort</th><th scope="col">Number reaching</th><th scope="col">% reached</th><th scope="col">Change from previous session <span>(percentage points)</span></th></tr></thead>
+          <caption className="pw-visually-hidden">Observed session progression. Clients in this group is constant at every milestone; changes are percentage points, not relative percentages.</caption>
+          <thead><tr><th scope="col">Session completed</th><th scope="col">Clients in this group</th><th scope="col">Number reaching</th><th scope="col">% reached</th><th scope="col">Change from previous session <span>(percentage points)</span></th></tr></thead>
           <tbody>{result.rows.map(row => <tr key={row.session}><th scope="row">Session {row.session}</th><td>{count(row.eligibleClients)}</td><td>{count(row.completions)}</td><td>{pct(row.reachedPct)}</td><td>{change(row.changePercentagePoints)}</td></tr>)}</tbody>
         </table>
       </div>
       </details>
       <section className="pw-progression-lifetime" aria-labelledby={`${id}-lifetime-title`}>
         <h4 id={`${id}-lifetime-title`}>Observed client lifetime</h4>
-        <p>Sessions and elapsed time observed in this same cohort — not expected eventual lifetime.</p>
+        <p>History so far, not predicted lifetime.</p>
         <div className="pw-progression-lifetime-grid">
-          <LifetimeGroup title="Apparent endings (90-day rule)" detail="At least three distinct treatment dates and verified 90-day absence evidence. Not a confirmed discharge; clients may return." group={result.lifetime.apparentEndings} />
-          <LifetimeGroup title="Ongoing or not classifiable as ended" detail="Includes recent/ongoing clients, fewer than three treatment dates, and uncertain coverage. Not all are known active; these observations are unfinished or unclassified." group={result.lifetime.ongoingOrCensored} />
+          <LifetimeGroup title="Apparent endings (90-day rule)" detail="No visit for 90 days; not a confirmed discharge." group={result.lifetime.apparentEndings} />
+          <LifetimeGroup title="Ongoing or uncertain" detail="Still in treatment or not enough evidence of an ending." group={result.lifetime.ongoingOrCensored} />
         </div>
-        <p className="pw-progression-lifetime-note">Elapsed time means calendar days from first to last observed treatment, not time through today. A same-day history is 0 days. Missing earlier history can shorten both groups’ observed lifetimes, even when follow-up coverage is complete.</p>
+        <p className="pw-progression-lifetime-note">Days from first to last recorded treatment. Missing earlier visits can shorten these figures.</p>
       </section>
     </>}
     <details className="pw-progression-method">

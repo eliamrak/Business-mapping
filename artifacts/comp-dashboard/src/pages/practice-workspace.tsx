@@ -5262,9 +5262,7 @@ export default function PracticeWorkspace() {
                           </button>
                         </div>
                         <p>
-                          Use this for agency fees or ongoing marketing services
-                          not already included in a campaign above. General
-                          practice technology belongs in Operating expenses.
+                          Practice-wide marketing services. Software belongs in Operating expenses.
                         </p>
                         {active(workingWorkspace.budgets)
                           .filter(
