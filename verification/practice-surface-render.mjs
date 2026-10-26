@@ -81,6 +81,25 @@ try {
  await page.setViewportSize({width:1280,height:900});
  await attrition.screenshot({path:path.join(outDir,'attrition-desktop.png')});
  await checkInteractiveContrast('Overview');
+ const filter=page.getByRole('group',{name:'Overview contributor',exact:true}).getByRole('button',{name:'Whole Practice',exact:true});
+ assert.equal(await filter.evaluate(el=>getComputedStyle(el).backgroundColor),'rgba(241, 246, 248, 0.5)');
+ await filter.focus();
+ assert.equal(await filter.evaluate(el=>getComputedStyle(el).outlineWidth),'3px');
+ assert.equal(await filter.getAttribute('aria-pressed'),'true');
+ assert.equal(await page.locator('.pw-overview-historical-summary .pw-text-button').count(),0);
+ await page.getByRole('button',{name:'Reports',exact:true}).click();
+ const reportDialog=page.getByRole('dialog');
+ await reportDialog.waitFor();
+ assert.equal(await reportDialog.evaluate(el=>getComputedStyle(el).backgroundColor),'rgba(241, 246, 248, 0.5)');
+ for(const width of [1280,390]) {
+  await page.setViewportSize({width,height:900});await page.waitForTimeout(250);
+  await page.screenshot({path:path.join(outDir,'reports-dialog-'+width+'.png'),fullPage:false});
+ }
+ assert.ok(await reportDialog.evaluate(el=>{const r=el.getBoundingClientRect();return r.left>=0&&r.right<=innerWidth&&el.scrollWidth<=el.clientWidth+1;}),'Dialog fits mobile without clipping content');
+ await page.keyboard.press('Escape');
+ await reportDialog.waitFor({state:'hidden'});
+ await page.setViewportSize({width:1280,height:900});
+
  const alertColors=await page.evaluate(()=>{const host=document.querySelector('.pw-content');const alert=document.createElement('p');alert.className='pw-error';alert.textContent='Synthetic warning';host.append(alert);const bare=getComputedStyle(alert).color;const card=document.createElement('div');card.className='pw-metric-panel';host.append(card);card.append(alert);const glass=getComputedStyle(alert).color;card.remove();return {bare,glass};});
  assert.deepEqual(alertColors,{bare:'rgb(255, 224, 229)',glass:'rgb(39, 0, 10)'},'Warnings use readable ink for artwork and glass');
  await page.getByRole('button',{name:'Settings',exact:true}).click();
@@ -114,6 +133,8 @@ try {
  await clickSection('Team');
  assert.equal(await page.locator('.pw-modeled-staff-row').first().evaluate(el=>getComputedStyle(el).backgroundColor),'rgba(0, 0, 0, 0)','Standalone staff text is unboxed');
  assert.ok(await page.locator('.pw-modeled-staff-row').first().evaluate(el=>[...el.querySelectorAll('span')].every(span=>getComputedStyle(span).color===getComputedStyle(el).color)));
+ assert.equal(await page.locator('.pw-content > .pw-historical-help').count(),0);
+ assert.equal(await page.getByLabel('Historical performance help',{exact:true}).count(),1);
  const history=page.locator('.pw-team-history').first();
  await history.locator('summary').first().focus();await page.keyboard.press('Enter');
  assert.equal(await history.evaluate(el=>el.open),true);
@@ -121,6 +142,11 @@ try {
  await page.setViewportSize({width:320,height:900});
  assert.equal(await history.evaluate(el=>el.open),true);
  await capture('team-expanded',320,900);
+ await page.locator('.pw-person').last().scrollIntoViewIfNeeded();
+ await page.screenshot({path:path.join(outDir,'team-mobile-viewport.png'),fullPage:false});
+ assert.ok(await page.locator('.pw-secondary-links button').evaluateAll(nodes=>nodes.every(el=>getComputedStyle(el).backgroundColor==='rgba(241, 246, 248, 0.5)')));
+ await page.locator('.pw-secondary-links').scrollIntoViewIfNeeded();
+ await page.screenshot({path:path.join(outDir,'team-actions-mobile-viewport.png'),fullPage:false});
  await clickSection('Sessions');
  assert.equal(await page.locator('.pw-content summary').filter({hasText:/^(Definition|Period dates|Exact changes?)$/}).count(),0);
  assert.match(await page.locator('.pw-session-coverage-summary').innerText(),/sessions \/ week.*covered calendar days[\s\S]*incomplete periods excluded/);
@@ -180,6 +206,7 @@ try {
  const fallback=await page.locator('.pw-edit-item').first().evaluate(el=>({background:getComputedStyle(el).backgroundColor,blur:getComputedStyle(el).backdropFilter}));
  assert.ok(!fallback.background.startsWith('rgba('),'Reduced transparency uses solid card');
  assert.equal(fallback.blur,'none');
+ assert.equal(await inputs.first().evaluate(el=>getComputedStyle(el).backgroundColor),'rgb(241, 246, 248)');
  await capture('growth-reduced-transparency',390,900);
  await cdp.send('Emulation.setEmulatedMedia',{features:[]});
  assert.equal(requests.filter(r=>r.method!=='GET').length,0,'No business writes');

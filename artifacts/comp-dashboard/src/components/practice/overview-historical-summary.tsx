@@ -27,7 +27,7 @@ export function HistoricalDifference({ recent, baseline, unit }: { recent: numbe
 
 export type OverviewHistoricalTargets = Partial<Record<"retentionPct" | "closeRatePct" | "attritionPct", number | null>>;
 
-export function OverviewHistoricalSummary({ reports, capacity: providedCapacity, contributor = "Whole Practice", contributorIdentityVerified = true, targets, onSessions, layout, onLayoutChange }: { reports: HistoricalPerformancePeriods; capacity: Record<"3mo" | "year", OverviewHistoricalCapacityPeriod>; contributor?: string; contributorIdentityVerified?: boolean; targets?: OverviewHistoricalTargets; onSessions: () => void; layout?: SectionLayout; onLayoutChange?: (layout: SectionLayout | undefined) => void }) {
+export function OverviewHistoricalSummary({ reports, capacity: providedCapacity, contributor = "Whole Practice", contributorIdentityVerified = true, targets, layout, onLayoutChange }: { reports: HistoricalPerformancePeriods; capacity: Record<"3mo" | "year", OverviewHistoricalCapacityPeriod>; contributor?: string; contributorIdentityVerified?: boolean; targets?: OverviewHistoricalTargets; layout?: SectionLayout; onLayoutChange?: (layout: SectionLayout | undefined) => void }) {
   const capacityFor = (period: typeof periods[number]): OverviewHistoricalCapacityPeriod => {
     const row = providedCapacity[period];
     return contributor === "Whole Practice" || contributorIdentityVerified ? row : {
@@ -116,6 +116,5 @@ export function OverviewHistoricalSummary({ reports, capacity: providedCapacity,
       <div className="sr-only"><HistoricalDifference recent={attrition["3mo"].attritionPct} baseline={attrition.year.attritionPct} unit="percentage points" /></div>
     </section> },
     ]} />
-    <button type="button" className="pw-text-button" onClick={onSessions}>Sessions</button>
   </div>;
 }

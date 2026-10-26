@@ -98,7 +98,7 @@ function fixture(): Props {
     coverageComplete: true, desiredCoverageComplete: period === "year", unknownDesiredDays: period === "3mo" ? 92 : 0,
     reasons: [period === "3mo" ? "Current-card desired scenario; historical staffing is unverified." : "Dated profile assumptions; not verified actual historical capacity."],
   });
-  return { reports, capacity: { "3mo": capacityRow("3mo"), year: capacityRow("year") }, onSessions() {} };
+  return { reports, capacity: { "3mo": capacityRow("3mo"), year: capacityRow("year") } };
 }
 const render = (props = fixture()) => renderToStaticMarkup(createElement(OverviewHistoricalSummary, props));
 const labels = ["Overview desired session utilization", "Overview initial retention", "Overview consult conversion", "Overview average monthly attrition"];
@@ -150,7 +150,7 @@ test("all four cards show both histories simultaneously with accessible date met
   }
   assert.doesNotMatch(html, /<select|role="(?:tab|switch)"|type="(?:radio|checkbox)"|\shidden(?:=|\s|>)/);
   assert.match(html, /<button\b[^>]*aria-pressed="false">[\s\S]*?Edit layout<\/button>/);
-  assert.match(html, /<button type="button" class="pw-text-button">Sessions<\/button>/);
+  assert.doesNotMatch(html, /<button type="button" class="pw-text-button">Sessions<\/button>/);
   assert.doesNotMatch(html, /<h[1-6][^>]*>[^<]*(?:hiring|rooms|owner pay|profit|revenue|projection|forecast|onboarding)/i);
 });
 
@@ -176,14 +176,14 @@ test("selected clinician consult dates follow the full consultation counts despi
   assert.deepEqual(props.reports, before);
 });
 
-test("summary widgets default to medium, honor saved order and sizes, and keep Sessions outside the layout", () => {
+test("summary widgets default to medium, honor saved order and sizes, without a duplicate Sessions shortcut", () => {
   const props = fixture();
   const defaults = render(props);
   const widgets = (html: string) => [...html.matchAll(/data-widget-id="([^"]+)" data-widget-size="([^"]+)"/g)].map(([, id, size]) => ({ id, size }));
   assert.deepEqual(widgets(defaults), ["caseload", "retention", "close-rate", "attrition"].map(id => ({ id, size: "medium" })));
   assert.doesNotMatch(defaults, /pw-section-widget--card/);
   assert.match(defaults, /data-section="summary"/);
-  assert.match(defaults, /<\/section><button type="button" class="pw-text-button">Sessions<\/button><\/div>$/);
+  assert.doesNotMatch(defaults, /class="pw-text-button"/);
   props.layout = { version: 1, widgets: [{ id: "attrition", size: "wide" }, { id: "retention", size: "small" }] };
   const before = structuredClone(props.layout);
   assert.deepEqual(widgets(render(props)), [

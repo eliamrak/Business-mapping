@@ -201,6 +201,7 @@ import "@/pages/practice-approved.css";
 import "@/components/practice/historical-period-values.css";
 import { TidalMaterial } from "@/components/practice/tidal-material";
 import "@/pages/practice-surfaces.css";
+import "@/pages/practice-controls.css";
 import { MobileWorkspaceNavigation, MobilePageActions, MobileContributorSelect } from "@/components/practice/mobile-workspace-controls";
 
 type Mode = "practice" | "sandbox" | "goals";
@@ -3306,7 +3307,7 @@ export default function PracticeWorkspace() {
     <div className="pw-section-heading">
       <div className="pw-label-help">
         <h2>{title}</h2>
-        <details className="pw-heading-help"><summary aria-label={`About ${title}`} title={subtitle}>?</summary><p>{subtitle}</p></details>
+        {title === "Clinical staff" ? historicalHelp : <details className="pw-heading-help"><summary aria-label={`About ${title}`} title={subtitle}>?</summary><p>{subtitle}</p></details>}
       </div>
       <div className="pw-actions">{actions}</div>
     </div>
@@ -4074,7 +4075,6 @@ export default function PracticeWorkspace() {
                     onCustom={setCustomPeriod}
                     note="Session activity uses the selected dates."
                   />
-                  {historicalHelp}
                   {heading(
                     "Clinical staff",
                     people.length + " clinicians",
@@ -7437,7 +7437,7 @@ export default function PracticeWorkspace() {
                   <div className="pw-contributor-tabs" role="group" aria-label="Overview contributor">
                     {contributorNames.map((name, index) => <button type="button" key={index === 0 ? "practice" : people[index - 1].id} aria-pressed={selectedContributorName === name} onClick={() => setSharedContributor(name)}>{name}</button>)}
                   </div>
-                  <OverviewHistoricalSummary reports={overviewHistoricalReports} capacity={overviewCapacity} targets={workingWorkspace.settings.performanceTargets} layout={workingWorkspace.settings.sectionLayouts?.summary} onLayoutChange={layout => stageSettings(sectionLayoutSettingsPatch(workingWorkspace.settings, "summary", layout), "Overview layout")} contributor={selectedContributorName} contributorIdentityVerified={selectedContributorName === "Whole Practice" || hasUniqueClinicianIdentity(context.clinicians, selectedContributorName, workspace.settings.teamId)} onSessions={() => setSection("sessions")} />
+                  <OverviewHistoricalSummary reports={overviewHistoricalReports} capacity={overviewCapacity} targets={workingWorkspace.settings.performanceTargets} layout={workingWorkspace.settings.sectionLayouts?.summary} onLayoutChange={layout => stageSettings(sectionLayoutSettingsPatch(workingWorkspace.settings, "summary", layout), "Overview layout")} contributor={selectedContributorName} contributorIdentityVerified={selectedContributorName === "Whole Practice" || hasUniqueClinicianIdentity(context.clinicians, selectedContributorName, workspace.settings.teamId)} />
                   <div className="pw-overview-primary-grid">
                     <section aria-label="Overview monthly surplus">
                       <h3>{financialEstimates?.summary.values.profit == null && financialEstimates?.summary.surplusBeforeUnconfiguredMarketing != null ? "Surplus before unconfigured marketing" : "Estimated monthly surplus"}</h3><p>{monthLabel(summaryMonth?.date ?? today)} · planning estimate, not cash</p>
