@@ -2,13 +2,11 @@
 .pw-app[data-material] {
   --pw-surface-solid: var(--pw-tone-panel);
   --pw-surface-glass: color-mix(in srgb, var(--pw-tone-panel) 50%, transparent);
-  --pw-content-glass: color-mix(in srgb, var(--pw-tone-panel) 90%, transparent);
   --pw-surface-radius: 14px;
   --pw-surface-space: clamp(16px, 2vw, 24px);
 }
 .pw-app[data-material="tidal"] {
   --pw-surface-glass: rgb(241 246 248 / 50%);
-  --pw-content-glass: rgb(241 246 248 / 75%);
   --pw-tone-text-muted: #294958;
   --pw-tone-text-detail: #294958;
 }
@@ -25,15 +23,26 @@
 /* Override legacy gradient cards too; unsupported blur stays opaque. */
 .pw-app[data-material] :is(.pw-section-widget--card,.pw-clinical-card,.pf-planning,.pw-money-budget,.pw-data-disclosure,.pw-import-start,.pw-import-conflict,.pw-local-retention,#retention-calculations,.pw-overview-primary-grid,.pw-overview-report-controls,.pw-money-month-control,.pw-content > details,.pw-person,.pw-edit-item,.pw-metric-panel,.pw-money-bridge-panel,.pw-focused-plan,.pw-session-tracker,.pw-progression,.pw-overview-composition > section,.pw-local-import-grid > section,.pw-local-tables > section,.pw-billing-codes,.pw-section-heading,.pw-marketing-breakdown,.pw-empty,.pw-overview-historical-summary.pw-overview-kpi-grid .sw-content > section,.pw-goal-editor .pw-section-widget-content > .pw-edit-item) {background:var(--pw-surface-solid);}
 @supports (backdrop-filter:blur(12px)) {
- /* Preserve the readability backing; only card backgrounds change alpha. */
+ /* One glass layer: the page must not add another fill or blur behind cards. */
  .pw-app[data-material] .pw-content {
-  background:var(--pw-content-glass); backdrop-filter:blur(12px); -webkit-backdrop-filter:blur(12px);
+  background:transparent; backdrop-filter:none; -webkit-backdrop-filter:none;
  }
  .pw-app[data-material] :is(.pw-section-widget--card,.pw-clinical-card,.pf-planning,.pw-money-budget,.pw-data-disclosure,.pw-import-start,.pw-import-conflict,.pw-local-retention,#retention-calculations,.pw-overview-primary-grid,.pw-overview-report-controls,.pw-money-month-control,.pw-content > details,.pw-person,.pw-edit-item,.pw-metric-panel,.pw-money-bridge-panel,.pw-focused-plan,.pw-session-tracker,.pw-progression,.pw-overview-composition > section,.pw-local-import-grid > section,.pw-local-tables > section,.pw-billing-codes,.pw-section-heading,.pw-marketing-breakdown,.pw-empty,.pw-overview-historical-summary.pw-overview-kpi-grid .sw-content > section,.pw-goal-editor .pw-section-widget-content > .pw-edit-item) {
   background:var(--pw-surface-glass); backdrop-filter:blur(12px); -webkit-backdrop-filter:blur(12px);
  }
  .pw-app[data-material] .pw-content > .pw-section-widget-layout,
  .pw-app[data-material] .pw-goal-editor {background:transparent;}
+ /* A local light halo supports unchanged ink over the darkest artwork. */
+ .pw-app[data-material="tidal"] .pw-content {
+  text-shadow:0 0 1px #f1f6f8,0 0 1px #f1f6f8;
+ }
+ .pw-app[data-material="tidal"] .pw-content :is(input,select,textarea,button) {text-shadow:none;}
+ .pw-app[data-material="tidal"] .pw-content :is(.recharts-wrapper,.pw-progression-chart svg) {background:rgb(241 246 248 / 85%);border-radius:8px;text-shadow:none;}
+ .pw-app[data-material="tidal"] .pw-content :is(.pw-text-button,summary,label,.hub-tabs button,.pr-button:not(.pr-primary)) {background:rgb(241 246 248 / 90%);border-radius:4px;}
+ /* Dense reading areas get local plates, not a second card/page blanket. */
+ .pw-app[data-material="tidal"] .pw-content :is(p,small,dt,dd,figcaption,table,.pw-modeled-staff-row) {
+  background:rgb(241 246 248 / 90%);text-shadow:none;box-decoration-break:clone;-webkit-box-decoration-break:clone;
+ }
  /* Nested cards share one layer instead of accumulating translucent veils. */
  .pw-app[data-material] :is(.pw-section-widget--card,.pw-clinical-card,.pf-planning,.pw-money-budget,.pw-data-disclosure,.pw-import-start,.pw-import-conflict,.pw-local-retention,#retention-calculations,.pw-overview-primary-grid,.pw-overview-report-controls,.pw-money-month-control,.pw-content > details,.pw-person,.pw-edit-item,.pw-metric-panel,.pw-money-bridge-panel,.pw-focused-plan,.pw-session-tracker,.pw-progression,.pw-overview-composition > section,.pw-local-import-grid > section,.pw-local-tables > section,.pw-billing-codes,.pw-section-heading,.pw-marketing-breakdown,.pw-empty,.pw-overview-historical-summary.pw-overview-kpi-grid .sw-content > section,.pw-goal-editor .pw-section-widget-content > .pw-edit-item) :is(.pw-section-widget--card,.pw-clinical-card,.pf-planning,.pw-money-budget,.pw-data-disclosure,.pw-import-start,.pw-import-conflict,.pw-local-retention,#retention-calculations,.pw-overview-primary-grid,.pw-overview-report-controls,.pw-money-month-control,.pw-content > details,.pw-person,.pw-edit-item,.pw-metric-panel,.pw-money-bridge-panel,.pw-focused-plan,.pw-session-tracker,.pw-progression,.pw-overview-composition > section,.pw-local-import-grid > section,.pw-local-tables > section,.pw-billing-codes,.pw-section-heading,.pw-marketing-breakdown,.pw-empty,.pw-overview-historical-summary.pw-overview-kpi-grid .sw-content > section,.pw-goal-editor .pw-section-widget-content > .pw-edit-item) {
   background:transparent; backdrop-filter:none; -webkit-backdrop-filter:none;
@@ -61,6 +70,7 @@
  .pw-app[data-material] :is(.pw-edit-item-heading,.pw-section-heading) {flex-wrap:wrap;gap:12px;}
 }
 @media(prefers-reduced-transparency:reduce), (forced-colors:active) {
+ .pw-app[data-material="tidal"] .pw-content {text-shadow:none;}
  .pw-app[data-material] .pw-content,
  .pw-app[data-material] :is(.pw-section-widget--card,.pw-clinical-card,.pf-planning,.pw-money-budget,.pw-data-disclosure,.pw-import-start,.pw-import-conflict,.pw-local-retention,#retention-calculations,.pw-overview-primary-grid,.pw-overview-report-controls,.pw-money-month-control,.pw-content > details,.pw-person,.pw-edit-item,.pw-metric-panel,.pw-money-bridge-panel,.pw-focused-plan,.pw-session-tracker,.pw-progression,.pw-overview-composition > section,.pw-local-import-grid > section,.pw-local-tables > section,.pw-billing-codes,.pw-section-heading,.pw-marketing-breakdown,.pw-empty,.pw-overview-historical-summary.pw-overview-kpi-grid .sw-content > section,.pw-goal-editor .pw-section-widget-content > .pw-edit-item),
  .pw-app[data-material] :is(.pw-section-widget--card,.pw-clinical-card,.pf-planning,.pw-money-budget,.pw-data-disclosure,.pw-import-start,.pw-import-conflict,.pw-local-retention,#retention-calculations,.pw-overview-primary-grid,.pw-overview-report-controls,.pw-money-month-control,.pw-content > details,.pw-person,.pw-edit-item,.pw-metric-panel,.pw-money-bridge-panel,.pw-focused-plan,.pw-session-tracker,.pw-progression,.pw-overview-composition > section,.pw-local-import-grid > section,.pw-local-tables > section,.pw-billing-codes,.pw-section-heading,.pw-marketing-breakdown,.pw-empty,.pw-overview-historical-summary.pw-overview-kpi-grid .sw-content > section,.pw-goal-editor .pw-section-widget-content > .pw-edit-item) :is(.pw-section-widget--card,.pw-clinical-card,.pf-planning,.pw-money-budget,.pw-data-disclosure,.pw-import-start,.pw-import-conflict,.pw-local-retention,#retention-calculations,.pw-overview-primary-grid,.pw-overview-report-controls,.pw-money-month-control,.pw-content > details,.pw-person,.pw-edit-item,.pw-metric-panel,.pw-money-bridge-panel,.pw-focused-plan,.pw-session-tracker,.pw-progression,.pw-overview-composition > section,.pw-local-import-grid > section,.pw-local-tables > section,.pw-billing-codes,.pw-section-heading,.pw-marketing-breakdown,.pw-empty,.pw-overview-historical-summary.pw-overview-kpi-grid .sw-content > section,.pw-goal-editor .pw-section-widget-content > .pw-edit-item) {background:var(--pw-surface-solid);backdrop-filter:none;-webkit-backdrop-filter:none;box-shadow:none;}

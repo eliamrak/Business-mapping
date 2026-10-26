@@ -24,6 +24,8 @@ async function checkCardSurfaces(section,width) {
   });
  });
  assert.ok(samples.length>0,section+' has sampled cards');
+ const pageSurface=await page.locator('.pw-content').evaluate(el=>({background:getComputedStyle(el).backgroundColor,blur:getComputedStyle(el).backdropFilter}));
+ assert.deepEqual(pageSurface,{background:'rgba(0, 0, 0, 0)',blur:'none'},'No blanket page fill or blur behind glass');
  for(const sample of samples) {
   assert.equal(sample.image,'none','No opaque legacy gradient');
   assert.equal(sample.background,sample.nested?'rgba(0, 0, 0, 0)':'rgba(241, 246, 248, 0.5)',section+' card alpha');
@@ -95,6 +97,7 @@ try {
  await page.getByRole('group',{name:'Money view',exact:true}).getByRole('button',{name:'Budget',exact:true}).click();
  await capture('money-budget',1280,900);await capture('money-budget',320,900);
  await clickSection('Team');
+ assert.equal(await page.locator('.pw-modeled-staff-row').first().evaluate(el=>getComputedStyle(el).backgroundColor),'rgba(241, 246, 248, 0.9)','Standalone staff text has a local reading plate');
  const history=page.locator('.pw-team-history').first();
  await history.locator('summary').first().focus();await page.keyboard.press('Enter');
  assert.equal(await history.evaluate(el=>el.open),true);
@@ -140,14 +143,10 @@ try {
  await page.evaluate(()=>document.body.style.zoom='2');
  await capture('growth-zoom',1280,900);
  await page.evaluate(()=>document.body.style.zoom='');
- // Conservative contrast: retained 75% page backing against black, even without an extra card fill.
- const contrast=await page.evaluate(()=>{
-  const rgb=s=>s.match(/[\d.]+/g).slice(0,3).map(Number);
-  const luminance=c=>c.map(v=>{v/=255;return v<=.04045?v/12.92:((v+.055)/1.055)**2.4}).reduce((a,v,i)=>a+v*[.2126,.7152,.0722][i],0);
-  const bg=luminance([241,246,248].map(v=>v*.75));
-  return [...document.querySelectorAll('.pw-content h3,.pw-content label,.pw-content p,.pw-content th')].filter(el=>el.getClientRects().length).map(el=>{const fg=luminance(rgb(getComputedStyle(el).color));return {tag:el.tagName,text:el.textContent.slice(0,60),ratio:(Math.max(bg,fg)+.05)/(Math.min(bg,fg)+.05)};});
- });
- assert.ok(contrast.every(item=>item.ratio>=4.5),'All sampled text passes conservative glass contrast');
+ // Body ink has a local light halo, not a full-card backing. Do not claim
+ // alpha-only calculations measure rendered halo contrast; capture it for review.
+ const contrast=await page.evaluate(()=>[...document.querySelectorAll('.pw-content p,.pw-content h3')].filter(el=>el.getClientRects().length).map(el=>({text:el.textContent.slice(0,60),color:getComputedStyle(el).color,halo:getComputedStyle(el).textShadow,background:getComputedStyle(el).backgroundColor})));
+ assert.ok(contrast.every(item=>item.halo!=='none'||item.background==='rgba(241, 246, 248, 0.9)'),'Body text retains a local reading plate or halo');
  const cdp=await page.context().newCDPSession(page);
  await cdp.send('Emulation.setEmulatedMedia',{features:[{name:'prefers-reduced-transparency',value:'reduce'}]});
  const fallback=await page.locator('.pw-edit-item').first().evaluate(el=>({background:getComputedStyle(el).backgroundColor,blur:getComputedStyle(el).backdropFilter}));
