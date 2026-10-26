@@ -138,3 +138,7 @@
 .pw-app[data-material] :is(.pw-section-widget--card,.pw-clinical-card,.pf-planning,.pw-money-budget,.pw-data-disclosure,.pw-import-start,.pw-import-conflict,.pw-local-retention,#retention-calculations,.pw-overview-primary-grid,.pw-overview-report-controls,.pw-money-month-control,.pw-content > details,.pw-person,.pw-edit-item,.pw-metric-panel,.pw-money-bridge-panel,.pw-focused-plan,.pw-session-tracker,.pw-progression,.pw-overview-composition > section,.pw-local-import-grid > section,.pw-local-tables > section,.pw-billing-codes,.pw-section-heading,.pw-marketing-breakdown,.pw-empty,.pw-overview-historical-summary.pw-overview-kpi-grid .sw-content > section,.pw-goal-editor .pw-section-widget-content > .pw-edit-item) :is(.pw-error,.pw-warning) {color:#27000a;}
 .pw-app[data-material] .pw-overview-historical-summary .pw-attrition-count-kpi {justify-items:center;margin:8px 0;}
 .pw-app[data-material] .pw-overview-historical-summary .pw-attrition-count-ring {width:126px;height:126px;font-size:26px;}
+.pw-app[data-material] .pw-attrition-starts {display:grid;gap:10px;margin:8px 0;color:var(--pw-tone-text);}
+.pw-app[data-material] .pw-attrition-starts div {display:grid;gap:3px;}
+.pw-app[data-material] .pw-attrition-starts dt {font-size:14px;}
+.pw-app[data-material] .pw-attrition-starts dd {font-size:22px;font-weight:650;margin:0;}

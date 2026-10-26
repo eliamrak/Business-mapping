@@ -757,3 +757,17 @@ test('zero monthly endings remain known while absent monthly coverage has a conc
   assert.match(html, /Not enough covered history/);
   assert.doesNotMatch(html, /-- clients ended|role="meter"/);
 });
+
+test("attrition compares matured starts on its own matched month basis, not retention window starts", () => {
+  const props=fixture();
+  const activity=props.reports['3mo'].attritionActivity!;
+  activity.maturedStartsComparison={months:['2026-04','2026-06'],maturedStarts:6,averageStarts:3,averageEndings:2,difference:1};
+  activity.averageClientEndingsPerFullMonth=2;
+  props.reports['3mo'].activity!.initialRetentionDenominator=999;
+  const html=render(props);
+  assert.match(html,/Matured starts \/ month<\/dt><dd>3<\/dd>/);
+  assert.match(html,/Starts minus endings \/ month<\/dt><dd>\+1<\/dd>/);
+  assert.match(html,/not net active growth/);
+  activity.maturedStartsComparison={months:[],maturedStarts:null,averageStarts:null,averageEndings:null,difference:null};
+  assert.match(render(props),/Starts comparison unavailable/);
+});

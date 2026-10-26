@@ -74,6 +74,9 @@ try {
  assert.equal(await page.getByRole('button',{name:'Open Imports',exact:true}).count(),0);
  const attrition=page.getByRole('region',{name:'Overview average monthly attrition'});
  assert.equal(await attrition.locator('.pw-attrition-count-ring').count(),2);
+ assert.equal(await attrition.getByText('Matured starts / month',{exact:true}).count(),2);
+ assert.equal(await attrition.getByText('Starts minus endings / month',{exact:true}).count(),2);
+ assert.equal(await attrition.getByText('Evaluated first-observed starts; not net active growth.',{exact:true}).count(),2);
  assert.equal(await attrition.locator('[role="meter"]').count(),0);
  assert.equal(await attrition.getByText('Client endings / month',{exact:true}).count(),2);
  assert.doesNotMatch(await attrition.innerText(),/-- clients ended|Full-window percentage unavailable/);

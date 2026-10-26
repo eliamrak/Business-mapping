@@ -98,7 +98,16 @@ export type ClinicianAttendanceMetric = {
   immatureClientsExcluded: number;
 };
 
+export type MaturedStartsComparison = {
+  months: string[];
+  maturedStarts: number | null;
+  averageStarts: number | null;
+  averageEndings: number | null;
+  difference: number | null;
+};
+
 export type ClinicianClientActivityMetric = {
+  maturedStartsComparison?: MaturedStartsComparison;
   clinician: string;
   coverageVerified: boolean;
   initialRetentionCoverageVerified: boolean;
@@ -150,6 +159,7 @@ export type LocalRetentionMetrics = {
 };
 
 export type LocalClientActivityEstimate = {
+  maturedStartsComparison?: MaturedStartsComparison;
   coverageVerified: boolean;
   initialRetentionCoverageVerified: boolean;
   endingEvents: { clientId: string; date: string }[];
@@ -1628,6 +1638,34 @@ function initialRetentionWindowCovered(
   return true;
 }
 
+/** Compare evaluated initial starts and apparent endings over exactly the same covered months.
+ * First-observed starts are not certified first-ever clients; this is not active-client growth.
+ */
+export function compareMaturedStarts(
+  datesByClient: Map<string, string[]>, intervals: DateInterval[],
+  endingMonths: readonly { month: string; endedClients: number }[], gapDays: number,
+  excluded: readonly { clientId: string; serviceDate: string }[] = [],
+): MaturedStartsComparison {
+  const months = endingMonths.map(row => row.month);
+  const unknown: MaturedStartsComparison = { months, maturedStarts: null, averageStarts: null, averageEndings: null, difference: null };
+  if (!months.length) return unknown;
+  let count = 0;
+  for (const month of months) {
+    if (!initialRetentionWindowCovered(datesByClient, intervals, monthStart(month), monthEnd(month), gapDays)) return unknown;
+  }
+  for (const [id, values] of datesByClient) {
+    const dates = [...new Set(values)].sort();
+    if (!dates.length || !months.includes(dates[0].slice(0, 7))) continue;
+    const { initialEpisode } = initialRetentionEpisode(dates, gapDays);
+    const through = initialEpisode.length >= 3 ? initialEpisode[2] : addDays(initialEpisode.at(-1)!, gapDays);
+    if (excluded.some(row => row.clientId === id && row.serviceDate >= dates[0] && row.serviceDate <= through)) return unknown;
+    count++;
+  }
+  const ends = endingMonths.reduce((sum, row) => sum + row.endedClients, 0);
+  return { months, maturedStarts: count, averageStarts: count / months.length,
+    averageEndings: ends / months.length, difference: (count - ends) / months.length };
+}
+
 function activeAtMonthStart(
   dates: string[],
   month: string,
@@ -2133,6 +2171,7 @@ export function estimateLocalClientActivity(
           eligibleInactivityMonths.length
         : null,
     ...clientEndings,
+    maturedStartsComparison: compareMaturedStarts(practiceShowDates, coverageIntervals, clientEndings.monthlyEndedClients, initialRetentionGapDays, excludedFollowUp),
   };
 }
 
@@ -2626,6 +2665,7 @@ export function buildLocalRetentionMetrics(
       eventEnd,
       excludedFollowUp,
     );
+    activity.maturedStartsComparison = compareMaturedStarts(clientDates, clinicianIntervals, endings.monthlyEndedClients, followUpDays, excludedFollowUp);
     activity.endingObservationCutoff = endings.endingObservationCutoff;
     activity.endingFullMonthClientEnds = endings.endingFullMonthClientEnds;
     activity.endingFullMonthDenominator = endings.endingFullMonthDenominator;
