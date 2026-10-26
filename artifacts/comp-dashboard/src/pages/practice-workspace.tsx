@@ -4257,15 +4257,15 @@ export default function PracticeWorkspace() {
                             </div>
                             <div>
                               <span>Retention</span>
-                              <HistoricalPeriodValues dates="help" values={historicalValuesFor("retention", person.label)} />
+                              <HistoricalPeriodValues dates="accessible" values={historicalValuesFor("retention", person.label)} />
                             </div>
                             <div>
                               <span>Average monthly attrition</span>
-                              <HistoricalPeriodValues dates="help" periodLabels={{ "3mo": "Last 3 mature months", year: "Last 12 mature months" }} values={historicalValuesFor("attrition", person.label)} />
+                              <HistoricalPeriodValues dates="accessible" periodLabels={{ "3mo": "Last 3 mature months", year: "Last 12 mature months" }} values={historicalValuesFor("attrition", person.label)} />
                             </div>
                             <div>
                               <span>Observed close rate</span>
-                              <HistoricalPeriodValues dates="help" values={historicalValuesFor("consult", person.label)} />
+                              <HistoricalPeriodValues dates="accessible" values={historicalValuesFor("consult", person.label)} />
                             </div>
                           </div>
                           </details>
@@ -4676,16 +4676,16 @@ export default function PracticeWorkspace() {
                     {widgetGrid("sessions", <>
                       <section className="pw-clinical-card" aria-label="Historical close rate card" data-widget-id="close-rate" data-widget-title="Observed close rate">
                         <div className="pw-label-help"><h3>Observed close rate</h3>{historicalHelp}</div>
-                        <HistoricalPeriodValues dates="help" values={historicalValuesFor("consult", compareWholePractice ? "Whole Practice" : selectedContributorName, compareWholePractice)} />
+                        <HistoricalPeriodValues dates="accessible" values={historicalValuesFor("consult", compareWholePractice ? "Whole Practice" : selectedContributorName, compareWholePractice)} />
                       </section>
                       <section className="pw-clinical-card" aria-label="Retention card" data-widget-id="retention" data-widget-title="Retention">
                         <h3>Retention</h3>
-                        <HistoricalPeriodValues dates="help" values={historicalValuesFor("retention", compareWholePractice ? "Whole Practice" : selectedContributorName, compareWholePractice)} />
+                        <HistoricalPeriodValues dates="accessible" values={historicalValuesFor("retention", compareWholePractice ? "Whole Practice" : selectedContributorName, compareWholePractice)} />
                         <details><summary>Source and calculation</summary><p>Imported treatment starts within each labeled calendar period. Three attended treatment sessions with no initial gap over 28 days; PHONE excluded. Pending starts are not failures. Coverage is reported separately for each period.</p></details>
                       </section>
                       <section className="pw-clinical-card" aria-label="Attrition card" data-widget-id="attrition" data-widget-title="Attrition">
                         <h3>Average monthly attrition</h3>
-                        <HistoricalPeriodValues dates="help" periodLabels={{ "3mo": "Last 3 mature months", year: "Last 12 mature months" }} values={historicalValuesFor("attrition", compareWholePractice ? "Whole Practice" : selectedContributorName, compareWholePractice)} />
+                        <HistoricalPeriodValues dates="accessible" periodLabels={{ "3mo": "Last 3 mature months", year: "Last 12 mature months" }} values={historicalValuesFor("attrition", compareWholePractice ? "Whole Practice" : selectedContributorName, compareWholePractice)} />
                         <details><summary>Source and calculation</summary><p>Established treatment relationships need 90 covered days of follow-up. A later return removes the prior ending. Unknown mature coverage stays unknown, not zero. No attrition target or replacement requirement is invented.</p></details>
                       </section>
                       <div data-widget-id="session-progression" data-widget-title="Session progression & observed lifetime" data-widget-size="wide">

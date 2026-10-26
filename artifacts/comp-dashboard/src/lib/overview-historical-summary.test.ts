@@ -108,7 +108,7 @@ const card = (html: string, label: string) => {
   assert.ok(index >= 0, `Missing ${label}`);
   return html.slice(sections[index].index, sections[index + 1]?.index ?? html.indexOf('<button type="button" class="pw-text-button"'));
 };
-const prominent = (html: string) => html.replace(/<details\b[\s\S]*?<\/details>/g, "");
+const prominent = (html: string) => html.replace(/<details\b[\s\S]*?<\/details>/g, "").replace(/<div class="sr-only">[\s\S]*?<\/div>/g, "").replace(/<p class="pw-historical-period-dates sr-only">[\s\S]*?<\/p>/g, "");
 const periodRegion = (html: string, period: "3mo" | "year") => {
   const region = html.match(new RegExp(`<section\\b[^>]*data-period="${period}"[^>]*>[\\s\\S]*?</section>`))?.[0];
   assert.ok(region, `Missing ${period} region`);
@@ -131,7 +131,7 @@ const julyFixture = (returned = false, asOf = "2026-11-30"): Props => {
   return props;
 };
 
-test("all four cards show both histories simultaneously with dates in accessible disclosures and no period toggles or removed cards", () => {
+test("all four cards show both histories simultaneously with accessible date metadata without auxiliary disclosure boxes and no period toggles or removed cards", () => {
   const html = render();
   const kpiLabels = [...html.matchAll(/<div class="[^"]*\bsw-content\b[^"]*"><section\b[^>]*aria-label="([^"]+)"/g)].map(match => match[1]);
   assert.deepEqual(kpiLabels, labels);
@@ -144,7 +144,8 @@ test("all four cards show both histories simultaneously with dates in accessible
     assert.match(section, /dateTime="2026-07-01"/);
     assert.match(section, /dateTime="2025-10-01"/);
     assert.equal([...section.matchAll(/dateTime="2026-09-30"/g)].length, 2);
-    assert.equal([...section.matchAll(/<details class="pw-historical-period-date-help"><summary>Period dates<\/summary>/g)].length, 2);
+    assert.equal([...section.matchAll(/class="pw-historical-period-dates sr-only"/g)].length, 2);
+    assert.doesNotMatch(section, /<summary>(?:Definition|Period dates|Exact changes?)<\/summary>/);
     assert.doesNotMatch(prominent(section), /dateTime=|percentage points vs 12-month baseline/);
   }
   assert.doesNotMatch(html, /<select|role="(?:tab|switch)"|type="(?:radio|checkbox)"|\shidden(?:=|\s|>)/);
@@ -466,7 +467,7 @@ test("observed close rate shows evaluated outcomes with unresolved counts and se
   assert.match(visible, /2 unresolved · 0 referrals excluded/);
   assert.match(visible, /Some cohort outcomes unresolved/);
   assert.doesNotMatch(visible, /onboarding|evaluated journeys|attribution rules|coverage verified/i);
-  assert.match(funnel, /<details><summary>Definition<\/summary><p>8 consultations\. Observed close rate is same-clinician closes divided by evaluated outcomes/);
+  assert.match(funnel, /<div class="sr-only"><p>8 consultations\. Observed close rate is same-clinician closes divided by evaluated outcomes/);
   assert.match(funnel, /unresolved cases and referrals are excluded, not treated as failures\./);
   assert.match(funnel, /A consultation followed by a qualifying full-session appointment under the same clinician counts as a close; attendance is not required\./);
   assert.match(funnel, /The recorded appointment sequence and one-calendar-month follow-up window are used, not a fabricated booking-created timestamp\./);

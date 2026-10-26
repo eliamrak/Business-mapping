@@ -79,3 +79,13 @@ test("redundant comparison arithmetic is omitted while both labeled periods rema
   assert.match(html, /Trailing 3 months/);
   assert.match(html, /Trailing year/);
 });
+
+test('comparison dates remain accessible without a disclosure or visible date row', () => {
+  const before = JSON.stringify(values);
+  const html = renderToStaticMarkup(createElement(HistoricalPeriodValues, { values, dates: 'accessible' }));
+  assert.equal([...html.matchAll(/class="pw-historical-period-dates sr-only"/g)].length, 2);
+  assert.doesNotMatch(html, /<details|<summary|Period dates/);
+  assert.match(html, /data-period="3mo"/);
+  assert.match(html, /data-period="year"/);
+  assert.equal(JSON.stringify(values), before);
+});

@@ -66,6 +66,10 @@ try {
   }
  }
  await clickSection('Overview');
+ assert.equal(await page.locator('.pw-content summary').filter({hasText:/^(Definition|Period dates|Exact changes?)$/}).count(),0,'Removed auxiliary disclosure boxes');
+ assert.ok(await page.locator('.pw-overview-historical-summary summary').filter({hasText:/^Coverage$/}).count()>0,'Coverage controls remain');
+ const accessibleDates=await page.locator('.pw-overview-historical-summary .pw-historical-period-dates').evaluateAll(nodes=>nodes.map(el=>({width:el.getBoundingClientRect().width,height:el.getBoundingClientRect().height,text:el.textContent})));
+ assert.equal(accessibleDates.length,8);assert.ok(accessibleDates.every(el=>el.width<=1&&el.height<=1&&el.text.includes(' to ')),'Date metadata retained without visual boxes');
  for(const label of ['Forecast controls','Projection basis','Forecast and historical details']) assert.equal(await page.locator('summary').filter({hasText:new RegExp('^'+label+'$')}).count(),0,label+' removed from Overview');
  assert.equal(await page.getByRole('button',{name:'Open Imports',exact:true}).count(),0);
  await checkInteractiveContrast('Overview');
@@ -101,10 +105,12 @@ try {
  const history=page.locator('.pw-team-history').first();
  await history.locator('summary').first().focus();await page.keyboard.press('Enter');
  assert.equal(await history.evaluate(el=>el.open),true);
+ assert.equal(await history.locator('summary').filter({hasText:/^Period dates$/}).count(),0);
  await page.setViewportSize({width:320,height:900});
  assert.equal(await history.evaluate(el=>el.open),true);
  await capture('team-expanded',320,900);
  await clickSection('Sessions');
+ assert.equal(await page.locator('.pw-content summary').filter({hasText:/^(Definition|Period dates|Exact changes?)$/}).count(),0);
  assert.equal(await page.getByLabel('Unresolved consultation reasons',{exact:true}).count(),1);
  assert.match(await page.getByLabel('Unresolved consultation reasons',{exact:true}).innerText(),/Follow-up window open\s+1/);
  assert.equal(await page.locator('#session-attribution-audit').evaluate(el=>el.open),false);
