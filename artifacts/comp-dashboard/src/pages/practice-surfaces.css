@@ -206,3 +206,5 @@
 @media(max-width:600px){.pw-app[data-material] .pw-reviewed-growth table :is(th,td){font-size:15px;padding:8px 5px;}.pw-reviewed-growth .pw-growth-history-grid{grid-template-columns:1fr 1fr;gap:10px;}}
 .pw-app.practice-theme[data-material="tidal"][data-material] .pw-reviewed-growth table :is(th,td) {background:transparent;backdrop-filter:none;}
 .pw-app.practice-theme[data-material="tidal"][data-material] .pw-reviewed-growth table :is(th,td) {-webkit-backdrop-filter:none;}
+.pw-app[data-material] .pw-provider-growth .pw-growth-summary th:first-child {width:40%;}
+.pw-app[data-material] .pw-provider-growth .pw-growth-summary th:not(:first-child) {width:30%;}

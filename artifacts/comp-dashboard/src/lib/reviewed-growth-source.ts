@@ -19,7 +19,9 @@ import {
   reviewedGrowth,
   type GrowthSettings,
   type GrowthVisit,
+  type GrowthObservationInput,
 } from "./reviewed-growth-observations.ts";
+import { providerGrowth, staffingPlanCandidates } from "./provider-growth.ts";
 /** One synchronous capture → result. Scenario settings cannot replace actual
  * attendance, leads, current roster or source identity. No cache survives inputs. */
 export function reviewedGrowthFromSources(input: {
@@ -31,6 +33,8 @@ export function reviewedGrowthFromSources(input: {
   today: string;
   settings: GrowthSettings;
   scenario: boolean;
+  planningWorkspace?: Workspace;
+  planningContext?: Context;
 }) {
   const { workspace, context, today } = input,
     teamId = workspace.settings.teamId;
@@ -120,7 +124,7 @@ export function reviewedGrowthFromSources(input: {
           .flatMap(resolve)
       : [],
   );
-  const result = reviewedGrowth({
+  const observationInput: GrowthObservationInput = {
     today,
     visits,
     consults,
@@ -134,7 +138,16 @@ export function reviewedGrowthFromSources(input: {
     weeksPerYear: workspace.settings.weeksPerYear,
     settings: input.settings,
     scenario: input.scenario,
-  });
+  };
+  const result = reviewedGrowth(observationInput);
+  const providers = providerGrowth(observationInput, result, roster);
+  const staffingCandidates = input.scenario
+    ? staffingPlanCandidates(
+        input.planningWorkspace ?? workspace,
+        input.planningContext ?? context,
+        input.settings.staffing ?? [],
+      )
+    : { overlays: [], issues: [], templateCount: 0 };
   // Diagnostic revision only (not a security/content-authentication hash). Every
   // captured dependency participates; no client identifiers leave the adapter.
   const serialized = JSON.stringify({
@@ -146,11 +159,18 @@ export function reviewedGrowthFromSources(input: {
     declarations: input.declarations,
     settings: input.settings,
     scenario: input.scenario,
+    planningWorkspace: input.planningWorkspace,
+    planningContext: input.planningContext,
   });
   let hash = 2166136261;
   for (let i = 0; i < serialized.length; i++) {
     hash ^= serialized.charCodeAt(i);
     hash = Math.imul(hash, 16777619);
   }
-  return { ...result, inputRevision: (hash >>> 0).toString(16) };
+  return {
+    ...result,
+    providers,
+    staffingCandidates,
+    inputRevision: (hash >>> 0).toString(16),
+  };
 }

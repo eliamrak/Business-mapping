@@ -646,6 +646,9 @@ export type SectionLayout = z.infer<typeof sectionLayoutSchema>;
 export type SectionLayouts = z.infer<typeof sectionLayoutsSchema>;
 
 export const growthPlanningSchema = z.object({
+  providerPlans: z.record(z.string().regex(/^[1-9]\d*$/), z.object({
+    usePracticeProxy:z.boolean(), monthlyLeads:z.record(z.string().regex(/^\d{4}-(0[1-9]|1[0-2])$/),z.number().finite().min(0).max(1000000)), reserve:z.number().finite().min(0).max(100000),
+  })).optional(),
   occupancy: z.number().finite().min(0).max(1),
   goalMonths: z.number().int().min(1).max(36),
   checkMonths: z.number().int().min(1).max(36),

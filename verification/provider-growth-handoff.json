@@ -1,0 +1,29 @@
+{
+ "base":"be0d5dd942ebf78c68168e131f1aae431bdf2f93",
+ "branch":"codex/provider-growth-20261027",
+ "scope":"Isolated provider follow-up; practice-level publisher branch/worktree untouched",
+ "capabilities":{
+  "history":"Current clinician selector; paired3/12windows use same practice cutoff and common covered-month set; attendance/week, established-active average, established cadence, first practice starts, prior-clinician starts and attributed leads",
+  "reconciliation":"Practice unique clients once; shared latest-date clients count once per participating clinician. Global third-date qualification preserved; transfer is not new practice acquisition. Actual session totals reconcile across providers; overlapping client-day pairs are explicitly not summed as unique people.",
+  "actualProviderResponse":"Only fully attributed, structurally valid original lead periods enter provider calibration. Partial/unassigned months withheld rather than misrepresented as complete provider denominators.",
+  "proxy":"Explicit opt-in per provider; practice future-arrival response plus provider current stock/cadence/capacity. Zero waiting pipeline is a visible scenario assumption, not a recorded queue. Incomplete lead totals stay provisional; source uncertainty cannot be bypassed.",
+  "constraints":"Per-provider conditional capacity paths and lead ceilings; explicit allocations plus modeled provider intakes checked against practice series; missing service/specialty suitability remains unknown. No automatic patient routing.",
+  "staffing":"Optional reconciliation of unique enabled clinician.hire events with known template identity, first-of-month starts, no dependencies/end-date ambiguity. Delay and ramp preserved; stable event IDs prevent duplicate copying. Matching unlinked overlays require review. Hiring profiles alone are templates, not automatic hire decisions.",
+  "persistence":"Provider assumptions and allocations use optional growthPlanning.providerPlans through existing staged-save and selected-plan save/reopen workflow. Scenario edits never change actual clinician/session/lead records."
+ },
+ "verification":{
+  "fullRegression":"1340 passed,0 failed",
+  "independent":"Provider logic, attribution, shared-client reconciliation, source uncertainty, staffing mapping and saved-plan isolation accepted after corrections",
+  "browser":"Synthetic real-component desktop1440/mobile390/320; keyboard proxy toggle, clinician switching, over-allocation/overload warnings, one-time staffing copy, reload persistence, missing coverage, source preservation",
+  "harness":"node verification/provider-growth-render.mjs",
+  "captures":"/tmp/practice-provider-growth-render (author-local; transfer separately)"
+ },
+ "remainingLimits":[
+  "No live authenticated private-import reconciliation or Mac verification by author; parent publisher coordinates those.",
+  "Service/specialty suitability is not recorded sufficiently and remains unknown; capacity estimates do not certify safe routing.",
+  "Ambiguous/dependent/partial-month/end-dated hire events are reported for review, not guessed. Arbitrary legacy capacity/room events are not converted into new-hire overlays.",
+  "Provider proxy is assumption-bound and not measured provider conversion; practice/provider projections need not sum because current-client frequencies and exposure populations differ.",
+  "Saved-plan UI acceptance uses synthetic browser storage plus actual schema/save-reopen helper tests, not production writes."
+ ],
+ "release":"Compose only this delta onto the published practice-level source; preserve publisher artifact pins and consultation fix. No author deployment."
+}

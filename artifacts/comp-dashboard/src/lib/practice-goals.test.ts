@@ -407,3 +407,13 @@ test("clinician import does not silently reassign modeled session history", () =
     /same clinicians/,
   );
 });
+
+test('provider proxy and allocation assumptions survive selected-plan save/reopen without changing actuals',()=>{
+ const actual=fixture(),before=structuredClone(actual);const draft=copyPractice(actual.workspace,actual.context);
+ draft.workspace.settings.growthPlanning={occupancy:.8,goalMonths:4,checkMonths:6,leadConsultDays:5,otherRouteDays:5,reserve:0,recruitmentMonths:null,onboardingMonths:null,rampMonths:null,providerPlans:{'1':{usePracticeProxy:true,monthlyLeads:{'2026-10':7},reserve:2}}};
+ const saved=makePlanningScenario('Provider allocation',draft,12,'sandbox');const restored=readPracticeGoal(saved)!;
+ assert.deepEqual(restored.workspace.settings.growthPlanning,draft.workspace.settings.growthPlanning);
+ restored.workspace.settings.growthPlanning!.providerPlans!['1']!.monthlyLeads['2026-10']=9;
+ assert.equal(draft.workspace.settings.growthPlanning.providerPlans!['1']!.monthlyLeads['2026-10'],7);
+ assert.deepEqual(actual,before);
+});

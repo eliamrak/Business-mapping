@@ -205,6 +205,7 @@ import "@/pages/practice-controls.css";
 import { MaturedStartsSummary } from "@/components/practice/matured-starts-summary";
 import { ReviewedGrowthPanel } from "@/components/practice/reviewed-growth-panel";
 import { reviewedGrowthFromSources } from "@/lib/reviewed-growth-source";
+import { ProviderGrowthPanel } from "@/components/practice/provider-growth-panel";
 import { DEFAULT_GROWTH_SETTINGS } from "@/lib/reviewed-growth-observations";
 import { MobileWorkspaceNavigation, MobilePageActions, MobileContributorSelect } from "@/components/practice/mobile-workspace-controls";
 
@@ -3428,7 +3429,7 @@ export default function PracticeWorkspace() {
     workspace: sandbox ? query.data!.data : workingWorkspace,
     context: contextQuery.data!, snapshots: localRetentionState.snapshots,
     overrides: localRetentionState.sameDayVisitOverrides, declarations: importEvidenceDeclarations,
-    today, settings: reviewedGrowthSettings, scenario: sandbox,
+    today, settings: reviewedGrowthSettings, scenario: sandbox, planningWorkspace:workingWorkspace,planningContext:context,
   });
   const growthPaceCard = query.isError || contextQuery.isError ? <section className="pw-metric-panel" role="status">Growth source refresh failed. Retry before relying on this forecast.</section> : query.isFetching || contextQuery.isFetching ? <section className="pw-metric-panel" aria-live="polite">Updating growth sources…</section> : <ReviewedGrowthPanel model={reviewedGrowthModel} settings={reviewedGrowthSettings}
     scenario={sandbox} onChange={growthPlanning => stageSettings({ growthPlanning }, "Growth planning assumptions")} />;
@@ -4989,6 +4990,7 @@ export default function PracticeWorkspace() {
               {section === "marketing" && (
                 <>
                   {growthPaceCard}
+                  {!query.isFetching&&!contextQuery.isFetching&&!query.isError&&!contextQuery.isError&&<ProviderGrowthPanel model={reviewedGrowthModel.providers} settings={reviewedGrowthSettings} scenario={sandbox} staffingCandidates={reviewedGrowthModel.staffingCandidates} onChange={growthPlanning=>stageSettings({growthPlanning},"Provider growth planning assumptions")}/>}
                   {heading(
                     "Marketing",
                     marketingTab === "campaigns"

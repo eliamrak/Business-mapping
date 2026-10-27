@@ -27,6 +27,14 @@ export type GrowthSettings = {
   recruitmentMonths: number | null;
   onboardingMonths: number | null;
   rampMonths: number | null;
+  providerPlans?: Record<
+    string,
+    {
+      usePracticeProxy: boolean;
+      monthlyLeads: Record<string, number>;
+      reserve: number;
+    }
+  >;
   monthlyLeads?: Record<string, number>;
   staffing?: {
     id: string;
@@ -82,10 +90,12 @@ function covered(
 }
 export type GrowthObservationInput = {
   today: string;
+  cutoff?: string;
   visits: readonly GrowthVisit[];
   consults: readonly GrowthVisit[];
   coverage: readonly GrowthCoverage[];
   clinicianIds: readonly number[];
+  coverageClinicianIds?: readonly number[];
   workspace: Pick<Workspace, "periods" | "funnels">;
   weeklyCapacity: number | null;
   weeksPerYear: number;
@@ -97,13 +107,25 @@ export type GrowthObservationInput = {
  * handling. Counts and all follow-up are cut off together before indexing. */
 export function reviewedGrowth(input: GrowthObservationInput) {
   const { settings } = input,
-    ids = new Set(input.clinicianIds);
+    ids = new Set(input.clinicianIds),
+    coverageIds = input.coverageClinicianIds ?? input.clinicianIds;
   const candidates = Array.from({ length: 24 }, (_, i) =>
     monthBefore(input.today, i + 1),
   );
-  const cutoffMonth = candidates.find((m) =>
-    covered(monthStart(m), monthEnd(m), input.clinicianIds, input.coverage),
-  );
+  const cutoffMonth = input.cutoff
+    ? input.cutoff < monthStart(input.today.slice(0, 7)) &&
+      input.cutoff === monthEnd(input.cutoff.slice(0, 7)) &&
+      covered(
+        monthStart(input.cutoff.slice(0, 7)),
+        input.cutoff,
+        coverageIds,
+        input.coverage,
+      )
+      ? input.cutoff.slice(0, 7)
+      : undefined
+    : candidates.find((m) =>
+        covered(monthStart(m), monthEnd(m), coverageIds, input.coverage),
+      );
   const empty = {
     version: REVIEWED_GROWTH_VERSION,
     cutoff: null as string | null,
@@ -114,7 +136,7 @@ export function reviewedGrowth(input: GrowthObservationInput) {
   if (!cutoffMonth) return empty;
   const cutoff = monthEnd(cutoffMonth),
     cut = stamp(cutoff);
-  if (!covered(iso(cut - 89), cutoff, input.clinicianIds, input.coverage))
+  if (!covered(iso(cut - 89), cutoff, coverageIds, input.coverage))
     return {
       ...empty,
       cutoff,
@@ -184,7 +206,7 @@ export function reviewedGrowth(input: GrowthObservationInput) {
       );
       if (
         period.length !== 1 ||
-        !covered(monthStart(m), monthEnd(m), input.clinicianIds, input.coverage)
+        !covered(monthStart(m), monthEnd(m), coverageIds, input.coverage)
       )
         return [];
       // Preserve overlap/duplicate validation while permitting explicitly provisional totals.
@@ -217,10 +239,30 @@ export function reviewedGrowth(input: GrowthObservationInput) {
       covered(
         iso(stamp(monthStart(m)) - 89),
         monthEnd(m),
-        input.clinicianIds,
+        coverageIds,
         input.coverage,
       ),
     );
+    const coveredDays = supported.reduce(
+      (sum, m) => sum + stamp(monthEnd(m)) - stamp(monthStart(m)) + 1,
+      0,
+    );
+    const attendedSessions = visits.filter(
+      (v) => ids.has(v.clinicianId) && supported.includes(v.date.slice(0, 7)),
+    ).length;
+    const firstObservedStarts = histories.filter(
+      (h) =>
+        supported.includes(h.first.slice(0, 7)) &&
+        h.rows.some((v) => v.date === h.first && ids.has(v.clinicianId)),
+    ).length;
+    const transferClients = histories.filter((h) => {
+      const firstProvider = h.rows.find((v) => ids.has(v.clinicianId));
+      return (
+        firstProvider &&
+        firstProvider.date > h.first &&
+        supported.includes(firstProvider.date.slice(0, 7))
+      );
+    }).length;
     const leadMonths = availableLeadMonths.filter(
       (m) => length === 12 || historyMonths.includes(m.month),
     );
@@ -263,7 +305,7 @@ export function reviewedGrowth(input: GrowthObservationInput) {
               covered(
                 iso(stamp(h.first) + intervalStart),
                 iso(stamp(h.first) + intervalStart + 29),
-                input.clinicianIds,
+                coverageIds,
                 input.coverage,
               ),
           );
@@ -422,7 +464,16 @@ export function reviewedGrowth(input: GrowthObservationInput) {
                     ? "Configured weekly capacity is unavailable."
                     : "Check the planning inputs.";
     families.push({
+      evidenceValid:
+        !uncertainHistory && supported.length > 0 && baseline !== null,
       historyMonths: length,
+      coveredDays,
+      attendedSessions,
+      weeklyAttendance: coveredDays
+        ? (attendedSessions * 7) / coveredDays
+        : null,
+      firstObservedStarts,
+      transferClients,
       coveredMonths: supported.length,
       leadMonths: leadMonths.map((m) => m.month),
       provisional: leadMonths.some((m) => !m.complete),
@@ -455,7 +506,13 @@ export function reviewedGrowth(input: GrowthObservationInput) {
   };
 }
 export type GrowthFamily = {
+  evidenceValid: boolean;
   historyMonths: number;
+  coveredDays: number;
+  attendedSessions: number;
+  weeklyAttendance: number | null;
+  firstObservedStarts: number;
+  transferClients: number;
   coveredMonths: number;
   leadMonths: string[];
   provisional: boolean;
