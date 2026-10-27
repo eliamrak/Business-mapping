@@ -4694,34 +4694,10 @@ export default function PracticeWorkspace() {
                       <section className="pw-clinical-card" aria-label="Historical close rate card" data-widget-id="close-rate" data-widget-title="Observed close rate">
                         <div className="pw-label-help"><h3>Observed close rate</h3>{historicalHelp}</div>
                         <HistoricalPeriodValues dates="accessible" values={historicalValuesFor("consult", compareWholePractice ? "Whole Practice" : selectedContributorName, compareWholePractice)} />
-                      </section>
-                      <section className="pw-clinical-card" aria-label="Retention card" data-widget-id="retention" data-widget-title="Retention">
-                        <h3>Retention</h3>
-                        <HistoricalPeriodValues dates="accessible" values={historicalValuesFor("retention", compareWholePractice ? "Whole Practice" : selectedContributorName, compareWholePractice)} />
-                        <details><summary>Source and calculation</summary><p>Imported treatment starts within each labeled calendar period. Three attended treatment sessions with no initial gap over 28 days; PHONE excluded. Pending starts are not failures. Coverage is reported separately for each period.</p></details>
-                      </section>
-                      <section className="pw-clinical-card" aria-label="Attrition card" data-widget-id="attrition" data-widget-title="Attrition">
-                        <h3>Average monthly attrition</h3>
-                        <HistoricalPeriodValues dates="accessible" periodLabels={{ "3mo": "Last 3 mature months", year: "Last 12 mature months" }} values={historicalValuesFor("attrition", compareWholePractice ? "Whole Practice" : selectedContributorName, compareWholePractice)} />
-                        <details><summary>Source and calculation</summary><p>Established treatment relationships need 90 covered days of follow-up. A later return removes the prior ending. Unknown mature coverage stays unknown, not zero. No attrition target or replacement requirement is invented.</p></details>
-                      </section>
-                      <div data-widget-id="session-progression" data-widget-title="Session progression & observed lifetime" data-widget-size="wide">
-                        <SessionProgressionPanel
-                          snapshots={historicalClinicalSnapshots}
-                          classificationSnapshots={localRetentionState.snapshots}
-                          excludedFollowUpEvidence={excludedFollowUpEvidence}
-                          overrides={localRetentionState.sameDayVisitOverrides}
-                          start={periodRange.start} end={periodRange.end} asOf={today}
-                          clinician={compareWholePractice || selectedContributorName === "Whole Practice" ? undefined : selectedContributorName}
-                          identityVerified={compareWholePractice || selectedContributorName === "Whole Practice" || hasUniqueClinicianIdentity(context.clinicians, selectedContributorName, workspace.settings.teamId)}
-                          comparisonMode={compareWholePractice}
-                          coverage={completeClinicalReports}
-                        />
-                      </div>
-                      <section className="pw-metric-panel pw-consult-summary" data-widget-id="current-consultations" data-widget-title="Selected-period consultations" data-widget-size="wide">
+                        <details className="pw-close-rate-details"><summary>Selected-period details{(contributorConsult?.pending ?? 0) > 0 ? ` · ${fmt(contributorConsult?.pending)} unresolved` : ""}</summary><div className="pw-consult-summary">
                         <div className="pw-section-heading">
                           <div>
-                            <h3>Observed close rate</h3>
+                            <h4>Selected-period consultation details</h4>
                             <p>
                               {activityPeriodCaption(sharedPeriod, periodRange)}
                             </p>
@@ -4782,7 +4758,32 @@ export default function PracticeWorkspace() {
                         {compareWholePractice && consultComparisonRows.map((row) => <p className="pw-note" key={row.id}>{row.label}: {row.detail}</p>)}
                         </details>
 
+                      </div></details>
                       </section>
+                      <section className="pw-clinical-card" aria-label="Retention card" data-widget-id="retention" data-widget-title="Retention">
+                        <h3>Retention</h3>
+                        <HistoricalPeriodValues dates="accessible" values={historicalValuesFor("retention", compareWholePractice ? "Whole Practice" : selectedContributorName, compareWholePractice)} />
+                        <details><summary>Source and calculation</summary><p>Imported treatment starts within each labeled calendar period. Three attended treatment sessions with no initial gap over 28 days; PHONE excluded. Pending starts are not failures. Coverage is reported separately for each period.</p></details>
+                      </section>
+                      <section className="pw-clinical-card" aria-label="Attrition card" data-widget-id="attrition" data-widget-title="Attrition">
+                        <h3>Average monthly attrition</h3>
+                        <HistoricalPeriodValues dates="accessible" periodLabels={{ "3mo": "Last 3 mature months", year: "Last 12 mature months" }} values={historicalValuesFor("attrition", compareWholePractice ? "Whole Practice" : selectedContributorName, compareWholePractice)} />
+                        <details><summary>Source and calculation</summary><p>Established treatment relationships need 90 covered days of follow-up. A later return removes the prior ending. Unknown mature coverage stays unknown, not zero. No attrition target or replacement requirement is invented.</p></details>
+                      </section>
+                      <div data-widget-id="session-progression" data-widget-title="Session progression & observed lifetime" data-widget-size="wide">
+                        <SessionProgressionPanel
+                          snapshots={historicalClinicalSnapshots}
+                          classificationSnapshots={localRetentionState.snapshots}
+                          excludedFollowUpEvidence={excludedFollowUpEvidence}
+                          overrides={localRetentionState.sameDayVisitOverrides}
+                          start={periodRange.start} end={periodRange.end} asOf={today}
+                          clinician={compareWholePractice || selectedContributorName === "Whole Practice" ? undefined : selectedContributorName}
+                          identityVerified={compareWholePractice || selectedContributorName === "Whole Practice" || hasUniqueClinicianIdentity(context.clinicians, selectedContributorName, workspace.settings.teamId)}
+                          comparisonMode={compareWholePractice}
+                          coverage={completeClinicalReports}
+                        />
+                      </div>
+
                     </>, "pw-sessions-history-widgets", "small")}
                   </div>
                   {importedSessionOverlay &&

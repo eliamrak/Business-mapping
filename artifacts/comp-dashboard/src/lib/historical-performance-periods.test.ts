@@ -327,12 +327,14 @@ test("Team and Sessions integrate both histories while activity-date consults re
   const stackEnd = sessions.indexOf('</>, "pw-sessions-history-widgets", "small")}', stackStart);
   const historyStack = stackStart >= 0 && stackEnd > stackStart ? sessions.slice(stackStart, stackEnd) : null;
   assert.ok(historyStack, "historical metrics and selected consultations share the editable grid below the full-width chart");
-  assert.equal([...historyStack.matchAll(/<section\b/g)].length, 4);
+  assert.equal([...historyStack.matchAll(/<section\b/g)].length, 3);
   assert.match(historyStack, /aria-label="Historical close rate card"/);
   assert.match(historyStack, /aria-label="Retention card"/);
   assert.match(historyStack, /aria-label="Attrition card"/);
   assert.doesNotMatch(historyStack, /aria-label="Session trends card"/);
-  assert.match(historyStack, /data-widget-id="current-consultations"/);
+  assert.doesNotMatch(historyStack, /data-widget-id="current-consultations"/);
+  assert.match(historyStack, /pw-close-rate-details/);
+  assert.ok(historyStack.indexOf("pw-close-rate-details") < historyStack.indexOf('data-widget-id="session-progression"'));
   assert.match(historyStack, /Last 3 mature months/);
   assert.match(sessions, /activityPeriodCaption\(sharedPeriod, periodRange\)/);
   assert.match(sessions, /rows=\{consultComparisonRows(?:\.map|\})/);
