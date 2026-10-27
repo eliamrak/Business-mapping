@@ -1,0 +1,41 @@
+import assert from 'node:assert/strict';import fs from 'node:fs/promises';import http from 'node:http';import path from 'node:path';import {createRequire} from 'node:module';
+const root=new URL('../',import.meta.url).pathname,req=createRequire(path.join(root,'artifacts/comp-dashboard/package.json'));
+const {build}=createRequire(req.resolve('vite/package.json'))('esbuild');
+const out='/tmp/practice-consultation-lead-flow';await fs.mkdir(out,{recursive:true});
+const result=await build({stdin:{loader:'tsx',resolveDir:path.join(root,'artifacts/comp-dashboard'),contents:`
+import React,{useState} from 'react';import {createRoot} from 'react-dom/client';
+import LeadFlow from './src/components/practice/lead-flow';
+import {emptyWorkspace,periodSchema,funnelSchema} from '@workspace/practice/hub';
+import {completeReportCoverage} from './src/lib/complete-report-coverage';
+const context={clinicians:[{id:1,label:'Synthetic Clinician With A Long Name',goalId:null}],sessions:[],staff:[]};
+const workspace=emptyWorkspace('2026-10-21');
+workspace.periods=[periodSchema.parse({id:'00000000-0000-4000-8000-000000000001',name:'Synthetic July',start:'2026-07-01',end:'2026-07-31',funnelComplete:false})];
+workspace.funnels=[funnelSchema.parse({id:'10000000-0000-4000-8000-000000000001',periodId:workspace.periods[0].id,scope:'practice',leads:8,scheduled:99,attended:88,clients:4,spend:null,firstSessions:null})];
+const snapshot={id:'synthetic',kind:'attendance',sourceHash:'synthetic',importedAt:'2026-10-21',coverageStart:'2026-01-01',coverageEnd:'2026-10-21',reportCoverage:{start:'2026-01-01',end:'2026-10-21',complete:true},rows:['show','cancelled','cancelled','no show','clinician cancelled'].map((status,i)=>({clientId:'synthetic-'+i,clinician:context.clinicians[0].label,serviceDate:'2026-07-'+String(10+i),status,location:null,visitKind:'consultation',sourceRowHash:String(i),...(i===2?{cancellationSubtype:'late_cancelled'}:{})}))};
+const baseline=JSON.stringify({workspace,snapshot});
+function App(){const [empty,setEmpty]=useState(false);const snapshots=empty?[]:[snapshot];const report=completeReportCoverage(snapshots,context.clinicians,'2026-10-21',context.clinicians,{teamId:null});
+window.fixture={saved:window.fixture?.saved,unchanged:()=>baseline===JSON.stringify({workspace,snapshot})};
+return <main className='practice-theme pw-app' data-appearance='dark' data-material='tidal' style={{padding:16,maxWidth:1300,margin:'auto'}}><button onClick={()=>setEmpty(!empty)}>Toggle missing coverage</button><LeadFlow workspace={workspace} context={context} consultationSource={{report,classificationSnapshots:snapshots,clinicians:context.clinicians,identityClinicians:context.clinicians,teamId:null,asOf:'2026-10-21'}} readOnly={false} pending={false} canSave={false} onSaveEntry={async()=>{}} onSaveBulk={async changes=>{window.fixture.saved=changes}} onCompleteMonth={async()=>{}} onPatch={()=>{}} onRemove={()=>{}} onSave={()=>{}} onOpenPeriods={()=>{}} onEditDetails={()=>{}} onAddCorrection={()=>{}}/></main>};
+createRoot(document.getElementById('root')).render(<App/>);
+`},bundle:true,write:false,format:'esm',platform:'browser',jsx:'automatic',outdir:out,alias:{'@':path.join(root,'artifacts/comp-dashboard/src')},define:{'process.env.NODE_ENV':'"development"'}});
+const js=result.outputFiles.find(f=>f.path.endsWith('.js')).contents;
+const assets=path.join(root,'artifacts/comp-dashboard/dist/public/assets');const cssName=(await fs.readdir(assets)).find(f=>/^index-.*\.css$/.test(f));assert.ok(cssName);const css=await fs.readFile(path.join(assets,cssName));
+const html=`<!doctype html><html><head><meta name="viewport" content="width=device-width,initial-scale=1"><link rel="stylesheet" href="/style.css"><style>body{margin:0}.pw-app{min-width:0}main{box-sizing:border-box}</style></head><body><div id="root"></div><script type="module" src="/app.js"></script></body></html>`;
+const server=http.createServer((request,response)=>{const f={'/':[html,'text/html'],'/app.js':[js,'text/javascript'],'/style.css':[css,'text/css'],'/favicon.ico':['','image/x-icon']}[request.url];response.writeHead(f?200:404,{'content-type':f?.[1]??'text/plain'});response.end(f?.[0]??'Not found');});await new Promise(r=>server.listen(0,'127.0.0.1',r));
+const {chromium}=createRequire('/opt/codex/runtimes/codex-primary-runtime/dependencies/node/node_modules/playwright/package.json')('playwright');let browser;const errors=[],checks=[];
+try{browser=await chromium.launch({executablePath:'/usr/bin/chromium',headless:true,args:['--no-sandbox']});const page=await browser.newPage({viewport:{width:1440,height:1000}});page.on('pageerror',e=>errors.push(e.message));await page.goto('http://127.0.0.1:'+server.address().port);
+await page.getByRole('button',{name:'July',exact:true}).waitFor();
+assert.equal(await page.getByLabel('Consults scheduled, 2026-07, imported',{exact:true}).innerText(),'4');assert.equal(await page.getByLabel('Consults attended, 2026-07, imported',{exact:true}).innerText(),'1');
+const july=page.locator('tr').filter({has:page.getByRole('button',{name:'July',exact:true})});assert.match(await july.innerText(),/50%\s*provisional/);assert.match(await july.innerText(),/25%/);checks.push('year imported4scheduled1attended,50%provisional schedule,25%show');
+await july.locator('summary').click();assert.match(await july.innerText(),/1 cancelled.*1 late cancelled.*1 no-show/s);assert.match(await july.innerText(),/Clinician cancelled: 1/);
+await page.screenshot({path:path.join(out,'desktop-year.png'),fullPage:true});
+await page.getByLabel('Leads, 2026-07',{exact:true}).fill('10');await page.getByRole('button',{name:/Save.*month/}).click();
+const saved=await page.evaluate(()=>window.fixture.saved);assert.equal(saved[0].scheduled,99);assert.equal(saved[0].attended,88);assert.equal(saved[0].leads,10);checks.push('editing leads never saves imported counts over manualrecords');
+await page.getByRole('button',{name:'July',exact:true}).focus();await page.keyboard.press('Enter');await page.getByRole('region',{name:'Imported consultation outcomes'}).waitFor();
+assert.match(await page.getByRole('region',{name:'Imported consultation outcomes'}).innerText(),/Consults scheduled\s*4/);await page.screenshot({path:path.join(out,'desktop-month.png'),fullPage:true});
+await page.getByLabel('Lead flow month',{exact:true}).fill('');assert.equal(errors.length,0);checks.push('clear month does not crash');await page.getByLabel('Lead flow month',{exact:true}).fill('2026-07');
+for(const width of [390,320]){await page.setViewportSize({width,height:950});await page.screenshot({path:path.join(out,'mobile-month-'+width+'.png'),fullPage:true});const size=await page.evaluate(()=>({body:document.documentElement.scrollWidth,width:innerWidth}));assert.ok(size.body<=size.width+1,JSON.stringify(size));}
+await page.getByRole('button',{name:'Year totals',exact:true}).click();await page.screenshot({path:path.join(out,'mobile-year.png'),fullPage:true});const scroll=page.getByRole('region',{name:'Monthly lead totals; scroll horizontally for all fields'});await scroll.focus();await page.keyboard.press('ArrowRight');checks.push('mobile month fits and yeartable remains keyboard-scrollable');
+await page.getByRole('button',{name:'Toggle missing coverage'}).click();assert.equal(await page.getByLabel('Consults scheduled, 2026-07, imported',{exact:true}).innerText(),'—');await page.screenshot({path:path.join(out,'missing-coverage.png'),fullPage:true});assert.ok(await page.evaluate(()=>window.fixture.unchanged()));assert.deepEqual(errors,[]);checks.push('missingcoverage unknown;sourceworkspaceunchanged;no pageerrors');
+await fs.writeFile(path.join(out,'report.json'),JSON.stringify({checks,errors,screenshots:['desktop-year.png','desktop-month.png','mobile-month-390.png','mobile-month-320.png','mobile-year.png','missing-coverage.png']},null,2));console.log(JSON.stringify({out,checks,errors}));
+}finally{await browser?.close();server.close();}

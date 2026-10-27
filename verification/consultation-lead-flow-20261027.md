@@ -1,0 +1,18 @@
+# Isolated consultation Lead flow fix
+
+Base:9865635faf427df7f9a10c479042c10493984a18 (parent's verified live author source; publisher f63a2c468e51bd79028f1c6817dfeb411962307c).
+Branch:codex/consultation-lead-flow-20261027. Separate worktree; no commits from prepared A6/A7, growth, capacity, hiring or Knowledge branches.
+
+Eligible Scheduled = attended + client cancelled + late cancelled + explicit no-show. Clinician-cancelled is separately visible and excluded from eligible Scheduled and Show rate. Original source statuses are unchanged. Did not attend is a count, not an additional rate. Schedule rate compares eligible consultation appointments with same-month reported leads; Show rate is attended / eligible scheduled. Schedule rates based on lead months not marked complete are explicitly provisional. Ratios may exceed100% and are not unique-person lead conversion probabilities.
+
+Uses existing canonical complete-report admission, current practice roster and identity mapping. Complete calendar-month coverage required; future/partial months, conflicting statuses, ambiguous same-outcome repetitions, or unknown statuses yield unknown rather than zero. Same-export mixed show/cancel outcomes count as separate appointment records. Matching cross-export status multisets count once. Same-client/provider/day same-outcome repetition within one export is unresolved without appointment identity. Date grouping is consultation service date, not booking-entry date. Rescheduled attendance on another date remains another recorded appointment; no invented reschedule linkage.
+
+Year grid shows imported Scheduled/Attended and nonattendance counts read-only; manual Leads/Booked stay editable. Imported counts never enter save payloads. Original manual funnel fields remain available in month details. Consult close and overall close formulas remain unchanged on their recorded-funnel basis; help text and year-cell denominator tooltip explain that basis separately from imported attendance. Clinician breakdown uses the same import scope and only its recorded leads. No practice-lead allocation.
+
+Source inputs are supplied from Practice's currentReportCoverage, raw classification snapshots, current roster, identity roster, team/declarations and as-of date. No new source queries, credentials, imports, migrations or real-record mutations. No hardcoded parent-supplied acceptance counts. Parent's actual aggregate receipt remains separate validation evidence; author used synthetic data only.
+
+Synthetic browser harness: verification/consultation-lead-flow-render.mjs; captures/report in /tmp/practice-consultation-lead-flow on author executor. Covers desktop/year/month,390px/320px month, mobile year horizontal keyboard access, blank-month input, missing coverage, provisional rate and saving lead edits without persisting derived consultation counts. Actual screenshots inspected by author and independent reviewer. Test-only endpoints do not connect to the app.
+
+Release: publisher should cherry-pick this isolated ordinary commit onto the verified publisher line, rerun integration checks and publish only this change. Do not publish codex/money-month-picker-20261025 or install the separate prepared models. No author deployment performed.
+
+Final validation: 1,307/1,307 regression tests, dashboard TypeScript and production Vite build passed; existing build warnings only. Independent review accepted5domain tests, source isolation and actual rendered captures. Final browser run passed5interaction groups with zero page errors. Initial worktree test setup failures for missingzod/esbuild resolved by linking existing installed dependencies; no lockfile/package changes.

@@ -5401,6 +5401,9 @@ export default function PracticeWorkspace() {
                           ))}
                       </div>
                       <LeadFlow data-widget-id="lead-flow" data-widget-title="Lead flow" data-widget-size="wide"
+                        consultationSource={!sandbox && currentReportCoverage ? {report:currentReportCoverage,classificationSnapshots:localRetentionState.snapshots,
+                          clinicians:currentPracticeClinicians(workingWorkspace,context,today),identityClinicians:context.clinicians,
+                          teamId:workingWorkspace.settings.teamId,declarations:importEvidenceDeclarations,asOf:today}:undefined}
                         workspace={workingWorkspace}
                         context={context}
                         readOnly={sandbox}

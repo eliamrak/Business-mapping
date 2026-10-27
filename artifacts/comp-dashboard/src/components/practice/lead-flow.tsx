@@ -1,3 +1,4 @@
+import { consultationLeadMonth, importedConsultationRates, type ConsultationLeadSource } from '@/lib/consultation-lead-flow';
 import { useState } from "react";
 import { useUnsaved } from "@/components/hub/use-unsaved";
 import { MoreHorizontal, Plus, Save, Trash2 } from "lucide-react";
@@ -8,10 +9,10 @@ import { leadFlowRates } from "@/lib/lead-flow-rates";
 import { HelpBubble } from "./help-bubble";
 
 const rateDefinitions = {
-  "Schedule rate": "Scheduled consults divided by leads",
+  "Schedule rate": "Recorded scheduled consults divided by leads; imported outcomes are shown separately",
   "Show rate": "Attended consults divided by scheduled consults",
-  "Consult close rate": "Clients booked divided by attended consults",
-  "Overall close rate": "Clients booked divided by leads",
+  "Consult close rate": "Recorded booked clients divided by recorded attended consults; unchanged manual funnel basis, separate from imported appointment counts",
+  "Overall close rate": "Recorded booked clients divided by recorded leads; booked does not mean attended treatment",
 } as const;
 function RateLabel({ name }: { name: keyof typeof rateDefinitions }) {
   return <span className="inline-flex items-center gap-1">{name}<HelpBubble label={`About ${name}`} text={rateDefinitions[name]} /></span>;
@@ -68,6 +69,7 @@ function CountInput({ row, field, disabled, onPatch }: {
 
 export default function LeadFlow({
   workspace,
+  consultationSource,
   context,
   readOnly,
   pending,
@@ -82,6 +84,7 @@ export default function LeadFlow({
   onEditDetails,
   onAddCorrection,
 }: {
+  consultationSource?:ConsultationLeadSource;
   workspace: Workspace;
   context: Context;
   readOnly: boolean;
@@ -123,6 +126,10 @@ export default function LeadFlow({
     setEntryError("");
     return true;
   }
+  const importedMonth=consultationSource&&/^\d{4}-(0[1-9]|1[0-2])$/.test(month)?consultationLeadMonth(consultationSource,month):null;
+  const importedYear=consultationSource?Object.fromEntries(Array.from({length:12},(_,index)=>{
+    const m=`${year}-${String(index+1).padStart(2,'0')}`;return [m,consultationLeadMonth(consultationSource,m)];
+  })):undefined;
   const start = `${month}-01`;
   const end = month
     ? new Date(Date.UTC(Number(month.slice(0, 4)), Number(month.slice(5)), 0)).toISOString().slice(0, 10)
@@ -238,7 +245,7 @@ export default function LeadFlow({
         onClick={() => setView("month")}>Month details</button>
     </div>
     {view === "year" ? <BulkLeadEntry workspace={workspace} readOnly={readOnly} pending={pending}
-      year={year} onYearChange={setYear} onDirtyChange={setBulkDirty} onSave={onSaveBulk}
+      consultations={importedYear} year={year} onYearChange={setYear} onDirtyChange={setBulkDirty} onSave={onSaveBulk}
       onOpenMonth={(next) => { if (selectMonth(next)) setView("month"); }} /> : <>
     <div className="pw-lead-flow-top">
       <label className="pw-lead-flow-month">Month
@@ -249,6 +256,21 @@ export default function LeadFlow({
         onClick={onSave}><Save /> Save edits</button>}
     </div>
 
+    {importedMonth && <section aria-label="Imported consultation outcomes">
+      <h3>Consultations · {month}</h3>
+      <div className="pw-lead-flow-totals">
+       <div><span>Consults scheduled</span><strong>{shown(importedMonth.scheduled)}</strong></div>
+       <div><span>Consults attended</span><strong>{shown(importedMonth.attended)}</strong></div>
+       <div><span>Did not attend</span><strong>{shown(importedMonth.didNotAttend)}</strong></div>
+       <div><span>Schedule rate</span><strong>{importedConsultationRates(importedMonth,rowConflict?null:total(rows,'leads'),selected?.funnelComplete).scheduledConsult}</strong>{importedConsultationRates(importedMonth,rowConflict?null:total(rows,'leads'),selected?.funnelComplete).scheduleProvisional&&<small>Provisional leads</small>}</div>
+       <div><span>Show rate</span><strong>{importedConsultationRates(importedMonth,null).show}</strong></div>
+       <div><RateLabel name="Consult close rate" /><strong>{practiceRates?.consultClose??totalRates.consultClose}</strong></div>
+       <div><RateLabel name="Overall close rate" /><strong>{practiceRates?.overallClose??totalRates.overallClose}</strong></div>
+      </div>
+      {importedMonth.reason&&<p>{importedMonth.reason}; counts are unknown, not zero.</p>}
+      <details><summary>Counts and source</summary><p>{importedMonth.status==='unavailable'?'Accepted subset only. ':''}Did not attend: {importedMonth.observed.clientCancelled} cancelled, {importedMonth.observed.lateCancelled} late cancelled, {importedMonth.observed.noShow} no-show. Clinician cancelled: {shown(importedMonth.clinicianCancelled)} (excluded from scheduled and show rate).</p><p>Appointment records, not unique people. Schedule rate compares appointments with same-month reported leads; it is not linked lead conversion and can exceed 100%. Booked clients are not attended treatment. Rescheduled visits retain their separate recorded outcomes.</p></details>
+    </section>}
+    <details open={!importedMonth}><summary>Recorded funnel entries and source details</summary>
     {overlap ? <div className="pw-lead-flow-status">
       <p>This month overlaps a custom reporting period.</p>
       {!readOnly && <button className="pw-button" type="button" onClick={onOpenPeriods}>Review dates</button>}
@@ -264,7 +286,7 @@ export default function LeadFlow({
 
       {mode === "practice" ? <div className="pw-lead-flow-practice">
         <div className="pw-lead-flow-section-head">
-          <h3>{practiceRow ? "Recorded this month" : "This month's numbers"}</h3>
+          <h3>{practiceRow ? "Recorded funnel entries" : "This month's numbers"}</h3>
           {practiceRow && !readOnly && selected?.status !== "finalized" &&
             <button className="pw-button" type="button" onClick={() => setReplacePractice(true)}>
               Break down this month
@@ -404,14 +426,16 @@ export default function LeadFlow({
             <th><RateLabel name="Overall close rate" /></th></tr></thead>
           <tbody>{attributed.map(({ id, name, counts }) => {
             const rates = leadFlowRates(counts);
+            const imported=consultationSource&&/^\d{4}-(0[1-9]|1[0-2])$/.test(month)?consultationLeadMonth(consultationSource,month,id):null;
+            const observedRates=imported?importedConsultationRates(imported,counts.leads,selected?.funnelComplete):null;
             return <tr key={id}>
               <th>{name}</th>
               <td>{shown(counts.leads)}</td>
-              <td>{shown(counts.scheduled)}</td>
-              <td>{shown(counts.attended)}</td>
+              <td>{shown(imported?imported.scheduled:counts.scheduled)}</td>
+              <td>{shown(imported?imported.attended:counts.attended)}</td>
               <td>{shown(counts.clients)}</td>
-              <td>{rates.scheduledConsult}</td>
-              <td>{rates.show}</td>
+              <td>{observedRates?.scheduledConsult??rates.scheduledConsult}{observedRates?.scheduleProvisional&&<small> provisional</small>}</td>
+              <td>{observedRates?.show??rates.show}</td>
               <td>{rates.consultClose}</td>
               <td>{rates.overallClose}</td>
             </tr>;
@@ -419,6 +443,7 @@ export default function LeadFlow({
         </table></div>
       </div>}
     </>}
+    </details>
     </>}
   </section>;
 }

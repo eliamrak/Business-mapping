@@ -1,3 +1,4 @@
+import { importedConsultationRates, type ConsultationLeadMonth } from '@/lib/consultation-lead-flow';
 import { useEffect, useMemo, useState } from "react";
 import { RotateCcw, Save } from "lucide-react";
 import type { Workspace } from "@workspace/practice/hub";
@@ -15,7 +16,8 @@ const fields: { key: LeadCountKey; label: string }[] = [
   { key: "clients", label: "Clients booked" },
 ];
 
-export default function BulkLeadEntry({ workspace, readOnly, pending, year, onYearChange, onOpenMonth, onDirtyChange, onSave }: {
+export default function BulkLeadEntry({ workspace, readOnly, pending, year, onYearChange, onOpenMonth, onDirtyChange, onSave, consultations }: {
+  consultations?:Record<string,ConsultationLeadMonth>;
   workspace: Workspace;
   readOnly: boolean;
   pending: boolean;
@@ -54,6 +56,9 @@ export default function BulkLeadEntry({ workspace, readOnly, pending, year, onYe
     if (row + cells.length > 12 || cells.some((line) => column + line.length > fields.length)) {
       setError("The paste extends past December or the last column.");
       return;
+    }
+    if (consultations && cells.some(line=>line.some((_,offset)=>['scheduled','attended'].includes(fields[column+offset]?.key)))) {
+      setError('Imported consultation counts are read-only. Paste leads or booked clients separately.');return;
     }
     if (cells.some((_, offset) => leadMonthState(workspace, leadMonth(year, row + offset)).locked)) {
       setError("The paste includes a locked month. Open that month's details to edit it.");
@@ -101,11 +106,13 @@ export default function BulkLeadEntry({ workspace, readOnly, pending, year, onYe
       </label>
       <span className="pw-bulk-summary">{busy ? "Saving..." : `${plan.changes.length} month${plan.changes.length === 1 ? "" : "s"} ready to save`}</span>
     </div>
+    {consultations && <p className="pw-lead-flow-note">Consultations from imports. Scheduled excludes clinician cancellations. Provisional schedule rates use lead months not marked complete.</p>}
     <div className="pw-bulk-table-wrap" role="region" aria-label="Monthly lead totals; scroll horizontally for all fields" tabIndex={0}><table className="pw-bulk-table">
       <thead><tr><th>Month</th>{fields.map(({ key, label }) => <th key={key}>{label}</th>)}
-        <th title="Scheduled consults divided by leads">Schedule rate</th>
+        {consultations && <th>Did not attend</th>}
+        <th title="Eligible scheduled consultation appointments divided by same-month reported leads; aggregate ratio, not unique-person conversion">Schedule rate</th>
         <th title="Attended consults divided by scheduled consults">Show rate</th>
-        <th title="Clients booked divided by attended consults">Consult close rate</th>
+        <th title="Recorded booked clients divided by recorded attended consults; unchanged manual funnel basis">Consult close rate</th>
         <th title="Clients booked divided by leads">Overall close rate</th></tr></thead>
       <tbody>{Array.from({ length: 12 }, (_, index) => {
         const month = leadMonth(year, index);
@@ -121,14 +128,17 @@ export default function BulkLeadEntry({ workspace, readOnly, pending, year, onYe
           attended: count(values.attended),
           clients: count(values.clients),
         });
+        const imported=consultations?.[month];
+        const importedRates=imported?importedConsultationRates(imported,count(values.leads),leadMonthState(workspace,month).period?.funnelComplete===true && !(leadCellKey(month,'leads') in overrides)):null;
         return <tr key={month}>
-          <th><button type="button" className="pw-bulk-lead-month" onClick={() => onOpenMonth(month)}
+          <th><button type="button" className="pw-bulk-lead-month" style={{minWidth:"7.5rem",paddingInline:"0.65rem",whiteSpace:"nowrap"}} onClick={() => onOpenMonth(month)}
             disabled={dirty || busy} title={dirty ? "Save or discard changes first" : "Open month details"}>
             {new Date(`${month}-01T12:00:00`).toLocaleDateString("en-US", { month: "long" })}</button>
             {locked && <span>{locked}</span>}</th>
           {fields.map(({ key, label }, column) => {
             const cell = leadCellKey(month, key);
             const invalid = cell in overrides && values[key].trim() !== "" && !/^\d+$/.test(values[key].trim());
+            if(imported && (key==='scheduled'||key==='attended'))return <td key={key} title={imported.reason??imported.basis}><span aria-label={`${label}, ${month}, imported`}>{imported[key]??'—'}</span></td>;
             return <td key={key} data-saved={practice?.[key] != null} data-changed={cell in overrides}>
               <input type="text" inputMode="numeric" placeholder="-" value={values[key]}
                 aria-label={`${label}, ${month}`} aria-invalid={invalid} title={locked || undefined}
@@ -136,7 +146,7 @@ export default function BulkLeadEntry({ workspace, readOnly, pending, year, onYe
                 onChange={(event) => setCell(month, key, event.target.value)}
                 onPaste={(event) => pasteAt(event, index, column)} />
             </td>;
-          })}<td>{rates.scheduledConsult}</td><td>{rates.show}</td><td>{rates.consultClose}</td><td>{rates.overallClose}</td>
+          })}{imported && <td><details><summary>{imported.didNotAttend??'—'}</summary><p>{imported.reason??`${imported.observed.clientCancelled} cancelled · ${imported.observed.lateCancelled} late cancelled · ${imported.observed.noShow} no-show`}</p><p>Clinician cancelled: {imported.clinicianCancelled??'—'} (excluded)</p><p>Appointment records; {imported.uniquePeople??'unknown'} unique people.</p></details></td>}<td>{importedRates?.scheduledConsult??rates.scheduledConsult}{importedRates?.scheduleProvisional && <small> provisional</small>}</td><td>{importedRates?.show??rates.show}</td><td title={`Recorded booked ${values.clients||'unknown'} / recorded attended ${values.attended||'unknown'}; imported attendance is separate`}>{rates.consultClose}</td><td>{rates.overallClose}</td>
         </tr>;
       })}</tbody>
     </table></div>
