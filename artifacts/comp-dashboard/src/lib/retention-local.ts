@@ -1603,7 +1603,7 @@ function inactiveTransitionDates(
   return transitions;
 }
 
-function initialRetentionEpisode(
+export function initialRetentionEpisode(
   dates: string[],
   initialRetentionGapDays: number,
 ) {
