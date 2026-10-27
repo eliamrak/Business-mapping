@@ -1,3 +1,5 @@
+> Superseded A6 labeling: see [daily average update](average-active-caseload-20261027.md). A6 now has a separate prepared daily-average metric; the end-date population remains a different metric. Neither is newly live-wired.
+
 # Practice / clinician metric catalog — unconnected review candidate
 
 Builds on shared foundation2478ae9. No database duplication, migrations, reimports, UI changes, downstream formula replacements, provider connections, or deployment.

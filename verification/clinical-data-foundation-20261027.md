@@ -1,3 +1,5 @@
+> Superseded A6 labeling: see [daily average update](average-active-caseload-20261027.md). A6 now has a separate prepared daily-average metric; the end-date population remains a different metric. Neither is newly live-wired.
+
 # Shared clinical data foundation — review handoff
 
 ## Existing source of truth (retained, not duplicated)

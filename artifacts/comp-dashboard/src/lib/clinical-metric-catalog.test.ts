@@ -14,6 +14,10 @@ test('catalog produces all clinical metric scopes and both histories without spl
  assert.equal(result.clinicians.length,2);assert.equal(JSON.stringify(input),before);
  const get=(rows:any[],id:string)=>rows.find(row=>row.id===id);
  assert.equal(get(result.practice.periods.threeMonths.metrics,'retained_not_ended').value,1);
+ assert.equal(get(result.practice.periods.threeMonths.metrics,'average_active_caseload').value,78/92);
+ assert.equal(get(result.practice.periods.twelveMonths.metrics,'average_active_caseload').value,78/365);
+ assert.equal(get(result.practice.periods.threeMonths.metrics,'average_active_caseload').formulaVersion,'daily-initial-retained-not-inactive-v1');
+ assert.deepEqual(result.clinicians.map(c=>get(c.periods.threeMonths.metrics,'average_active_caseload').value),[78/92,78/92]);
  assert.deepEqual(result.clinicians.map(c=>get(c.periods.threeMonths.metrics,'retained_not_ended').value),[1,1]);
  assert.equal(get(result.practice.periods.threeMonths.metrics,'reported_leads').value,30);
  for(const c of result.clinicians){assert.equal(get(c.periods.threeMonths.metrics,'reported_leads').value,null);assert.equal(get(c.periods.threeMonths.metrics,'provider_lead_requirement').value,null);}

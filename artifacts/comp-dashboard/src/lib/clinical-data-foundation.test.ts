@@ -124,3 +124,39 @@ test('3/12-month comparisons keep the same cutoff and source, with explicit cale
  assert.deepEqual(result.threeMonths.metrics!.provenance,result.twelveMonths.metrics!.provenance);
  assert.throws(()=>derivePracticeClinicalComparisons({...data,workspace,context,calendarThrough:'2026-10-22'}),RangeError);
 });
+
+test('average active caseload is daily exposure, separate from end-date population and future qualification',()=>{
+ const data=input([row('one','2026-07-01'),row('one','2026-07-08'),row('one','2026-07-15')]);
+ const result=clinicalDataFoundation(data);
+ assert.equal(result.averageActiveCaseload.clientDays,78);
+ assert.equal(result.averageActiveCaseload.denominatorDays,92);
+ assert.equal(result.averageActiveCaseload.value,78/92);
+ assert.equal(result.retainedPopulation.value,1);
+ const early=clinicalDataFoundation({...data,end:'2026-07-14'});
+ assert.equal(early.averageActiveCaseload.value,0);
+ assert.equal(early.retainedPopulation.value,1);
+});
+test('daily caseload excludes exact 90-day ending and includes an observed return only from its date',()=>{
+ const result=clinicalDataFoundation(input([row('one','2026-01-01'),row('one','2026-01-08'),row('one','2026-01-15'),row('one','2026-07-01')],'2026-01-01','2026-07-01'));
+ assert.equal(result.averageActiveCaseload.clientDays,91); // Jan15–Apr14:90; Jul1:1.
+ assert.equal(result.averageActiveCaseload.value,91/182);
+});
+test('daily clinician membership follows transfers without moving past exposure; shared providers are pairs',()=>{
+ const data=input([row('one','2026-07-01'),row('one','2026-07-02'),row('one','2026-07-03'),row('one','2026-07-05',{clinician:'Other'}),row('one','2026-07-07'),row('one','2026-07-07',{clinician:'Other'})],'2026-07-01','2026-07-07');
+ const all=clinicalDataFoundation({...data,clinicianNames:['Current','Other']}).averageActiveCaseload;
+ assert.equal(all.clientDays,5);assert.equal(all.value,5/7);
+ assert.deepEqual(all.byClinician.map(c=>c.clientDays),[3,3]);
+ assert.equal(clinicalDataFoundation(data).averageActiveCaseload.value,3/7);
+ assert.equal(clinicalDataFoundation({...data,clinicianNames:['Other']}).averageActiveCaseload.value,3/7);
+});
+test('daily caseload preserves known zero but never treats missing or uncertain days as zero',()=>{
+ assert.equal(clinicalDataFoundation(input([])).averageActiveCaseload.value,0);
+ const data=input([row('one','2026-07-01'),row('one','2026-07-08'),row('one','2026-07-15')]);
+ const missing=clinicalDataFoundation({...data,attendanceCoverage:[{clinician:'Current',start:'2026-07-01',end:'2026-09-29'},{clinician:'Other',start:'2026-01-01',end:'2026-09-30'}]});
+ assert.equal(missing.averageActiveCaseload.value,null);
+ assert.equal(missing.averageActiveCaseload.denominatorDays,92);
+ assert.equal(missing.averageActiveCaseload.coveredDays,91);
+ const uncertain=clinicalDataFoundation({...data,excludedFollowUpEvidence:[{clientId:'one',serviceDate:'2026-08-01'}]});
+ assert.equal(uncertain.averageActiveCaseload.value,null);
+ assert.ok(uncertain.averageActiveCaseload.uncertainClientDays>0);
+});
