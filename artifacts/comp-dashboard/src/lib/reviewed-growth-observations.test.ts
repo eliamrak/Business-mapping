@@ -182,3 +182,64 @@ test("excluded follow-up and missing lookback coverage cannot silently classify 
   b.coverage = [{ clinicianId: 1, start: "2026-09-01", end: "2026-10-21" }];
   assert.match(reviewedGrowth(b).reason!, /90-day/);
 });
+
+test("six harmless boundary clients and one annual qualification dependency preserve current stock and recent forecast", () => {
+  const a = input();
+  for (let i = 0; i < 7; i++) {
+    const id = `boundary-${i}`;
+    a.visits.push(...["2025-07-10", i === 6 ? "2025-10-01" : "2025-07-20",
+      i === 6 ? "2025-11-05" : "2025-08-01", "2026-09-10"].map(d => visit(id, d)));
+  }
+  const clean = reviewedGrowth(a);
+  a.excludedTreatmentEvidence = Array.from({ length: 7 }, (_, i) => visit(`boundary-${i}`, "2025-07-01"));
+  const before = JSON.stringify(a);
+  const result = reviewedGrowth(a);
+  assert.equal(result.reason, null);
+  assert.deepEqual(result.stock, clean.stock);
+  assert.deepEqual(result.families[0]!.projection, clean.families[0]!.projection);
+  assert.ok(result.families[0]!.projection);
+  assert.equal(result.families[1]!.projection, null);
+  assert.match(result.families[1]!.reason!, /historical treatment evidence/);
+  assert.equal(JSON.stringify(a), before);
+  a.excludedTreatmentEvidence.pop();
+  assert.deepEqual(reviewedGrowth(a).families.map(f => f.projection), clean.families.map(f => f.projection));
+});
+
+test("multiple old excluded dates can establish a current early client and must block stock", () => {
+  const a = input();
+  a.excludedTreatmentEvidence = [visit("early", "2025-07-01"), visit("early", "2025-07-02")];
+  assert.match(reviewedGrowth(a).reason!, /current client status/);
+});
+
+test("old first-date uncertainty still blocks response calibration even after qualification predates history", () => {
+  const a = input();
+  a.excludedTreatmentEvidence = [visit("a", "2025-07-01")];
+  const result = reviewedGrowth(a);
+  assert.equal(result.reason, null);
+  assert.equal(result.families[0]!.projection, null); // longer tail uses January starter cohort
+  assert.equal(result.families[1]!.projection, null);
+});
+
+test("recent missing attendance can affect latest activity and remains blocked even for previously unseen clients", () => {
+  const a = input();
+  a.excludedTreatmentEvidence = [visit("unadmitted", "2026-09-30")];
+  assert.match(reviewedGrowth(a).reason!, /current client status/);
+  a.excludedTreatmentEvidence = [visit("unadmitted", "2026-10-01")];
+  assert.equal(reviewedGrowth(a).reason, null);
+});
+
+test("older excluded follow-up still blocks a borrowed response tail without changing first or third dates", () => {
+  const a = input();
+  a.visits = ["2026-01-01", "2026-01-08", "2026-01-15", "2026-09-15"].map(d => visit("older", d))
+    .concat(["2026-07-01", "2026-07-08", "2026-07-15"].map(d => visit("recent", d)));
+  const baseline = reviewedGrowth(a);
+  assert.ok(baseline.families[0]!.fallbackAges.includes(90));
+  assert.ok(baseline.families[0]!.projection);
+  a.excludedTreatmentEvidence = [visit("older", "2026-04-01")];
+  const result = reviewedGrowth(a);
+  assert.equal(result.reason, null);
+  assert.deepEqual(result.stock, baseline.stock);
+  assert.equal(result.families[0]!.projection, null);
+  assert.equal(result.families[0]!.evidenceValid, false);
+  assert.equal(result.families[1]!.projection, null);
+});

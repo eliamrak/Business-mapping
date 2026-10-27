@@ -1,0 +1,18 @@
+{
+  "base": "874047516569be9a93e82b00f001a44988016c53",
+  "branch": "codex/growth-evidence-dependencies-20261027",
+  "scope": "Dependency-sensitive exclusion gates only; raw admission, source records, UI and forecast equations unchanged.",
+  "currentStatus": "Recent excluded attendance still blocks; older excluded dates block current stock if they could establish an admitted active early client. Grouped counterfactual dates never become admitted visits.",
+  "historicalStatus": "Existing history/lookback gate retained. Older exclusions also block when third-date qualification could change inside the history or first-observed starter/response calibration could change, including the longer response tail. Excluded older follow-up in a borrowed longer-cohort response age also blocks the recent estimate, even if first/third dates are unchanged.",
+  "capturedEvidence": "Parent supplied aggregate diagnosis: July1/2 2025 incomplete canonical boundary; seven active established clients, six qualified before annual window and one possible third-date shift Nov5 to Oct1. Regression fixtures deidentified; actual imports not accessed by author.",
+  "expectedAcceptance": "Current stock and recent estimate available if no other gates fail; annual projection remains withheld for genuine qualification/exposure uncertainty. No promise that captured data have no additional blockers.",
+  "tests": {
+    "fullRegression": "1346 passed,0 failed",
+    "typecheck": "practice/API declarations and dashboard noEmit passed",
+    "build": "dashboard production build passed; existing large-chunk advisory",
+    "browser": "Existing synthetic real-component desktop/mobile harness passed five interaction groups; mobile390 capture inspected; no UI changes.",
+    "specific": "Six harmless old plus one annual dependency; source proof/canonical boundary integration; old early qualification; recent latest-activity uncertainty; first-start calibration; existing conflict and missing/zero coverage tests.",
+    "independentReview": "Accepted after borrowed-response-tail correction; independent28/28focused tests, diffcheckclean; no live private-data reconciliation by reviewer."
+  },
+  "release": "Author does not deploy. Parent publisher and authenticated actual-import/Mac acceptance remain required."
+}

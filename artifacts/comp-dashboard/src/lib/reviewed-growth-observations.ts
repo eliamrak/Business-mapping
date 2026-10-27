@@ -171,14 +171,18 @@ export function reviewedGrowth(input: GrowthObservationInput) {
     );
     return [...owners].some((id) => ids.has(id)) ? true : null;
   };
-  const uncertain = (input.excludedTreatmentEvidence ?? []).some(
-    (v) =>
-      v.date <= cutoff &&
-      (stamp(v.date) > cut - 90 ||
-        histories.some(
-          (h) => h.clientId === v.clientId && ownerAt(h.rows, cutoff) !== null,
-        )),
-  );
+  // Counterfactual dates are uncertainty bounds only: never admitted visits.
+  // Group all excluded dates so multiple old rows cannot evade qualification checks.
+  const excluded = (input.excludedTreatmentEvidence ?? []).filter(v => v.date <= cutoff);
+  const possibleDates = new Map<string, string[]>();
+  for (const v of excluded) {
+    const dates = possibleDates.get(v.clientId) ??
+      histories.find(h => h.clientId === v.clientId)?.dates ?? [];
+    possibleDates.set(v.clientId, [...new Set([...dates, v.date])].sort());
+  }
+  const uncertain = excluded.some(v => stamp(v.date) > cut - 90) ||
+    histories.some(h => ownerAt(h.rows, cutoff) !== null &&
+      h.qualified === null && (possibleDates.get(h.clientId)?.length ?? 0) >= 3);
   if (uncertain)
     return {
       ...empty,
@@ -427,11 +431,29 @@ export function reviewedGrowth(input: GrowthObservationInput) {
               ? (settings.monthlyLeads?.[m.month] ?? standardLeadPace)
               : standardLeadPace,
           );
-    const uncertainHistory = (input.excludedTreatmentEvidence ?? []).some(
-      (v) =>
-        v.date <= cutoff &&
-        v.date >= iso(stamp(monthStart(historyMonths[0]!)) - 89),
-    );
+    const historyStart = monthStart(historyMonths[0]!);
+    const uncertainHistory = excluded.some(v =>
+      v.date >= iso(stamp(historyStart) - 89) ||
+      // Recent estimates borrow supported older-cohort response ages. An old
+      // excluded follow-up can affect that tail without changing first/third dates.
+      longerCohort.some(h => h.clientId === v.clientId &&
+        fallbackAges.includes(stamp(v.date) - stamp(h.first)))) || histories.some(h => {
+        const possible = possibleDates.get(h.clientId);
+        if (!possible) return false;
+        const possibleThird = possible[2] ?? null;
+        // A pre-window row can advance qualification INSIDE this history, even
+        // when it predates the ordinary activity lookback (July → October).
+        const qualificationChanges = possibleThird !== h.qualified &&
+          possibleThird !== null &&
+          (h.qualified === null || h.qualified > historyStart);
+        // Earlier first attendance can change a counted start, its calibration
+        // cohort, consultation delay and every response age. Keep this blocked.
+        const firstChanges = possible[0] !== h.first &&
+          (h.first >= historyStart ||
+            leadMonths.some(m => m.month === h.first.slice(0, 7)) ||
+            availableLeadMonths.some(m => m.month === h.first.slice(0, 7)));
+        return qualificationChanges || firstChanges;
+      });
     const projection =
       !uncertainHistory && response && baseline && capacity && leadSeries
         ? projectGrowth({

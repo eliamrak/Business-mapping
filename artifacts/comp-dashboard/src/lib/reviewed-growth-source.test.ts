@@ -95,3 +95,30 @@ test("source revision changes with records, capacity and assumptions; original s
   assert.notEqual(a.inputRevision, c.inputRevision);
   assert.equal(JSON.stringify(input), original);
 });
+
+test("July source-boundary shows remain unadmitted without suppressing unaffected stock or recent history", () => {
+  const input = base();
+  const snapshot = input.snapshots[0]!;
+  snapshot.coverageStart = "2025-07-01";
+  snapshot.reportCoverage = { start: "2025-07-01", end: "2026-10-21", complete: true };
+  snapshot.rows = Array.from({ length: 7 }, (_, i) =>
+    ["2025-07-01", "2025-07-10", i === 6 ? "2025-10-01" : "2025-07-20",
+      i === 6 ? "2025-11-05" : "2025-08-01", "2026-09-15"].map(date => ({
+        ...row(date), clientId: `synthetic-boundary-${i}`, sourceRowHash: `${i}-${date}`,
+      }))).flat();
+  const original = JSON.stringify(input);
+  const result = reviewedGrowthFromSources(input);
+  assert.equal(result.reason, null);
+  assert.deepEqual(result.stock, { established: 7, early: 0 });
+  assert.equal(result.families[0]!.evidenceValid, true);
+  assert.equal(result.families[1]!.evidenceValid, false);
+  assert.match(result.families[1]!.reason!, /historical treatment evidence/);
+  // Third dates stay admitted November/earlier dates, not counterfactual October.
+  const withoutBoundary = structuredClone(input);
+  withoutBoundary.snapshots[0]!.rows = withoutBoundary.snapshots[0]!.rows.filter(r => r.serviceDate !== "2025-07-01");
+  const clean = reviewedGrowthFromSources(withoutBoundary);
+  assert.equal(result.families[1]!.establishedDays, clean.families[1]!.establishedDays);
+  assert.equal(result.families[1]!.attendedSessions, clean.families[1]!.attendedSessions);
+  assert.equal(clean.families[1]!.evidenceValid, true);
+  assert.equal(JSON.stringify(input), original);
+});
