@@ -5,22 +5,18 @@ import {registerHooks} from 'node:module';
 import {createElement} from 'react';
 import {renderToStaticMarkup} from 'react-dom/server';
 import ts from 'typescript';
+import {automaticGrowth} from './automatic-growth.ts';
 import {historicalPerformancePeriods} from './historical-performance-periods.ts';
 const url=new URL('../components/practice/acquisition-dashboard.tsx',import.meta.url);
 const hook=registerHooks({load(source,context,next){return source===url.href?{format:'module',shortCircuit:true,source:ts.transpileModule(readFileSync(url,'utf8'),{compilerOptions:{jsx:ts.JsxEmit.ReactJSX,module:ts.ModuleKind.ESNext,target:ts.ScriptTarget.ES2022}}).outputText}:next(source,context);}});
 const {AcquisitionDashboard}=await import(url.href);hook.deregister();
-test('missing cohort linkage never becomes a measured lead requirement, even with a target',()=>{
+test('both historical columns stay visible without manual setup; unknown is specific',()=>{
  const reports=historicalPerformancePeriods({today:'2026-10-26',snapshots:[]});
- const html=renderToStaticMarkup(createElement(AcquisitionDashboard,{reports,target:'10',onTarget(){throw Error('No writes during rendering');}}));
- assert.match(html,/Estimated leads needed \/ month: Unknown/);
- assert.match(html,/Net active additions \/ month: Unknown/);
- assert.match(html,/not net active growth/);
- assert.match(html,/Not enough covered history/);
+ const model=automaticGrowth({snapshots:[],coverage:[],clinicians:[],start:'2025-10-01',end:'2026-09-30',asOf:'2026-10-26',reports,capacity:94,horizon:'4'});
+ const html=renderToStaticMarkup(createElement(AcquisitionDashboard,{model}));
+ assert.match(html,/Estimated leads needed \/ month · 3 months: Unknown/);
+ assert.match(html,/Last 3 months/);assert.match(html,/Last 12 months/);
+ assert.match(html,/not net active growth/);assert.match(html,/Covered attendance and positive client load needed/);
  assert.match(html,/Google Ads and Meta Ads are not connected/);
- assert.match(html,/value="10"/);
-});
-test('negative scenario target is invalid, not an inferred acquisition forecast',()=>{
- const reports=historicalPerformancePeriods({today:'2026-10-26',snapshots:[]});
- const html=renderToStaticMarkup(createElement(AcquisitionDashboard,{reports,target:'-1',onTarget(){}}));
- assert.match(html,/aria-invalid="true"/);assert.match(html,/Enter a target of zero or more/);
+ assert.doesNotMatch(html,/<input|<select|<th scope="col">Plan/);
 });

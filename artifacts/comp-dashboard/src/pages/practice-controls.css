@@ -114,3 +114,9 @@ body:has(.pw-app.practice-theme[data-material="tidal"][data-material]) [role="di
 @media(prefers-reduced-transparency:reduce),(forced-colors:active) {
  .pw-app.practice-theme[data-material="tidal"][data-material] .pw-content .pw-modeled-staff-row {background:var(--pw-control-solid);backdrop-filter:none;-webkit-backdrop-filter:none;}
 }
+
+/* Historical Growth comparisons share the same glass surface and stay adjacent. */
+.pw-growth-history-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:24px; }
+.pw-growth-history-grid > div { min-width:0; }
+.pw-acquisition-table-wrap td { overflow-wrap:anywhere; }
+@media(max-width:700px) { .pw-growth-history-grid {grid-template-columns:1fr;} .pw-acquisition-dashboard table {min-width:0;table-layout:fixed;width:100%;} .pw-acquisition-dashboard th:first-child {width:44%;} .pw-acquisition-dashboard th,.pw-acquisition-dashboard td {padding:10px 4px;} .pw-acquisition-dashboard .pw-acquisition-circle {width:64px;max-width:100%;} }

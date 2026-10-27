@@ -204,6 +204,7 @@ import "@/pages/practice-surfaces.css";
 import "@/pages/practice-controls.css";
 import { MaturedStartsSummary } from "@/components/practice/matured-starts-summary";
 import { GrowthPaceCard } from "@/components/practice/growth-pace-card";
+import { automaticGrowth } from "@/lib/automatic-growth";
 import { AcquisitionDashboard } from "@/components/practice/acquisition-dashboard";
 import { MobileWorkspaceNavigation, MobilePageActions, MobileContributorSelect } from "@/components/practice/mobile-workspace-controls";
 
@@ -743,11 +744,7 @@ function MetricTargetBar({
 }
 
 export default function PracticeWorkspace() {
-  const [growthPaceAssumption, setGrowthPaceAssumption] = useState("");
   const [growthPaceHorizon, setGrowthPaceHorizon] = useState("4");
-  const [acquisitionTarget, setAcquisitionTarget] = useState("");
-  const [acquisitionConversion, setAcquisitionConversion] = useState("");
-  const [acquisitionEndings, setAcquisitionEndings] = useState("");
   const cache = useQueryClient();
   const query = useQuery({ queryKey: hubKey, queryFn: getHub });
   const contextQuery = useQuery({
@@ -3427,13 +3424,19 @@ export default function PracticeWorkspace() {
     historicalReports, selectedClinicianIds: selectedContributor ? [selectedContributor.id] : people.map(person => person.id), today,
     historyBasis: selectedContributor ? "available-history" : "calendar",
   });
-  const practiceGrowthCapacity = selectedContributor ? overviewHistoricalCapacity({
+  const growthClinicians = currentPracticeClinicians(workingWorkspace, modelContext ?? context, today);
+  const practiceGrowthCapacity = overviewHistoricalCapacity({
     workspace: workingWorkspace, context: modelContext ?? context,
     attendanceCoverage: importedSessionOverlay?.attendanceCoverage ?? [], historicalReports,
-    selectedClinicianIds: people.map(person => person.id), today, historyBasis: "calendar",
-  }) : overviewCapacity;
-  const growthPaceCard = <GrowthPaceCard baseline={practiceGrowthCapacity["3mo"].weekly} capacity={practiceGrowthCapacity["3mo"].currentDesiredWeekly}
-    growth={growthPaceAssumption} horizon={growthPaceHorizon} onGrowth={setGrowthPaceAssumption} onHorizon={setGrowthPaceHorizon} />;
+    selectedClinicianIds: growthClinicians.map(person => person.id), today, historyBasis: "calendar",
+  });
+  const growthModel = automaticGrowth({ snapshots: historicalClinicalSnapshots,
+    classificationSnapshots: localRetentionState.snapshots, overrides: localRetentionState.sameDayVisitOverrides,
+    coverage: importedSessionOverlay?.attendanceCoverage ?? [], clinicians: growthClinicians,
+    start: historicalReports.year.window.cohort.start, end: historicalReports.year.window.cohort.end, asOf: today,
+    reports: historicalReports, workspace: workingWorkspace, capacity: practiceGrowthCapacity["3mo"].currentDesiredWeekly,
+    horizon: growthPaceHorizon });
+  const growthPaceCard = <GrowthPaceCard model={growthModel} horizon={growthPaceHorizon} onHorizon={setGrowthPaceHorizon} />;
   const overviewHistoricalReports = selectedContributor ? Object.fromEntries((["3mo", "year"] as const).map(period => {
     const history = clinicianHistory(selectedContributor.id);
     const base = historicalReports[period];
@@ -3497,6 +3500,7 @@ export default function PracticeWorkspace() {
       <div className="pw-edit-grid">
         {([["retentionPct", "Retention (%)"], ["closeRatePct", "Close rate (%)"], ["attritionPct", "Attrition maximum (%)"]] as const).map(([key, label]) => <DraftField key={key} label={label} type="number" min={0} max={100} value={workingWorkspace.settings.performanceTargets?.[key] ?? ""} onChange={value => stageSettings({ performanceTargets: { ...workingWorkspace.settings.performanceTargets, [key]: optionalNumber(value) } }, label)} />)}
       </div>
+      <details><summary>Target definitions and research context</summary><p>Retention: three distinct treatment dates with no gap over 28 days, among evaluated initial starts. Close rate: qualifying same-clinician scheduled follow-up among evaluated consultations; it is not attended-first-session conversion. Attrition: apparent endings after 90 covered days, among observed established clients active during the period.</p><p><a href="https://onlinelibrary.wiley.com/doi/abs/10.1002/cpp.70258" target="_blank" rel="noreferrer">Oh et al. (2026)</a> reported 27.8% attending fewer than three sessions among 12,988 adults in one US digital mental-health network—about 72.2% reached a third session. That study does not establish this app's 28-day retention target, scheduled-close target or 90-day attrition maximum. Your targets remain your own; no research default is applied.</p></details>
     </section>
     {coreGoalRows.filter(row => sandbox || row.metric !== "activeClinicalHeadcount").map((row) => {
       const goal = findGoal(row.name);
@@ -4988,7 +4992,7 @@ export default function PracticeWorkspace() {
               {section === "marketing" && (
                 <>
                   {growthPaceCard}
-                  <AcquisitionDashboard conversion={acquisitionConversion} onConversion={setAcquisitionConversion} endings={acquisitionEndings} onEndings={setAcquisitionEndings} workspace={workingWorkspace} reports={historicalReports} target={acquisitionTarget} onTarget={setAcquisitionTarget} />
+                  <AcquisitionDashboard model={growthModel} />
                   {heading(
                     "Marketing",
                     marketingTab === "campaigns"

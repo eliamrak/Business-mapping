@@ -27,3 +27,13 @@ test('reported conversion is an aligned aggregate ratio, never a matured cohort 
  assert.equal(acquisitionFunnel({...workspace,funnels:[row,{...row,scope:'source'}]},['2026-04']).leads,null);
  assert.deepEqual(acquisitionFunnel({...workspace,funnels:[{...row,leads:0,clients:0}]},['2026-04']),{leads:0,averageLeads:0,bookedPerLeadPct:null});
 });
+
+test('complete source breakdowns aggregate without duplicating totals and retain independent lead evidence',()=>{
+ const source={...row,scope:'source' as const,sourceName:'Synthetic source',clinicianId:1};
+ const workspace={periods:[period],funnels:[source,{...source,id:'other',clinicianId:2}]};
+ assert.equal(acquisitionFunnel(workspace,['2026-04']).leads,80);
+ assert.equal(acquisitionFunnel({...workspace,funnels:[source,source]},['2026-04']).leads,null);
+ assert.equal(acquisitionFunnel({...workspace,funnels:[source,{...source,clinicianId:null}]},['2026-04']).leads,null);
+ const independent=acquisitionFunnel({...workspace,funnels:[{...row,clients:null}]},['2026-04']);
+ assert.equal(independent.leads,40);assert.equal(independent.bookedPerLeadPct,null);
+});
