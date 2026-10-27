@@ -202,6 +202,7 @@ import "@/components/practice/historical-period-values.css";
 import { TidalMaterial } from "@/components/practice/tidal-material";
 import "@/pages/practice-surfaces.css";
 import "@/pages/practice-controls.css";
+import { MaturedStartsSummary } from "@/components/practice/matured-starts-summary";
 import { AcquisitionDashboard } from "@/components/practice/acquisition-dashboard";
 import { MobileWorkspaceNavigation, MobilePageActions, MobileContributorSelect } from "@/components/practice/mobile-workspace-controls";
 
@@ -3007,6 +3008,7 @@ export default function PracticeWorkspace() {
     if (kind === "retention") return { range, value: practice ? practiceRetention : row?.initialRetentionPct, benchmark,
       detail: `${historyNote}${fmt(practice ? activity?.retainedClientPairs : row?.retainedClients)} retained / ${fmt(practice ? activity?.initialRetentionDenominator : row?.initialRetentionDenominator)} evaluated starts; ${fmt(practice ? activity?.immatureClientPairsExcluded : row?.pendingInitialClients)} pending; coverage ${(practice ? activity?.initialRetentionCoverageVerified : row?.initialRetentionCoverageVerified) ? "verified" : "unverified"}` };
     return { range, value: practice ? activity?.averageClientEndingsPerFullMonth : row?.averageClientEndingsPerFullMonth, benchmark,
+      maturedStartsComparison: practice ? activity?.maturedStartsComparison : row?.maturedStartsComparison,
       detail: `${historyNote}${fmt(practice ? activity?.endingFullMonthClientEnds : row?.endingFullMonthClientEnds)} endings / ${fmt(practice ? activity?.endingFullMonthDenominator : row?.endingFullMonthDenominator)} covered mature months; 90-day follow-up through ${report.window.asOf}; latest eligible ending ${report.window.endingObservationCutoff}` };
   };
   const historicalDifferenceFor = (kind: HistoricalMetricKind, name: string) => {
@@ -3019,7 +3021,7 @@ export default function PracticeWorkspace() {
     { id: "practice", label: "Whole Practice" },
   ].map((person) => {
     const metric = historicalMetricFor(historicalReports[period], kind, person.label);
-    return { ...person, value: metric.value, period: metric.range, detail: `${metric.detail}; ${historicalDifferenceFor(kind, person.label)}`, practice: person.id === "practice" };
+    return { ...person, value: metric.value, maturedStartsComparison: metric.maturedStartsComparison, period: metric.range, detail: `${metric.detail}; ${historicalDifferenceFor(kind, person.label)}`, practice: person.id === "practice" };
   });
   const historicalValuesFor = (kind: HistoricalMetricKind, name: string, comparison = false): Record<HistoricalPerformancePeriod, HistoricalPeriodValue> => {
     const valueFor = (period: HistoricalPerformancePeriod): HistoricalPeriodValue => {
@@ -3031,10 +3033,10 @@ export default function PracticeWorkspace() {
           ? <MetricComparison rows={comparisonRows.map((row) => ({ ...row, detail: undefined }))} unit={kind === "attrition" ? "endings / month" : "%"} percentage={kind !== "attrition"} label={`${period === "3mo" ? "Trailing 3 months" : "Trailing year"} ${kind} comparison`} />
           : kind === "attrition" ? <figure className="pw-attrition-count-kpi" aria-label={`Average monthly attrition: ${metric.value == null ? "Unknown" : fmt(metric.value)} endings per month. This is a count, not a percentage.`}><div className="pw-attrition-count-ring" aria-hidden="true">{metric.value == null ? "—" : fmt(metric.value)}</div><figcaption>{metric.value == null ? "Unknown endings / month" : "endings / month"}</figcaption></figure>
           : <PercentageKpi label={kind === "retention" ? "Retention" : "Observed close rate"} value={metric.value} goal={workingWorkspace.settings.performanceTargets?.[kind === "retention" ? "retentionPct" : "closeRatePct"]} benchmark={name === "Whole Practice" ? null : metric.benchmark} period={metric.range} benchmarkPeriod={metric.range} showPeriod={false} />,
-        detail: <details><summary>Counts and coverage</summary>
+        detail: <>{kind === "attrition" && (comparisonRows ? comparisonRows.map(row => <MaturedStartsSummary key={row.id} label={row.label} comparison={row.maturedStartsComparison} />) : <MaturedStartsSummary comparison={metric.maturedStartsComparison} />)}<details><summary>Counts and coverage</summary>
           {comparisonRows && <p>Available date ranges can differ by clinician. A Whole Practice marker is shown only for matching dates.</p>}
           {comparisonRows ? comparisonRows.map((row) => <p key={row.id}>{row.label}: {row.detail}</p>) : <p>{metric.detail}</p>}
-        </details>,
+        </details></>,
       };
     };
     return { "3mo": valueFor("3mo"), year: valueFor("year") };

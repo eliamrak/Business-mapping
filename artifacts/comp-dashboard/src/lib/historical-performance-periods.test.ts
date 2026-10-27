@@ -340,7 +340,10 @@ test("Team and Sessions integrate both histories while activity-date consults re
   assert.match(source, /clinicalComparisonRowsFor\(kind, period\)/);
   assert.match(source, /kind === "consult" \? currentConsultPeople : people/);
   const historicalValues = source.slice(source.indexOf("  const historicalValuesFor ="), source.indexOf("  const consultComparisonRows ="));
-  assert.match(historicalValues, /detail: <details><summary>Counts and coverage<\/summary>/);
+  assert.match(historicalValues, /<details><summary>Counts and coverage<\/summary>/);
+  assert.match(historicalValues, /kind === "attrition"[\s\S]*MaturedStartsSummary[\s\S]*<details><summary>Counts and coverage/);
+  assert.match(historicalValues, /comparison=\{metric.maturedStartsComparison\}/);
+  assert.match(historicalValues, /comparison=\{row.maturedStartsComparison\}/);
   assert.doesNotMatch(historicalValues, /<details\s+open/);
   assert.match(historicalValues, /rows=\{comparisonRows\.map\(\(row\) => \(\{ \.\.\.row, detail: undefined \}\)\)\}/);
   assert.match(historicalValues, /<p key=\{row.id\}>\{row.label\}: \{row.detail\}<\/p>/);

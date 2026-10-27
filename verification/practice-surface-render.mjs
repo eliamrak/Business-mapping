@@ -153,6 +153,24 @@ try {
  await page.screenshot({path:path.join(outDir,'team-actions-mobile-viewport.png'),fullPage:false});
  await clickSection('Sessions');
  assert.equal(await page.locator('.pw-content summary').filter({hasText:/^(Definition|Period dates|Exact changes?)$/}).count(),0);
+ const sessionsAttrition=page.getByRole('region',{name:'Attrition card',exact:true});
+ assert.equal(await sessionsAttrition.getByText('Matured starts / month',{exact:true}).count(),2);
+ assert.equal(await sessionsAttrition.getByText('Starts minus endings / month',{exact:true}).count(),2);
+ assert.equal(await sessionsAttrition.locator('.pw-matured-starts-summary').count(),2);
+ await page.setViewportSize({width:390,height:900});
+ await sessionsAttrition.screenshot({path:path.join(outDir,'sessions-matched-mobile.png')});
+ await page.setViewportSize({width:1280,height:900});
+ await sessionsAttrition.screenshot({path:path.join(outDir,'sessions-matched-desktop.png')});
+ const sessionContributors=page.getByRole('group',{name:'Sessions contributor',exact:true});
+ await sessionContributors.getByRole('button',{name:'Elia',exact:true}).click();
+ assert.equal(await sessionsAttrition.locator('.pw-matured-starts-summary').count(),2);
+ await sessionContributors.getByRole('button',{name:'Compare',exact:true}).click();
+ assert.equal(await sessionsAttrition.locator('.pw-matured-starts-summary').count(),6);
+ assert.equal(await sessionsAttrition.getByText('Whole Practice',{exact:true}).count()>0,true);
+ await sessionContributors.getByRole('button',{name:'Whole Practice',exact:true}).click();
+ assert.equal(await sessionsAttrition.locator('.pw-matured-starts-summary').count(),2);
+
+
  assert.match(await page.locator('.pw-session-coverage-summary').innerText(),/sessions \/ week.*covered calendar days[\s\S]*incomplete periods excluded/);
  assert.equal(await page.getByLabel('Unresolved consultation reasons',{exact:true}).count(),1);
  assert.match(await page.getByLabel('Unresolved consultation reasons',{exact:true}).innerText(),/Follow-up window open\s+1/);
