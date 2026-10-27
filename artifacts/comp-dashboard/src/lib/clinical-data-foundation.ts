@@ -147,14 +147,25 @@ export function clinicalDataFoundation(input: ClinicalFoundationInput) {
     return { averageDistinctClients: covered.length ? sum / covered.length : null, sumDistinctClientBuckets: sum,
       denominator: covered.length, requestedCompleteBuckets: buckets.length, missingBuckets: buckets.length - covered.length, buckets };
   };
-  const population = { retainedNotEnded: 0, apparentlyEnded: 0, uncertain: 0, returnedAfterVerifiedGap: 0, notInitiallyRetained: 0 };
-  for (const client of index.indexedClients.filter(client => index.inScopeAt(client, input.asOf))) {
+  const emptyPopulation = () => ({ retainedNotEnded: 0, apparentlyEnded: 0, uncertain: 0, returnedAfterVerifiedGap: 0, notInitiallyRetained: 0 });
+  const population = emptyPopulation();
+  const clinicianPopulations = index.names.map(clinician => ({ clinician, ...emptyPopulation() }));
+  let sharedRetainedClients = 0;
+  const add = (counts: ReturnType<typeof emptyPopulation>, client: typeof index.indexedClients[number]) => {
     const state = index.stateAt(client, input.asOf);
-    if (state === 'not-ended') population.retainedNotEnded++;
-    else if (state === 'ended') population.apparentlyEnded++;
-    else if (state === 'uncertain') population.uncertain++;
-    else population.notInitiallyRetained++;
-    if(client.retainedOn && client.returns.some(date=>date<=input.asOf && date>client.retainedOn!)) population.returnedAfterVerifiedGap++;
+    if (state === 'not-ended') counts.retainedNotEnded++;
+    else if (state === 'ended') counts.apparentlyEnded++;
+    else if (state === 'uncertain') counts.uncertain++;
+    else counts.notInitiallyRetained++;
+    if(client.retainedOn && client.returns.some(date=>date<=input.asOf && date>client.retainedOn!)) counts.returnedAfterVerifiedGap++;
+  };
+  for (const client of index.indexedClients.filter(client => index.inScopeAt(client, input.asOf))) {
+    add(population, client);
+    const last = client.dates.at(-1)!;
+    const latestProviders = new Set(client.visits.filter(visit=>visit.serviceDate===last).map(visit=>normalize(visit.clinician)));
+    const attributed = clinicianPopulations.filter(row=>latestProviders.has(row.clinician));
+    for(const clinician of attributed) add(clinician,client);
+    if(attributed.length>1 && index.stateAt(client,input.asOf)==='not-ended') sharedRetainedClients++;
   }
   // A6 requires complete recent practice-wide follow-up, not merely the absence
   // of a recorded ending. The positive observed subset remains separately visible.
@@ -174,7 +185,7 @@ export function clinicalDataFoundation(input: ClinicalFoundationInput) {
     }
   }
   return {
-    contractVersion: 1 as const, sourceBasis: 'admitted-observed-treatment' as const,
+    contractVersion: 2 as const, sourceBasis: 'admitted-observed-treatment' as const,
     window: { start: input.start, end: input.end, asOf: input.asOf },
     scope: { clinicianNames: [...input.clinicianNames], populationMembership: 'latest-observed-treatment-provider' as const },
     provenance: { snapshots: input.snapshots.map(snapshot => ({ id: snapshot.id, kind: snapshot.kind, sourceHash: snapshot.sourceHash })),
@@ -184,6 +195,13 @@ export function clinicalDataFoundation(input: ClinicalFoundationInput) {
       excludedBoundaryDays: Math.round((stamp(input.end) - stamp(input.start)) / DAY) + 1 - weeks.length * 7 },
     monthly: { ...summarize(months), boundary: 'complete calendar months' as const },
     retainedPopulation: { ...population, coverageComplete: populationCoverageComplete,
+      byClinician: clinicianPopulations.map(row=>({...row, coverageComplete:populationCoverageComplete,
+        value:populationCoverageComplete && row.uncertain===0 ? row.retainedNotEnded : null})),
+      qualification: 'practice-wide initial retention; not three visits per provider' as const,
+      attribution: 'latest treatment date providers; same-day shared providers each receive a pair' as const,
+      clinicianClientPairs: clinicianPopulations.reduce((sum,row)=>sum+row.retainedNotEnded,0),
+      sharedRetainedClients,
+      excessClinicianClientPairs: clinicianPopulations.reduce((sum,row)=>sum+row.retainedNotEnded,0)-population.retainedNotEnded,
       value: populationCoverageComplete && population.uncertain === 0 ? population.retainedNotEnded : null,
       definition: 'first-observed initial episode: 3 distinct treatment dates, gaps <=28 days; no verified 90-day ending' as const,
       returnPolicy: 'latest admitted treatment determines current inactivity; returns are separate from new initial starts or episode classification' as const },
@@ -201,10 +219,13 @@ export function derivePracticeClinicalMetrics(input: {
   snapshots: LocalSnapshot[]; workspace: Workspace; context: Context;
   declarations?: ImportEvidenceDeclarations; sameDayVisitOverrides?: SameDayVisitOverrides;
   start: string; end: string; asOf: string;
+  scopeClinicianIds?: readonly number[];
 }) {
   const {workspace,context,snapshots,asOf}=input;
   const team=context.clinicians.filter(person=>(person.goalId??null)===workspace.settings.teamId);
-  const roster=currentPracticeClinicians(workspace,context,asOf);
+  const currentRoster=currentPracticeClinicians(workspace,context,asOf);
+  if(input.scopeClinicianIds && (new Set(input.scopeClinicianIds).size!==input.scopeClinicianIds.length || input.scopeClinicianIds.some(id=>!currentRoster.some(person=>person.id===id)))) throw new RangeError('Clinician scope must reference unique current practice IDs.');
+  const roster=input.scopeClinicianIds?currentRoster.filter(person=>input.scopeClinicianIds!.includes(person.id)):currentRoster;
   const report=completeReportCoverage(snapshots,team,asOf,context.clinicians,{declarations:input.declarations,teamId:workspace.settings.teamId});
   const accepted=buildImportedSessionOverlay(context,report.eligibleSnapshots,workspace.settings.teamId,input.sameDayVisitOverrides,
     {declarations:input.declarations,classificationSnapshots:snapshots,billingEvidenceSnapshots:snapshots});
@@ -218,6 +239,23 @@ export function derivePracticeClinicalMetrics(input: {
       const person=team.find(person=>person.id===range.clinicianId);
       return person?[{start:range.start,end:range.end,clinician:person.label}]:[];
     })});
-  return {status:'derived' as const,metrics,admission:{excludedRows:report.excludedRowsCount,statusConflicts:report.attendanceStatusConflictCount,
+  return {status:'derived' as const,scope:{kind:input.scopeClinicianIds?'clinician-selection' as const:'whole-practice' as const,clinicianIds:roster.map(person=>person.id)},metrics,admission:{excludedRows:report.excludedRowsCount,statusConflicts:report.attendanceStatusConflictCount,
     sourceSnapshotCount:snapshots.length,admittedSnapshotCount:admitted.length,manualImportConflicts:accepted.diagnostic.manualImportConflictCount}};
+}
+
+/** Side-by-side calendar comparisons share one source version, current roster and
+ * population cutoff. Attendance/frequency windows differ; A6 is a snapshot and
+ * must not be presented as two independently period-filtered populations. */
+export function derivePracticeClinicalComparisons(input: Omit<Parameters<typeof derivePracticeClinicalMetrics>[0], 'start'|'end'> & {calendarThrough?:string}) {
+  const through=input.calendarThrough??input.asOf;
+  if(!validDate(through)||!validDate(input.asOf)||through>input.asOf) throw new RangeError('Calendar anchor must be valid and no later than asOf.');
+  const date=new Date(stamp(through));
+  const monthEnd=new Date(Date.UTC(date.getUTCFullYear(),date.getUTCMonth()+1,0)).toISOString().slice(0,10);
+  const nextMonth=date.getUTCMonth()+(through===monthEnd?1:0);
+  const end=new Date(Date.UTC(date.getUTCFullYear(),nextMonth,0)).toISOString().slice(0,10);
+  const window=(months:number)=>({start:new Date(Date.UTC(date.getUTCFullYear(),nextMonth-months,1)).toISOString().slice(0,10),end});
+  return {contractVersion:2 as const,asOf:input.asOf,calendarThrough:through,
+    populationComparisonBasis:'same as-of snapshot; attendance windows differ' as const,
+    threeMonths:derivePracticeClinicalMetrics({...input,...window(3)}),
+    twelveMonths:derivePracticeClinicalMetrics({...input,...window(12)})};
 }

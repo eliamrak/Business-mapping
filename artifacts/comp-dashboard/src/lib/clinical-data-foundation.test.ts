@@ -103,3 +103,24 @@ test('final proof constrains historical qualification, endings and returns, not 
  assert.equal(returned.retainedPopulation.returnedAfterVerifiedGap,0);assert.equal(returned.retainedPopulation.uncertain,1);
  assert.equal(returned.retainedAttendance.sessionsPerClientWeek,null);
 });
+test('clinician breakdown uses global qualification, deduplicated practice clients and explicit shared pairs',()=>{
+ const data=input([row('shared','2026-07-01'),row('shared','2026-07-08',{clinician:'Other'}),row('shared','2026-07-15'),row('shared','2026-07-15',{clinician:'Other'}),row('transfer','2026-07-01'),row('transfer','2026-07-08'),row('transfer','2026-07-15',{clinician:'Other'})]);
+ const result=clinicalDataFoundation({...data,clinicianNames:['Current','Other',' current ']}).retainedPopulation;
+ assert.equal(result.value,2);assert.equal(result.byClinician.length,2);
+ assert.deepEqual(result.byClinician.map(row=>row.value),[1,2]);
+ assert.equal(result.clinicianClientPairs,3);assert.equal(result.sharedRetainedClients,1);assert.equal(result.excessClinicianClientPairs,1);
+ assert.match(result.qualification,/practice-wide/);
+});
+test('3/12-month comparisons keep the same cutoff and source, with explicit calendar windows',async()=>{
+ const {derivePracticeClinicalComparisons}=await import('./clinical-data-foundation.ts');
+ const {emptyWorkspace}=await import('@workspace/practice/hub');
+ const workspace=emptyWorkspace('2026-10-21');
+ const context={clinicians:[{id:1,label:'Current',goalId:null,sessionsPerWeek:20}],sessions:[],staff:[]} as any;
+ const data=input([row('one','2026-07-01'),row('one','2026-07-08'),row('one','2026-07-15')],'2026-07-01','2026-09-30','2026-10-21');
+ const result=derivePracticeClinicalComparisons({...data,workspace,context});
+ assert.equal(result.threeMonths.metrics!.window.start,'2026-07-01');assert.equal(result.threeMonths.metrics!.window.end,'2026-09-30');
+ assert.equal(result.twelveMonths.metrics!.window.start,'2025-10-01');assert.equal(result.twelveMonths.metrics!.window.end,'2026-09-30');
+ assert.deepEqual(result.threeMonths.metrics!.retainedPopulation,result.twelveMonths.metrics!.retainedPopulation);
+ assert.deepEqual(result.threeMonths.metrics!.provenance,result.twelveMonths.metrics!.provenance);
+ assert.throws(()=>derivePracticeClinicalComparisons({...data,workspace,context,calendarThrough:'2026-10-22'}),RangeError);
+});
