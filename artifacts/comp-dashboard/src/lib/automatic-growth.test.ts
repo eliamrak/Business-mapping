@@ -86,3 +86,26 @@ test('departed clinicians with capacity but no coverage do not inflate or block 
  const model=automaticGrowth({...base,reports,clinicians:current,capacity:cap['3mo'].currentDesiredWeekly,horizon:'4'});
  assert.equal(model.periods.year.months.length,12);assert.equal(model.capacity,20);
 });
+
+test('prepared owner-capacity adapter recomputes all existing dependent estimates without calendar checks or copied targets',async()=>{
+ const {automaticGrowthWithConfiguredCapacity,configuredWeeklyCapacity}=await import('./configured-growth-capacity.ts');
+ const source={...base,reports:matched,workspace:{periods,funnels},horizon:'4',clinicians:[{...clinician,sessionsPerWeek:20}]};
+ const before=JSON.stringify(source);
+ const original=automaticGrowthWithConfiguredCapacity(source);
+ const changed=automaticGrowthWithConfiguredCapacity({...source,clinicians:[{...clinician,sessionsPerWeek:30}]});
+ assert.equal(original.capacity,20);assert.equal(changed.capacity,30);
+ for(const period of ['3mo','year'] as const){
+  const a=original.periods[period],b=changed.periods[period];
+  assert.ok(Math.abs(b.pace.gap!-a.pace.gap!-10)<1e-10);
+  assert.ok(Math.abs(b.pace.requiredGrowth!-a.pace.requiredGrowth!-2.5)<1e-10);
+  assert.ok(b.additions!>a.additions!);assert.ok(b.requiredStarts!>a.requiredStarts!);
+  assert.ok(b.requiredLeads!>a.requiredLeads!);assert.ok(b.pace.monthsToFill!>a.pace.monthsToFill!);
+  assert.equal(a.frequency,b.frequency);assert.equal(a.ends,b.ends);
+ }
+ assert.equal(JSON.stringify(source),before);
+ assert.equal(configuredWeeklyCapacity([{id:1,sessionsPerWeek:0}]),0);
+ assert.equal(configuredWeeklyCapacity([]),null);
+ assert.equal(configuredWeeklyCapacity([{id:1,sessionsPerWeek:NaN}]),null);
+ const noLeads=automaticGrowthWithConfiguredCapacity({...source,workspace:{periods,funnels:[]}});
+ assert.equal(noLeads.periods.year.requiredLeads,null);
+});

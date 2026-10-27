@@ -1,3 +1,4 @@
+import { configuredWeeklyCapacity } from './configured-growth-capacity.ts';
 import type { AutomaticGrowth } from './automatic-growth.ts';
 import { acquisitionFunnel } from './acquisition-funnel.ts';
 import { currentPracticeClinicians } from './practice-scope.ts';
@@ -71,10 +72,10 @@ export function deriveClinicalMetricCatalog(input:Parameters<typeof derivePracti
     if(lead && funnel.leads!==null) Object.assign(lead,{value:funnel.leads,numerator:funnel.leads,denominator:1,status:'available',reason:null,formulaVersion:'recorded-funnel-v1',coveredBuckets:months.length});
     if(lead) rows.push({...lead,id:'reported_leads_per_month',unit:'leads/month',value:funnel.averageLeads,denominator:months.length||null});
     const people=ids?roster.filter(p=>ids.includes(p.id)):roster;
-    const capacity=people.length&&people.every(p=>Number.isFinite(p.sessionsPerWeek)&&p.sessionsPerWeek>=0)?people.reduce((sum,p)=>sum+p.sessionsPerWeek,0):null;
+    const capacity=configuredWeeklyCapacity(people);
     rows.push({id:'desired_weekly_capacity',unit:'sessions/week',value:capacity,numerator:capacity,denominator:1,status:capacity===null?'unavailable':'available',reason:capacity===null?'Current clinician desired sessions unavailable':null,formulaVersion:'configured-capacity-v1',model:'configured-target',coveredDays:null,coveredBuckets:null});
     const candidate=(ids?undefined:input.currentModels?.practice)?.periods[period];
-    const current=candidate && candidate.range.start===result.metrics?.window.start && candidate.range.end===result.metrics?.window.end?candidate:undefined;
+    const current=candidate && input.currentModels?.practice?.capacity===capacity && candidate.range.start===result.metrics?.window.start && candidate.range.end===result.metrics?.window.end?candidate:undefined;
     const matchedFlowLeads=current?scopedFunnel(current.flow?.months??[]):null;
     const definitions:[ClinicalMetricId,string,number|null|undefined][]=[
       ['matured_starts_per_month','clients/month',current?.starts],
@@ -92,7 +93,7 @@ export function deriveClinicalMetricCatalog(input:Parameters<typeof derivePracti
     for(const [id,unit,raw] of definitions){
       const attributed=id!=='required_leads_per_month'||!ids||matchedFlowLeads?.leads!=null;
       const value=attributed && raw!=null && Number.isFinite(raw)?raw:null;
-      rows.push({id,unit,value,status:value===null?'unavailable':'available',reason:value===null?(!attributed?'Recorded provider lead attribution required':current?.reason??(candidate?'Workflow calendar window differs; align source anchor before use':(ids?'Source-bound clinician acquisition engine pending review; no fallback assumed':'Existing practice workflow engine not connected; no fallback assumed'))):null,
+      rows.push({id,unit,value,status:value===null?'unavailable':'available',reason:value===null?(!attributed?'Recorded provider lead attribution required':current?.reason??(candidate?'Workflow window or configured capacity differs; recompute from current inputs':(ids?'Source-bound clinician acquisition engine pending review; no fallback assumed':'Existing practice workflow engine not connected; no fallback assumed'))):null,
         formulaVersion:'automatic-growth-v1',model:'current-acquisition-model',numerator:null,denominator:null,coveredDays:null,coveredBuckets:current?.months.length??null});
     }
     const providerTarget=rows.find(row=>row.id==='provider_lead_requirement');

@@ -50,3 +50,19 @@ test('workflow adapter requires matching cutoff and never reuses a practice mode
  assert.equal(rejected.practice.periods.threeMonths.workflowSource,null);
  assert.equal(rejected.practice.periods.threeMonths.metrics.find(m=>m.id==='required_leads_per_month')!.value,null);
 });
+
+test('configured capacity follows current roster edits in both windows without changing imported observations',()=>{
+ const original=deriveClinicalMetricCatalog(input);
+ const edited={...context,clinicians:context.clinicians.map((p:any)=>({...p,sessionsPerWeek:p.id===1?30:p.sessionsPerWeek}))};
+ const changed=deriveClinicalMetricCatalog({...input,context:edited});
+ for(const key of ['threeMonths','twelveMonths'] as const){
+  const value=(scope:any,id:string)=>scope.periods[key].metrics.find((m:any)=>m.id===id).value;
+  assert.equal(value(original.practice,'desired_weekly_capacity'),45);
+  assert.equal(value(changed.practice,'desired_weekly_capacity'),55);
+  assert.deepEqual(changed.clinicians.map(c=>value(c,'desired_weekly_capacity')),[30,25]);
+  assert.equal(value(changed.practice,'average_active_caseload'),value(original.practice,'average_active_caseload'));
+ }
+ const removed=deriveClinicalMetricCatalog({...input,context:{...context,clinicians:context.clinicians.slice(0,1)}});
+ assert.equal(removed.practice.periods.threeMonths.metrics.find(m=>m.id==='desired_weekly_capacity')!.value,20);
+ assert.equal(removed.clinicians.length,1);
+});
