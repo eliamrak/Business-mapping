@@ -160,3 +160,37 @@ test('daily caseload preserves known zero but never treats missing or uncertain 
  assert.equal(uncertain.averageActiveCaseload.value,null);
  assert.ok(uncertain.averageActiveCaseload.uncertainClientDays>0);
 });
+
+test('A7 uses exactly A6 daily exposure, includes qualification-day visits and excludes prequalification',()=>{
+ const data=input([row('one','2026-07-01'),row('one','2026-07-02'),row('one','2026-07-03'),row('one','2026-07-05',{clinician:'Other'})],'2026-07-01','2026-07-07');
+ const whole=clinicalDataFoundation({...data,clinicianNames:['Current','Other']});
+ assert.equal(whole.activeRetainedAttendance.sessions,2);
+ assert.equal(whole.activeRetainedAttendance.clientDays,whole.averageActiveCaseload.clientDays);
+ assert.equal(whole.activeRetainedAttendance.sessionsPerClientWeek,2*7/5);
+ assert.deepEqual(whole.activeRetainedAttendance.byClinician.map(c=>[c.sessions,c.clientDays,c.sessionsPerClientWeek]),[[1,2,3.5],[1,3,7/3]]);
+ for(const name of ['Current','Other']){
+  const scoped=clinicalDataFoundation({...data,clinicianNames:[name]});
+  const row=whole.activeRetainedAttendance.byClinician.find(c=>c.clinician===name.toLowerCase())!;
+  assert.equal(scoped.activeRetainedAttendance.sessionsPerClientWeek,row.sessionsPerClientWeek);
+  assert.equal(scoped.activeRetainedAttendance.clientDays,scoped.averageActiveCaseload.clientDays);
+ }
+ const before=clinicalDataFoundation({...data,end:'2026-07-02'});
+ assert.equal(before.activeRetainedAttendance.sessions,0);
+ assert.equal(before.activeRetainedAttendance.sessionsPerClientWeek,null);
+});
+test('A7 preserves historical attendance for ended clients instead of selecting end-date survivors',()=>{
+ const result=clinicalDataFoundation(input([row('ended','2026-01-01'),row('ended','2026-01-08'),row('ended','2026-01-15')],'2026-01-01','2026-07-01'));
+ assert.equal(result.retainedPopulation.value,0);
+ assert.equal(result.activeRetainedAttendance.sessions,1);
+ assert.equal(result.activeRetainedAttendance.clientDays,90);
+ assert.equal(result.activeRetainedAttendance.sessionsPerClientWeek,7/90);
+});
+test('A7 requires full A6 coverage; quiet active exposure is zero frequency, no exposure is unknown',()=>{
+ const data=input([row('one','2026-06-01'),row('one','2026-06-08'),row('one','2026-06-15')],'2026-07-01','2026-07-07');
+ assert.equal(clinicalDataFoundation(data).activeRetainedAttendance.sessionsPerClientWeek,0);
+ assert.equal(clinicalDataFoundation(input([])).activeRetainedAttendance.sessionsPerClientWeek,null);
+ const partial=clinicalDataFoundation({...data,attendanceCoverage:[{clinician:'Current',start:'2026-01-01',end:'2026-07-06'},{clinician:'Other',start:'2026-01-01',end:'2026-07-07'}]});
+ assert.equal(partial.averageActiveCaseload.value,null);
+ assert.equal(partial.activeRetainedAttendance.sessionsPerClientWeek,null);
+ assert.equal(partial.retainedAttendance.sessionsPerClientWeek,0,'Legacy covered-subset metric remains separate');
+});

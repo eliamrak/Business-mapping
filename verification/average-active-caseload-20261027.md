@@ -1,3 +1,5 @@
+> Follow-up: [A7 daily active-retained attendance](daily-active-retained-attendance-20261027.md) now prepares an explicitly versioned frequency using these same A6 client-days. Live A7 and downstream equations remain untouched.
+
 # Daily average active caseload — review candidate, not installed
 
 Adds `average_active_caseload`, formula `daily-initial-retained-not-inactive-v1`, independently for whole practice and each current clinician over the 3- and 12-month calendar windows. Foundation DTO is v3. Existing `retained_not_ended` remains the distinct common-as-of snapshot; it is not A6's period average.

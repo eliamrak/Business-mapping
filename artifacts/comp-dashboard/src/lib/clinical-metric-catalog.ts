@@ -4,7 +4,7 @@ import { currentPracticeClinicians } from './practice-scope.ts';
 import { derivePracticeClinicalComparisons } from './clinical-data-foundation.ts';
 
 export type ClinicalMetricId = 'treatment_sessions'|'sessions_per_week'|'weekly_unique_attendees'|'monthly_unique_attendees'
-  |'average_active_caseload'|'retained_not_ended'|'retained_sessions'|'retained_client_weeks'|'retained_sessions_per_client_week'
+  |'daily_active_retained_sessions_per_client_week'|'average_active_caseload'|'retained_not_ended'|'retained_sessions'|'retained_client_weeks'|'retained_sessions_per_client_week'
   |'all_attender_sessions_per_client_week'|'reported_leads'|'reported_leads_per_month'|'desired_weekly_capacity'|'provider_lead_requirement'|'matured_starts_per_month'|'apparent_endings_per_month'|'start_end_flow_balance'|'observed_consultation_close_rate'|'workload_growth_per_month'|'required_workload_growth_per_month'|'required_client_equivalents_per_month'|'required_matured_starts_per_month'|'required_leads_per_month'|'estimated_fill_months'|'target_pace_percent';
 export type ClinicalMetric = {
   id:ClinicalMetricId; unit:string; value:number|null;
@@ -31,6 +31,7 @@ function metrics(result:Comparisons['threeMonths']):ClinicalMetric[]{
   make('monthly_unique_attendees','clients/month',m.monthly.averageDistinctClients,m.monthly.sumDistinctClientBuckets,m.monthly.denominator,'observed',undefined,days,m.monthly.denominator),
   {...make('average_active_caseload','clients',m.averageActiveCaseload.value,m.averageActiveCaseload.clientDays,m.averageActiveCaseload.denominatorDays,'observed','Complete daily coverage and resolved daily retention states required',m.averageActiveCaseload.coveredDays),formulaVersion:m.averageActiveCaseload.formulaVersion},
   make('retained_not_ended','clients',m.retainedPopulation.value,m.retainedPopulation.retainedNotEnded,1),
+  {...make('daily_active_retained_sessions_per_client_week','sessions/client/week',m.activeRetainedAttendance.sessionsPerClientWeek,m.activeRetainedAttendance.sessions,m.activeRetainedAttendance.clientWeeks,'proposed-retained','Complete daily coverage and positive A6 active client-days required',m.activeRetainedAttendance.coveredDays),formulaVersion:m.activeRetainedAttendance.formulaVersion},
   make('retained_sessions','sessions',retained.coveredDays?retained.sessions:null,retained.sessions,1,'proposed-retained',undefined,retained.coveredDays),
   make('retained_client_weeks','client-weeks',retained.coveredDays?retained.clientWeeks:null,retained.clientDays,7,'proposed-retained',undefined,retained.coveredDays),
   make('retained_sessions_per_client_week','sessions/client/week',retained.sessionsPerClientWeek,retained.sessions,retained.clientWeeks,'proposed-retained','Covered retained exposure with no unresolved client-days needed',retained.coveredDays),

@@ -23,6 +23,11 @@ test('catalog produces all clinical metric scopes and both histories without spl
  for(const c of result.clinicians){assert.equal(get(c.periods.threeMonths.metrics,'reported_leads').value,null);assert.equal(get(c.periods.threeMonths.metrics,'provider_lead_requirement').value,null);}
  assert.equal(get(result.practice.periods.threeMonths.metrics,'desired_weekly_capacity').value,45);
  assert.equal(get(result.practice.periods.threeMonths.metrics,'retained_sessions_per_client_week').model,'proposed-retained');
+ const a7=get(result.practice.periods.threeMonths.metrics,'daily_active_retained_sessions_per_client_week');
+ assert.equal(a7.formulaVersion,'daily-active-retained-attendance-v1');
+ assert.equal(a7.numerator,4);assert.equal(a7.denominator,78/7);
+ assert.equal(a7.value,28/78);
+ assert.deepEqual(result.clinicians.map(c=>get(c.periods.threeMonths.metrics,'daily_active_retained_sessions_per_client_week').value),[14/78,14/78]);
  assert.equal(result.practice.periods.twelveMonths.source.metrics!.window.start,'2025-10-01');
 });
 test('fully recorded clinician-source leads remain attributable, never equal-split',()=>{
