@@ -181,3 +181,28 @@
 .pw-app[data-material] .pw-attrition-starts [data-direction="positive"] dd {color:#002619;}
 .pw-app[data-material] .pw-attrition-starts [data-direction="negative"] dd {color:#420014;}
 .pw-app[data-material] .pw-attrition-starts [data-direction="zero"] dd {color:#000d16;}
+
+/* Reviewed growth: retain the shared glass surface; no nested opaque backplate. */
+.pw-reviewed-growth {min-width:0; margin-bottom:24px;}
+.pw-reviewed-growth header {display:flex;flex-wrap:wrap;justify-content:space-between;gap:12px;}
+.pw-reviewed-growth .pw-growth-table-wrap {max-width:100%;overflow-x:auto;margin:18px 0;}
+.pw-reviewed-growth table {width:100%;border-collapse:collapse;}
+.pw-reviewed-growth th,.pw-reviewed-growth td {padding:12px;text-align:left;vertical-align:top;overflow-wrap:anywhere;}
+.pw-reviewed-growth tbody th {color:var(--pw-tone-text,#243638);font-weight:600;}
+.pw-reviewed-growth input {max-width:100%;min-width:0;box-sizing:border-box;}
+.pw-reviewed-growth-controls {display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,220px),1fr));gap:16px;margin:16px 0;}
+.pw-reviewed-growth label {display:grid;gap:6px;}
+.pw-reviewed-growth details {margin-top:20px;}
+@media(max-width:600px){.pw-reviewed-growth th,.pw-reviewed-growth td {padding:8px;font-size:15px;} .pw-reviewed-growth table {min-width:450px;}}
+
+.pw-app[data-material] .pw-reviewed-growth table :is(th,td) {background:transparent;font-size:16px;line-height:1.45;white-space:normal;}
+.pw-app[data-material] .pw-reviewed-growth table th {color:var(--pw-tone-text,#243638);}
+.pw-app[data-material] .pw-reviewed-growth .pw-growth-summary table {table-layout:fixed;min-width:0;}
+.pw-app[data-material] .pw-reviewed-growth .pw-growth-summary th:first-child {width:44%;}
+.pw-app[data-material] .pw-reviewed-growth .pw-growth-summary th:not(:first-child) {width:28%;}
+.pw-app[data-material] .pw-reviewed-growth .pw-reviewed-growth-gauge {width:140px;height:110px;min-width:140px;display:block;}
+.pw-reviewed-growth figure {margin:12px 0;}
+.pw-reviewed-growth [role="region"]:focus-visible {outline:2px solid currentColor;outline-offset:3px;}
+@media(max-width:600px){.pw-app[data-material] .pw-reviewed-growth table :is(th,td){font-size:15px;padding:8px 5px;}.pw-reviewed-growth .pw-growth-history-grid{grid-template-columns:1fr 1fr;gap:10px;}}
+.pw-app.practice-theme[data-material="tidal"][data-material] .pw-reviewed-growth table :is(th,td) {background:transparent;backdrop-filter:none;}
+.pw-app.practice-theme[data-material="tidal"][data-material] .pw-reviewed-growth table :is(th,td) {-webkit-backdrop-filter:none;}

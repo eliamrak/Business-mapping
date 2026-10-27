@@ -203,9 +203,9 @@ import { TidalMaterial } from "@/components/practice/tidal-material";
 import "@/pages/practice-surfaces.css";
 import "@/pages/practice-controls.css";
 import { MaturedStartsSummary } from "@/components/practice/matured-starts-summary";
-import { GrowthPaceCard } from "@/components/practice/growth-pace-card";
-import { automaticGrowth } from "@/lib/automatic-growth";
-import { AcquisitionDashboard } from "@/components/practice/acquisition-dashboard";
+import { ReviewedGrowthPanel } from "@/components/practice/reviewed-growth-panel";
+import { reviewedGrowthFromSources } from "@/lib/reviewed-growth-source";
+import { DEFAULT_GROWTH_SETTINGS } from "@/lib/reviewed-growth-observations";
 import { MobileWorkspaceNavigation, MobilePageActions, MobileContributorSelect } from "@/components/practice/mobile-workspace-controls";
 
 type Mode = "practice" | "sandbox" | "goals";
@@ -744,7 +744,6 @@ function MetricTargetBar({
 }
 
 export default function PracticeWorkspace() {
-  const [growthPaceHorizon, setGrowthPaceHorizon] = useState("4");
   const cache = useQueryClient();
   const query = useQuery({ queryKey: hubKey, queryFn: getHub });
   const contextQuery = useQuery({
@@ -3424,19 +3423,17 @@ export default function PracticeWorkspace() {
     historicalReports, selectedClinicianIds: selectedContributor ? [selectedContributor.id] : people.map(person => person.id), today,
     historyBasis: selectedContributor ? "available-history" : "calendar",
   });
-  const growthClinicians = currentPracticeClinicians(workingWorkspace, modelContext ?? context, today);
-  const practiceGrowthCapacity = overviewHistoricalCapacity({
-    workspace: workingWorkspace, context: modelContext ?? context,
-    attendanceCoverage: importedSessionOverlay?.attendanceCoverage ?? [], historicalReports,
-    selectedClinicianIds: growthClinicians.map(person => person.id), today, historyBasis: "calendar",
+  const reviewedGrowthSettings = workingWorkspace.settings.growthPlanning ?? DEFAULT_GROWTH_SETTINGS;
+  const reviewedGrowthModel = reviewedGrowthFromSources({
+    workspace: sandbox ? query.data!.data : workingWorkspace,
+    context: contextQuery.data!, snapshots: localRetentionState.snapshots,
+    overrides: localRetentionState.sameDayVisitOverrides, declarations: importEvidenceDeclarations,
+    today, settings: reviewedGrowthSettings, scenario: sandbox,
   });
-  const growthModel = automaticGrowth({ snapshots: historicalClinicalSnapshots,
-    classificationSnapshots: localRetentionState.snapshots, overrides: localRetentionState.sameDayVisitOverrides,
-    coverage: importedSessionOverlay?.attendanceCoverage ?? [], clinicians: growthClinicians,
-    start: historicalReports.year.window.cohort.start, end: historicalReports.year.window.cohort.end, asOf: today,
-    reports: historicalReports, workspace: workingWorkspace, capacity: practiceGrowthCapacity["3mo"].currentDesiredWeekly,
-    horizon: growthPaceHorizon });
-  const growthPaceCard = <GrowthPaceCard model={growthModel} horizon={growthPaceHorizon} onHorizon={setGrowthPaceHorizon} />;
+  const growthPaceCard = query.isError || contextQuery.isError ? <section className="pw-metric-panel" role="status">Growth source refresh failed. Retry before relying on this forecast.</section> : query.isFetching || contextQuery.isFetching ? <section className="pw-metric-panel" aria-live="polite">Updating growth sources…</section> : <ReviewedGrowthPanel model={reviewedGrowthModel} settings={reviewedGrowthSettings}
+    scenario={sandbox} onChange={growthPlanning => stageSettings({ growthPlanning }, "Growth planning assumptions")} />;
+  const overviewGrowthPaceCard = query.isError || contextQuery.isError ? <section className="pw-metric-panel" role="status">Growth source refresh failed. Retry before relying on this forecast.</section> : query.isFetching || contextQuery.isFetching ? <section className="pw-metric-panel" aria-live="polite">Updating growth sources…</section> : <ReviewedGrowthPanel compact model={reviewedGrowthModel} settings={reviewedGrowthSettings}
+    scenario={sandbox} onChange={growthPlanning => stageSettings({ growthPlanning }, "Growth planning assumptions")} />;
   const overviewHistoricalReports = selectedContributor ? Object.fromEntries((["3mo", "year"] as const).map(period => {
     const history = clinicianHistory(selectedContributor.id);
     const base = historicalReports[period];
@@ -4992,7 +4989,6 @@ export default function PracticeWorkspace() {
               {section === "marketing" && (
                 <>
                   {growthPaceCard}
-                  <AcquisitionDashboard model={growthModel} />
                   {heading(
                     "Marketing",
                     marketingTab === "campaigns"
@@ -7464,7 +7460,7 @@ export default function PracticeWorkspace() {
                   <div className="pw-contributor-tabs" role="group" aria-label="Overview contributor">
                     {contributorNames.map((name, index) => <button type="button" key={index === 0 ? "practice" : people[index - 1].id} aria-pressed={selectedContributorName === name} onClick={() => setSharedContributor(name)}>{name}</button>)}
                   </div>
-                  {growthPaceCard}
+                  {overviewGrowthPaceCard}
                   <OverviewHistoricalSummary reports={overviewHistoricalReports} capacity={overviewCapacity} targets={workingWorkspace.settings.performanceTargets} layout={workingWorkspace.settings.sectionLayouts?.summary} onLayoutChange={layout => stageSettings(sectionLayoutSettingsPatch(workingWorkspace.settings, "summary", layout), "Overview layout")} contributor={selectedContributorName} contributorIdentityVerified={selectedContributorName === "Whole Practice" || hasUniqueClinicianIdentity(context.clinicians, selectedContributorName, workspace.settings.teamId)} />
                   <div className="pw-overview-primary-grid">
                     <section aria-label="Overview monthly surplus">

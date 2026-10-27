@@ -1,0 +1,40 @@
+{
+  "reference": {"page": "page_54a211286cec819191f7569b55176518", "revision": 68, "reviewedAt": "2026-10-27"},
+  "base": "6f4b016404311b2022859faf5a61e90077b2b3dd",
+  "branch": "codex/reviewed-growth-install-20261027",
+  "formula": "calendar-response-68-v1",
+  "implemented": [
+    "Exact daily-age calendar response R, cumulative constant-intake Q, empirical route delays and modeled pending pipeline P",
+    "Common completed-month cutoff; third-distinct-date established stock with strict90-day expiry; separate frozen early cohort",
+    "Historical dynamic established exposure; matched lead-month starter response; explicit unsupported recent-tail borrowing",
+    "Standard observed-lead-average trajectory; separate Sandbox monthly leads and hypothetical staffing ramps",
+    "Occupancy goal versus physical ceiling; whole-path overload; later feasible horizon within checked window; additional capacity requirement",
+    "Shared Overview/Growth UI; optional validated settings persisted through existing workspace/proposal workflow",
+    "Recruiting preparation dates only when all three duration inputs are set; no actual roster or records changed",
+    "Synchronous captured-input result and diagnostic revision; hide forecasts during source refetch or query errors"
+  ],
+  "verification": {
+    "regression": "1328 passed,0 failed",
+    "focusedIndependent": "21 passed; mathematical/source/isolation review accepted after corrections",
+    "types": "dashboard strict typecheck passed after local shared declaration build",
+    "build": "dashboard Vite production build passed; existing large-chunk advisory remains",
+    "golden": "Both aggregate daily kernels derive every R cell, Q, P, goal pace and physical limit within1e-8; January/March Standard outputs matchPage68",
+    "browser": "Synthetic real-component Chromium harness, complete built CSS; desktop1440 and mobile390/320, keyboard settings/trajectory, scenario isolation, synthetic plan reload/navigation, missing coverage, no runtime errors",
+    "screenshots": "/tmp/practice-reviewed-growth-render (author-local; not assumed shared with parent)",
+    "harness": "node verification/reviewed-growth-render.mjs"
+  },
+  "releaseGates": [
+    "Parent publisher must compose this ordinary child with its current publisher-only source/artifact pins; do not overwrite publisher commits",
+    "Reconcile live imported snapshot totals through the installed source adapter; author had aggregate receipts and synthetic records, not live private imports",
+    "Parent coordinates actual installed WKWebView/Mac verification after publication; author did not deploy or use shared browser"
+  ],
+  "explicitLimits": [
+    "Practice-level demand is an aggregate estimate, not person-linked lead conversion or guaranteed deadline",
+    "Clinician/service-specific lead assignment and suitability are not recorded sufficiently for constrained acquisition forecasts; no fabricated allocation or practice-rate fallback is enabled",
+    "Recruitment dates use projected month crossing and average-calendar-month duration assumptions; unset inputs remain unavailable",
+    "Unresolved treatment evidence or insufficient active-stock/follow-up coverage withholds affected forecasts rather than assuming absence",
+    "No forecast beyond supported checked horizon; no automated lead connector; no source-entry timestamps invented",
+    "Browser persistence check uses isolated synthetic storage; full authenticated app navigation and real saved-plan acceptance remain publisher QA"
+  ],
+  "dataImpact": "Optional growthPlanning settings only when explicitly saved through existing workflow. No migrations, imports, actual record edits, credentials, access grants or provider calls. Existing consultation fix retained."
+}

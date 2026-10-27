@@ -645,7 +645,21 @@ export type SectionWidgetSize = z.infer<typeof sectionWidgetSizeSchema>;
 export type SectionLayout = z.infer<typeof sectionLayoutSchema>;
 export type SectionLayouts = z.infer<typeof sectionLayoutsSchema>;
 
+export const growthPlanningSchema = z.object({
+  occupancy: z.number().finite().min(0).max(1),
+  goalMonths: z.number().int().min(1).max(36),
+  checkMonths: z.number().int().min(1).max(36),
+  leadConsultDays: z.number().finite().min(0).max(365),
+  otherRouteDays: z.number().finite().min(0).max(365),
+  reserve: z.number().finite().min(0).max(100000),
+  recruitmentMonths: z.number().finite().min(0).max(60).nullable(),
+  onboardingMonths: z.number().finite().min(0).max(60).nullable(),
+  rampMonths: z.number().finite().min(0).max(60).nullable(),
+  monthlyLeads: z.record(z.string().regex(/^\d{4}-(0[1-9]|1[0-2])$/), z.number().finite().min(0).max(1000000)).optional(),
+  staffing: z.array(z.object({id:z.string().min(1),startMonth:z.string().regex(/^\d{4}-(0[1-9]|1[0-2])$/),weeklyCapacity:z.number().finite().min(0).max(200),rampMonths:z.number().finite().min(0).max(60)})).optional(),
+}).refine(value => value.checkMonths >= value.goalMonths, {message:'Capacity check must include the goal horizon.'});
 export const settingsSchema = z.object({
+  growthPlanning: growthPlanningSchema.optional(),
   sectionLayouts: sectionLayoutsSchema.optional(),
   practiceName: label.default("EMCounseling"),
   teamId: z.number().int().positive().nullable().default(null),
