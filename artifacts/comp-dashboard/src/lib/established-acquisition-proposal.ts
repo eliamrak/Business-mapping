@@ -96,7 +96,8 @@ export function establishedActivityLedger(input:ClinicalFoundationInput) {
 
 /** Assumption-bound equation proposal. Expiry/return events must come from the
  * matching established ledger. Marginal, expiry and return workload is assumed
- * equal to period A7 frequency; early-client workload is assumed stable. */
+ * equal to period A7 frequency. Non-established workload is included in W;
+ * its future path and marginal first-two-visit workload are not separately modeled. */
 export function establishedLeadTargetProposal(input:{
  clinicians:readonly {id:number;sessionsPerWeek:number}[];
  observedWeeklySessions:number|null; activeEstablishedSessionsPerClientWeek:number|null;
@@ -126,6 +127,6 @@ export function establishedLeadTargetProposal(input:{
   capacity,signedWeeklySessionGap:gap,expansionWeeklyWorkloadPerMonth:expansion,
   netReplacementEstablishedPerMonth:replacement,noAcquisitionWeeklyWorkload:noAcquisitionWorkload,requiredEstablishedPerMonth:requiredEstablished,estimatedLeadsPerMonth:requiredLeads,
   reason:requiredEstablished===0?null:overflow?'Inputs exceed supported numeric range':gap===null?'Configured capacity and observed workload required':expansion===null?'Positive target horizon required':replacement===null?'Matching established expiry/reactivation ledger required':requiredEstablished===null?'Positive matching established-active attendance frequency required':requiredLeads===null?'Positive observed leads-to-established planning ratio required':null,
-  assumptions:'Marginal established load and expiry/return load equal period A7; early-client workload stable; flows stable; no credit for new prequalification visits' as const,
+  assumptions:'Marginal established load and expiry/return load equal period A7; flows stable. Non-established workload is included in W, not counted as new established-client gains; its future path is not separately modeled. Marginal first-two-visit workload is not separately credited.' as const,
   limitation:'Steady-state workload estimate, not guaranteed acquisition or time-to-capacity. Establishment lag and ramp are not modeled.' as const};
 }
