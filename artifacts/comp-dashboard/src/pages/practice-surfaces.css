@@ -160,3 +160,24 @@
 .pw-app[data-material] .pw-acquisition-circle {position:relative;width:52px;height:52px;margin:0 auto;color:var(--pw-tone-text);}
 .pw-app[data-material] .pw-acquisition-circle svg {width:100%;height:100%;}
 .pw-app[data-material] .pw-acquisition-circle span {position:absolute;inset:0;display:grid;place-items:center;font-size:14px;font-weight:650;}
+.pw-app[data-material] .pw-growth-pace {margin-bottom:24px;}
+.pw-app[data-material] .pw-growth-pace header {display:flex;gap:12px;flex-wrap:wrap;justify-content:space-between;}
+.pw-app[data-material] .pw-growth-pace-summary {display:flex;gap:20px;align-items:center;margin:12px 0;}
+.pw-app[data-material] .pw-growth-pace-gauge {width:140px;flex-shrink:0;margin:0;text-align:center;color:#000d16;}
+.pw-app[data-material] .pw-growth-pace-gauge svg {height:150px;width:100%;}
+.pw-app[data-material] .pw-growth-pace-gauge[data-state="growing"] {color:#004c31;}
+.pw-app[data-material] .pw-growth-pace-gauge[data-state="shrinking"] {color:#640d21;}
+.pw-app[data-material] .pw-growth-pace-gauge[data-state="unknown"] {color:var(--pw-tone-text);}
+.pw-app[data-material] .pw-growth-fill-time {font-size:22px;}
+.pw-app[data-material] .pw-growth-pace-controls {display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,220px),1fr));gap:16px;margin:16px 0;}
+.pw-app[data-material] .pw-growth-pace-controls label {display:grid;gap:6px;}
+.pw-app[data-material] .pw-growth-pace details {margin-top:16px;}
+@media(max-width:480px){.pw-app[data-material] .pw-growth-pace-summary {flex-direction:column;align-items:start;}.pw-app[data-material] .pw-growth-pace-gauge {align-self:center;}}
+.pw-app[data-material] .pw-growth-pace-gauge figcaption {color:var(--pw-tone-text);}
+.pw-app[data-material] .pw-attrition-bar-track {height:12px;background:transparent;border:1px solid #607d88;border-radius:6px;overflow:hidden;width:100%;}
+.pw-app[data-material] .pw-attrition-bar-fill {display:block;height:100%;}
+.pw-app[data-material] .pw-attrition-bar-fill.starts {background:#005b60;}
+.pw-app[data-material] .pw-attrition-bar-fill.endings {background:#505a60;}
+.pw-app[data-material] .pw-attrition-starts [data-direction="positive"] dd {color:#002619;}
+.pw-app[data-material] .pw-attrition-starts [data-direction="negative"] dd {color:#420014;}
+.pw-app[data-material] .pw-attrition-starts [data-direction="zero"] dd {color:#000d16;}

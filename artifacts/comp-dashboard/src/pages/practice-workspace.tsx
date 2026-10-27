@@ -203,6 +203,7 @@ import { TidalMaterial } from "@/components/practice/tidal-material";
 import "@/pages/practice-surfaces.css";
 import "@/pages/practice-controls.css";
 import { MaturedStartsSummary } from "@/components/practice/matured-starts-summary";
+import { GrowthPaceCard } from "@/components/practice/growth-pace-card";
 import { AcquisitionDashboard } from "@/components/practice/acquisition-dashboard";
 import { MobileWorkspaceNavigation, MobilePageActions, MobileContributorSelect } from "@/components/practice/mobile-workspace-controls";
 
@@ -742,6 +743,8 @@ function MetricTargetBar({
 }
 
 export default function PracticeWorkspace() {
+  const [growthPaceAssumption, setGrowthPaceAssumption] = useState("");
+  const [growthPaceHorizon, setGrowthPaceHorizon] = useState("4");
   const [acquisitionTarget, setAcquisitionTarget] = useState("");
   const [acquisitionConversion, setAcquisitionConversion] = useState("");
   const [acquisitionEndings, setAcquisitionEndings] = useState("");
@@ -3024,6 +3027,7 @@ export default function PracticeWorkspace() {
     return { ...person, value: metric.value, maturedStartsComparison: metric.maturedStartsComparison, period: metric.range, detail: `${metric.detail}; ${historicalDifferenceFor(kind, person.label)}`, practice: person.id === "practice" };
   });
   const historicalValuesFor = (kind: HistoricalMetricKind, name: string, comparison = false): Record<HistoricalPerformancePeriod, HistoricalPeriodValue> => {
+    const flowScale = (person: string) => Math.max(0, ...(["3mo", "year"] as const).flatMap(period => { const metric = historicalMetricFor(historicalReports[period], "attrition", person); return [metric.value ?? 0, metric.maturedStartsComparison?.averageStarts ?? 0]; }));
     const valueFor = (period: HistoricalPerformancePeriod): HistoricalPeriodValue => {
       const metric = historicalMetricFor(historicalReports[period], kind, name);
       const comparisonRows = comparison ? clinicalComparisonRowsFor(kind, period) : null;
@@ -3031,9 +3035,9 @@ export default function PracticeWorkspace() {
         range: metric.range,
         value: comparisonRows
           ? <MetricComparison rows={comparisonRows.map((row) => ({ ...row, detail: undefined }))} unit={kind === "attrition" ? "endings / month" : "%"} percentage={kind !== "attrition"} label={`${period === "3mo" ? "Trailing 3 months" : "Trailing year"} ${kind} comparison`} />
-          : kind === "attrition" ? <figure className="pw-attrition-count-kpi" aria-label={`Average monthly attrition: ${metric.value == null ? "Unknown" : fmt(metric.value)} endings per month. This is a count, not a percentage.`}><div className="pw-attrition-count-ring" aria-hidden="true">{metric.value == null ? "—" : fmt(metric.value)}</div><figcaption>{metric.value == null ? "Unknown endings / month" : "endings / month"}</figcaption></figure>
+          : kind === "attrition" ? <MaturedStartsSummary comparison={metric.maturedStartsComparison} endings={metric.value} scale={flowScale(name)} />
           : <PercentageKpi label={kind === "retention" ? "Retention" : "Observed close rate"} value={metric.value} goal={workingWorkspace.settings.performanceTargets?.[kind === "retention" ? "retentionPct" : "closeRatePct"]} benchmark={name === "Whole Practice" ? null : metric.benchmark} period={metric.range} benchmarkPeriod={metric.range} showPeriod={false} />,
-        detail: <>{kind === "attrition" && (comparisonRows ? comparisonRows.map(row => <MaturedStartsSummary key={row.id} label={row.label} comparison={row.maturedStartsComparison} />) : <MaturedStartsSummary comparison={metric.maturedStartsComparison} />)}<details><summary>Counts and coverage</summary>
+        detail: <>{kind === "attrition" && comparisonRows?.map(row => <MaturedStartsSummary key={row.id} label={row.label} comparison={row.maturedStartsComparison} endings={row.value} scale={flowScale(row.label)} />)}<details><summary>Counts and coverage</summary>
           {comparisonRows && <p>Available date ranges can differ by clinician. A Whole Practice marker is shown only for matching dates.</p>}
           {comparisonRows ? comparisonRows.map((row) => <p key={row.id}>{row.label}: {row.detail}</p>) : <p>{metric.detail}</p>}
         </details></>,
@@ -3423,6 +3427,13 @@ export default function PracticeWorkspace() {
     historicalReports, selectedClinicianIds: selectedContributor ? [selectedContributor.id] : people.map(person => person.id), today,
     historyBasis: selectedContributor ? "available-history" : "calendar",
   });
+  const practiceGrowthCapacity = selectedContributor ? overviewHistoricalCapacity({
+    workspace: workingWorkspace, context: modelContext ?? context,
+    attendanceCoverage: importedSessionOverlay?.attendanceCoverage ?? [], historicalReports,
+    selectedClinicianIds: people.map(person => person.id), today, historyBasis: "calendar",
+  }) : overviewCapacity;
+  const growthPaceCard = <GrowthPaceCard baseline={practiceGrowthCapacity["3mo"].weekly} capacity={practiceGrowthCapacity["3mo"].currentDesiredWeekly}
+    growth={growthPaceAssumption} horizon={growthPaceHorizon} onGrowth={setGrowthPaceAssumption} onHorizon={setGrowthPaceHorizon} />;
   const overviewHistoricalReports = selectedContributor ? Object.fromEntries((["3mo", "year"] as const).map(period => {
     const history = clinicianHistory(selectedContributor.id);
     const base = historicalReports[period];
@@ -4975,6 +4986,7 @@ export default function PracticeWorkspace() {
               )}
               {section === "marketing" && (
                 <>
+                  {growthPaceCard}
                   <AcquisitionDashboard conversion={acquisitionConversion} onConversion={setAcquisitionConversion} endings={acquisitionEndings} onEndings={setAcquisitionEndings} workspace={workingWorkspace} reports={historicalReports} target={acquisitionTarget} onTarget={setAcquisitionTarget} />
                   {heading(
                     "Marketing",
@@ -7444,6 +7456,7 @@ export default function PracticeWorkspace() {
                   <div className="pw-contributor-tabs" role="group" aria-label="Overview contributor">
                     {contributorNames.map((name, index) => <button type="button" key={index === 0 ? "practice" : people[index - 1].id} aria-pressed={selectedContributorName === name} onClick={() => setSharedContributor(name)}>{name}</button>)}
                   </div>
+                  {growthPaceCard}
                   <OverviewHistoricalSummary reports={overviewHistoricalReports} capacity={overviewCapacity} targets={workingWorkspace.settings.performanceTargets} layout={workingWorkspace.settings.sectionLayouts?.summary} onLayoutChange={layout => stageSettings(sectionLayoutSettingsPatch(workingWorkspace.settings, "summary", layout), "Overview layout")} contributor={selectedContributorName} contributorIdentityVerified={selectedContributorName === "Whole Practice" || hasUniqueClinicianIdentity(context.clinicians, selectedContributorName, workspace.settings.teamId)} />
                   <div className="pw-overview-primary-grid">
                     <section aria-label="Overview monthly surplus">

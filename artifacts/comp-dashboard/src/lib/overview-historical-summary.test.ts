@@ -108,7 +108,7 @@ const card = (html: string, label: string) => {
   assert.ok(index >= 0, `Missing ${label}`);
   return html.slice(sections[index].index, sections[index + 1]?.index ?? html.indexOf('<button type="button" class="pw-text-button"'));
 };
-const prominent = (html: string) => html.replace(/<details\b[\s\S]*?<\/details>/g, "").replace(/<div class="sr-only">[\s\S]*?<\/div>/g, "").replace(/<p class="pw-historical-period-dates sr-only">[\s\S]*?<\/p>/g, "");
+const prominent = (html: string) => html.replace(/ style="[^"]*"/g, "").replace(/<details\b[\s\S]*?<\/details>/g, "").replace(/<div class="sr-only">[\s\S]*?<\/div>/g, "").replace(/<p class="pw-historical-period-dates sr-only">[\s\S]*?<\/p>/g, "");
 const periodRegion = (html: string, period: "3mo" | "year") => {
   const region = html.match(new RegExp(`<section\\b[^>]*data-period="${period}"[^>]*>[\\s\\S]*?</section>`))?.[0];
   assert.ok(region, `Missing ${period} region`);
@@ -372,7 +372,7 @@ test("attrition differences use full-window clinician percentages while monthly 
   assert.match(selected, /\+10 percentage points vs 12-month baseline/);
   assert.match(selected, /1 per covered mature month/);
   assert.match(selected, /2 per covered mature month/);
-  assert.doesNotMatch(selected, /clients \/ mature month vs 12-month baseline|99%|50%/);
+  assert.doesNotMatch(selected.replace(/ style="[^"]*"/g, ""), /clients \/ mature month vs 12-month baseline|99%|50%/);
 });
 
 test("attrition coverage reasons render as plain-language explanations", () => {
@@ -720,7 +720,7 @@ test("a cleared clinician period remains unknown without falling back to populat
   const html = render(props);
   for (const label of labels) {
     const region = periodRegion(card(html, label), "3mo");
-    assert.match(region, /role="img"/);
+    assert.match(region, label === labels[3] ? /pw-matured-starts-summary/ : /role="img"/);
     assert.match(region, /data-state="unknown"/);
     assert.doesNotMatch(region, /aria-valuenow=|role="meter"|pw-percentage-kpi-marker-goal/);
   }
@@ -732,15 +732,15 @@ test("a cleared clinician period remains unknown without falling back to populat
   assert.match(periodRegion(card(html, labels[2]), "year"), /aria-valuenow="10"/);
 });
 
-test('partial screenshot-shaped histories put 13 and 7.6 in count rings without invented percentages or ended totals', () => {
+test('partial screenshot-shaped histories put 13 and 7.6 in paired count bars without invented percentages or ended totals', () => {
   const props = fixture();
   props.reports['3mo'].attritionActivity!.averageClientEndingsPerFullMonth = 13;
   props.reports.year.attritionActivity!.averageClientEndingsPerFullMonth = 7.6;
   const before = structuredClone(props.reports);
   const html = prominent(card(render(props), labels[3]));
-  assert.match(html, /pw-attrition-count-ring" aria-hidden="true">13<\/div>/);
-  assert.match(html, /pw-attrition-count-ring" aria-hidden="true">7\.6<\/div>/);
-  assert.equal([...html.matchAll(/Client endings \/ month/g)].length, 2);
+  assert.match(html, /Endings \/ month<\/dt><dd>13<\/dd>/);
+  assert.match(html, /Endings \/ month<\/dt><dd>7\.6<\/dd>/);
+  assert.equal([...html.matchAll(/Endings \/ month/g)].length, 2);
   assert.doesNotMatch(html, /role="meter"|13%|7\.6%|clients ended|Full-window percentage unavailable/);
   assert.match(html, /covered mature months/);
   assert.deepEqual(props.reports, before);
@@ -752,7 +752,7 @@ test('zero monthly endings remain known while absent monthly coverage has a conc
   props.reports.year.attritionActivity = null;
   const html = prominent(card(render(props), labels[3]));
   assert.match(html, /data-state="known"[^>]*aria-label="Average monthly client endings: 0 per covered mature month"/);
-  assert.match(html, /pw-attrition-count-ring" aria-hidden="true">0<\/div>/);
+  assert.match(html, /Endings \/ month<\/dt><dd>0<\/dd>/);
   assert.match(html, /data-state="unknown"/);
   assert.match(html, /Not enough covered history/);
   assert.doesNotMatch(html, /-- clients ended|role="meter"/);
