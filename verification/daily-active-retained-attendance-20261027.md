@@ -1,3 +1,5 @@
+> Definition superseded by the approved [established-active v2 contract](established-active-definition-20261027.md): third distinct treatment date regardless of early gaps. Historical v1 notes below are retained for audit. No live wiring.
+
 # A7 daily active-retained attendance — prepared, not installed
 
 New metric ID: `daily_active_retained_sessions_per_client_week`.

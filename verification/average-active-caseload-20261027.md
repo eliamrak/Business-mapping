@@ -1,3 +1,5 @@
+> Definition superseded by the approved [established-active v2 contract](established-active-definition-20261027.md): third distinct treatment date regardless of early gaps. Historical v1 notes below are retained for audit. No live wiring.
+
 > Follow-up: [A7 daily active-retained attendance](daily-active-retained-attendance-20261027.md) now prepares an explicitly versioned frequency using these same A6 client-days. Live A7 and downstream equations remain untouched.
 
 # Daily average active caseload — review candidate, not installed

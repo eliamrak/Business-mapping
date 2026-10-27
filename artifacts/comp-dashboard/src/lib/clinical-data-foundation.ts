@@ -85,7 +85,7 @@ export function buildClinicalObservationIndex(input: ClinicalFoundationInput) {
     // admitted visit, exactly as the existing 90-day ending rule does.
     const returns = dates.filter((date, i) => i > 0 && date > shift(dates[i - 1], 90)
       && covers(evidence.intervals, shift(dates[i - 1], 1), shift(dates[i - 1], 90)));
-    return { clientId, visits: clientVisits, dates, retainedOn, returns };
+    return { clientId, visits: clientVisits, dates, retainedOn, establishedOn: dates.length >= 3 ? dates[2] : null, returns };
   });
   const scoped = (clinician: string) => names.includes(normalize(clinician));
   const scopeCovered = (start: string, end = start) => providerCoverage.every(ranges => covers(ranges, start, end))
@@ -112,13 +112,23 @@ export function buildClinicalObservationIndex(input: ClinicalFoundationInput) {
     if (elapsed) return covers(evidence.intervals, shift(last, 1), shift(last, 90)) ? 'ended' : 'uncertain';
     return 'not-ended';
   };
+  // Established activity is distinct from early initial retention. Positive
+  // admitted treatment dates establish qualification despite long early gaps.
+  const establishedStateAt = (client: typeof indexedClients[number], date: string): RetainedState => {
+    if (!client.establishedOn || client.establishedOn > date) return 'not-retained';
+    const last = client.dates.filter(value => value <= date).at(-1)!;
+    if (options.excludedFollowUpEvidence.some(row => row.clientId === client.clientId && row.serviceDate > last && row.serviceDate <= date)) return 'uncertain';
+    if (shift(last, 90) <= date)
+      return covers(evidence.intervals, shift(last, 1), shift(last, 90)) ? 'ended' : 'uncertain';
+    return 'not-ended';
+  };
   const ordinal = new Map<string, number>();
   const sessionKeys = visits.map(visit => {
     const key = sameDayVisitKey(visit), count = (ordinal.get(key) ?? 0) + 1;
     ordinal.set(key, count);
     return { sessionKey: `${key}:${count}`, sourceRowHash: visit.sourceRowHash };
   });
-  return { visits, indexedClients, evidence, providerCoverage, names, scoped, scopeCovered, inScopeAt, stateAt, sessionKeys };
+  return { visits, indexedClients, evidence, providerCoverage, names, scoped, scopeCovered, inScopeAt, stateAt, establishedStateAt, sessionKeys };
 }
 
 /** Public aggregate DTO. All rates carry their actual denominators. This function
@@ -171,6 +181,7 @@ export function clinicalDataFoundation(input: ClinicalFoundationInput) {
   // of a recorded ending. The positive observed subset remains separately visible.
   const populationCoverageComplete = index.scopeCovered(shift(input.asOf, -90), input.asOf)
     && covers(index.evidence.intervals, shift(input.asOf, -90), input.asOf);
+  const dailyExposure = (stateAt: typeof index.stateAt) => {
   const averageByClinician = index.names.map(clinician => ({ clinician, clientDays: 0, sessions: 0, uncertainClientDays: 0 }));
   let retainedClientDays = 0, retainedSessions = 0, uncertainClientDays = 0, coveredDays = 0;
   for (let date = input.start; date <= input.end; date = shift(date, 1)) {
@@ -178,7 +189,7 @@ export function clinicalDataFoundation(input: ClinicalFoundationInput) {
     coveredDays++;
     for (const client of index.indexedClients) {
       if (!index.inScopeAt(client, date)) continue;
-      const state = index.stateAt(client, date);
+      const state = stateAt(client, date);
       const lastDate = client.dates.filter(value => value <= date).at(-1)!;
       const providers = new Set(client.visits.filter(visit => visit.serviceDate === lastDate).map(visit => normalize(visit.clinician)));
       for (const counts of averageByClinician.filter(counts => providers.has(counts.clinician))) {
@@ -194,10 +205,14 @@ export function clinicalDataFoundation(input: ClinicalFoundationInput) {
       retainedSessions += client.visits.filter(visit => visit.serviceDate === date && index.scoped(visit.clinician)).length;
     }
   }
+  return { retainedClientDays, retainedSessions, uncertainClientDays, coveredDays, averageByClinician };
+  };
+  const initialDaily = dailyExposure(index.stateAt);
+  const { retainedClientDays, retainedSessions, uncertainClientDays, coveredDays, averageByClinician } = dailyExposure(index.establishedStateAt);
   const requestedDays = Math.round((stamp(input.end) - stamp(input.start)) / DAY) + 1;
   const averageCoverageComplete = coveredDays === requestedDays;
   return {
-    contractVersion: 3 as const, sourceBasis: 'admitted-observed-treatment' as const,
+    contractVersion: 4 as const, sourceBasis: 'admitted-observed-treatment' as const,
     window: { start: input.start, end: input.end, asOf: input.asOf },
     scope: { clinicianNames: [...input.clinicianNames], populationMembership: 'latest-observed-treatment-provider' as const },
     provenance: { snapshots: input.snapshots.map(snapshot => ({ id: snapshot.id, kind: snapshot.kind, sourceHash: snapshot.sourceHash })),
@@ -218,17 +233,17 @@ export function clinicalDataFoundation(input: ClinicalFoundationInput) {
       definition: 'first-observed initial episode: 3 distinct treatment dates, gaps <=28 days; no verified 90-day ending' as const,
       returnPolicy: 'latest admitted treatment determines current inactivity; returns are separate from new initial starts or episode classification' as const },
     averageActiveCaseload: {
-      formulaVersion: 'daily-initial-retained-not-inactive-v1' as const,
+      formulaVersion: 'daily-established-active-v2' as const,
       value: averageCoverageComplete && uncertainClientDays === 0 ? retainedClientDays / requestedDays : null,
       clientDays: retainedClientDays, denominatorDays: requestedDays, coveredDays,
       coverageComplete: averageCoverageComplete, uncertainClientDays,
       byClinician: averageByClinician.map(row => ({ ...row,
         value: averageCoverageComplete && row.uncertainClientDays === 0 ? row.clientDays / requestedDays : null })),
-      basis: 'calendar-day mean; initial retention qualified by each day; latest treatment +90 days > day; latest-provider attribution as of each day' as const,
+      basis: 'calendar-day mean; third distinct treatment date ever qualified by each day; early gaps unrestricted; latest treatment +90 days > day; latest-provider attribution as of each day' as const,
       limitation: 'observed imported history only; unobserved earlier retention is not inferred' as const,
     },
     activeRetainedAttendance: {
-      formulaVersion: 'daily-active-retained-attendance-v1' as const,
+      formulaVersion: 'daily-established-active-attendance-v2' as const,
       sessions: retainedSessions, clientDays: retainedClientDays, clientWeeks: retainedClientDays / 7,
       coveredDays, requestedDays, coverageComplete: averageCoverageComplete, uncertainClientDays,
       sessionsPerClientWeek: averageCoverageComplete && uncertainClientDays === 0 && retainedClientDays > 0
@@ -236,12 +251,12 @@ export function clinicalDataFoundation(input: ClinicalFoundationInput) {
       byClinician: averageByClinician.map(row => ({ ...row, clientWeeks: row.clientDays / 7,
         sessionsPerClientWeek: averageCoverageComplete && row.uncertainClientDays === 0 && row.clientDays > 0
           ? row.sessions * 7 / row.clientDays : null })),
-      basis: 'sessions on daily active-retained visit dates / (same A6 active client-days /7); third qualifying date included; earlier visits excluded' as const,
+      basis: 'sessions on daily established-active visit dates / (same A6 active client-days /7); third qualifying date included; earlier visits excluded' as const,
     },
-    retainedAttendance: { sessions: retainedSessions, clientDays: retainedClientDays, clientWeeks: retainedClientDays / 7,
-      coveredDays, requestedDays: Math.round((stamp(input.end) - stamp(input.start)) / DAY) + 1, uncertainClientDays,
-      sessionsPerClientWeek: retainedClientDays > 0 && uncertainClientDays === 0 ? retainedSessions * 7 / retainedClientDays : null,
-      basis: 'covered retained-not-ended client-days; includes quiet days; third qualifying date included; no future qualification' as const },
+    retainedAttendance: { sessions: initialDaily.retainedSessions, clientDays: initialDaily.retainedClientDays, clientWeeks: initialDaily.retainedClientDays / 7,
+      coveredDays: initialDaily.coveredDays, requestedDays, uncertainClientDays: initialDaily.uncertainClientDays,
+      sessionsPerClientWeek: initialDaily.retainedClientDays > 0 && initialDaily.uncertainClientDays === 0 ? initialDaily.retainedSessions * 7 / initialDaily.retainedClientDays : null,
+      basis: 'legacy initial-retention covered client-days; gaps <=28 days; third qualifying date included; no future qualification' as const },
   };
 }
 
@@ -287,7 +302,7 @@ export function derivePracticeClinicalComparisons(input: Omit<Parameters<typeof 
   const nextMonth=date.getUTCMonth()+(through===monthEnd?1:0);
   const end=new Date(Date.UTC(date.getUTCFullYear(),nextMonth,0)).toISOString().slice(0,10);
   const window=(months:number)=>({start:new Date(Date.UTC(date.getUTCFullYear(),nextMonth-months,1)).toISOString().slice(0,10),end});
-  return {contractVersion:3 as const,asOf:input.asOf,calendarThrough:through,
+  return {contractVersion:4 as const,asOf:input.asOf,calendarThrough:through,
     populationComparisonBasis:'daily average uses each window; end-date snapshot shares as-of' as const,
     threeMonths:derivePracticeClinicalMetrics({...input,...window(3)}),
     twelveMonths:derivePracticeClinicalMetrics({...input,...window(12)})};

@@ -194,3 +194,40 @@ test('A7 requires full A6 coverage; quiet active exposure is zero frequency, no 
  assert.equal(partial.activeRetainedAttendance.sessionsPerClientWeek,null);
  assert.equal(partial.retainedAttendance.sessionsPerClientWeek,0,'Legacy covered-subset metric remains separate');
 });
+
+test('approved A6/A7 establishment uses third distinct date despite long early gaps; early retention stays separate',()=>{
+ const data=input([row('one','2026-07-01'),row('one','2026-08-10'),row('one','2026-09-20')]);
+ const result=clinicalDataFoundation(data);
+ assert.equal(result.averageActiveCaseload.clientDays,11);
+ assert.equal(result.averageActiveCaseload.value,11/92);
+ assert.equal(result.averageActiveCaseload.formulaVersion,'daily-established-active-v2');
+ assert.equal(result.activeRetainedAttendance.sessions,1);
+ assert.equal(result.activeRetainedAttendance.sessionsPerClientWeek,7/11);
+ assert.equal(result.activeRetainedAttendance.formulaVersion,'daily-established-active-attendance-v2');
+ assert.equal(result.retainedPopulation.value,0);
+ assert.equal(result.retainedAttendance.clientDays,0);
+ const before=clinicalDataFoundation({...data,end:'2026-09-19'});
+ assert.equal(before.averageActiveCaseload.value,0);
+ assert.equal(before.activeRetainedAttendance.sessions,0);
+});
+test('global establishment crosses providers, ends on day90 and reactivates on return without future attribution',()=>{
+ const data=input([row('one','2026-01-01'),row('one','2026-03-01',{clinician:'Other'}),row('one','2026-05-01'),row('one','2026-09-01',{clinician:'Other'})],'2026-01-01','2026-09-30');
+ const result=clinicalDataFoundation({...data,clinicianNames:['Current','Other']});
+ assert.equal(result.averageActiveCaseload.clientDays,120); // May1–Jul29 + Sep1–30.
+ assert.equal(result.activeRetainedAttendance.sessions,2);
+ assert.deepEqual(result.activeRetainedAttendance.byClinician.map(c=>[c.sessions,c.clientDays]),[[1,90],[1,30]]);
+ const index=buildClinicalObservationIndex(data),client=index.indexedClients[0];
+ assert.equal(index.establishedStateAt(client,'2026-04-30'),'not-retained');
+ assert.equal(index.establishedStateAt(client,'2026-07-29'),'not-ended');
+ assert.equal(index.establishedStateAt(client,'2026-07-30'),'ended');
+ assert.equal(index.establishedStateAt(client,'2026-09-01'),'not-ended');
+ assert.equal(index.stateAt(client,'2026-09-01'),'not-retained');
+});
+test('same-day session exceptions and consultation dates never manufacture three distinct treatment dates',()=>{
+ const first=row('one','2026-07-01');
+ const data=input([first,row('one','2026-07-08'),row('one','2026-07-15',{visitKind:'consultation'})]);
+ const result=clinicalDataFoundation({...data,sameDayVisitOverrides:{[sameDayVisitKey(first)]:3}});
+ assert.equal(result.averageActiveCaseload.value,0);
+ assert.equal(result.activeRetainedAttendance.sessions,0);
+ assert.equal(result.activeRetainedAttendance.sessionsPerClientWeek,null);
+});
