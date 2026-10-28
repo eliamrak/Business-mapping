@@ -34,6 +34,9 @@ export function GrowthTrajectory({
   cutoff: string | null;
   actualMonths: { month: string; sessions: number | null }[];
   families: (GrowthFamily & {
+    targetProjection?: GrowthFamily["projection"];
+    targetBasis?: string;
+    targetProvisional?: boolean;
     planningReason?: string | null;
     planningProvisional?: boolean;
   })[];
@@ -43,6 +46,7 @@ export function GrowthTrajectory({
   const [history, setHistory] = useState(3),
     [selected, setSelected] = useState("");
   const family = families.find((f) => f.historyMonths === history);
+  const targets = family?.targetProjection === undefined ? family?.projection : family.targetProjection;
   const future = Array.from({ length: 6 }, (_, i) => {
     if (!cutoff) return null;
     const date = new Date(cutoff.slice(0, 7) + "-01T12:00:00Z");
@@ -279,17 +283,18 @@ export function GrowthTrajectory({
         Target line: {n(settings.occupancy * 100)}% occupancy. Full-capacity
         line: 100%. Estimates are not guarantees.
       </p>
+      {family?.targetBasis === "practice-average-estimate" && <p>Estimated using practice averages{family.targetProvisional ? " · provisional lead history" : ""}. Pending pipeline assumed zero.</p>}
       <p>
-        <strong>{n(family?.projection?.goalPace)}</strong> estimated leads/month
+        <strong>{n(targets?.goalPace)}</strong> estimated leads/month
         to reach the selected target.
       </p>
       <p>
-        <strong>{n(family?.projection?.physicalLeadCeiling)}</strong>{" "}
+        <strong>{n(targets?.physicalLeadCeiling)}</strong>{" "}
         leads/month maximum before the{" "}
         <strong>physical 100% capacity limit</strong> in the checked horizon—not
         the selected occupancy target.
       </p>
-      {family?.projection?.goalStatus === "capacity-limited" && (
+      {targets?.goalStatus === "capacity-limited" && (
         <p role="status">
           The target lead pace would exceed physical capacity during the checked
           horizon.

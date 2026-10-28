@@ -349,3 +349,33 @@ test('proxy inherits provisional lead evidence instead of claiming complete prov
  const result=providerGrowth(a,reviewedGrowth(a),providers);
  assert.equal(result.rows[0]!.families[0]!.planningProvisional,true);assert.equal(result.rows[0]!.families[1]!.planningProvisional,true);
 });
+
+test('default clinician targets use practice averages without inventing a trajectory', () => {
+  const a = input(), before = JSON.stringify(a);
+  const f = providerGrowth(a, reviewedGrowth(a), providers).rows[0]!.families[0]!;
+  assert.ok(f.targetProjection);
+  assert.equal(f.targetBasis, 'practice-average-estimate');
+  assert.ok(Number.isFinite(f.targetProjection.goalPace));
+  assert.ok(Number.isFinite(f.targetProjection.physicalLeadCeiling));
+  assert.equal(f.projection, null);
+  assert.equal(f.standardLeadPace, null);
+  assert.equal(JSON.stringify(a), before);
+});
+test('usable attributed target response takes precedence over a saved proxy scenario', () => {
+  const a = input();
+  a.workspace.funnels = a.workspace.periods.map(p => ({periodId:p.id, scope:'source', clinicianId:1, leads:4, clients:1, campaignId:null,sourceName:'synthetic'})) as typeof a.workspace.funnels;
+  const actual = providerGrowth(a, reviewedGrowth(a), providers).rows[0]!.families[0]!;
+  a.settings.providerPlans = {'1':{usePracticeProxy:true,monthlyLeads:{},reserve:0}};
+  const saved = providerGrowth(a, reviewedGrowth(a), providers).rows[0]!.families[0]!;
+  assert.equal(saved.targetBasis, 'provider-attributed-aggregate');
+  assert.deepEqual(saved.targetProjection, actual.targetProjection);
+});
+test('automatic target estimates cannot bypass missing provider coverage or practice response', () => {
+  const a = input(), practice = reviewedGrowth(a);
+  a.coverage = [];
+  const result = providerGrowth(a, practice, providers);
+  assert.ok(result.rows.every(r => r.families.every(f => f.targetProjection === null)));
+  const b = input();
+  const unavailable = {...reviewedGrowth(b), families: reviewedGrowth(b).families.map(f=>({...f,response:null}))};
+  assert.ok(providerGrowth(b, unavailable, providers).rows.every(r=>r.families.every(f=>f.targetProjection === null)));
+});

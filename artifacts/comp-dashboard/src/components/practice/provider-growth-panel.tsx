@@ -52,8 +52,6 @@ export function ProviderGrowthPanel({
       </header>
       {selectedProviderId !== undefined && provider?.reason && <p role="status">{provider.reason}</p>}
       {selectedProviderId !== undefined && provider && <GrowthTrajectory cutoff={model.cutoff} actualMonths={provider.actualMonths} families={provider.families} settings={settings} onChange={onChange} />}
-      {selectedProviderId !== undefined && provider && <label><input type="checkbox" checked={plan.usePracticeProxy} onChange={e=>setPlan({...plan,usePracticeProxy:e.target.checked})} />Use practice averages to estimate this clinician’s leads</label>}
-      {selectedProviderId !== undefined && plan.usePracticeProxy && <p>Estimate uses practice averages, not recorded clinician conversion.</p>}
       {selectedProviderId !== undefined && provider && <GrowthHiringCard families={provider.families} settings={settings} onChange={onChange} />}
       <details open={selectedProviderId === undefined}><summary>Deep dive: model diagnostics and planning assumptions</summary>
       {!provider ? (
@@ -152,7 +150,7 @@ export function ProviderGrowthPanel({
               provisional.
             </p>
           )}
-          {selectedProviderId === undefined && <label>
+          {<label>
             <input
               type="checkbox"
               checked={plan.usePracticeProxy}
@@ -160,8 +158,7 @@ export function ProviderGrowthPanel({
                 setPlan({ ...plan, usePracticeProxy: e.target.checked })
               }
             />
-            Use practice-average response (proxy, not recorded provider
-            conversion)
+            Use practice averages for an allocated-lead trajectory (scenario)
           </label>}
           {plan.usePracticeProxy && (
             <p>
@@ -185,7 +182,7 @@ export function ProviderGrowthPanel({
               <tbody>
                 {[
                   [
-                    "Response basis",
+                    "Trajectory response basis",
                     ...provider.families.map((f) =>
                       f.basis === "practice-proxy-scenario"
                         ? "Practice proxy scenario"
@@ -195,13 +192,17 @@ export function ProviderGrowthPanel({
                     ),
                   ],
                   [
+                    "Target estimate basis",
+                    ...provider.families.map((f) => f.targetBasis === "practice-average-estimate" ? "Estimated using practice averages" : f.targetBasis === "provider-attributed-aggregate" ? "Attributed period aggregates" : "Unavailable"),
+                  ],
+                  [
                     "Leads / month to occupancy goal",
-                    ...provider.families.map((f) => n(f.projection?.goalPace)),
+                    ...provider.families.map((f) => n(f.targetProjection?.goalPace)),
                   ],
                   [
                     "Physical lead ceiling / month",
                     ...provider.families.map((f) =>
-                      n(f.projection?.physicalLeadCeiling),
+                      n(f.targetProjection?.physicalLeadCeiling),
                     ),
                   ],
                   [

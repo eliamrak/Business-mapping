@@ -1,0 +1,14 @@
+{
+  "baseCommit": "77ce86e65b2f9bd2f7316157a11841e1e79c1640",
+  "baseTree": "99e17cecc8bcc3f6c2525a4f84ed993fc5b8c334",
+  "scope": "Automatic clinician target estimates only; attributed response first, otherwise labeled practice averages with zero pending pipeline. Own baseline and capacity; evidence gates unchanged. No invented trajectory or attributed lead volume. Scenario controls in Deep dive.",
+  "checks": {
+    "fullRegression": "1353 passed",
+    "focused": "14 passed",
+    "types": "dashboard noEmit passed",
+    "build": "dashboard production passed (existing chunk-size advisory)",
+    "browser": "six scope/mobile/touch/persistence groups; default targets visible and forecast remains unavailable until explicit scenario allocation",
+    "review": "independent calculation review passed; wording clarifications addressed"
+  },
+  "publication": "New child of exact live77ce; publisher owns deployment. No business records or clinical-history admission changes."
+}

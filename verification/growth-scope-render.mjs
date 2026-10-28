@@ -163,19 +163,21 @@ try {
   );
   assert.match(
     await page.locator("main").innerText(),
-    /provider-attributed lead totals are missing/,
+    /Future clinician lead volume is not recorded/,
   );
+  assert.match(await page.locator("main").innerText(), /Estimated using practice averages/);
+  assert.ok(await page.evaluate(() => Number.isFinite(window.fixture.model.rows[0].families[0].targetProjection.goalPace)));
+  await page.screenshot({path:path.join(out,"provider-default-desktop.png"),fullPage:true});
+  await page.setViewportSize({width:390,height:950});
+  await page.screenshot({path:path.join(out,"provider-default-mobile.png"),fullPage:true});
+  await page.setViewportSize({width:1440,height:1100});
+  await page.getByText("Deep dive: model diagnostics and planning assumptions", {exact:true}).click();
   await page.getByRole("checkbox").focus();
   await page.keyboard.press("Space");
   assert.equal(
     await page.evaluate(() => window.fixture.model.rows[0].families[0].basis),
     "practice-proxy-scenario",
   );
-  await page
-    .getByText("Deep dive: model diagnostics and planning assumptions", {
-      exact: true,
-    })
-    .click();
   await page
     .getByText("Monthly lead allocation scenario", { exact: true })
     .click();
@@ -196,14 +198,14 @@ try {
     /Allocations exceed practice series/,
   );
   await scope.getByRole("button", { name: "Synthetic B", exact: true }).click();
-  assert.equal(await page.getByRole("checkbox").isChecked(), false);
+  assert.equal(await page.getByRole("checkbox", {includeHidden:true}).isChecked(), false);
   await scope
     .getByRole("button", {
       name: "Synthetic Clinician With A Long Name",
       exact: true,
     })
     .click();
-  assert.equal(await page.getByRole("checkbox").isChecked(), true);
+  assert.equal(await page.getByRole("checkbox", {includeHidden:true}).isChecked(), true);
   await page.getByRole("button", { name: "Save synthetic plan" }).click();
   await page.reload();
   await scope
@@ -212,7 +214,7 @@ try {
       exact: true,
     })
     .click();
-  assert.equal(await page.getByRole("checkbox").isChecked(), true);
+  assert.equal(await page.getByRole("checkbox", {includeHidden:true}).isChecked(), true);
   for (const width of [390, 320]) {
     await page.setViewportSize({ width, height: 950 });
     await scope
@@ -286,7 +288,7 @@ try {
     "Six completed actual months plus six future months; unknown forecasts not invented",
     "Visible occupancy/horizon controls,3/12history choice and available lead-month count",
     "Mouse chart interaction, touch chart interaction and accessible month/value picker",
-    "Explicit physical100percent ceiling vs selected target; proxy opt-in and provider isolation; diagnostics retained",
+    "Explicit physical100percent ceiling vs selected target; automatic labeled targets, separate trajectory opt-in and provider isolation; diagnostics retained",
     "Saved synthetic settings reload; missing coverage and actual records preserved",
   );
   await fs.writeFile(
