@@ -243,3 +243,15 @@ test("older excluded follow-up still blocks a borrowed response tail without cha
   assert.equal(result.families[0]!.evidenceValid, false);
   assert.equal(result.families[1]!.projection, null);
 });
+
+test("chart actuals are six completed calendar months with admitted counts, scoped providers and unknown gaps", () => {
+  const a = input();
+  a.visits.push(visit("other", "2026-09-01", 2));
+  const r = reviewedGrowth(a);
+  assert.deepEqual(r.actualMonths.map(m=>m.month), ['2026-04','2026-05','2026-06','2026-07','2026-08','2026-09']);
+  assert.equal(r.actualMonths.at(-1)!.sessions,2);
+  assert.equal(r.actualMonths.find(m=>m.month==='2026-08')!.sessions,0);
+  a.coverage=[{clinicianId:1,start:'2026-06-01',end:'2026-10-21'}];
+  assert.equal(reviewedGrowth(a).actualMonths[0]!.sessions,null);
+  assert.equal(reviewedGrowth(a).actualMonths.at(-1)!.sessions,2);
+});

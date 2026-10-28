@@ -208,3 +208,12 @@
 .pw-app.practice-theme[data-material="tidal"][data-material] .pw-reviewed-growth table :is(th,td) {-webkit-backdrop-filter:none;}
 .pw-app[data-material] .pw-provider-growth .pw-growth-summary th:first-child {width:40%;}
 .pw-app[data-material] .pw-provider-growth .pw-growth-summary th:not(:first-child) {width:30%;}
+
+/* Growth has one shared scope control at every viewport size. */
+.pw-app .pw-contributor-tabs.pw-growth-scope { display: flex; flex-wrap: wrap; }
+.pw-app .pw-growth-scope button { max-width: 100%; white-space: normal; overflow-wrap: anywhere; min-height: 44px; }
+
+.pw-growth-spinner { display:inline-block; width:1em; height:1em; border:2px solid currentColor; border-right-color:transparent; border-radius:50%; animation:pw-growth-spin 0.8s linear infinite; }
+@keyframes pw-growth-spin { to { transform:rotate(360deg); } }
+@media (prefers-reduced-motion:reduce) { .pw-growth-spinner { animation:none; } }
+.pw-growth-trajectory output { display:block; margin:12px 0; }

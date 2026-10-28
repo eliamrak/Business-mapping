@@ -1,3 +1,6 @@
+import { GrowthInput } from "./growth-input";
+import { GrowthHiringCard } from "./growth-hiring-card";
+import { GrowthTrajectory } from "./growth-trajectory";
 import type {
   ReviewedGrowth,
   GrowthSettings,
@@ -40,7 +43,7 @@ export function ReviewedGrowthPanel({
   ) => (
     <label>
       {label}
-      <input
+      <GrowthInput
         type="number"
         min={min}
         max={max}
@@ -82,6 +85,10 @@ export function ReviewedGrowthPanel({
           ? "Hypothetical plan — actual records stay unchanged."
           : "Observed lead averages projected forward; estimates, not guarantees."}
       </p>
+      {model.reason && <p role="status">{model.reason}</p>}
+      <GrowthTrajectory cutoff={model.cutoff} actualMonths={model.actualMonths} families={model.families} settings={settings} onChange={onChange} />
+      <GrowthHiringCard families={model.families} settings={settings} onChange={onChange} />
+      <details><summary>Deep dive: model diagnostics and monthly values</summary>
       {model.reason ? (
         <p role="status">{model.reason}</p>
       ) : (
@@ -98,63 +105,6 @@ export function ReviewedGrowthPanel({
             · {number(model.families[0]?.capacity?.[settings.goalMonths - 1])} sessions / month
             capacity
           </p>
-          <div className="pw-growth-history-grid">
-            {model.families.map((f) => {
-              const p = f.projection,
-                h = settings.goalMonths - 1;
-              const base =
-                f.baseline && f.response
-                  ? f.baseline[h]! + f.response.pipeline[h]!
-                  : null;
-              const gap =
-                base !== null && f.capacity
-                  ? Math.max(0, settings.occupancy * f.capacity[h]! - base)
-                  : null;
-              const ratio =
-                p && base !== null && gap !== null
-                  ? gap === 0
-                    ? 1
-                    : (p.workload[h]! - base) / gap
-                  : null;
-              const angle =
-                ratio === null ? 0 : Math.max(-90, Math.min(90, 90 * ratio));
-              return (
-                <figure
-                  key={f.historyMonths}
-                  aria-label={`${f.historyMonths === 3 ? "Recent" : "Longer"} goal-relative pace: ${ratio === null ? "unavailable" : number(ratio * 100) + " percent"}`}
-                >
-                  <svg
-                    className="pw-reviewed-growth-gauge"
-                    viewBox="0 0 140 110"
-                    width="140"
-                    height="110"
-                    aria-hidden="true"
-                  >
-                    <path
-                      d="M20 95H125 M20 95V10"
-                      stroke="currentColor"
-                      fill="none"
-                      strokeDasharray="3 4"
-                    />
-                    {ratio !== null && (
-                      <path
-                        d={`M20 95L${20 + 80 * Math.cos((angle * Math.PI) / 180)} ${95 - 80 * Math.sin((angle * Math.PI) / 180)}`}
-                        stroke="currentColor"
-                        strokeWidth="4"
-                        fill="none"
-                      />
-                    )}
-                  </svg>
-                  <figcaption>
-                    {f.historyMonths === 3 ? "Recent" : "Longer"} ·{" "}
-                    {ratio === null
-                      ? "Pace unavailable"
-                      : `${number(ratio * 100)}% of goal pace`}
-                  </figcaption>
-                </figure>
-              );
-            })}
-          </div>
           <div className="pw-growth-table-wrap pw-growth-summary">
             <table>
               <caption className="sr-only">
@@ -166,8 +116,8 @@ export function ReviewedGrowthPanel({
                   {model.families.map((f) => (
                     <th scope="col" key={f.historyMonths}>
                       {f.historyMonths === 3
-                        ? "Recent 3 months"
-                        : "Longer history"}
+                        ? "Last 3 months"
+                        : "Last 12 months"}
                     </th>
                   ))}
                 </tr>
@@ -336,7 +286,7 @@ export function ReviewedGrowthPanel({
                       </td>
                       {scenario && (
                         <td>
-                          <input
+                          <GrowthInput
                             aria-label={`Future leads ${m.month}`}
                             type="number"
                             min="0"
@@ -362,46 +312,11 @@ export function ReviewedGrowthPanel({
           )}
         </>
       )}
+      </details>
       <details>
         <summary>Planning settings and source details</summary>
         <div className="pw-reviewed-growth-controls">
-          {control("Occupancy goal (%)", "occupancy", 0, 100, 100)}
-          {control("Goal horizon (months)", "goalMonths", 1, 36)}
           {control("Capacity check (months)", "checkMonths", 1, 36)}
-          {control(
-            "Lead to consult assumption (days)",
-            "leadConsultDays",
-            0,
-            365,
-          )}
-          {control(
-            "No observed consult: assumed delay (days)",
-            "otherRouteDays",
-            0,
-            365,
-          )}
-          {control("Extra reserve (sessions / month)", "reserve", 0, 100000)}
-          {(
-            ["recruitmentMonths", "onboardingMonths", "rampMonths"] as const
-          ).map((key, i) => (
-            <label key={key}>
-              {["Recruitment", "Onboarding", "Ramp"][i]} time (months)
-              <input
-                type="number"
-                min="0"
-                max="60"
-                step="any"
-                value={settings[key] ?? ""}
-                placeholder="Not set"
-                onChange={(e) => {
-                  const v =
-                    e.target.value === "" ? null : Number(e.target.value);
-                  if (v === null || (Number.isFinite(v) && v >= 0 && v <= 60))
-                    onChange({ ...settings, [key]: v });
-                }}
-              />
-            </label>
-          ))}
         </div>
         {scenario && (
           <fieldset>
@@ -410,7 +325,7 @@ export function ReviewedGrowthPanel({
               <div className="pw-reviewed-growth-controls" key={person.id}>
                 <label>
                   Start month
-                  <input
+                  <GrowthInput
                     type="month"
                     value={person.startMonth}
                     onChange={(e) => {
@@ -428,7 +343,7 @@ export function ReviewedGrowthPanel({
                 </label>
                 <label>
                   Weekly capacity
-                  <input
+                  <GrowthInput
                     type="number"
                     min="0"
                     max="200"
@@ -447,7 +362,7 @@ export function ReviewedGrowthPanel({
                 </label>
                 <label>
                   Ramp months
-                  <input
+                  <GrowthInput
                     type="number"
                     min="0"
                     max="60"
@@ -502,6 +417,7 @@ export function ReviewedGrowthPanel({
             </button>
           </fieldset>
         )}
+        <p>Lead-to-consult planning delay: 5 days. Extra reserve: 0 sessions. No-observed-consult delay: {settings.otherRouteDays} days (scenario assumption, not measured).</p>
         <p>
           Settings use the workspace save/review workflow. Standard uses
           observed lead averages; Sandbox overrides are separate. Capacity comes

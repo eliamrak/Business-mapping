@@ -1,3 +1,6 @@
+import { GrowthInput } from "./growth-input";
+import { GrowthHiringCard } from "./growth-hiring-card";
+import { GrowthTrajectory } from "./growth-trajectory";
 import { useState } from "react";
 import type {
   ProviderGrowth,
@@ -14,7 +17,9 @@ export function ProviderGrowthPanel({
   onChange,
   scenario,
   staffingCandidates,
+  selectedProviderId,
 }: {
+  selectedProviderId?: number;
   model: ProviderGrowth;
   settings: GrowthSettings;
   onChange: (s: GrowthSettings) => void;
@@ -23,6 +28,7 @@ export function ProviderGrowthPanel({
 }) {
   const [selected, setSelected] = useState("");
   const provider =
+    selectedProviderId !== undefined ? model.rows.find(p => p.id === selectedProviderId) :
     model.rows.find((p) => String(p.id) === selected) ?? model.rows[0];
   const key = String(provider?.id ?? "");
   const plan = settings.providerPlans?.[key] ?? {
@@ -41,14 +47,20 @@ export function ProviderGrowthPanel({
       aria-label="Clinician growth history and planning"
     >
       <header>
-        <h2>Clinician growth</h2>
-        <span>Same cutoff: {model.cutoff ?? "Unknown"}</span>
+        <h2>{selectedProviderId === undefined ? "Clinician growth" : "Growth outlook"}</h2>
+        <span>{selectedProviderId === undefined ? "Same cutoff" : provider?.label ?? "Unavailable clinician"}: {model.cutoff ?? "Unknown"}</span>
       </header>
+      {selectedProviderId !== undefined && provider?.reason && <p role="status">{provider.reason}</p>}
+      {selectedProviderId !== undefined && provider && <GrowthTrajectory cutoff={model.cutoff} actualMonths={provider.actualMonths} families={provider.families} settings={settings} onChange={onChange} />}
+      {selectedProviderId !== undefined && provider && <label><input type="checkbox" checked={plan.usePracticeProxy} onChange={e=>setPlan({...plan,usePracticeProxy:e.target.checked})} />Use practice averages to estimate this clinician’s leads</label>}
+      {selectedProviderId !== undefined && plan.usePracticeProxy && <p>Estimate uses practice averages, not recorded clinician conversion.</p>}
+      {selectedProviderId !== undefined && provider && <GrowthHiringCard families={provider.families} settings={settings} onChange={onChange} />}
+      <details open={selectedProviderId === undefined}><summary>Deep dive: model diagnostics and planning assumptions</summary>
       {!provider ? (
         <p>Current clinician roster is unavailable.</p>
       ) : (
         <>
-          <label>
+          {selectedProviderId === undefined && <label>
             Clinician
             <select
               aria-label="Growth clinician"
@@ -61,7 +73,7 @@ export function ProviderGrowthPanel({
                 </option>
               ))}
             </select>
-          </label>
+          </label>}
           <p>
             {n(provider.stock?.established)} established active ·{" "}
             {n(provider.stock?.early)} early clients ·{" "}
@@ -140,7 +152,7 @@ export function ProviderGrowthPanel({
               provisional.
             </p>
           )}
-          <label>
+          {selectedProviderId === undefined && <label>
             <input
               type="checkbox"
               checked={plan.usePracticeProxy}
@@ -150,7 +162,7 @@ export function ProviderGrowthPanel({
             />
             Use practice-average response (proxy, not recorded provider
             conversion)
-          </label>
+          </label>}
           {plan.usePracticeProxy && (
             <p>
               Uses this clinician’s current stock, historical cadence and
@@ -228,20 +240,7 @@ export function ProviderGrowthPanel({
               {reason}
             </p>
           ))}
-          <label>
-            Provider reserve (sessions / month)
-            <input
-              type="number"
-              min="0"
-              step="any"
-              value={plan.reserve}
-              onChange={(e) => {
-                const v = Number(e.target.value);
-                if (Number.isFinite(v) && v >= 0)
-                  setPlan({ ...plan, reserve: v });
-              }}
-            />
-          </label>
+
           <details>
             <summary>Monthly lead allocation scenario</summary>
             <p>
@@ -281,7 +280,7 @@ export function ProviderGrowthPanel({
                       <tr key={m.month}>
                         <th scope="row">{m.month}</th>
                         <td>
-                          <input
+                          <GrowthInput
                             aria-label={`Allocated leads ${provider.label} ${m.month}`}
                             type="number"
                             min="0"
@@ -398,6 +397,7 @@ export function ProviderGrowthPanel({
           here. Service, specialty and availability fit need separate
           verification.
         </p>
+      </details>
       </details>
     </section>
   );

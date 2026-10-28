@@ -153,6 +153,7 @@ export function providerGrowth(
       label: provider.label,
       weeklyCapacity: provider.sessionsPerWeek,
       stock: model?.stock ?? null,
+      actualMonths: model?.actualMonths ?? [],
       reason: model?.reason ?? practice.reason,
       families,
     };

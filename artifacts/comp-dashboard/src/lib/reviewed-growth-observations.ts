@@ -131,6 +131,7 @@ export function reviewedGrowth(input: GrowthObservationInput) {
     cutoff: null as string | null,
     stock: null as { established: number; early: number } | null,
     families: [] as GrowthFamily[],
+    actualMonths: [] as { month: string; sessions: number | null }[],
     reason: "Complete attendance coverage for the current roster is needed.",
   };
   if (!cutoffMonth) return empty;
@@ -147,6 +148,12 @@ export function reviewedGrowth(input: GrowthObservationInput) {
     .filter((v) => v.date <= cutoff)
     .slice()
     .sort((a, b) => a.date.localeCompare(b.date));
+  const actualMonths = Array.from({ length: 6 }, (_, i) => monthBefore(cutoff, 5 - i)).map(month => ({
+    month,
+    sessions: covered(monthStart(month), monthEnd(month), coverageIds, input.coverage)
+      ? visits.filter(v => ids.has(v.clinicianId) && v.date.slice(0, 7) === month).length
+      : null,
+  }));
   const clients = new Map<string, GrowthVisit[]>();
   for (const v of visits) {
     const rows = clients.get(v.clientId) ?? [];
@@ -187,6 +194,7 @@ export function reviewedGrowth(input: GrowthObservationInput) {
     return {
       ...empty,
       cutoff,
+      actualMonths,
       reason:
         "Unresolved treatment evidence could change current client status. Review import details.",
     };
@@ -523,6 +531,7 @@ export function reviewedGrowth(input: GrowthObservationInput) {
     version: REVIEWED_GROWTH_VERSION,
     cutoff,
     stock,
+    actualMonths,
     families,
     reason: null,
   };

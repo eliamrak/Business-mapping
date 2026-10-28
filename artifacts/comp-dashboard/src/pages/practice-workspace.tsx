@@ -203,9 +203,8 @@ import { TidalMaterial } from "@/components/practice/tidal-material";
 import "@/pages/practice-surfaces.css";
 import "@/pages/practice-controls.css";
 import { MaturedStartsSummary } from "@/components/practice/matured-starts-summary";
-import { ReviewedGrowthPanel } from "@/components/practice/reviewed-growth-panel";
-import { reviewedGrowthFromSources } from "@/lib/reviewed-growth-source";
-import { ProviderGrowthPanel } from "@/components/practice/provider-growth-panel";
+import { GrowthWorkspaceView } from "@/components/practice/growth-workspace-view";
+import { createGrowthResultCache, growthViewSettings } from "@/lib/growth-result-cache";
 import { DEFAULT_GROWTH_SETTINGS } from "@/lib/reviewed-growth-observations";
 import { MobileWorkspaceNavigation, MobilePageActions, MobileContributorSelect } from "@/components/practice/mobile-workspace-controls";
 
@@ -754,6 +753,7 @@ export default function PracticeWorkspace() {
   const teams = useListBusinessGoals();
   const legacyScenarioQuery = useListScenarios();
   const [mode, setMode] = useState<Mode>("practice");
+  const [growthResultCache] = useState(() => createGrowthResultCache());
   const [integratedTool, setIntegratedTool] = useState<IntegratedTool | null>(
     null,
   );
@@ -3424,17 +3424,18 @@ export default function PracticeWorkspace() {
     historicalReports, selectedClinicianIds: selectedContributor ? [selectedContributor.id] : people.map(person => person.id), today,
     historyBasis: selectedContributor ? "available-history" : "calendar",
   });
-  const reviewedGrowthSettings = workingWorkspace.settings.growthPlanning ?? DEFAULT_GROWTH_SETTINGS;
-  const reviewedGrowthModel = reviewedGrowthFromSources({
+  const savedGrowthSettings = workingWorkspace.settings.growthPlanning ?? DEFAULT_GROWTH_SETTINGS;
+  const reviewedGrowthSettings = growthViewSettings(savedGrowthSettings);
+  const reviewedGrowthInput = {
     workspace: sandbox ? query.data!.data : workingWorkspace,
     context: contextQuery.data!, snapshots: localRetentionState.snapshots,
     overrides: localRetentionState.sameDayVisitOverrides, declarations: importEvidenceDeclarations,
     today, settings: reviewedGrowthSettings, scenario: sandbox, planningWorkspace:workingWorkspace,planningContext:context,
-  });
-  const growthPaceCard = query.isError || contextQuery.isError ? <section className="pw-metric-panel" role="status">Growth source refresh failed. Retry before relying on this forecast.</section> : query.isFetching || contextQuery.isFetching ? <section className="pw-metric-panel" aria-live="polite">Updating growth sources…</section> : <ReviewedGrowthPanel model={reviewedGrowthModel} settings={reviewedGrowthSettings}
-    scenario={sandbox} onChange={growthPlanning => stageSettings({ growthPlanning }, "Growth planning assumptions")} />;
-  const overviewGrowthPaceCard = query.isError || contextQuery.isError ? <section className="pw-metric-panel" role="status">Growth source refresh failed. Retry before relying on this forecast.</section> : query.isFetching || contextQuery.isFetching ? <section className="pw-metric-panel" aria-live="polite">Updating growth sources…</section> : <ReviewedGrowthPanel compact model={reviewedGrowthModel} settings={reviewedGrowthSettings}
-    scenario={sandbox} onChange={growthPlanning => stageSettings({ growthPlanning }, "Growth planning assumptions")} />;
+  };
+  const growthView = (compact = false) => <GrowthWorkspaceView compact={compact} input={reviewedGrowthInput} cache={growthResultCache}
+    sourcePending={query.isFetching || contextQuery.isFetching} sourceError={query.isError || contextQuery.isError}
+    onChange={growthPlanning => stageSettings({growthPlanning}, "Growth planning assumptions")} />;
+  const overviewGrowthPaceCard = growthView(true);
   const overviewHistoricalReports = selectedContributor ? Object.fromEntries((["3mo", "year"] as const).map(period => {
     const history = clinicianHistory(selectedContributor.id);
     const base = historicalReports[period];
@@ -4989,10 +4990,9 @@ export default function PracticeWorkspace() {
               )}
               {section === "marketing" && (
                 <>
-                  {growthPaceCard}
-                  {!query.isFetching&&!contextQuery.isFetching&&!query.isError&&!contextQuery.isError&&<ProviderGrowthPanel model={reviewedGrowthModel.providers} settings={reviewedGrowthSettings} scenario={sandbox} staffingCandidates={reviewedGrowthModel.staffingCandidates} onChange={growthPlanning=>stageSettings({growthPlanning},"Provider growth planning assumptions")}/>}
+                  {growthView()}
                   {heading(
-                    "Marketing",
+                    "Practice-wide campaigns and lead entry",
                     marketingTab === "campaigns"
                       ? "Ad spend drives lead estimates. Service costs complete the marketing total."
                       : "Monthly leads, consults, and new clients.",
@@ -7462,7 +7462,6 @@ export default function PracticeWorkspace() {
                   <div className="pw-contributor-tabs" role="group" aria-label="Overview contributor">
                     {contributorNames.map((name, index) => <button type="button" key={index === 0 ? "practice" : people[index - 1].id} aria-pressed={selectedContributorName === name} onClick={() => setSharedContributor(name)}>{name}</button>)}
                   </div>
-                  {overviewGrowthPaceCard}
                   <OverviewHistoricalSummary reports={overviewHistoricalReports} capacity={overviewCapacity} targets={workingWorkspace.settings.performanceTargets} layout={workingWorkspace.settings.sectionLayouts?.summary} onLayoutChange={layout => stageSettings(sectionLayoutSettingsPatch(workingWorkspace.settings, "summary", layout), "Overview layout")} contributor={selectedContributorName} contributorIdentityVerified={selectedContributorName === "Whole Practice" || hasUniqueClinicianIdentity(context.clinicians, selectedContributorName, workspace.settings.teamId)} />
                   <div className="pw-overview-primary-grid">
                     <section aria-label="Overview monthly surplus">
@@ -8206,6 +8205,7 @@ export default function PracticeWorkspace() {
                   </details>
                 </section>
               )}
+              {section === "summary" && overviewGrowthPaceCard}
               {section === "current-goals" && (
                 <>
                   <SharedPeriodControls

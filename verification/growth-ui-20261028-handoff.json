@@ -1,0 +1,33 @@
+{
+  "base": "308d0cea68367eb4d1e9b32d8b473267e31286fb",
+  "scope": [
+    "Overview Growth Outlook relocated to bottom",
+    "One Whole Practice/clinician selector, visible on mobile; no duplicate clinician panel",
+    "Six completed actual months plus six future forecast months; null gaps preserved; mouse/touch/month picker",
+    "Visible occupancy/horizon and average established active clients; physical100percent ceiling explicitly distinct from target",
+    "Separate Hiring card; no reassurance without valid projection; diagnostics collapsed",
+    "Five-day consult planning delay and zero reserve applied as view policy without rewriting stored records",
+    "Exact-dependency bounded per-workspace result cache; pending state paints before compute; coherent results and interrupted-input handling"
+  ],
+  "preserved": [
+    "No clinical-history adapter or source-admission change",
+    "Consultation fix, uncertainty gates, forecast equations and recorded data unchanged",
+    "Source-entry and campaign editors explicitly practice-wide; provider estimates do not relabel those records",
+    "Provider practice-average estimates remain explicit opt-in; unavailable source evidence is never bypassed"
+  ],
+  "verification": {
+    "regression": "1350 passed",
+    "types": "dashboard noEmit passed",
+    "build": "production dashboard passed; existing chunk-size advisory",
+    "browser": "growth-scope-render: scope/mobile320+390/chart/keyboard/touch/proxy/persistence/unknown; growth-cache-render: navigation/parity/invalidation/interruption/draft typing/focus restore",
+    "performance": "Synthetic 3 uncached computations505.5ms vs3 cache hits0.2ms; five unrelated navigation renders zero rebuilds. Not live-app timing.",
+    "visual": "Desktop and mobile actual-component synthetic captures inspected; SVG axes contrast tested at least4.5 against synthetic glass background."
+  },
+  "publication": "Git transport failed stale authentication; do not retry credentials. Final source to publish through existing same-account GitHub connector with new-branch/base guard; parent deploys and performs actual Mac acceptance.",
+  "remainingLimits": [
+    "No actual private-import or Mac acceptance by author",
+    "Service suitability remains unverified in details; no patient routing",
+    "No provider lead attribution is invented; optional practice-average projection assumes zero pending pipeline and requires scenario lead allocations for future intake",
+    "Cache avoids repeated Growth engine work, not all other app computations; no broad performance refactor"
+  ]
+}
